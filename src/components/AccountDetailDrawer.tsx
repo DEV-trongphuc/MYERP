@@ -19,6 +19,7 @@ import { SignaturePadModal } from './ui/SignaturePadModal';
 import { AssignedAssetsSection, type AssignedAsset } from './ui/AssignedAssetsSection';
 import { VietnameseDateInput } from './ui/VietnameseDateInput';
 import { useAuth } from '../contexts/AuthContext';
+import { resolveTeamDepartmentCode, getCachedTenantBootstrap, getTenantRoleOptions, isInternalTenantEmail } from '../contexts/TenantConfigContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useUIStore } from '../store/uiStore';
 import styles from '../pages/EntityDrawer.module.css';
@@ -54,7 +55,10 @@ const DAY_LABELS: Record<string, string> = {
 };
 
 const getDefaultRoleLabel = (role: string) => {
-  switch (role?.toLowerCase()) {
+  const rLow = (role || '').toLowerCase().trim();
+  const dynRole = getCachedTenantBootstrap()?.roles?.find(r => r.role_slug === rLow || (rLow === 'sale' && r.role_slug === 'sales'));
+  if (dynRole?.name) return dynRole.name;
+  switch (rLow) {
     case 'superadmin': return 'Super Admin';
     case 'admin': return 'Quản trị viên';
     case 'director': return 'Giám đốc';
@@ -72,6 +76,10 @@ const getDefaultRoleLabel = (role: string) => {
 
 const getDefaultPermissionsForRole = (role: string) => {
   const normRole = (role || '').toLowerCase();
+  const dynRole = getCachedTenantBootstrap()?.roles?.find(r => r.role_slug === normRole || (normRole === 'sale' && r.role_slug === 'sales'));
+  if (dynRole?.permissions && Object.keys(dynRole.permissions).length > 0) {
+    return JSON.parse(JSON.stringify(dynRole.permissions));
+  }
   if (normRole === 'admin' || normRole === 'superadmin' || normRole === 'super_admin') {
     return {
       leads: { read: 'all', write: 'all', delete: 'all' },
@@ -1301,15 +1309,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                   <div className="form-group">
                     <label className="form-label">{t('Phân quyền')} <span style={{ color: 'var(--color-danger)' }}>*</span></label>
                     <CustomSelect 
-                      options={[
-                        { value: 'superadmin', label: t('Super Admin (Quản trị cấp cao)') },
-                        { value: 'admin', label: t('Admin (Toàn quyền)') },
-                        { value: 'director', label: t('Director (Giám đốc)') },
-                        { value: 'manager', label: t('Manager (Quản lý)') },
-                        { value: 'assistant', label: t('Assistant (Trợ lý / Phân bổ Data)') },
-                        { value: 'sale', label: t('Sales (Nhân viên kinh doanh)') },
-                        { value: 'viewer', label: t('Viewer (Chỉ xem Data)') }
-                      ]}
+                      options={getTenantRoleOptions({ includeSuperAdmin: true }).map(o => ({ value: o.value, label: t(o.label) }))}
                       value={role}
                       onChange={val => {
                         const newRole = val.toString();
@@ -1599,7 +1599,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                         {t('Cá nhân & Lịch trực')}
                       </div>
                       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-                        {Boolean(['sale', 'sales'].includes(String(role || account?.role || '').toLowerCase()) || (account?.team_id === 4)) && (
+                        {Boolean(['sale', 'sales'].includes(String(role || account?.role || '').toLowerCase()) || resolveTeamDepartmentCode(account?.team_id) === 'sales') && (
                           <button
                             type="button"
                             onClick={() => setActiveTab('schedule')}
@@ -1766,7 +1766,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                         </button>
                       )}
 
-                      {Boolean(['sale', 'sales'].includes(String(role || account?.role || '').toLowerCase()) || (account?.team_id === 4)) && (
+                      {Boolean(['sale', 'sales'].includes(String(role || account?.role || '').toLowerCase()) || resolveTeamDepartmentCode(account?.team_id) === 'sales') && (
                         <button
                           type="button"
                           className={`${styles.sidebarTabBtn} ${activeTab === 'schedule' ? styles.sidebarTabActive : ''}`}
@@ -2001,7 +2001,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                             backgroundSize: '12px 12px'
                           }}>
                             <img 
-                              src={signatureUrl ? (signatureUrl.startsWith('http') || signatureUrl.startsWith('data:') ? signatureUrl : `https://myerp.ideas.edu.vn/backend/${signatureUrl.replace(/^\/+/, '')}`) : ''} 
+                              src={signatureUrl ? (signatureUrl.startsWith('http') || signatureUrl.startsWith('data:') ? signatureUrl : `/backend/${signatureUrl.replace(/^\/+/, '')}`) : ''} 
                               alt="Chữ ký mẫu" 
                               style={{ maxHeight: '110px', objectFit: 'contain' }} 
                             />
@@ -2396,7 +2396,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                           <label className="form-label" style={{ margin: 0 }}>{t('Email đăng nhập')} <span style={{ color: 'var(--color-danger)' }}>*</span></label>
                           {account && (
-                            (Number(account.is_confirmed) === 1 || account.email?.endsWith('@ideas.edu.vn')) ? (
+                            (Number(account.is_confirmed) === 1 || isInternalTenantEmail(account.email)) ? (
                               <span style={{ fontSize: '0.7rem', color: 'var(--color-success)', background: 'var(--color-success-light)', padding: '2px 8px', borderRadius: 12, fontWeight: 700 }}>
                                 {t('Đã xác thực')}
                               </span>
@@ -2434,15 +2434,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                           <div className="form-group">
                             <label className="form-label">{t('Phân quyền')} <span style={{ color: 'var(--color-danger)' }}>*</span></label>
                             <CustomSelect 
-                              options={[
-                                { value: 'superadmin', label: t('Super Admin (Quản trị cấp cao)') },
-                                { value: 'admin', label: t('Admin (Toàn quyền)') },
-                                { value: 'director', label: t('Director (Giám đốc)') },
-                                { value: 'manager', label: t('Manager (Quản lý)') },
-                                { value: 'assistant', label: t('Assistant (Trợ lý / Phân bổ Data)') },
-                                { value: 'sale', label: t('Sales (Nhân viên kinh doanh)') },
-                                { value: 'viewer', label: t('Viewer (Chỉ xem Data)') }
-                              ]}
+                              options={getTenantRoleOptions({ includeSuperAdmin: true }).map(o => ({ value: o.value, label: t(o.label) }))}
                               value={role}
                               onChange={val => {
                                 const newRole = val.toString();

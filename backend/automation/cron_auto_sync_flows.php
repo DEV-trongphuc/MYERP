@@ -4,10 +4,10 @@
  * Chạy định kỳ mỗi giờ để tự động fix các vấn đề đồng bộ
  * 
  * Crontab entry (chạy mỗi giờ):
- * 0 * * * * /usr/local/bin/php /home/vhvxoigh/automation.ideas.edu.vn/mail_api/cron_auto_sync_flows.php > /dev/null 2>&1
+ * 0 * * * * /usr/local/bin/php /path/to/backend/automation/cron_auto_sync_flows.php > /dev/null 2>&1
  * 
  * Hoặc chạy mỗi 30 phút (thay dấu * đầu tiên bằng dấu sao-gạch-30):
- * 0,30 * * * * /usr/local/bin/php /home/vhvxoigh/automation.ideas.edu.vn/mail_api/cron_auto_sync_flows.php > /dev/null 2>&1
+ * 0,30 * * * * /usr/local/bin/php /path/to/backend/automation/cron_auto_sync_flows.php > /dev/null 2>&1
  */
 
 ini_set('display_errors', 0);
@@ -133,10 +133,10 @@ try {
                 $hasActivity = $stmt->fetchColumn() > 0;
 
                 if (!$hasActivity) {
-                    // No activity at all -> likely garbage data, remove it
-                    $pdo->prepare("DELETE FROM subscriber_flow_states WHERE flow_id = ? AND subscriber_id = ?")
+                    // Axiom 4: Soft-cancel flow state rather than hard delete
+                    $pdo->prepare("UPDATE subscriber_flow_states SET status = 'cancelled', updated_at = NOW() WHERE flow_id = ? AND subscriber_id = ?")
                         ->execute([$flowId, $fc['subscriber_id']]);
-                    echo "$logPrefix   DELETED garbage state for subscriber {$fc['subscriber_id']} (no activity logs)\n";
+                    echo "$logPrefix   CANCELLED garbage state for subscriber {$fc['subscriber_id']} (no activity logs)\n";
                     $falseCompletedCount++;
                 } else {
                     // Has activity -> add complete_flow log
@@ -282,9 +282,6 @@ try {
         foreach ($criticalErrors as $err) {
             echo "$logPrefix   - $err\n";
         }
-
-        // TODO: Send email notification to admin
-        // mail('admin@ideas.edu.vn', 'Flow Sync Critical Errors', implode("\n", $criticalErrors));
     }
 
     echo "$logPrefix ========================================\n";
@@ -292,9 +289,6 @@ try {
 } catch (Exception $e) {
     echo "$logPrefix FATAL ERROR: " . $e->getMessage() . "\n";
     echo $e->getTraceAsString() . "\n";
-
-    // TODO: Send critical error notification
-    // mail('admin@ideas.edu.vn', 'Flow Sync FATAL ERROR', $e->getMessage() . "\n\n" . $e->getTraceAsString());
 }
 
 echo "$logPrefix Auto-sync cron job finished.\n\n";

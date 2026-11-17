@@ -73,7 +73,10 @@ try {
     }
 
     $workspaceId = (int)get_current_workspace_id();
-    $mailer = new Mailer($pdo, API_BASE_URL, 'marketing@ideas.edu.vn', $workspaceId);
+    require_once dirname(__DIR__) . '/config/TenantConfigService.php';
+    $tenantBrandName = TenantConfigService::getBrandName($pdo, $workspaceId);
+    $tenantDefaultSender = TenantConfigService::getDefaultSenderEmail($pdo, $workspaceId);
+    $mailer = new Mailer($pdo, API_BASE_URL, $tenantDefaultSender, $workspaceId);
 
     $requestedSenderEmail = strtolower(trim((string)($data['sender_email'] ?? ($data['from_email'] ?? ($data['senderEmail'] ?? '')))));
     $requestedSenderName = trim((string)($data['sender_name'] ?? ($data['from_name'] ?? ($data['senderName'] ?? ''))));
@@ -102,8 +105,8 @@ try {
             // Check if recipient is a company employee in users table
             $empRow = null;
             try {
-                $stmtEmp = $pdo->prepare("SELECT id, full_name, email, phone, job_title FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1");
-                $stmtEmp->execute([$toEmail]);
+                $stmtEmp = $pdo->prepare("SELECT id, full_name, email, phone, job_title FROM users WHERE LOWER(email) = LOWER(?) AND tenant_id = ? LIMIT 1");
+                $stmtEmp->execute([$toEmail, $workspaceId]);
                 $empRow = $stmtEmp->fetch(PDO::FETCH_ASSOC);
             } catch (\Throwable $ignore) {
                 $empRow = null;
@@ -131,19 +134,19 @@ try {
                 'first_name' => $firstName,
                 'last_name' => $lastName,
                 'phone_number' => !empty($empRow['phone']) ? $empRow['phone'] : '0901234567',
-                'company_name' => 'Viện Đào tạo Quốc tế IDEAS',
-                'job_title' => !empty($empRow['job_title']) ? $empRow['job_title'] : 'Học viên',
+                'company_name' => $tenantBrandName,
+                'job_title' => !empty($empRow['job_title']) ? $empRow['job_title'] : 'Khách hàng',
                 'city' => 'TP. Hồ Chí Minh',
                 'district' => 'Quận 1',
                 'ward' => 'Phường Bến Nghé',
                 'country' => 'Việt Nam',
                 'address' => '123 Nguyễn Huệ, Quận 1',
                 'gender' => 'Nam',
-                'program' => 'MBA Quốc tế Thụy Sĩ',
+                'program' => 'Chương trình trọng điểm',
                 'stage_name' => 'Đang tư vấn',
-                'owner_name' => 'Chuyên viên Tư vấn IDEAS',
+                'owner_name' => 'Chuyên viên Tư vấn ' . $tenantBrandName,
                 'owner_phone' => '0987654321',
-                'owner_email' => 'tuvan@ideas.edu.vn',
+                'owner_email' => $tenantDefaultSender,
                 'branch_name' => 'Cơ sở TP.HCM',
                 'deal_name' => 'Hồ sơ Học bổng MBA - ' . ($fullName !== '' ? $fullName : 'Nguyễn Văn An'),
                 'expected_revenue' => 150000000,

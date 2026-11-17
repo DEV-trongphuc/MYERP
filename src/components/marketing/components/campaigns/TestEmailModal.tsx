@@ -7,6 +7,7 @@ import Modal from '../common/Modal';
 import Button from '../common/Button';
 import { api } from '../../services/storageAdapter';
 import { useSettings, parseVerifiedSenderEmails } from '../contexts/SettingsContext';
+import { getTenantOrganizationName, getTenantDefaultSenderEmail } from '../../../../contexts/TenantConfigContext';
 import erpApi from '../../../../api/axios';
 import { Avatar } from '../../../ui/Avatar';
 import toast from 'react-hot-toast';
@@ -55,11 +56,11 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
     const [verifiedSenders, setVerifiedSenders] = useState<string[]>(contextSenderEmails);
     const normalizeSenderName = (val?: string | null) => {
         const s = String(val || '').trim();
-        if (!s || /^viện\s+quốc\s+tế\s+ideas$/i.test(s)) return 'IDEAS';
+        if (!s) return getTenantOrganizationName('Enterprise');
         return s;
     };
     const [selectedSenderEmail, setSelectedSenderEmail] = useState<string>(
-        defaultSenderEmail || contextSenderEmails[0] || 'tuyensinh@ideas.edu.vn'
+        defaultSenderEmail || contextSenderEmails[0] || getTenantDefaultSenderEmail()
     );
     const [senderName, setSenderName] = useState<string>(
         normalizeSenderName(defaultSenderName || settings?.senderName)
@@ -123,9 +124,9 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
                     payload?.smtp_from_name ||
                     payload?.ses_sender_name ||
                     settings?.senderName ||
-                    'IDEAS'
+                    getTenantOrganizationName('Enterprise')
                 );
-                setSenderName((prev) => (!prev || /^viện\s+quốc\s+tế\s+ideas$/i.test(prev) ? resolvedName : prev));
+                setSenderName((prev) => (!prev ? resolvedName : prev));
             })
             .catch(() => {
                 if (cancelled) return;
@@ -330,8 +331,8 @@ const TestEmailModal: React.FC<TestEmailModalProps> = ({
             return;
         }
 
-        const chosenFromEmail = (selectedSenderEmail || verifiedSenders[0] || 'tuyensinh@ideas.edu.vn').trim().toLowerCase();
-        const chosenFromName = senderName.trim() || 'Viện Quốc Tế IDEAS';
+        const chosenFromEmail = (selectedSenderEmail || verifiedSenders[0] || getTenantDefaultSenderEmail()).trim().toLowerCase();
+        const chosenFromName = senderName.trim() || getTenantOrganizationName('Enterprise');
 
         setLoading(true);
         try {

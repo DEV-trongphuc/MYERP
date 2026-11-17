@@ -1,6 +1,8 @@
 <?php
 // f:\CRM\backend\controllers\ContactController.php
 
+require_once __DIR__ . '/../config/TenantConfigService.php';
+
 class ContactController {
     private PDO $db;
     private array $stagesCache = [];
@@ -12,6 +14,10 @@ class ContactController {
 
     public function __construct(PDO $db) { 
         $this->db = $db; 
+    }
+
+    private function buildStudentSubTabClause(int $tid, string $tabKey, string $alias = 'c'): ?string {
+        return TenantConfigService::buildStudentSubTabClause($this->db, $tid, $tabKey, $alias);
     }
 
     public static function invalidatePersonaCache(int $tid = 0): void {
@@ -437,18 +443,20 @@ class ContactController {
             || !empty($_GET['study_status']) || !empty($_GET['student_code']) || !empty($_GET['expected_intake']);
 
         if (!$isGlobalPipelineSearch) {
+            $wonStageIds = TenantConfigService::getStageIdsBySlugs($this->db, (int)$tid, ['enrolled', 'hoc_vien', 'won']);
+            $wonStageExcl = !empty($wonStageIds) ? "(c.stage_id IS NULL OR c.stage_id NOT IN (" . implode(',', array_map('intval', $wonStageIds)) . "))" : "1=1";
+            $dynamicSubTabClause = ($segment === 'customer' && $studentSubTab !== '') ? $this->buildStudentSubTabClause((int)$tid, $studentSubTab, 'c') : null;
+
             switch ($segment) {
                 case 'tiem_nang':
-                    // By default, exclude pipeline 14 (enrolled / customer / won) from Tiềm năng list.
-                    // If searching ($isGlobalPipelineSearch), filtering explicitly by stage, filtering by data_type, or filtering by admission/academic fields, keep them accessible.
                     if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id']) && empty($_GET['stages']) && empty($_GET['stage_ids']) && !$hasAcademicFilter && $dataType === '') {
-                        $where[] = "(c.stage_id != 44 AND (c.pipeline_status IS NULL OR c.pipeline_status NOT IN ('enrolled', 'hoc_vien', 'won')) AND c.status != 'customer')";
+                        $where[] = "({$wonStageExcl} AND (c.pipeline_status IS NULL OR c.pipeline_status NOT IN ('enrolled', 'hoc_vien', 'won')) AND c.status != 'customer')";
                     }
                     break;
                 case 'hot':        $where[] = 'c.lead_score >= 80'; break;
                 case 'customer':
-                    if ($studentSubTab === 'le_phi' || $studentSubTab === 'nop_ho_so') {
-                        // Bypass c.status = 'customer' for candidate stages
+                    if ($dynamicSubTabClause !== null) {
+                        $where[] = $dynamicSubTabClause;
                     } else {
                         $where[] = "(c.status = 'customer' OR EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND (ps.system_slug IN ('enrolled', 'hoc_vien') OR ps.is_won = 1)) OR c.pipeline_status IN ('enrolled', 'hoc_vien'))";
                     }
@@ -456,26 +464,6 @@ class ContactController {
                 case 'has_deal':   $where[] = "EXISTS (SELECT 1 FROM deals d WHERE d.contact_id = c.id AND d.deleted_at IS NULL)"; break;
                 case 'no_contact': $where[] = "c.last_contact < DATE_SUB(NOW(), INTERVAL 30 DAY)"; break;
                 case 'new_week':   $where[] = "c.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"; break;
-            }
-
-            if ($segment === 'customer' && $studentSubTab !== '') {
-                if ($studentSubTab === 'le_phi') {
-                    $where[] = "(
-                        EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('deposit_tuition_payment', 'dong_le_phi_ho_so'))
-                        OR c.pipeline_status IN ('deposit_tuition_payment', 'dong_le_phi_ho_so')
-                    )";
-                } elseif ($studentSubTab === 'nop_ho_so') {
-                    $where[] = "(
-                        EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))
-                        OR c.pipeline_status IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so')
-                    )";
-                } elseif ($studentSubTab === 'chinh_thuc') {
-                    $where[] = "(
-                        EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND (ps.system_slug IN ('enrolled', 'hoc_vien') OR ps.is_won = 1))
-                        OR c.pipeline_status IN ('enrolled', 'hoc_vien')
-                        OR c.status = 'customer'
-                    )";
-                }
             }
         }
 
@@ -687,22 +675,24 @@ class ContactController {
         }
 
         if (($uncontacted || $segment === 'not_contacted') && !$isGlobalPipelineSearch) {
+            $newLeadStageIds = TenantConfigService::getStageIdsBySlugs($this->db, (int)$tid, ['new_lead']);
+            $notNewLeadCond = !empty($newLeadStageIds) ? "c.stage_id NOT IN (" . implode(',', array_map('intval', $newLeadStageIds)) . ")" : "1=0";
             $where[] = "(
                 (c.last_contact IS NULL OR c.last_contact = '')
                 AND NOT EXISTS (
                     SELECT 1 FROM activities a1
                     WHERE a1.contact_id = c.id AND a1.deleted_at IS NULL
-                      AND (c.stage_id != 31 OR a1.created_at >= c.created_at)
+                      AND ({$notNewLeadCond} OR a1.created_at >= c.created_at)
                 )
                 AND NOT EXISTS (
                     SELECT 1 FROM activities a2
                     WHERE a2.related_type IN ('contact', 'lead') AND a2.related_id = c.id AND a2.deleted_at IS NULL
-                      AND (c.stage_id != 31 OR a2.created_at >= c.created_at)
+                      AND ({$notNewLeadCond} OR a2.created_at >= c.created_at)
                 )
                 AND NOT EXISTS (
                     SELECT 1 FROM notes n 
                     WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id 
-                      AND (c.stage_id != 31 OR n.created_at >= c.created_at)
+                      AND ({$notNewLeadCond} OR n.created_at >= c.created_at)
                       AND n.body NOT LIKE '[Tự động]%' 
                       AND n.body NOT LIKE '[Phân bổ]%' 
                       AND n.body NOT LIKE '[Giao data]%'
@@ -1877,6 +1867,10 @@ class ContactController {
                         $row = $stmt->fetch();
                     }
                     if (!$row) {
+                        if (in_array(strtolower($auth['role'] ?? ''), ['sale', 'sales'], true)) {
+                            respond(403, null, 'Bạn không có quyền xem thông tin khách hàng này', false);
+                            return;
+                        }
                         $fullName = trim(((string)($sub['first_name'] ?? '')) . ' ' . ((string)($sub['last_name'] ?? '')));
                         if ($fullName === '') {
                             $fullName = (string)($sub['email'] ?? $sub['phone_number'] ?? 'Subscriber');
@@ -1909,6 +1903,16 @@ class ContactController {
         }
 
         if (!$row) respond(404, null, 'Không tìm thấy liên hệ', false);
+        if (in_array(strtolower($auth['role'] ?? ''), ['sale', 'sales'], true)) {
+            $currentUid = (int)($auth['user_id'] ?? $auth['id'] ?? 0);
+            $ownerId = (int)($row['owner_id'] ?? 0);
+            $collabs = array_map('intval', array_filter(array_map('trim', explode(',', (string)($row['collaborator_ids'] ?? '')))));
+            $isOwnerOrCollab = ($ownerId === $currentUid) || in_array($currentUid, $collabs, true);
+            if (!$isOwnerOrCollab) {
+                respond(403, null, 'Bạn không có quyền xem thông tin khách hàng này', false);
+                return;
+            }
+        }
         foreach (['birthday', 'dob', 'admission_date'] as $dateCol) {
             if (isset($row[$dateCol]) && ($row[$dateCol] === '0000-00-00' || $row[$dateCol] === '0000-00-00 00:00:00' || $row[$dateCol] === '00/00/0000')) {
                 $row[$dateCol] = null;
@@ -1946,14 +1950,116 @@ class ContactController {
         respond(200, $row);
     }
 
-    public function update(array $auth, int $id): void {
+    private function resolveOrPromoteContactId(array $auth, $rawId): int {
+        $rawStr = trim((string)$rawId);
+        if ($rawStr !== '' && ctype_digit($rawStr)) {
+            return (int)$rawStr;
+        }
+        if ($rawStr === '') {
+            respond(404, null, 'Không tìm thấy liên hệ', false);
+        }
+
+        $tenantId = (int)($auth['tenant_id'] ?? 1);
+        $stmtSub = $this->db->prepare("SELECT * FROM subscribers WHERE id = ? AND deleted_at IS NULL LIMIT 1");
+        $stmtSub->execute([$rawStr]);
+        $sub = $stmtSub->fetch(PDO::FETCH_ASSOC);
+        if (!$sub) {
+            respond(404, null, 'Không tìm thấy liên hệ', false);
+        }
+
+        if (!empty($sub['contact_id'])) {
+            $chk = $this->db->prepare("SELECT id FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+            $chk->execute([(int)$sub['contact_id'], $tenantId]);
+            if ($foundId = (int)$chk->fetchColumn()) {
+                return $foundId;
+            }
+        }
+
+        require_once __DIR__ . '/../utils/DomationContactMatcher.php';
+        $syncRes = DomationContactMatcher::syncSubscriberMatchOnly($this->db, (string)$sub['id']);
+        if (!empty($syncRes['contact_id'])) {
+            return (int)$syncRes['contact_id'];
+        }
+
+        // Promote subscriber-only profile into CRM contacts so edits/stage moves persist cleanly
+        $fullName = trim(((string)($sub['first_name'] ?? '')) . ' ' . ((string)($sub['last_name'] ?? '')));
+        if ($fullName === '') {
+            $fullName = (string)($sub['email'] ?? ($sub['phone_number'] ?? ($sub['phone'] ?? 'Khách hàng')));
+        }
+        $email = trim((string)($sub['email'] ?? '')) ?: null;
+        $phone = trim((string)($sub['phone_number'] ?? ($sub['phone'] ?? ''))) ?: null;
+        $source = trim((string)($sub['source'] ?? '')) ?: 'Marketing Audience';
+        $ownerId = !empty($sub['owner_id']) ? (int)$sub['owner_id'] : ((int)($auth['user_id'] ?? $auth['id'] ?? 0) ?: null);
+
+        $stStage = $this->db->prepare("SELECT id, slug FROM pipeline_stages WHERE tenant_id = ? ORDER BY sort_order ASC, id ASC LIMIT 1");
+        $stStage->execute([$tenantId]);
+        $firstStage = $stStage->fetch(PDO::FETCH_ASSOC);
+        $stageId = !empty($firstStage['id']) ? (int)$firstStage['id'] : null;
+        $pipelineStatus = !empty($firstStage['slug']) ? (string)$firstStage['slug'] : 'new';
+
+        $startedTx = false;
+        try {
+            if (!$this->db->inTransaction()) {
+                $this->db->beginTransaction();
+                $startedTx = true;
+            }
+            $ins = $this->db->prepare("
+                INSERT INTO contacts (
+                    tenant_id, full_name, email, phone, mobile, source,
+                    status, pipeline_status, stage_id, lead_status, owner_id,
+                    domation_subscriber_id, created_by, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'lead', ?, ?, 'new', ?, ?, ?, NOW(), NOW())
+            ");
+            $ins->execute([
+                $tenantId,
+                $fullName,
+                $email,
+                $phone,
+                $phone,
+                $source,
+                $pipelineStatus,
+                $stageId,
+                $ownerId,
+                (string)$sub['id'],
+                (int)($auth['user_id'] ?? $auth['id'] ?? 1),
+            ]);
+            $newContactId = (int)$this->db->lastInsertId();
+            $this->db->prepare("UPDATE subscribers SET contact_id = ? WHERE id = ?")->execute([$newContactId, (string)$sub['id']]);
+            if ($startedTx) $this->db->commit();
+            return $newContactId;
+        } catch (\Throwable $e) {
+            if ($startedTx && $this->db->inTransaction()) $this->db->rollBack();
+            error_log("resolveOrPromoteContactId failed: " . $e->getMessage());
+            respond(500, null, 'Lỗi khởi tạo hồ sơ liên hệ từ dữ liệu Marketing', false);
+        }
+        return 0;
+    }
+
+    public function update(array $auth, $rawId): void {
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền cập nhật', false);
+        $id = $this->resolveOrPromoteContactId($auth, $rawId);
         $b = getBody();
         // 1. Pre-fetch current contact state for lifecycle validation
         $stmtCurr = $this->db->prepare("SELECT stage_id, pipeline_status, ttl1_completed, owner_id, full_name, person_id, email, phone, mobile, collaborator_ids FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $stmtCurr->execute([$id, $auth['tenant_id']]);
         $currentContact = $stmtCurr->fetch();
         if (!$currentContact) respond(404, null, 'Không tìm thấy liên hệ', false);
+
+        if (in_array(strtolower($auth['role'] ?? ''), ['sale', 'sales'], true)) {
+            $currentUid = (int)($auth['user_id'] ?? $auth['id'] ?? 0);
+            $currOwnerId = (int)($currentContact['owner_id'] ?? 0);
+            $collabs = array_map('intval', array_filter(array_map('trim', explode(',', (string)($currentContact['collaborator_ids'] ?? '')))));
+            $isOwnerOrCollab = ($currOwnerId === $currentUid) || in_array($currentUid, $collabs, true);
+            if (!$isOwnerOrCollab) {
+                respond(403, null, 'Bạn không có quyền chỉnh sửa thông tin khách hàng này', false);
+                return;
+            }
+            $targetOwnerId = array_key_exists('owner_id', $b) ? (int)$b['owner_id'] : (array_key_exists('assigned_to', $b) ? (int)$b['assigned_to'] : $currOwnerId);
+            if ($targetOwnerId !== $currOwnerId) {
+                respond(403, null, 'Bạn không có quyền chuyển nhượng người phụ trách khách hàng', false);
+                return;
+            }
+        }
 
         $currEffStage = $this->resolveEffectiveStage(
             !empty($currentContact['stage_id']) ? (int)$currentContact['stage_id'] : null,
@@ -2059,8 +2165,8 @@ class ContactController {
                 $isToSuccess = strpos(strtolower($newStatus), 'success') !== false || strpos(strtolower($newStatus), 'thanh_cong') !== false || $newStatus === 'dong_deal' || $newStatus === 'thanh_cong' || $newStatus === 'enrolled' || $newStatus === 'hoc_vien' || (int)($b['stage_id'] ?? 0) === 44;
                 $isCancellation = $isFromDeposit && !$isToSuccess;
 
-                $userRole = strtolower($auth['role'] ?? '');
-                $isPrivileged = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'sale_admin', 'saleadmin'], true);
+                require_once __DIR__ . '/../config/TenantConfigService.php';
+                $isPrivileged = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'sale_admin', 'saleadmin'], 'contacts', 'approve');
 
                 // Enforce forward-only (Sale Admin & Admins have full rights to transition state)
                 if ($newIdx < $currIdx && !$isPrivileged) {
@@ -2481,12 +2587,27 @@ class ContactController {
                     $cidRef = (int)$id;
                     register_shutdown_function(function () use ($dbRef, $cidRef) {
                         try {
-                            if (function_exists('fastcgi_finish_request')) @fastcgi_finish_request();
+                            $flushed = false;
+                            if (function_exists('litespeed_finish_request')) {
+                                $flushed = (bool)@litespeed_finish_request();
+                            } elseif (function_exists('fastcgi_finish_request')) {
+                                $flushed = (bool)@fastcgi_finish_request();
+                            }
                             $ocrPath = __DIR__ . '/../utils/StudentDocOcrService.php';
                             if (is_file($ocrPath)) {
                                 require_once $ocrPath;
                                 if (class_exists('StudentDocOcrService') && \StudentDocOcrService::shouldScanContact($dbRef, $cidRef)) {
-                                    \StudentDocOcrService::scanAndEnrichContact($dbRef, $cidRef);
+                                    if (!$flushed && function_exists('exec') && PHP_OS_FAMILY !== 'Windows') {
+                                        $phpBin = is_executable('/opt/cpanel/ea-php81/root/usr/bin/php') ? '/opt/cpanel/ea-php81/root/usr/bin/php' : 'php';
+                                        $cmd = sprintf(
+                                            'nohup %s -r %s >/dev/null 2>&1 &',
+                                            escapeshellarg($phpBin),
+                                            escapeshellarg("require_once " . var_export($ocrPath, true) . "; require_once " . var_export(__DIR__ . '/../automation/bootstrap.php', true) . "; \\StudentDocOcrService::scanAndEnrichContact(\$pdo, " . (int)$cidRef . ");")
+                                        );
+                                        @exec($cmd);
+                                    } else {
+                                        \StudentDocOcrService::scanAndEnrichContact($dbRef, $cidRef);
+                                    }
                                 }
                             }
                         } catch (\Throwable $e) {}
@@ -2535,19 +2656,27 @@ class ContactController {
                 }
 
                 require_once __DIR__ . '/../config/CapiHelper.php';
-                
-                // Load CAPI triggers mapping from settings dynamically
-                $capiTriggersRaw = $this->getSetting('capi_event_triggers', '');
-                $capiMap = [];
-                if (!empty($capiTriggersRaw)) {
-                    $capiMap = json_decode($capiTriggersRaw, true) ?: [];
-                }
-                if (isset($capiMap[$newStatus]) && $capiMap[$newStatus] !== 'Skip' && $capiMap[$newStatus] !== 'None' && $capiMap[$newStatus] !== 'BAD') {
-                    $evtName = $capiMap[$newStatus];
-                    register_shutdown_function(function() use ($id, $evtName) {
+                $capiRes = CapiHelper::resolveEventForStage(
+                    $this->db,
+                    $effNewSlug ?? ($newStatus ?: $currStatus),
+                    !empty($effNewId) ? (int)$effNewId : null,
+                    (int)$auth['tenant_id']
+                );
+                if (($capiRes['event_name'] ?? 'Skip') !== 'Skip') {
+                    $evtName = $capiRes['event_name'];
+                    $evtStageSlug = (string)($capiRes['stage_slug'] ?? $effNewSlug ?? $newStatus);
+                    $purchaseVal = ($evtName === 'Purchase') ? CapiHelper::resolveBestPurchaseValue($this->db, (int)$id, 0.0) : 0.0;
+                    register_shutdown_function(function () use ($id, $evtName, $purchaseVal, $evtStageSlug) {
                         try {
+                            if (function_exists('litespeed_finish_request')) {
+                                @litespeed_finish_request();
+                            } elseif (function_exists('fastcgi_finish_request')) {
+                                @fastcgi_finish_request();
+                            }
                             require_once __DIR__ . '/../config/CapiHelper.php';
-                            CapiHelper::sendEvent(null, $id, $evtName);
+                            CapiHelper::sendEvent(null, (int)$id, $evtName, $purchaseVal, [
+                                'stage_slug' => $evtStageSlug,
+                            ]);
                         } catch (\Throwable $ex) {}
                     });
                 }
@@ -2709,7 +2838,8 @@ class ContactController {
         }
     }
 
-    public function moveStage(array $auth, int $id): void {
+    public function moveStage(array $auth, $rawId): void {
+        $id = $this->resolveOrPromoteContactId($auth, $rawId);
         $b = getBody();
         if (empty($b['stage_id'])) respond(422, null, 'stage_id là bắt buộc', false);
         
@@ -2833,8 +2963,8 @@ class ContactController {
         $isToSuccess = strpos(strtolower($newStatus), 'success') !== false || strpos(strtolower($newStatus), 'enrolled') !== false || strpos(strtolower($newStatus), 'thanh_cong') !== false || $newStatus === 'dong_deal' || $newStatus === 'thanh_cong' || $stageId === 44 || $targetStageOrder === 14;
         $isCancellation = $isFromDeposit && !$isToSuccess;
 
-        $userRole = strtolower($auth['role'] ?? '');
-        $isPrivileged = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isPrivileged = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu'], 'contacts', 'approve');
 
         // Enforce forward-only (Sale Admin & Admins have full rights to transition state)
         if ($newIdx < $currIdx && $targetLeadStatus === 'active' && !$isPrivileged) {
@@ -2953,21 +3083,18 @@ class ContactController {
         if ($newStatus !== $currStatus) {
             try {
                 require_once __DIR__ . '/../config/CapiHelper.php';
-                $capiTriggersRaw = $this->getSetting('capi_event_triggers', '');
-                $capiMap = !empty($capiTriggersRaw) ? (json_decode($capiTriggersRaw, true) ?: []) : [];
-                if (empty($capiMap)) {
-                    $capiMap = [
-                        'dong_y_gap' => 'Schedule',
-                        'da_gap' => 'Schedule',
-                        'proposal_sent' => 'Schedule',
-                        'not_lead' => 'BAD',
-                        'dat_coc' => 'Purchase',
-                        'deposit_tuition_payment' => 'Purchase',
-                        'enrolled' => 'Purchase'
-                    ];
-                }
-                if (isset($capiMap[$newStatus]) && $capiMap[$newStatus] !== 'Skip' && $capiMap[$newStatus] !== 'None' && $capiMap[$newStatus] !== 'BAD') {
-                    CapiHelper::sendEvent($this->db, $id, $capiMap[$newStatus]);
+                $capiRes = CapiHelper::resolveEventForStage(
+                    $this->db,
+                    $newStatus,
+                    !empty($stageId) ? (int)$stageId : null,
+                    (int)$auth['tenant_id']
+                );
+                if (($capiRes['event_name'] ?? 'Skip') !== 'Skip') {
+                    $evtName = $capiRes['event_name'];
+                    $purchaseVal = ($evtName === 'Purchase') ? CapiHelper::resolveBestPurchaseValue($this->db, (int)$id, 0.0) : 0.0;
+                    CapiHelper::sendEvent($this->db, (int)$id, $evtName, $purchaseVal, [
+                        'stage_slug' => (string)($capiRes['stage_slug'] ?? $newStatus),
+                    ]);
                 }
             } catch (\Throwable $eCapi) {
                 error_log("CapiHelper error in moveStage: " . $eCapi->getMessage());
@@ -3000,12 +3127,27 @@ class ContactController {
                     $cidRef = (int)$id;
                     register_shutdown_function(function () use ($dbRef, $cidRef) {
                         try {
-                            if (function_exists('fastcgi_finish_request')) @fastcgi_finish_request();
+                            $flushed = false;
+                            if (function_exists('litespeed_finish_request')) {
+                                $flushed = (bool)@litespeed_finish_request();
+                            } elseif (function_exists('fastcgi_finish_request')) {
+                                $flushed = (bool)@fastcgi_finish_request();
+                            }
                             $ocrPath = __DIR__ . '/../utils/StudentDocOcrService.php';
                             if (is_file($ocrPath)) {
                                 require_once $ocrPath;
                                 if (class_exists('StudentDocOcrService') && \StudentDocOcrService::shouldScanContact($dbRef, $cidRef)) {
-                                    \StudentDocOcrService::scanAndEnrichContact($dbRef, $cidRef);
+                                    if (!$flushed && function_exists('exec') && PHP_OS_FAMILY !== 'Windows') {
+                                        $phpBin = is_executable('/opt/cpanel/ea-php81/root/usr/bin/php') ? '/opt/cpanel/ea-php81/root/usr/bin/php' : 'php';
+                                        $cmd = sprintf(
+                                            'nohup %s -r %s >/dev/null 2>&1 &',
+                                            escapeshellarg($phpBin),
+                                            escapeshellarg("require_once " . var_export($ocrPath, true) . "; require_once " . var_export(__DIR__ . '/../automation/bootstrap.php', true) . "; \\StudentDocOcrService::scanAndEnrichContact(\$pdo, " . (int)$cidRef . ");")
+                                        );
+                                        @exec($cmd);
+                                    } else {
+                                        \StudentDocOcrService::scanAndEnrichContact($dbRef, $cidRef);
+                                    }
                                 }
                             }
                         } catch (\Throwable $e) {}
@@ -3301,20 +3443,8 @@ class ContactController {
     }
 
     private function getSetting(string $key, string $default): string {
-        if (self::$settingsCache === null) {
-            self::$settingsCache = [];
-            try {
-                $stmt = $this->db->query("SELECT setting_key, setting_value FROM system_settings");
-                if ($stmt) {
-                    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
-                        if (isset($r['setting_key'])) {
-                            self::$settingsCache[(string)$r['setting_key']] = (string)($r['setting_value'] ?? '');
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {}
-        }
-        return array_key_exists($key, self::$settingsCache) ? self::$settingsCache[$key] : $default;
+        $tid = (int)($GLOBALS['current_tenant_id'] ?? 1);
+        return (string)TenantConfigService::getSetting($this->db, $tid, $key, $default);
     }
 
     private function getSecurityExpiration(string $status): ?string {
@@ -3724,105 +3854,35 @@ class ContactController {
     }
 
     private function getScope(array $auth, string $module, string $action): string {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
         $uRow = $this->getUserAuthProfile((int)($auth['user_id'] ?? 0));
         $permissionsJson = null;
         if (!empty($uRow['permissions_json'])) {
             $permissionsJson = json_decode((string)$uRow['permissions_json'], true);
+            $auth['permissions'] = $permissionsJson;
+        }
+        $mappedMod = ($module === 'leads') ? 'contacts' : $module;
+        $resolved = TenantConfigService::resolvePermissionScope($this->db, $auth, $mappedMod, $action);
+
+        // If user has explicit user-level override, honor it strictly
+        if (is_array($permissionsJson) && isset($permissionsJson[$mappedMod][$action]) && in_array($permissionsJson[$mappedMod][$action], ['all', 'team', 'own', 'none'], true)) {
+            return (string)$permissionsJson[$mappedMod][$action];
         }
 
-        $isMarketing = false;
-        if (strtolower($auth['role'] ?? '') === 'marketing') {
-            $isMarketing = true;
-        } elseif ($uRow) {
-            $tName = mb_strtolower($uRow['team_name'] ?? '');
-            $jTitle = mb_strtolower($uRow['job_title'] ?? '');
-            if ((int)($uRow['team_id'] ?? 0) === 3 || strpos($tName, 'marketing') !== false || strpos($jTitle, 'marketing') !== false) {
-                $isMarketing = true;
+        // Preserve department-based Marketing / Academic global read/write on CRM contacts when assigned generic sales/staff/manager role
+        if ($uRow && in_array(strtolower((string)($auth['role'] ?? '')), ['sales', 'sale', 'staff', 'manager', 'leader', 'team_lead', 'truong_phong', 'truongphong'], true) && in_array($mappedMod, ['contacts', 'deals'], true)) {
+            $tidScope = (int)($auth['tenant_id'] ?? 1);
+            [$deptCode] = TenantConfigService::classifyDepartmentCode(
+                trim(($uRow['team_name'] ?? '') . ' ' . ($uRow['department'] ?? '') . ' ' . ($uRow['job_title'] ?? '')),
+                (int)($uRow['team_id'] ?? 0),
+                $tidScope
+            );
+            if ($deptCode === 'marketing' || $deptCode === 'academic') {
+                return $action === 'delete' ? 'none' : 'all';
             }
         }
 
-        $isAcademic = false;
-        if (in_array(strtolower($auth['role'] ?? ''), ['academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor'], true)) {
-            $isAcademic = true;
-        } elseif ($uRow) {
-            $comb = mb_strtolower(($uRow['department'] ?? '') . ' ' . ($uRow['job_title'] ?? '') . ' ' . ($uRow['team_name'] ?? ''));
-            if (
-                (int)($uRow['team_id'] ?? 0) === 5 ||
-                strpos($comb, 'học vụ') !== false ||
-                strpos($comb, 'hoc_vu') !== false ||
-                strpos($comb, 'học thuật') !== false ||
-                strpos($comb, 'hoc_thuat') !== false ||
-                strpos($comb, 'đào tạo') !== false ||
-                strpos($comb, 'dao_tao') !== false ||
-                strpos($comb, 'academic') !== false ||
-                strpos($comb, 'giảng viên') !== false ||
-                strpos($comb, 'giáo viên') !== false ||
-                strpos($comb, 'trợ giảng') !== false ||
-                strpos($comb, 'tutor') !== false ||
-                strpos($comb, 'teacher') !== false
-            ) {
-                $isAcademic = true;
-            }
-        }
-
-        if (in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'sale_admin', 'saleadmin', 'marketing'], true) || $isMarketing || $isAcademic) {
-            if (($isMarketing || strtolower($auth['role'] ?? '') === 'marketing') && $action === 'delete') {
-                return 'none';
-            }
-            if ($isAcademic && $action === 'delete') {
-                return 'none';
-            }
-            return 'all';
-        }
-
-        if (in_array(strtolower($auth['role'] ?? ''), ['sale', 'sales'], true) && ($module === 'deals' || $module === 'leads')) {
-            return $action === 'delete' ? 'none' : 'own';
-        }
-
-        if ($permissionsJson && isset($permissionsJson[$module][$action])) {
-            $val = $permissionsJson[$module][$action];
-            if (in_array($val, ['all', 'team', 'own', 'none'], true)) {
-                if ($action !== 'delete' && $val === 'none' && in_array($auth['role'], ['sale', 'sales', 'manager', 'director', 'assistant'], true)) {
-                    return 'own';
-                }
-                return $val;
-            }
-        }
-
-        // Default fallbacks
-        $role = $auth['role'];
-        if ($role === 'director') {
-            if ($module === 'settings') {
-                return 'none';
-            }
-            return 'all';
-        }
-        if ($role === 'assistant') {
-            return $action === 'delete' ? 'none' : 'all';
-        }
-        if ($role === 'manager') {
-            return $action === 'delete' ? 'none' : 'team';
-        }
-        if (in_array($role, ['sale', 'sales'], true)) {
-            if ($module === 'projects') {
-                return $action === 'read' ? 'all' : 'none';
-            }
-            return $action === 'delete' ? 'none' : 'own';
-        }
-        if ($role === 'viewer') {
-            return $action === 'read' ? 'all' : 'none';
-        }
-        if ($role === 'accountant') {
-            return 'all';
-        }
-        if ($role === 'marketing') {
-            return 'all';
-        }
-        if (in_array($role, ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
-            return $action === 'delete' ? 'own' : 'all';
-        }
-
-        return 'none';
+        return $resolved;
     }
 
     private function restorePersonPublicStatus(int $contactId, int $tenantId): void {
@@ -3834,20 +3894,16 @@ class ContactController {
             $stmtCount->execute([$personId, $tenantId]);
             $activeClaims = (int)$stmtCount->fetchColumn();
 
+            $dealWonStatus = (string)TenantConfigService::getSetting($this->db, $tenantId, 'deal_won_status', 'enrolled');
             $hasProtectedStatus = false;
-            if ($activeClaims > 0) {
-                $stmtProtected = $this->db->prepare("SELECT COUNT(*) FROM contacts WHERE person_id = ? AND tenant_id = ? AND deleted_at IS NULL AND pipeline_status = (SELECT setting_value FROM system_settings WHERE setting_key = 'deal_won_status' LIMIT 1)");
-                $stmtProtected->execute([$personId, $tenantId]);
+            if ($activeClaims > 0 && $dealWonStatus !== '') {
+                $stmtProtected = $this->db->prepare("SELECT COUNT(*) FROM contacts WHERE person_id = ? AND tenant_id = ? AND deleted_at IS NULL AND pipeline_status = ?");
+                $stmtProtected->execute([$personId, $tenantId, $dealWonStatus]);
                 $hasProtectedStatus = ((int)$stmtProtected->fetchColumn() > 0);
             }
 
-            $maxParallelClaims = 2;
-            $stmtSetting = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'max_parallel_sales_per_client' LIMIT 1");
-            $stmtSetting->execute();
-            $sVal = $stmtSetting->fetchColumn();
-            if ($sVal !== false) {
-                $maxParallelClaims = (int)$sVal;
-            }
+            $sVal = TenantConfigService::getSetting($this->db, $tenantId, 'max_parallel_sales_per_client', '');
+            $maxParallelClaims = ($sVal !== '') ? (int)$sVal : 2;
 
             if ($activeClaims < $maxParallelClaims && !$hasProtectedStatus) {
                 $stmtUp = $this->db->prepare("UPDATE persons SET is_public = 1 WHERE id = ?");
@@ -3883,28 +3939,24 @@ class ContactController {
         }
         
         // 3. Fetch protected status (won status) count for all these person_ids
-        $stmtProtected = $this->db->prepare("
-            SELECT person_id, COUNT(*) as protected_count 
-            FROM contacts 
-            WHERE person_id IN ($inPeople) AND tenant_id = ? AND deleted_at IS NULL AND pipeline_status = (
-                SELECT setting_value FROM system_settings WHERE setting_key = 'deal_won_status' LIMIT 1
-            )
-            GROUP BY person_id
-        ");
-        $stmtProtected->execute(array_merge($personIds, [$tenantId]));
+        $dealWonStatusBatch = (string)TenantConfigService::getSetting($this->db, $tenantId, 'deal_won_status', 'enrolled');
         $protectedMap = [];
-        while ($row = $stmtProtected->fetch(PDO::FETCH_ASSOC)) {
-            $protectedMap[(int)$row['person_id']] = ((int)$row['protected_count'] > 0);
+        if ($dealWonStatusBatch !== '') {
+            $stmtProtected = $this->db->prepare("
+                SELECT person_id, COUNT(*) as protected_count 
+                FROM contacts 
+                WHERE person_id IN ($inPeople) AND tenant_id = ? AND deleted_at IS NULL AND pipeline_status = ?
+                GROUP BY person_id
+            ");
+            $stmtProtected->execute(array_merge($personIds, [$tenantId, $dealWonStatusBatch]));
+            while ($row = $stmtProtected->fetch(PDO::FETCH_ASSOC)) {
+                $protectedMap[(int)$row['person_id']] = ((int)$row['protected_count'] > 0);
+            }
         }
         
         // 4. Fetch max parallel claims setting
-        $maxParallelClaims = 2;
-        $stmtSetting = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'max_parallel_sales_per_client' LIMIT 1");
-        $stmtSetting->execute();
-        $sVal = $stmtSetting->fetchColumn();
-        if ($sVal !== false) {
-            $maxParallelClaims = (int)$sVal;
-        }
+        $sValBatch = TenantConfigService::getSetting($this->db, $tenantId, 'max_parallel_sales_per_client', '');
+        $maxParallelClaims = ($sValBatch !== '') ? (int)$sValBatch : 2;
         
         // 5. Identify which person_ids should be set to is_public = 1
         $qualifyingPersonIds = [];
@@ -4067,39 +4119,20 @@ class ContactController {
         $baseWhereStr = implode(' AND ', $where);
 
         try {
-            // Group 1: Nộp hồ sơ (application_started, application_completed, admission_approved, offer_accepted, nop_ho_so)
-            $nopHoSoSql = "SELECT COUNT(*) FROM contacts c WHERE $baseWhereStr AND (
-                EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))
-                OR c.pipeline_status IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so')
-            )";
-            $nopHoSoStmt = $this->db->prepare($nopHoSoSql);
-            $nopHoSoStmt->execute($params);
-            $nopHoSoCount = (int)$nopHoSoStmt->fetchColumn();
-
-            // Group 2: Lệ phí hồ sơ (deposit_tuition_payment, dong_le_phi_ho_so)
-            $lePhiSql = "SELECT COUNT(*) FROM contacts c WHERE $baseWhereStr AND (
-                EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('deposit_tuition_payment', 'dong_le_phi_ho_so'))
-                OR c.pipeline_status IN ('deposit_tuition_payment', 'dong_le_phi_ho_so')
-            )";
-            $lePhiStmt = $this->db->prepare($lePhiSql);
-            $lePhiStmt->execute($params);
-            $lePhiCount = (int)$lePhiStmt->fetchColumn();
-
-            // Group 3: Học viên chính thức (enrolled, hoc_vien, is_won = 1, or c.status = 'customer')
-            $chinhThucSql = "SELECT COUNT(*) FROM contacts c WHERE $baseWhereStr AND (
-                EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND (ps.system_slug IN ('enrolled', 'hoc_vien') OR ps.is_won = 1))
-                OR c.pipeline_status IN ('enrolled', 'hoc_vien')
-                OR c.status = 'customer'
-            )";
-            $chinhThucStmt = $this->db->prepare($chinhThucSql);
-            $chinhThucStmt->execute($params);
-            $chinhThucCount = (int)$chinhThucStmt->fetchColumn();
-
-            respond(200, [
-                'nop_ho_so' => $nopHoSoCount,
-                'le_phi' => $lePhiCount,
-                'chinh_thuc' => $chinhThucCount
-            ]);
+            $counts = [];
+            $tabs = TenantConfigService::getStudentTabs($this->db, (int)$tid);
+            foreach ($tabs as $tabDef) {
+                $tKey = (string)$tabDef['tab_key'];
+                $clause = $this->buildStudentSubTabClause((int)$tid, $tKey, 'c');
+                if ($clause !== null) {
+                    $stCnt = $this->db->prepare("SELECT COUNT(*) FROM contacts c WHERE {$baseWhereStr} AND {$clause}");
+                    $stCnt->execute($params);
+                    $counts[$tKey] = (int)$stCnt->fetchColumn();
+                } else {
+                    $counts[$tKey] = 0;
+                }
+            }
+            respond(200, $counts);
         } catch (\Throwable $e) {
             respond(500, null, 'Lỗi truy vấn số lượng học viên: ' . $e->getMessage(), false);
         }
@@ -4556,7 +4589,8 @@ class ContactController {
      * Lấy danh sách SĐT học viên từ pipeline 9 trở lên để phục vụ quét avatar
      */
     public function getPipelinePhones(array $auth): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'manager'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'manager', 'director'], 'contacts', 'write', ['all', 'team'])) {
             respond(403, null, 'Chỉ quản trị viên mới có quyền thực hiện tính năng này', false);
         }
         $tid = (int)$auth['tenant_id'];
@@ -4626,7 +4660,8 @@ class ContactController {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             respond(405, null, 'Chỉ hỗ trợ phương thức POST để cập nhật', false);
         }
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'manager'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'manager', 'director'], 'contacts', 'write', ['all', 'team'])) {
             respond(403, null, 'Không có quyền thực hiện', false);
         }
         $tid = (int)$auth['tenant_id'];
@@ -4691,7 +4726,8 @@ class ContactController {
         if (!$contact) respond(404, null, 'Không tìm thấy thông tin học viên', false);
 
         $body = getBody();
-        $defaultAcademicCc = 'it.dept@ideas.edu.vn, student.notice@ideas.edu.vn, support@ideas.edu.vn';
+        $orgCfg = TenantConfigService::getOrganizationProfile($this->db, (int)$auth['tenant_id']);
+        $defaultAcademicCc = (string)($orgCfg['academic_cc_emails'] ?? '');
         $toEmail = trim($body['to_email'] ?? $contact['email'] ?? '');
         $ccEmail = array_key_exists('cc_email', $body) ? trim((string)$body['cc_email']) : $defaultAcademicCc;
         $subject = trim($body['subject'] ?? 'Thông báo Tiếp nhận học viên & Hướng dẫn học tập');
@@ -4846,15 +4882,15 @@ class ContactController {
             $notifyUserIds[] = $ownerId;
         }
 
-        // Tự động thêm Mai Thị Nữ vào danh sách nhận thông báo
         try {
-            $stmtNu = $this->db->prepare("SELECT id FROM users WHERE (email = 'numt@ideas.edu.vn' OR username = 'numt' OR full_name LIKE '%Mai Thị Nữ%' OR id = 100062) AND is_active = 1 LIMIT 1");
-            $stmtNu->execute();
-            $nuRow = $stmtNu->fetch(PDO::FETCH_ASSOC);
-            if ($nuRow && (int)$nuRow['id'] > 0) {
-                $nuId = (int)$nuRow['id'];
-                if ($nuId !== $currentUid && !in_array($nuId, $notifyUserIds, true)) {
-                    $notifyUserIds[] = $nuId;
+            $ruleRecipients = TenantConfigService::resolveNotificationRecipients($this->db, (int)$auth['tenant_id'], 'STUDENT_STUDY_STATUS_CHANGED', [
+                'actor_id' => $currentUid,
+                'owner_id' => $ownerId,
+            ]);
+            foreach ($ruleRecipients as $recRow) {
+                $rId = (int)($recRow['id'] ?? 0);
+                if ($rId > 0 && $rId !== $currentUid && !in_array($rId, $notifyUserIds, true)) {
+                    $notifyUserIds[] = $rId;
                 }
             }
         } catch (\Throwable $e) {}
@@ -5061,7 +5097,8 @@ class ContactController {
         }
     }
 
-    public function assignContact(array $auth, int $contactId): void {
+    public function assignContact(array $auth, $rawContactId): void {
+        $contactId = $this->resolveOrPromoteContactId($auth, $rawContactId);
         $isGlobalAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'sale_admin', 'saleadmin'], true);
         $isManager = strtolower($auth['role'] ?? '') === 'manager';
 
@@ -5140,10 +5177,11 @@ class ContactController {
         respond(200, ['contact_id' => $contactId, 'owner_id' => $ownerId, 'assigned_to' => $ownerId, 'reason' => $reason], 'Điều chuyển nhân sự phụ trách thành công');
     }
 
-    public function addNote(array $auth, int $contactId): void {
+    public function addNote(array $auth, $rawContactId): void {
         if (($auth['role'] ?? '') === 'viewer') {
             respond(403, null, 'Tài khoản chỉ xem không có quyền thêm ghi chú', false);
         }
+        $contactId = $this->resolveOrPromoteContactId($auth, $rawContactId);
         $body = getBody();
         $content = trim($body['content'] ?? $body['note'] ?? $body['body'] ?? '');
         if (!$content) {
@@ -5392,31 +5430,26 @@ class ContactController {
                 || (($filterInput['date_field'] ?? '') === 'admission_date' && (!empty($filterInput['from']) || !empty($filterInput['to']) || !empty($filterInput['from_date']) || !empty($filterInput['to_date'])))
                 || !empty($filterInput['study_status']) || !empty($filterInput['student_code']) || !empty($filterInput['expected_intake']);
             if (!$isGlobalPipelineSearch) {
+                $wonStageIdsStatic = TenantConfigService::getStageIdsBySlugs($this->db, (int)$tid, ['enrolled', 'hoc_vien', 'won']);
+                $wonStageExclStatic = !empty($wonStageIdsStatic) ? "(c.stage_id IS NULL OR c.stage_id NOT IN (" . implode(',', array_map('intval', $wonStageIdsStatic)) . "))" : "1=1";
+                $dynTabStatic = ($segment === 'customer' && $studentSubTab !== '') ? $this->buildStudentSubTabClause((int)$tid, $studentSubTab, 'c') : null;
                 switch ($segment) {
                     case 'tiem_nang':
                         if (empty($stage) && empty($stageSlug) && empty($filterInput['stage_id']) && empty($filterInput['stages']) && empty($filterInput['stage_ids']) && !$hasAcademicFilter) {
-                            $where[] = "(c.stage_id != 44 AND (c.pipeline_status IS NULL OR c.pipeline_status NOT IN ('enrolled', 'hoc_vien', 'won')) AND c.status != 'customer')";
+                            $where[] = "({$wonStageExclStatic} AND (c.pipeline_status IS NULL OR c.pipeline_status NOT IN ('enrolled', 'hoc_vien', 'won')) AND c.status != 'customer')";
                         }
                         break;
                     case 'hot':        $where[] = 'c.lead_score >= 80'; break;
                     case 'customer':
-                        if ($studentSubTab !== 'le_phi' && $studentSubTab !== 'nop_ho_so') {
+                        if ($dynTabStatic !== null) {
+                            $where[] = $dynTabStatic;
+                        } else {
                             $where[] = "(c.status = 'customer' OR EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND (ps.system_slug IN ('enrolled', 'hoc_vien') OR ps.is_won = 1)) OR c.pipeline_status IN ('enrolled', 'hoc_vien'))";
                         }
                         break;
                     case 'has_deal':   $where[] = "EXISTS (SELECT 1 FROM deals d WHERE d.contact_id = c.id AND d.deleted_at IS NULL)"; break;
                     case 'no_contact': $where[] = "c.last_contact < DATE_SUB(NOW(), INTERVAL 30 DAY)"; break;
                     case 'new_week':   $where[] = "c.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"; break;
-                }
-
-                if ($segment === 'customer' && $studentSubTab !== '') {
-                    if ($studentSubTab === 'le_phi') {
-                        $where[] = "(EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('deposit_tuition_payment', 'dong_le_phi_ho_so')) OR c.pipeline_status IN ('deposit_tuition_payment', 'dong_le_phi_ho_so'))";
-                    } elseif ($studentSubTab === 'nop_ho_so') {
-                        $where[] = "(EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so')) OR c.pipeline_status IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))";
-                    } elseif ($studentSubTab === 'chinh_thuc') {
-                        $where[] = "(EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND (ps.system_slug IN ('enrolled', 'hoc_vien') OR ps.is_won = 1)) OR c.pipeline_status IN ('enrolled', 'hoc_vien') OR c.status = 'customer')";
-                    }
                 }
             }
 
@@ -5522,7 +5555,7 @@ class ContactController {
             $subscriberIds = [];
             foreach (array_chunk($matchedContactIds, 1000) as $cidChunk) {
                 $ph = implode(',', array_fill(0, count($cidChunk), '?'));
-                $stmtSub = $this->db->prepare("SELECT id FROM subscribers WHERE workspace_id = ? AND contact_id IN ($ph)");
+                $stmtSub = $this->db->prepare("SELECT id FROM subscribers WHERE workspace_id = ? AND deleted_at IS NULL AND contact_id IN ($ph)");
                 $stmtSub->execute(array_merge([$tid], $cidChunk));
                 $foundSubIds = $stmtSub->fetchAll(PDO::FETCH_COLUMN) ?: [];
                 foreach ($foundSubIds as $sid) {
@@ -5557,10 +5590,10 @@ class ContactController {
                 COUNT(DISTINCT sl.subscriber_id) AS total_count,
                 COUNT(DISTINCT CASE WHEN s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '' THEN sl.subscriber_id END) AS phone_count
             FROM subscriber_lists sl
-            INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ?
-            WHERE sl.list_id = ?
+            INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? AND s.deleted_at IS NULL
+            WHERE sl.workspace_id = ? AND sl.list_id = ?
         ");
-        $stmtRecount->execute([$tid, $listId]);
+        $stmtRecount->execute([$tid, $tid, $listId]);
         $counts = $stmtRecount->fetch(PDO::FETCH_ASSOC) ?: ['total_count' => 0, 'phone_count' => 0];
         $subCount = (int)($counts['total_count'] ?? 0);
         $phoneCount = (int)($counts['phone_count'] ?? 0);
@@ -5579,7 +5612,8 @@ class ContactController {
         ], "Đã đồng bộ {$totalMatched} khách hàng vào danh sách tĩnh \"{$listName}\"");
     }
 
-    public function manageContactTags(array $auth, int $id, string $method = 'POST'): void {
+    public function manageContactTags(array $auth, $rawId, string $method = 'POST'): void {
+        $id = $this->resolveOrPromoteContactId($auth, $rawId);
         $tid = (int)($auth['tenant_id'] ?? 1);
         $b = getBody();
         $tagName = trim((string)($b['name'] ?? $b['tag'] ?? $_GET['name'] ?? $_GET['tag'] ?? ''));
@@ -5807,6 +5841,7 @@ class ContactController {
     }
 
     public static function computePersonaOverviewData(PDO $db, int $tid, array $queryArgs = []): array {
+        @ini_set('memory_limit', '512M');
         $segment = strtolower(trim((string)($queryArgs['segment'] ?? 'student')));
         $programFilter = trim((string)($queryArgs['program'] ?? $queryArgs['school'] ?? ''));
         $intakeFilter = trim((string)($queryArgs['intake'] ?? ''));
@@ -5927,11 +5962,15 @@ class ContactController {
 
         if ($segment === '' || $segment === 'student' || $segment === 'customer' || $segment === 'hoc_vien' || $segment === 'students') {
             $segment = 'student';
-            $where[] = "(c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', '14', 'deposit_tuition_payment', '13') OR c.stage_id IN (43, 44) OR (c.student_id IS NOT NULL AND TRIM(c.student_id) != ''))";
+            $candStageIds = TenantConfigService::getStageIdsBySlugs($db, (int)$tid, ['deposit_tuition_payment', 'dong_le_phi_ho_so', 'enrolled', 'hoc_vien', 'won']);
+            $candStageCond = !empty($candStageIds) ? " OR c.stage_id IN (" . implode(',', array_map('intval', $candStageIds)) . ")" : "";
+            $where[] = "(c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', '14', 'deposit_tuition_payment', '13'){$candStageCond} OR (c.student_id IS NOT NULL AND TRIM(c.student_id) != ''))";
         } else {
             // Tiềm năng (Leads)
             $segment = 'lead';
-            $where[] = "NOT (c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', '14') OR c.stage_id = 44)";
+            $wonPersonaStageIds = TenantConfigService::getStageIdsBySlugs($db, (int)$tid, ['enrolled', 'hoc_vien', 'won']);
+            $wonPersonaCond = !empty($wonPersonaStageIds) ? " OR c.stage_id IN (" . implode(',', array_map('intval', $wonPersonaStageIds)) . ")" : "";
+            $where[] = "NOT (c.status = 'customer' OR c.pipeline_status IN ('enrolled', 'hoc_vien', '14'){$wonPersonaCond})";
         }
 
         // First fetch available programs, intakes, owners for filter dropdowns before applying sub-filters

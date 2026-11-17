@@ -213,14 +213,10 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
 
   const defaultAccountant = useMemo(() => {
     const businessUsers = users.filter(u => 
-      !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) && 
-      u.email !== 'turniodev@gmail.com'
+      !['superadmin', 'super_admin', 'bot', 'system'].includes(String(u.role).toLowerCase())
     );
-    return businessUsers.find(u => String(u.role).toLowerCase() === 'accountant')
-      || businessUsers.find(u => {
-        const fn = String(u.full_name || u.name || '').toLowerCase();
-        return fn.includes('thu thảo') || u.username === 'thaont';
-      })
+    return businessUsers.find(u => ['accountant', 'ke_toan', 'finance'].includes(String(u.role).toLowerCase()))
+      || businessUsers.find(u => String((u as any).department || '').toLowerCase().includes('kế toán'))
       || null;
   }, [users]);
 

@@ -1031,7 +1031,7 @@ export const InternalSchedulePage: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 2147483600,
+          zIndex: 2147483646,
           backdropFilter: 'blur(4px)'
         }}>
           <div style={{

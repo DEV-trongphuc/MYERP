@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import dbSchemaJson from '../assets/db_schema.json';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -17,6 +18,9 @@ import toast from 'react-hot-toast';
 import { CardSkeleton, TableSkeleton, Skeleton } from '../components/ui/Skeleton';
 import { Avatar } from '../components/ui/Avatar';
 import { AITrainingPanel } from '../components/ui/AITrainingPanel';
+import { EnterpriseSaaSSettingsPanels, type EnterpriseSaaSPanelType } from '../components/Settings/EnterpriseSaaSSettingsPanels';
+import { Bell, GraduationCap, Building2 } from 'lucide-react';
+import { getTenantFrontendUrl, getTenantOrganizationName, getTenantInternalDomain } from '../contexts/TenantConfigContext';
 
 
 const thStyle: React.CSSProperties = {
@@ -102,6 +106,8 @@ const DEFAULT_REPORT_REASONS = [
 const SettingsInner = () => {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const location = useLocation();
+  const isStrictAdmin = ['admin', 'superadmin', 'super_admin'].includes(String(user?.role || '').toLowerCase());
   const isMktUser = Boolean(user?.role === 'marketing' || isMarketing(user));
   const { showConfirm } = useUIStore();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -174,6 +180,18 @@ const SettingsInner = () => {
 
   // Tab State & Categories definition
   const categories = [
+    ...(isStrictAdmin ? [{
+      title: t('Kiến trúc SaaS & Phân quyền'),
+      items: [
+        { value: 'roles_permissions', label: t('Vai trò & Phân quyền Phân hệ'), icon: <Shield size={15} /> },
+        { value: 'departments_hierarchy', label: t('Cơ cấu Phòng ban & Leader'), icon: <Users size={15} /> },
+        { value: 'approval_workflows_saas', label: t('Quy trình Phê duyệt Đa cấp'), icon: <CheckSquare size={15} /> },
+        { value: 'notification_routing', label: t('Ma trận Điểm bắn Thông báo'), icon: <Bell size={15} /> },
+        { value: 'pipeline_builder', label: t('Thiết kế Phễu Pipeline Động'), icon: <Layers size={15} /> },
+        { value: 'academic_and_templates', label: t('Tab Học viên & Mẫu Email'), icon: <GraduationCap size={15} /> },
+        { value: 'organization_branding', label: t('Thương hiệu & Multi-Tenant'), icon: <Building2 size={15} /> }
+      ]
+    }] : []),
     {
       title: t('Phân phối & Nghiệp vụ'),
       items: [
@@ -252,6 +270,15 @@ const SettingsInner = () => {
 
   // Search Index for Quick Settings Navigation
   const searchableSettingsItems = [
+    ...(isStrictAdmin ? [
+      { id: "saas_roles", tab: "roles_permissions", category: t("Kiến trúc SaaS & Phân quyền"), subtab: t("Vai trò & Phân quyền"), title: t("Ma trận Phân quyền Phân hệ (RBAC)"), desc: t("Tạo Role tùy chỉnh và phân quyền Read/Write/Delete/Approve từng phân hệ"), keywords: ["role", "quyền", "rbac", "phân quyền", "phân hệ"] },
+      { id: "saas_depts", tab: "departments_hierarchy", category: t("Kiến trúc SaaS & Phân quyền"), subtab: t("Phòng ban & Leader"), title: t("Cơ cấu Phòng ban, Trưởng bộ phận & Người duyệt"), desc: t("Gán mã khối chức năng, trưởng phòng và người duyệt mặc định theo DB"), keywords: ["phòng ban", "department", "team", "leader", "người duyệt"] },
+      { id: "saas_workflows", tab: "approval_workflows_saas", category: t("Kiến trúc SaaS & Phân quyền"), subtab: t("Quy trình Phê duyệt"), title: t("Luồng Phê duyệt Đa cấp & Chống Tự Duyệt"), desc: t("Cấu hình cấp 1/2/3, hạn mức số tiền và người theo dõi"), keywords: ["phê duyệt", "workflow", "cấp duyệt", "anti self approval"] },
+      { id: "saas_notif", tab: "notification_routing", category: t("Kiến trúc SaaS & Phân quyền"), subtab: t("Điểm bắn Thông báo"), title: t("Ma trận Điểm bắn Thông báo Động"), desc: t("Cấu hình người nhận và kênh gửi cho toàn bộ sự kiện hệ thống"), keywords: ["thông báo", "notification", "người nhận", "zalo", "telegram"] },
+      { id: "saas_pipeline", tab: "pipeline_builder", category: t("Kiến trúc SaaS & Phân quyền"), subtab: t("Phễu Pipeline"), title: t("Thiết kế Phễu Pipeline & Thông báo Chuyển bước"), desc: t("Thêm/sửa/sắp xếp bước Pipeline và người nhận thông báo từng bước"), keywords: ["pipeline", "stage", "phễu", "enrolled", "cọc"] },
+      { id: "saas_academic", tab: "academic_and_templates", category: t("Kiến trúc SaaS & Phân quyền"), subtab: t("Học vụ & Mẫu Email"), title: t("Tab Học viên (/students), Chương trình & Mẫu Email"), desc: t("Tùy biến tab học viên, khung môn học và email tiếp nhận học viên"), keywords: ["tab học viên", "students", "chương trình", "email mẫu", "onboarding"] },
+      { id: "saas_org", tab: "organization_branding", category: t("Kiến trúc SaaS & Phân quyền"), subtab: t("Thương hiệu Tổ chức"), title: t("Thương hiệu Tổ chức, Tên miền & Đầu mối Multi-Tenant"), desc: t("Cấu hình logo, hotline, email hỗ trợ, CC học vụ và LMS URL"), keywords: ["tenant", "thương hiệu", "logo", "hotline", "cc", "lms"] },
+    ] : []),
     // Phân phối & Nghiệp vụ
     { id: 'business_limits', tab: 'business_limits', category: t('Phân phối & Nghiệp vụ'), subtab: t('Nghiệp vụ & Hạn mức'), title: t('Số ngày tự động rớt nhiệt (Decay)'), desc: t('Tự động thu hồi lead khi không tương tác quá số ngày quy định'), keywords: ['nhiệt', 'decay', 'thu hồi', 'tương tác', 'ngày'] },
     { id: 'sla_timeout', tab: 'business_limits', category: t('Phân phối & Nghiệp vụ'), subtab: t('Nghiệp vụ & Hạn mức'), title: t('Thời gian chờ nhận lead & SLA Phản hồi'), desc: t('Quy định số phút chờ tiếp nhận lead giờ hành chính và tăng ca'), keywords: ['sla', 'timeout', 'chờ', 'phản hồi', 'tiếp nhận', 'hành chính'] },
@@ -457,22 +484,19 @@ const SettingsInner = () => {
   const [sesUser, setSesUser] = useState('');
   const [sesPass, setSesPass] = useState('');
   const [sesSenderEmail, setSesSenderEmail] = useState('');
-  const [sesSenderName, setSesSenderName] = useState('IDEAS TEAM');
+  const [sesSenderName, setSesSenderName] = useState(() => getTenantOrganizationName('Enterprise Workspace'));
   const [sesRegion, setSesRegion] = useState('ap-southeast-1');
   const [sesAccessKey, setSesAccessKey] = useState('');
   const [sesSecretKey, setSesSecretKey] = useState('');
   const [smtpPort, setSmtpPort] = useState('587');
-  const [verifiedFromSenders, setVerifiedFromSenders] = useState('tuyensinh@ideas.edu.vn, cskh@ideas.edu.vn, marketing@ideas.edu.vn');
-  const [qaTestEmails, setQaTestEmails] = useState('qa@ideas.edu.vn');
+  const [verifiedFromSenders, setVerifiedFromSenders] = useState('');
+  const [qaTestEmails, setQaTestEmails] = useState('');
   const [automationSandboxMode, setAutomationSandboxMode] = useState(false);
 
   // Web Tracking Pixel & Domain Properties
-  const [trackingSiteId, setTrackingSiteId] = useState('IDEAS-MAIN');
-  const [trackingEndpointUrl, setTrackingEndpointUrl] = useState('https://crm.ideas.edu.vn/tracker.js');
-  const [webProperties, setWebProperties] = useState<Array<{ id: string; domain: string; site_id: string; status: string; events_count?: number }>>([
-    { id: 'prop-1', domain: 'ideas.edu.vn', site_id: 'IDEAS-MAIN', status: 'active' },
-    { id: 'prop-2', domain: 'mba.ideas.edu.vn', site_id: 'IDEAS-MBA', status: 'active' }
-  ]);
+  const [trackingSiteId, setTrackingSiteId] = useState('MAIN-SITE');
+  const [trackingEndpointUrl, setTrackingEndpointUrl] = useState(() => `${getTenantFrontendUrl() || window.location.origin}/tracker.js`);
+  const [webProperties, setWebProperties] = useState<Array<{ id: string; domain: string; site_id: string; status: string; events_count?: number }>>([]);
   const [newDomainInput, setNewDomainInput] = useState('');
   const [newSiteIdInput, setNewSiteIdInput] = useState('');
 
@@ -968,10 +992,18 @@ const SettingsInner = () => {
           }
         } else {
           setCapiMap({
-            'dong_y_gap': 'Schedule',
-            'da_gap': 'Schedule',
+            'new_lead': 'Skip',
+            'contact_attempted': 'Skip',
+            'connected': 'Skip',
+            'needed': 'Lead',
+            'discovery_completed': 'Schedule',
+            'program_matched': 'ViewContent',
+            'proposal_sent': 'Schedule',
+            'application_started': 'SubmitApplication',
+            'deposit_tuition_payment': 'Purchase',
+            'enrolled': 'Purchase',
             'not_lead': 'Skip',
-            'dat_coc': 'Purchase'
+            'lost': 'Skip'
           });
         }
         setReassignIfOwnerInactive(json.data.reassign_if_owner_inactive === undefined || json.data.reassign_if_owner_inactive === '1' || json.data.reassign_if_owner_inactive === 1);
@@ -1246,8 +1278,7 @@ const SettingsInner = () => {
   };
 
   useEffect(() => {
-    fetchSettings();
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(location.search || window.location.search);
     const tabParam = params.get('tab');
     if (tabParam) {
       let targetTab = tabParam;
@@ -1272,6 +1303,18 @@ const SettingsInner = () => {
       } else if (tabParam === 'marketing' || tabParam === 'automation' || tabParam === 'marketing_automation') {
         targetTab = 'marketing_automation';
       }
+      const strictAdminTabs = [
+        'roles_permissions',
+        'departments_hierarchy',
+        'approval_workflows_saas',
+        'notification_routing',
+        'pipeline_builder',
+        'academic_and_templates',
+        'organization_branding'
+      ];
+      if (strictAdminTabs.includes(targetTab) && !isStrictAdmin) {
+        return;
+      }
       setActiveTab(targetTab);
       if (window.location.hash === '#auto-approve') {
         setTimeout(() => {
@@ -1282,6 +1325,10 @@ const SettingsInner = () => {
     } else if (isMktUser && window.innerWidth > 768) {
       setActiveTab('marketing_automation');
     }
+  }, [isMktUser, isStrictAdmin, location.search]);
+
+  useEffect(() => {
+    fetchSettings();
   }, [isMktUser]);
 
   useEffect(() => {
@@ -1720,7 +1767,7 @@ const SettingsInner = () => {
 
   const handleTestEmail = async () => {
     if (!testEmail) return toast.error(t("Vui lòng nhập Email người nhận test."));
-    const chosenSender = (testSenderEmail || sesSenderEmail || 'tuyensinh@ideas.edu.vn').trim();
+    const chosenSender = (testSenderEmail || sesSenderEmail || '').trim();
     setTesting(true);
     try {
       const json = await fetchAPI('test_email', {
@@ -1730,8 +1777,8 @@ const SettingsInner = () => {
           type: testType,
           sender_email: chosenSender,
           from_email: chosenSender,
-          sender_name: sesSenderName || 'IDEAS TEAM',
-          from_name: sesSenderName || 'IDEAS TEAM'
+          sender_name: sesSenderName || companyName || 'MYERP',
+          from_name: sesSenderName || companyName || 'MYERP'
         })
       });
       if (json.success) toast.success(t("Gửi mail test thành công (từ ") + chosenSender + t(")! Vui lòng kiểm tra hộp thư đến."));
@@ -2236,13 +2283,22 @@ const SettingsInner = () => {
     paddingLeft: '11px'
   });
 
-  const showGlobalSave = true;
+  const saasManagedTabs = ["roles_permissions", "departments_hierarchy", "approval_workflows_saas", "notification_routing", "pipeline_builder", "academic_and_templates", "organization_branding"];
+  const showGlobalSave = !saasManagedTabs.includes(activeTab);
   const showTestEmailButton = true;
  
   const getTabIconBg = (tab: string) => {
     const colors: Record<string, string> = {
+      roles_permissions: '#dc2626',
+      departments_hierarchy: '#2563eb',
+      approval_workflows_saas: '#059669',
+      notification_routing: '#d97706',
+      pipeline_builder: '#7c3aed',
+      academic_and_templates: '#0891b2',
+      organization_branding: '#0f172a',
       business_limits: '#3b82f6',
       time_schedule: '#ec4899',
+      approval_rules: '#be123c',
       fallback: '#f59e0b',
       starvation_prevention: '#ef4444',
       pipeline_stages: '#8b5cf6',
@@ -2250,6 +2306,7 @@ const SettingsInner = () => {
       blacklist: '#06b6d4',
       tag_management: '#6366f1',
       legacy_mapping: '#14b8a6',
+      lead_scoring: '#ca8a04',
       error_reasons: '#f43f5e',
       auto_approve_ticket: '#10b981',
       email_config: '#0ea5e9',
@@ -2259,7 +2316,9 @@ const SettingsInner = () => {
       automated_reports: '#f97316',
       ai_assistant: '#a855f7',
       workflow_templates: '#64748b',
+      company_info: '#4f46e5',
       database_maintenance: '#475569',
+      database_erd: '#0d9488',
     };
     return colors[tab] || 'var(--color-primary)';
   };
@@ -2686,6 +2745,20 @@ const SettingsInner = () => {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
+            {/* Enterprise Multi-Tenant SaaS Architecture Panels (Admin-only) */}
+            {saasManagedTabs.includes(activeTab) && (
+              isStrictAdmin ? (
+                <EnterpriseSaaSSettingsPanels panel={activeTab as EnterpriseSaaSPanelType} usersList={consultants} />
+              ) : (
+                <div className="card" style={{ padding: '2.5rem', textAlign: 'center', border: '1px solid #fecaca', background: '#fef2f2', borderRadius: '16px' }}>
+                  <Shield size={36} color="#BD1D2D" style={{ margin: '0 auto 12px' }} />
+                  <h3 style={{ margin: '0 0 8px', color: '#991b1b', fontWeight: 700 }}>{t('Chỉ Admin mới có quyền thao tác')}</h3>
+                  <p style={{ margin: 0, color: '#7f1d1d', fontSize: '0.875rem' }}>
+                    {t('Phân hệ Kiến trúc SaaS & Phân quyền chỉ dành riêng cho tài khoản Admin hệ thống.')}
+                  </p>
+                </div>
+              )
+            )}
             {/* AI Assistant Tab Content */}
             <div style={{ display: activeTab === 'ai_assistant' ? 'block' : 'none' }} className="subtab-enter-active">
               <div className="card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -2791,7 +2864,7 @@ const SettingsInner = () => {
                   }}>
                     {((Array.isArray(pipelineStatusHierarchy) && pipelineStatusHierarchy.length > 0) 
                       ? pipelineStatusHierarchy 
-                      : ['chua_xac_dinh', 'quan_tam', 'dong_y_gap', 'da_gap', 'booking', 'dat_coc', 'dong_deal', 'not_lead']
+                      : ['new_lead', 'contact_attempted', 'connected', 'needed', 'discovery_completed', 'program_matched', 'proposal_sent', 'evaluation_objection', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'deposit_tuition_payment', 'enrolled', 'not_lead']
                     ).map(status => (
                       <div key={status} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
                         <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
@@ -4261,11 +4334,11 @@ function doPost(e) {
                     <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                       <div>
                         <label className="form-label">{t('Email Người Gửi Mặc Định (From Email)')}</label>
-                        <input className="form-input" placeholder="no-reply@ideas.edu.vn" value={sesSenderEmail} onChange={e => setSesSenderEmail(e.target.value)} />
+                        <input className="form-input" placeholder={`no-reply@${getTenantInternalDomain() || 'your-domain.com'}`} value={sesSenderEmail} onChange={e => setSesSenderEmail(e.target.value)} />
                       </div>
                       <div>
                         <label className="form-label">{t('Tên Người Gửi Mặc Định (From Name)')}</label>
-                        <input className="form-input" placeholder="IDEAS TEAM" value={sesSenderName} onChange={e => setSesSenderName(e.target.value)} />
+                        <input className="form-input" placeholder={getTenantOrganizationName('Organization Name')} value={sesSenderName} onChange={e => setSesSenderName(e.target.value)} />
                       </div>
                     </div>
                     <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', paddingTop: '1rem', borderTop: '1px dashed var(--color-border-light)' }}>
@@ -4273,7 +4346,7 @@ function doPost(e) {
                         <label className="form-label">{t('Danh sách Verified From Senders (AWS SES)')}</label>
                         <input
                           className="form-input"
-                          placeholder="tuyensinh@ideas.edu.vn, cskh@ideas.edu.vn"
+                          placeholder={`contact@${getTenantInternalDomain() || 'your-domain.com'}, support@${getTenantInternalDomain() || 'your-domain.com'}`}
                           value={verifiedFromSenders}
                           onChange={e => setVerifiedFromSenders(e.target.value)}
                         />
@@ -4285,7 +4358,7 @@ function doPost(e) {
                         <label className="form-label">{t('Danh sách QA Test Emails (Nhận email kiểm thử)')}</label>
                         <input
                           className="form-input"
-                          placeholder="qa@ideas.edu.vn, marketing@ideas.edu.vn"
+                          placeholder={`qa@${getTenantInternalDomain() || 'your-domain.com'}, marketing@${getTenantInternalDomain() || 'your-domain.com'}`}
                           value={qaTestEmails}
                           onChange={e => setQaTestEmails(e.target.value)}
                         />
@@ -4425,7 +4498,7 @@ function doPost(e) {
                       <label className="form-label">{t('Verified From Senders (Email gửi đã xác thực AWS SES)')}</label>
                       <input
                         className="form-input"
-                        placeholder="tuyensinh@ideas.edu.vn, cskh@ideas.edu.vn"
+                        placeholder={`contact@${getTenantInternalDomain() || 'your-domain.com'}, support@${getTenantInternalDomain() || 'your-domain.com'}`}
                         value={verifiedFromSenders}
                         onChange={e => setVerifiedFromSenders(e.target.value)}
                       />
@@ -4434,7 +4507,7 @@ function doPost(e) {
                       <label className="form-label">{t('QA Test Emails (Nhận email khi bật Sandbox)')}</label>
                       <input
                         className="form-input"
-                        placeholder="qa@ideas.edu.vn, marketing@ideas.edu.vn"
+                        placeholder={`qa@${getTenantInternalDomain() || 'your-domain.com'}, marketing@${getTenantInternalDomain() || 'your-domain.com'}`}
                         value={qaTestEmails}
                         onChange={e => setQaTestEmails(e.target.value)}
                       />
@@ -4459,7 +4532,7 @@ function doPost(e) {
                         className="form-input"
                         value={trackingEndpointUrl}
                         onChange={e => setTrackingEndpointUrl(e.target.value)}
-                        placeholder="https://crm.ideas.edu.vn/tracker.js"
+                        placeholder={`${getTenantFrontendUrl() || window.location.origin}/tracker.js`}
                       />
                     </div>
                     <div>
@@ -4468,7 +4541,7 @@ function doPost(e) {
                         className="form-input"
                         value={trackingSiteId}
                         onChange={e => setTrackingSiteId(e.target.value)}
-                        placeholder="IDEAS-MAIN"
+                        placeholder="MAIN-SITE"
                       />
                     </div>
                   </div>
@@ -4489,12 +4562,12 @@ function doPost(e) {
                     overflowX: 'auto'
                   }}>
                     <code style={{ whiteSpace: 'nowrap' }}>
-                      {`<script src="${trackingEndpointUrl || 'https://crm.ideas.edu.vn/tracker.js'}" data-site-id="${trackingSiteId || 'IDEAS-MAIN'}" async></script>`}
+                      {`<script src="${trackingEndpointUrl || `${getTenantFrontendUrl() || window.location.origin}/tracker.js`}" data-site-id="${trackingSiteId || 'MAIN-SITE'}" async></script>`}
                     </code>
                     <button
                       type="button"
                       onClick={() => {
-                        const snippet = `<script src="${trackingEndpointUrl || 'https://crm.ideas.edu.vn/tracker.js'}" data-site-id="${trackingSiteId || 'IDEAS-MAIN'}" async></script>`;
+                        const snippet = `<script src="${trackingEndpointUrl || `${getTenantFrontendUrl() || window.location.origin}/tracker.js`}" data-site-id="${trackingSiteId || 'MAIN-SITE'}" async></script>`;
                         navigator.clipboard.writeText(snippet);
                         toast.success(t('Đã sao chép mã nhúng Web Tracking Pixel!'));
                       }}
@@ -4526,14 +4599,14 @@ function doPost(e) {
                       <input
                         className="form-input"
                         style={{ flex: 2, minWidth: '200px' }}
-                        placeholder={t('Tên miền (VD: landing.ideas.edu.vn)')}
+                        placeholder={t('Tên miền (VD: landing.your-domain.com)')}
                         value={newDomainInput}
                         onChange={e => setNewDomainInput(e.target.value)}
                       />
                       <input
                         className="form-input"
                         style={{ flex: 1, minWidth: '140px' }}
-                        placeholder={t('Mã Site ID (VD: IDEAS-LP)')}
+                        placeholder={t('Mã Site ID (VD: LANDING-LP)')}
                         value={newSiteIdInput}
                         onChange={e => setNewSiteIdInput(e.target.value)}
                       />
@@ -9002,13 +9075,13 @@ function doPost(e) {
                   .map(s => s.trim())
                   .filter(s => s.includes('@'))
               ));
-              const senderOpts = (verifiedList.length > 0 ? verifiedList : ['tuyensinh@ideas.edu.vn', 'cskh@ideas.edu.vn', 'marketing@ideas.edu.vn']).map(em => ({
+              const senderOpts = (verifiedList.length > 0 ? verifiedList : []).map(em => ({
                 value: em,
                 label: `${em}${em === sesSenderEmail ? ' (Mặc định)' : ' (Đã xác minh)'}`
               }));
               const activeVal = testSenderEmail && senderOpts.some(o => o.value === testSenderEmail)
                 ? testSenderEmail
-                : (sesSenderEmail || senderOpts[0]?.value || 'tuyensinh@ideas.edu.vn');
+                : (sesSenderEmail || senderOpts[0]?.value || '');
               return (
                 <CustomSelect
                   options={senderOpts}

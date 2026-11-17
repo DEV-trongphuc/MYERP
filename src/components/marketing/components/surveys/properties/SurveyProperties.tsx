@@ -31,7 +31,8 @@ const FlowTriggerSelector: React.FC<{
         setLoading(true);
         api.get<any>('flows').then(r => {
             if (r.success) {
-                const surveyFlows = (r.data ?? []).filter((f: any) =>
+                const rawFlows = Array.isArray(r.data) ? r.data : (r.data?.data ?? []);
+                const surveyFlows = (Array.isArray(rawFlows) ? rawFlows : []).filter((f: any) =>
                     f.status !== 'archived' &&
                     (f.trigger_type === 'survey' ||
                      (f.steps ?? []).some((s: any) => s.type === 'trigger' && s.config?.type === 'survey'))

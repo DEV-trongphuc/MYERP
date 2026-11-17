@@ -43,6 +43,7 @@ import { SPECIALIZED_AGENTS, type SpecializedAgent } from '../../constants/aiAge
 import { AgentDetailModal } from './AgentDetailModal';
 import { ActionProposalCard, parseActionProposal } from './ActionProposalCard';
 import { parseAllChatTags } from './chatTagParsers';
+import { isSameTenantOriginUrl } from '../../contexts/TenantConfigContext';
 import { copyTextSafely } from '../../utils/clipboard';
 import { ChatDynamicChart } from './ChatDynamicChart';
 import { NextBestActionChips } from './NextBestActionChips';
@@ -528,10 +529,20 @@ const handleErpLinkClick = (e: React.MouseEvent, url: string) => {
   } catch {}
 
   // 6. Navigation to internal routes without specific ID: use SPA navigation without full page reload
-  if (url.startsWith('/') || url.startsWith('https://myerp.ideas.edu.vn/')) {
+  if (isSameTenantOriginUrl(url)) {
     e.preventDefault();
     e.stopPropagation();
-    const targetPath = url.replace(/^https:\/\/myerp\.ideas\.edu\.vn/, '') || '/';
+    let targetPath = '/';
+    if (url.startsWith('/')) {
+      targetPath = url;
+    } else {
+      try {
+        const parsed = new URL(url);
+        targetPath = `${parsed.pathname}${parsed.search}${parsed.hash}` || '/';
+      } catch {
+        targetPath = '/';
+      }
+    }
     window.history.pushState({}, '', targetPath);
     window.dispatchEvent(new PopStateEvent('popstate'));
     return;
@@ -634,7 +645,7 @@ const renderInlineTokens = (rawText: string, isMine?: boolean, keyPrefix: string
       const rawLabel = mdLinkMatch[1];
       const cleanLabel = rawLabel.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim() || rawLabel;
       const href = mdLinkMatch[2].trim();
-      const isInternal = href.startsWith('/') || href.includes('myerp.ideas.edu.vn');
+      const isInternal = isSameTenantOriginUrl(href);
       return (
         <a
           key={tokenKey}
@@ -672,7 +683,7 @@ const renderInlineTokens = (rawText: string, isMine?: boolean, keyPrefix: string
       );
     }
     if (part.startsWith('http://') || part.startsWith('https://')) {
-      const isInternal = part.includes('myerp.ideas.edu.vn');
+      const isInternal = isSameTenantOriginUrl(part);
       return (
         <a
           key={tokenKey}

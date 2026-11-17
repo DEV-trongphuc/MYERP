@@ -56,12 +56,12 @@ if ($method === 'POST') {
                 // Get source name for label
                 $sourceLabel = "Unknown Source";
                 if ($sourceType === 'segment') {
-                    $stmtSrc = $pdo->prepare("SELECT name FROM segments WHERE id = ? AND workspace_id = ?");
+                    $stmtSrc = $pdo->prepare("SELECT name FROM segments WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL");
                     $stmtSrc->execute([$sourceId, $workspace_id]);
                     $srcName = $stmtSrc->fetchColumn();
                     $sourceLabel = "Split from Segment: " . ($srcName ?: $sourceId);
                 } else {
-                    $stmtSrc = $pdo->prepare("SELECT name FROM lists WHERE id = ? AND workspace_id = ?");
+                    $stmtSrc = $pdo->prepare("SELECT name FROM lists WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL");
                     $stmtSrc->execute([$sourceId, $workspace_id]);
                     $srcName = $stmtSrc->fetchColumn();
                     $sourceLabel = "Split from List: " . ($srcName ?: $sourceId);
@@ -83,7 +83,7 @@ if ($method === 'POST') {
 
         // A. BUILD SOURCE CONSTRAINT
         if ($sourceType === 'segment') {
-            $stmtS = $pdo->prepare("SELECT criteria FROM segments WHERE id = ? AND workspace_id = ?");
+            $stmtS = $pdo->prepare("SELECT criteria FROM segments WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL");
             $stmtS->execute([$sourceId, $workspace_id]);
             $criteria = $stmtS->fetchColumn();
 
@@ -94,13 +94,13 @@ if ($method === 'POST') {
 
             $resS = buildSegmentWhereClause($criteria, $workspace_id, $sourceId);
             // Base select from subscribers table for segments
-            $sql = "SELECT s.id FROM subscribers s WHERE s.workspace_id = ? AND s.status IN ('active', 'lead', 'customer') AND " . $resS['sql'];
+            $sql = "SELECT s.id FROM subscribers s WHERE s.workspace_id = ? AND s.deleted_at IS NULL AND s.status IN ('active', 'lead', 'customer') AND " . $resS['sql'];
             $params = array_merge([$workspace_id], $resS['params']);
         } else {
             // Source is List
             // Verify list ownership and filter subscribers
-            $sql = "SELECT s.id FROM subscribers s JOIN subscriber_lists sl ON s.id = sl.subscriber_id WHERE sl.list_id = ? AND s.workspace_id = ?";
-            $params = [$sourceId, $workspace_id];
+            $sql = "SELECT s.id FROM subscribers s JOIN subscriber_lists sl ON s.id = sl.subscriber_id WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.workspace_id = ? AND s.deleted_at IS NULL";
+            $params = [$workspace_id, $sourceId, $workspace_id];
         }
 
         // B. APPLY SPLIT FILTER
@@ -123,36 +123,51 @@ if ($method === 'POST') {
             $targetIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
         } elseif ($type === 'list') {
-            // Filter by Text List (Email/Phone)
-            if (empty($inputData)) {
+            // Filter by Text List (Email/Phone) - Chunked in batches of 500 to prevent SQLSTATE[HY093]
+            if (empty($inputData) || !is_array($inputData)) {
                 jsonResponse(false, ['message' => 'Danh sách nhập vào trống']);
                 return;
             }
 
-            $placeholders = implode(',', array_fill(0, count($inputData), '?'));
-            $matchSql = "(s.email IN ($placeholders) OR s.phone_number IN ($placeholders))";
+            $collectedIds = [];
+            $chunks = array_chunk(array_values(array_unique(array_filter(array_map('trim', $inputData)))), 500);
 
             if ($sourceType === 'segment') {
-                $sql .= " AND $matchSql";
+                $segScopeSql = !empty($resS['sql']) ? " AND " . $resS['sql'] : "";
+                $segParams = $resS['params'] ?? [];
+                foreach ($chunks as $chunk) {
+                    $ph = implode(',', array_fill(0, count($chunk), '?'));
+                    $sqlChunk = "SELECT s.id FROM subscribers s 
+                                 WHERE s.workspace_id = ? 
+                                   AND s.deleted_at IS NULL 
+                                   AND s.status IN ('active', 'lead', 'customer') 
+                                   AND (s.email IN ($ph) OR s.phone_number IN ($ph))" . $segScopeSql;
+                    $chunkParams = array_values(array_merge([$workspace_id], $chunk, $chunk, $segParams));
+                    $stmtChunk = $pdo->prepare($sqlChunk);
+                    $stmtChunk->execute($chunkParams);
+                    while ($sid = $stmtChunk->fetchColumn()) {
+                        $collectedIds[$sid] = true;
+                    }
+                }
             } else {
-                $sql .= " AND $matchSql";
+                foreach ($chunks as $chunk) {
+                    $ph = implode(',', array_fill(0, count($chunk), '?'));
+                    $sqlChunk = "SELECT s.id FROM subscribers s 
+                                 INNER JOIN subscriber_lists sl ON s.id = sl.subscriber_id 
+                                 WHERE sl.workspace_id = ? 
+                                   AND sl.list_id = ? 
+                                   AND s.workspace_id = ? 
+                                   AND s.deleted_at IS NULL 
+                                   AND (s.email IN ($ph) OR s.phone_number IN ($ph))";
+                    $chunkParams = array_values(array_merge([$workspace_id, $sourceId, $workspace_id], $chunk, $chunk));
+                    $stmtChunk = $pdo->prepare($sqlChunk);
+                    $stmtChunk->execute($chunkParams);
+                    while ($sid = $stmtChunk->fetchColumn()) {
+                        $collectedIds[$sid] = true;
+                    }
+                }
             }
-            // Add inputData (doubled for email OR phone) to params
-            // Note: The params order depends on where we inject matchSql.
-            // For simplicity, let's wrap: SELECT id FROM (SourceQuery) as src WHERE email IN ...
-
-            // Re-construct for safer param order
-            if ($sourceType === 'segment') {
-                $sql = "SELECT s.id FROM subscribers s WHERE s.workspace_id = ? AND ($matchSql) AND s.status IN ('active', 'lead', 'customer') AND " . $resS['sql'];
-                $params = array_merge([$workspace_id], $inputData, $inputData, $resS['params']);
-            } else {
-                $sql = "SELECT s.id FROM subscribers s JOIN subscriber_lists sl ON s.id = sl.subscriber_id WHERE sl.list_id = ? AND s.workspace_id = ? AND ($matchSql)";
-                $params = array_merge([$sourceId, $workspace_id], $inputData, $inputData);
-            }
-
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute($params);
-            $targetIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            $targetIds = array_keys($collectedIds);
 
         } elseif ($type === 'phone') {
             // Filter valid phones
@@ -217,21 +232,22 @@ if ($method === 'POST') {
             return;
         }
 
-        // 3. Add to Destination List
+        // 3. Add to Destination List (Multi-tenant workspace scoped)
         $addedCount = 0;
         foreach (array_chunk($targetIds, 500) as $chunk) {
-            $placeholders = implode(',', array_fill(0, count($chunk), '(?, ?)'));
+            $placeholders = implode(',', array_fill(0, count($chunk), '(?, ?, ?)'));
             $values = [];
             foreach ($chunk as $sid) {
+                $values[] = $workspace_id;
                 $values[] = $sid;
                 $values[] = $listId;
             }
-            $stmtIns = $pdo->prepare("INSERT IGNORE INTO subscriber_lists (subscriber_id, list_id) VALUES $placeholders");
+            $stmtIns = $pdo->prepare("INSERT IGNORE INTO subscriber_lists (workspace_id, subscriber_id, list_id) VALUES $placeholders");
             $stmtIns->execute($values);
             $addedCount += $stmtIns->rowCount();
         }
         // Update List Count
-        $pdo->prepare("UPDATE lists SET subscriber_count = (SELECT COUNT(*) FROM subscriber_lists WHERE list_id = ?) WHERE id = ?")->execute([$listId, $listId]);
+        $pdo->prepare("UPDATE lists SET subscriber_count = (SELECT COUNT(*) FROM subscriber_lists WHERE list_id = ? AND workspace_id = ?) WHERE id = ? AND workspace_id = ?")->execute([$listId, $workspace_id, $listId, $workspace_id]);
 
         // 4. Handle Exclusion (Remove from Source)
         $removedCount = 0;
@@ -239,53 +255,59 @@ if ($method === 'POST') {
             if ($sourceType === 'segment') {
                 // Add to Exclusions
                 foreach (array_chunk($targetIds, 500) as $chunk) {
-                    $placeholders = implode(',', array_fill(0, count($chunk), '(?, ?)'));
+                    $placeholders = implode(',', array_fill(0, count($chunk), '(?, ?, ?)'));
                     $values = [];
                     foreach ($chunk as $sid) {
+                        $values[] = $workspace_id;
                         $values[] = $sourceId;
-                        $values[] = $sid; // Exclusion is (segment_id, subscriber_id)
+                        $values[] = $sid; // Exclusion is (workspace_id, segment_id, subscriber_id)
                     }
-                    $pdo->prepare("INSERT IGNORE INTO segment_exclusions (segment_id, subscriber_id) VALUES $placeholders")->execute($values);
+                    $pdo->prepare("INSERT IGNORE INTO segment_exclusions (workspace_id, segment_id, subscriber_id) VALUES $placeholders")->execute($values);
                     $removedCount += count($chunk);
                 }
                 // Update Segment Count
-                $stmtS = $pdo->prepare("SELECT criteria FROM segments WHERE id = ?");
-                $stmtS->execute([$sourceId]);
+                $stmtS = $pdo->prepare("SELECT criteria FROM segments WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL");
+                $stmtS->execute([$sourceId, $workspace_id]);
                 $criteria = $stmtS->fetchColumn();
                 $resCount = buildSegmentWhereClause($criteria, $workspace_id, $sourceId);
-                $stmtC = $pdo->prepare("SELECT COUNT(*) FROM subscribers s WHERE s.workspace_id = ? AND s.status IN ('active', 'lead', 'customer') AND " . $resCount['sql']);
+                $stmtC = $pdo->prepare("SELECT COUNT(*) FROM subscribers s WHERE s.workspace_id = ? AND s.deleted_at IS NULL AND s.status IN ('active', 'lead', 'customer') AND " . $resCount['sql']);
                 $stmtC->execute(array_merge([$workspace_id], $resCount['params']));
                 $newCount = (int) $stmtC->fetchColumn();
-                $pdo->prepare("UPDATE segments SET subscriber_count = ? WHERE id = ?")->execute([$newCount, $sourceId]);
+                $pdo->prepare("UPDATE segments SET subscriber_count = ? WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL")->execute([$newCount, $sourceId, $workspace_id]);
 
             } else {
                 // Remove from Source List (DELETE from subscriber_lists)
                 foreach (array_chunk($targetIds, 500) as $chunk) {
                     $placeholders = implode(',', array_fill(0, count($chunk), '?'));
-                    $values = array_merge([$sourceId], $chunk);
-                    $stmtDel = $pdo->prepare("DELETE FROM subscriber_lists WHERE list_id = ? AND subscriber_id IN ($placeholders)");
+                    $values = array_merge([$workspace_id, $sourceId], $chunk);
+                    $stmtDel = $pdo->prepare("DELETE FROM subscriber_lists WHERE workspace_id = ? AND list_id = ? AND subscriber_id IN ($placeholders)");
                     $stmtDel->execute($values);
                     $removedCount += $stmtDel->rowCount();
                 }
                 // Update Source List Count
-                $pdo->prepare("UPDATE lists SET subscriber_count = (SELECT COUNT(*) FROM subscriber_lists WHERE list_id = ?) WHERE id = ?")->execute([$sourceId, $sourceId]);
+                $pdo->prepare("UPDATE lists SET subscriber_count = (SELECT COUNT(*) FROM subscriber_lists WHERE list_id = ? AND workspace_id = ?) WHERE id = ? AND workspace_id = ?")->execute([$sourceId, $workspace_id, $sourceId, $workspace_id]);
             }
         }
 
-        // 5. Cleanup Invalid (Clean Destination List)
-        if ($cleanupInvalid) {
-            $inClause = implode(',', array_fill(0, count($targetIds), '?'));
-            $stmtBad = $pdo->prepare("SELECT id FROM subscribers WHERE id IN ($inClause) AND workspace_id = ? AND status IN ('unsubscribed', 'error', 'bounced', 'complained')");
-            $stmtBad->execute(array_merge($targetIds, [$workspace_id]));
-            $badIds = $stmtBad->fetchAll(PDO::FETCH_COLUMN);
+        // 5. Cleanup Invalid (Clean Destination List) - Chunked in batches of 500
+        if ($cleanupInvalid && !empty($targetIds)) {
+            $badIds = [];
+            foreach (array_chunk($targetIds, 500) as $chunk) {
+                $inClause = implode(',', array_fill(0, count($chunk), '?'));
+                $stmtBad = $pdo->prepare("SELECT id FROM subscribers WHERE id IN ($inClause) AND workspace_id = ? AND status IN ('unsubscribed', 'error', 'bounced', 'complained')");
+                $stmtBad->execute(array_merge($chunk, [$workspace_id]));
+                while ($bid = $stmtBad->fetchColumn()) {
+                    $badIds[] = $bid;
+                }
+            }
 
             if (!empty($badIds)) {
                 foreach (array_chunk($badIds, 500) as $chunk) {
                     $delPlaceholders = implode(',', array_fill(0, count($chunk), '?'));
-                    $pdo->prepare("DELETE FROM subscriber_lists WHERE list_id = ? AND subscriber_id IN ($delPlaceholders)")->execute(array_merge([$listId], $chunk));
+                    $pdo->prepare("DELETE FROM subscriber_lists WHERE workspace_id = ? AND list_id = ? AND subscriber_id IN ($delPlaceholders)")->execute(array_merge([$workspace_id, $listId], $chunk));
                 }
                 // Update List Count Again
-                $pdo->prepare("UPDATE lists SET subscriber_count = (SELECT COUNT(*) FROM subscriber_lists WHERE list_id = ?) WHERE id = ?")->execute([$listId, $listId]);
+                $pdo->prepare("UPDATE lists SET subscriber_count = (SELECT COUNT(*) FROM subscriber_lists WHERE list_id = ? AND workspace_id = ?) WHERE id = ? AND workspace_id = ?")->execute([$listId, $workspace_id, $listId, $workspace_id]);
             }
         }
 

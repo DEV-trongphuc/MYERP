@@ -37,7 +37,8 @@ class TagController {
     }
 
     public function store($auth) {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true)) respond(403, null, 'Chỉ admin mới có quyền quản lý tags', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director'], 'settings', 'write')) respond(403, null, 'Chỉ admin mới có quyền quản lý tags', false);
         $data = getBody();
         if (empty($data['name'])) respond(400, null, 'Tên tag không được để trống', false);
         if (in_array(strtolower(trim($data['name'])), ['junk', 'new', 'unqualified', 'needed', 'considering', 'badtiming', 'bad timing', 'bad_timing', 'qualified'], true)) {
@@ -77,7 +78,8 @@ class TagController {
     }
 
     public function update($auth, $id) {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true)) respond(403, null, 'Chỉ admin mới có quyền quản lý tags', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director'], 'settings', 'write')) respond(403, null, 'Chỉ admin mới có quyền quản lý tags', false);
         $data = getBody();
 
         $oldName = '';
@@ -122,7 +124,8 @@ class TagController {
     }
 
     public function destroy($auth, $id) {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true)) respond(403, null, 'Chỉ admin mới có quyền quản lý tags', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director'], 'settings', 'write')) respond(403, null, 'Chỉ admin mới có quyền quản lý tags', false);
 
         $oldName = '';
         try {

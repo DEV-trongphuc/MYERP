@@ -58,11 +58,7 @@ if ($method === 'POST') {
             // IMPORTANT: If you change admin emails, update BOTH this file AND admin_users.php.
             // TODO: Move to a shared config file (e.g. config.php) to avoid duplication.
             if (!defined('ROOT_ADMIN_EMAILS')) {
-                define('ROOT_ADMIN_EMAILS', [
-                    'dom.marketing.vn@gmail.com',
-                    'marketing@ideas.edu.vn',
-                    'ledaovuphuong@gmail.com'
-                ]);
+                define('ROOT_ADMIN_EMAILS', array_values(array_filter(array_map('strtolower', array_map('trim', explode(',', (string)(getenv('ROOT_ADMIN_EMAILS') ?: ($_ENV['ROOT_ADMIN_EMAILS'] ?? ''))))))));
             }
             $role = in_array($email, ROOT_ADMIN_EMAILS) ? 'admin' : 'user';
             $status = in_array($email, ROOT_ADMIN_EMAILS) ? 'approved' : 'pending';

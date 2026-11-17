@@ -52,7 +52,8 @@ class ImportController {
 
     /** POST /import/process — Upload & process CSV */
     public function process(array $auth): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'contacts', 'write', ['all', 'team'])) {
             respond(403, null, 'Bạn không có quyền nhập dữ liệu', false);
         }
 

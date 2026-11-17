@@ -34,8 +34,8 @@ if (isset($_GET['route']) && $_GET['route'] === 'delete_delivery_log') {
 
     $pdo->beginTransaction();
     try {
-        // Delete the delivery log
-        $stmtDeleteLog = $pdo->prepare("DELETE FROM mail_delivery_logs WHERE id = ? AND workspace_id = ?");
+        // Soft-delete the delivery log (Axiom 4 100% Soft-Delete Mandate)
+        $stmtDeleteLog = $pdo->prepare("UPDATE mail_delivery_logs SET deleted_at = NOW() WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL");
         $stmtDeleteLog->execute([$logId, $_logWorkspaceId]);
         
         // If action is 'remove_failed', unsubscribe the subscriber
@@ -63,7 +63,7 @@ if (isset($_GET['route']) && $_GET['route'] === 'delete_delivery_log') {
 
 // --- ROUTE: Fetch logs ---
 if ($type === 'delivery') {
-    $sql = "SELECT id, recipient, subject, status, error_message, sent_at FROM mail_delivery_logs WHERE workspace_id = ?";
+    $sql = "SELECT id, recipient, subject, status, error_message, sent_at FROM mail_delivery_logs WHERE workspace_id = ? AND deleted_at IS NULL";
     $params = [$_logWorkspaceId];
 
     // FIX: The campaign_id column is assumed to exist after db.txt migration

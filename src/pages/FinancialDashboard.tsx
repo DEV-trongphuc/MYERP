@@ -14,7 +14,8 @@ import type { Period, DateRange } from '../components/ui/PeriodFilter';
 import { Skeleton } from '../components/ui/Skeleton';
 import toast from 'react-hot-toast';
 
-const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#0d9488'];
+const PALETTE = ['#C6333D', '#334155', '#E11D48', '#64748B', '#991B1B', '#475569', '#FB7185', '#94A3B8', '#1E293B', '#CBD5E1'];
+const COLORS = PALETTE;
 
 const FMT_VND = (n: any) => {
   const num = Math.round(Number(n || 0));

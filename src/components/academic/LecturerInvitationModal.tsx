@@ -29,7 +29,8 @@ import {
 } from 'lucide-react';
 import { API_BASE } from '../../config/env';
 import { cleanSubjectNameWithoutCode } from './SubjectAnnouncementModal';
-const DEFAULT_ACADEMIC_CC = 'it.dept@ideas.edu.vn, student.notice@ideas.edu.vn, support@ideas.edu.vn';
+import { getCachedTenantBootstrap, getTenantOrganizationName, getTenantFrontendUrl, getTenantLogoUrl, getTenantInternalDomain } from '../../contexts/TenantConfigContext';
+const getDefaultAcademicCc = () => getCachedTenantBootstrap()?.organization?.academic_cc_emails || '';
 import { STANDARD_PROGRAM_NAMES, resolveCurriculumSubjects } from './StudentAcademicWorkspace';
 
 const API_URL = API_BASE;
@@ -286,7 +287,7 @@ export const LecturerInvitationModal: React.FC<LecturerInvitationModalProps> = (
   // Section 4: Academic support contact
   const [academicContactName, setAcademicContactName] = useState<string>('Huyền Trâm');
   const [academicContactZalo, setAcademicContactZalo] = useState<string>('0839901719');
-  const [ccEmails, setCcEmails] = useState<string>(DEFAULT_ACADEMIC_CC);
+  const [ccEmails, setCcEmails] = useState<string>(() => getDefaultAcademicCc());
 
   // Attachments
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
@@ -482,10 +483,10 @@ export const LecturerInvitationModal: React.FC<LecturerInvitationModalProps> = (
           <!-- SIGNATURE -->
           <div style="margin-top:24px;color:#1e293b;">
             <p style="margin:0 0 4px 0;">Cảm ơn ${honorificLower},</p>
-            <p style="margin:0;font-weight:700;color:#BD1D2D;font-size:15px;">Ban Học vụ — IDEAS</p>
+            <p style="margin:0;font-weight:700;color:#BD1D2D;font-size:15px;">Ban Học vụ — ${getTenantOrganizationName()}</p>
             <p style="margin:4px 0 0 0;font-size:12.5px;color:#64748b;">
-              Email: student.notice@ideas.edu.vn | support@ideas.edu.vn | it.dept@ideas.edu.vn<br/>
-              Website: <a href="https://ideas.edu.vn" style="color:#BD1D2D;text-decoration:none;">https://ideas.edu.vn</a>
+              Email: ${getDefaultAcademicCc() || getCachedTenantBootstrap()?.organization?.support_email || ''}<br/>
+              Website: <a href="${getTenantFrontendUrl()}" style="color:#BD1D2D;text-decoration:none;">${getTenantFrontendUrl()}</a>
             </p>
           </div>
 
@@ -730,8 +731,7 @@ export const LecturerInvitationModal: React.FC<LecturerInvitationModalProps> = (
                 display: 'block',
               }}
               onError={(e) => {
-                (e.target as HTMLImageElement).src =
-                  'https://ideas.edu.vn/wp-content/uploads/2026/06/Logo_IDEAS_Slg-optimized.webp';
+                (e.target as HTMLImageElement).src = getTenantLogoUrl('/LOGO.webp');
                 (e.target as HTMLImageElement).style.filter = 'brightness(0) invert(1)';
               }}
             />
@@ -937,7 +937,7 @@ export const LecturerInvitationModal: React.FC<LecturerInvitationModalProps> = (
                     type="email"
                     value={lecturerEmail}
                     onChange={(e) => setLecturerEmail(e.target.value)}
-                    placeholder="giangvien@ideas.edu.vn"
+                    placeholder={`giangvien@${getTenantInternalDomain() || 'university.edu'}`}
                     style={{
                       width: '100%',
                       padding: '7px 10px',

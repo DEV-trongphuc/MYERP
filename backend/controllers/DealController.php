@@ -25,7 +25,7 @@ class DealController {
         } else {
             $roleFilter = " AND 1=0";
         }
-        $stmtStages = $this->db->prepare("SELECT * FROM pipeline_stages WHERE tenant_id = ? ORDER BY order_index");
+        $stmtStages = $this->db->prepare("SELECT * FROM pipeline_stages WHERE tenant_id = ? AND (deleted_at IS NULL) ORDER BY order_index");
         $stmtStages->execute([$tid]);
         $stages = $stmtStages->fetchAll(PDO::FETCH_ASSOC);
 
@@ -53,49 +53,75 @@ class DealController {
     }
 
     public function storeStage(array $auth): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true)) respond(403, null, 'Chỉ admin mới có quyền quản lý pipeline', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $tid = (int)$auth['tenant_id'];
+        TenantConfigService::ensureSchema($this->db, $tid);
+        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true) && TenantConfigService::resolvePermissionScope($this->db, $auth, 'settings', 'write') !== 'all') {
+            respond(403, null, 'Chỉ quản trị viên mới có quyền quản lý pipeline', false);
+        }
         $b = getBody();
         if (empty($b['name'])) respond(422, null, 'Tên stage là bắt buộc', false);
-        $maxIdx = $this->db->prepare("SELECT COALESCE(MAX(order_index),0)+1 FROM pipeline_stages WHERE tenant_id=?");
-        $maxIdx->execute([$auth['tenant_id']]);
+        $maxIdx = $this->db->prepare("SELECT COALESCE(MAX(order_index),0)+1 FROM pipeline_stages WHERE tenant_id=? AND deleted_at IS NULL");
+        $maxIdx->execute([$tid]);
         $nextIdx = (int)$maxIdx->fetchColumn();
-        $this->db->prepare("INSERT INTO pipeline_stages (tenant_id,name,color,order_index,is_won,is_lost,system_slug,definition,target_goal,sales_actions,exit_criteria) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+        $notifyJson = isset($b['notify_config']) ? (is_array($b['notify_config']) ? json_encode($b['notify_config'], JSON_UNESCAPED_UNICODE) : $b['notify_config']) : ($b['notify_config_json'] ?? null);
+        $this->db->prepare("INSERT INTO pipeline_stages (tenant_id,name,color,order_index,is_won,is_lost,system_slug,definition,target_goal,sales_actions,exit_criteria,notify_config_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
             ->execute([
-                $auth['tenant_id'],
-                $b['name'],
+                $tid,
+                trim((string)$b['name']),
                 $b['color'] ?? '#6366f1',
-                $nextIdx,
-                $b['is_won'] ?? 0,
-                $b['is_lost'] ?? 0,
+                isset($b['order_index']) ? (int)$b['order_index'] : $nextIdx,
+                !empty($b['is_won']) ? 1 : 0,
+                !empty($b['is_lost']) ? 1 : 0,
                 $b['system_slug'] ?? null,
                 $b['definition'] ?? null,
                 $b['target_goal'] ?? null,
                 $b['sales_actions'] ?? null,
-                $b['exit_criteria'] ?? null
+                $b['exit_criteria'] ?? null,
+                $notifyJson
             ]);
-        respond(201, ['id' => (int)$this->db->lastInsertId()], 'Stage đã tạo thành công');
+        $newId = (int)$this->db->lastInsertId();
+        TenantConfigService::invalidateCache($tid);
+        respond(201, ['id' => $newId], 'Stage đã tạo thành công');
     }
 
     public function updateStage(array $auth, int $id): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true)) respond(403, null, 'Chỉ admin mới có quyền quản lý pipeline', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $tid = (int)$auth['tenant_id'];
+        TenantConfigService::ensureSchema($this->db, $tid);
+        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true) && TenantConfigService::resolvePermissionScope($this->db, $auth, 'settings', 'write') !== 'all') {
+            respond(403, null, 'Chỉ quản trị viên mới có quyền quản lý pipeline', false);
+        }
         $b = getBody();
-        $fields = ['name','color','order_index','is_won','is_lost','system_slug','definition','target_goal','sales_actions','exit_criteria'];
+        if (array_key_exists('notify_config', $b) && !array_key_exists('notify_config_json', $b)) {
+            $b['notify_config_json'] = is_array($b['notify_config']) ? json_encode($b['notify_config'], JSON_UNESCAPED_UNICODE) : $b['notify_config'];
+        }
+        $fields = ['name','color','order_index','is_won','is_lost','system_slug','definition','target_goal','sales_actions','exit_criteria','notify_config_json'];
         $sets=[]; $params=[];
         foreach ($fields as $f) { if (array_key_exists($f,$b)) { $sets[]="$f=?"; $params[]=$b[$f]; } }
         if (!$sets) respond(422, null, 'Không có dữ liệu', false);
-        $params[]=$id; $params[]=$auth['tenant_id'];
+        $params[]=$id; $params[]=$tid;
         $this->db->prepare("UPDATE pipeline_stages SET ".implode(',',$sets)." WHERE id=? AND tenant_id=?")->execute($params);
+        TenantConfigService::invalidateCache($tid);
         respond(200, null, 'Đã cập nhật stage');
     }
 
     public function destroyStage(array $auth, int $id): void {
-        if (!in_array($auth['role'], ['admin', 'super_admin'], true)) respond(403, null, 'Chỉ admin mới có quyền quản lý pipeline', false);
-        // Prevent deleting stages that have deals
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $tid = (int)$auth['tenant_id'];
+        TenantConfigService::ensureSchema($this->db, $tid);
+        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true) && TenantConfigService::resolvePermissionScope($this->db, $auth, 'settings', 'delete') !== 'all') {
+            respond(403, null, 'Chỉ quản trị viên mới có quyền quản lý pipeline', false);
+        }
         $cnt = $this->db->prepare("SELECT COUNT(*) FROM deals WHERE stage_id=? AND tenant_id=? AND deleted_at IS NULL");
-        $cnt->execute([$id, $auth['tenant_id']]);
+        $cnt->execute([$id, $tid]);
         if ($cnt->fetchColumn() > 0) respond(400, null, 'Không thể xóa stage đang có cơ hội bán hàng', false);
+        $cntC = $this->db->prepare("SELECT COUNT(*) FROM contacts WHERE stage_id=? AND tenant_id=? AND deleted_at IS NULL");
+        $cntC->execute([$id, $tid]);
+        if ($cntC->fetchColumn() > 0) respond(400, null, 'Không thể xóa stage đang có khách hàng / lead', false);
         
-        $this->db->prepare("DELETE FROM pipeline_stages WHERE id=? AND tenant_id=?")->execute([$id, $auth['tenant_id']]);
+        $this->db->prepare("UPDATE pipeline_stages SET deleted_at = CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?")->execute([$id, $tid]);
+        TenantConfigService::invalidateCache($tid);
         respond(200, null, 'Đã xóa stage thành công');
     }
 
@@ -206,9 +232,9 @@ class DealController {
             }
         }
 
-        // Multi-Team on deals (`team_id`, `teams`)
-        // Exclude non-sales department teams (1=HCNS, 2=Kế toán, 3=Marketing, 5=Học vụ - học thuật, 99983=Ban Giám đốc)
-        $nonSalesDeptTeamIds = [1, 2, 3, 5, 99983];
+        // Multi-Team on deals (`team_id`, `teams`) - dynamically exclude non-sales department teams via TenantConfigService
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $nonSalesDeptTeamIds = TenantConfigService::getNonSalesTeamIds($this->db, (int)$tid);
         $dealTeams = array_values(array_unique(array_merge(
             parseCrmMultiFilterValues($_GET['team_id'] ?? null),
             parseCrmMultiFilterValues($_GET['teams'] ?? null)
@@ -875,120 +901,48 @@ class DealController {
     }
 
     private function getScope(array $auth, string $module, string $action): string {
-        $permissionsJson = null;
-        static $uCache = []; $uid = (int)($auth['user_id'] ?? 0); if (!isset($uCache[$uid])) { $stmtQ = $this->db->prepare("SELECT u.permissions_json, u.team_id, t.name as team_name, u.job_title, u.department FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1"); $stmtQ->execute([$uid]); $uCache[$uid] = $stmtQ->fetch(PDO::FETCH_ASSOC) ?: []; } $resQ = $uCache[$uid];
-        // Loaded from $uCache[$uid] above
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        static $uCache = [];
+        $uid = (int)($auth['user_id'] ?? 0);
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        if (!isset($uCache[$uid])) {
+            $stmtQ = $this->db->prepare("SELECT u.permissions_json, u.team_id, t.name as team_name, u.job_title, u.department FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? AND u.tenant_id = ? LIMIT 1");
+            $stmtQ->execute([$uid, $tid]);
+            $uCache[$uid] = $stmtQ->fetch(PDO::FETCH_ASSOC) ?: [];
+        }
+        $resQ = $uCache[$uid];
         $permissionsJson = (!empty($resQ['permissions_json'])) ? json_decode($resQ['permissions_json'], true) : null;
-        if ($resQ && !empty($resQ['permissions_json'])) {
-            $permissionsJson = json_decode($resQ['permissions_json'], true);
+        if (is_array($permissionsJson)) {
+            $auth['permissions'] = $permissionsJson;
         }
-
-        $isMarketing = false;
-        $isAcademic = in_array(strtolower($auth['role'] ?? ''), ['academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor'], true);
-        if (strtolower($auth['role'] ?? '') === 'marketing') {
-            $isMarketing = true;
+        $resolved = TenantConfigService::resolvePermissionScope($this->db, $auth, $module, $action);
+        if (is_array($permissionsJson) && isset($permissionsJson[$module][$action]) && in_array($permissionsJson[$module][$action], ['all', 'team', 'own', 'none'], true)) {
+            return (string)$permissionsJson[$module][$action];
         }
-        if (!$isMarketing || !$isAcademic) {
-            // Reuse $resQ from $uCache[$uid]
-            // Single query already includes team_name, job_title, department
-            $uInfo = $resQ ?: null;
-            if ($uInfo) {
-                $tName = mb_strtolower($uInfo['team_name'] ?? '');
-                $jTitle = mb_strtolower($uInfo['job_title'] ?? '');
-                $dept = mb_strtolower($uInfo['department'] ?? '');
-                $comb = $dept . ' ' . $jTitle . ' ' . $tName;
-                if ((int)$uInfo['team_id'] === 3 || strpos($tName, 'marketing') !== false || strpos($jTitle, 'marketing') !== false) {
-                    $isMarketing = true;
-                }
-                if (
-                    (int)$uInfo['team_id'] === 5 ||
-                    strpos($comb, 'học vụ') !== false ||
-                    strpos($comb, 'hoc_vu') !== false ||
-                    strpos($comb, 'học thuật') !== false ||
-                    strpos($comb, 'hoc_thuat') !== false ||
-                    strpos($comb, 'đào tạo') !== false ||
-                    strpos($comb, 'dao_tao') !== false ||
-                    strpos($comb, 'academic') !== false ||
-                    strpos($comb, 'giảng viên') !== false ||
-                    strpos($comb, 'giáo viên') !== false ||
-                    strpos($comb, 'trợ giảng') !== false ||
-                    strpos($comb, 'tutor') !== false ||
-                    strpos($comb, 'teacher') !== false
-                ) {
-                    $isAcademic = true;
-                }
+        if ($resQ && in_array(strtolower((string)($auth['role'] ?? '')), ['sales', 'sale', 'staff', 'manager', 'leader', 'team_lead', 'truong_phong', 'truongphong'], true) && $module === 'deals') {
+            [$deptCode] = TenantConfigService::classifyDepartmentCode(
+                trim(($resQ['team_name'] ?? '') . ' ' . ($resQ['department'] ?? '') . ' ' . ($resQ['job_title'] ?? '')),
+                (int)($resQ['team_id'] ?? 0),
+                $tid
+            );
+            if ($deptCode === 'marketing') {
+                return $action === 'delete' ? 'none' : 'all';
+            }
+            if ($deptCode === 'academic') {
+                return $action === 'delete' ? 'own' : 'all';
             }
         }
-
-        if (in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'sale_admin', 'saleadmin', 'marketing', 'accountant', 'academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor'], true) || $isMarketing || $isAcademic) {
-            if (($isMarketing || strtolower($auth['role'] ?? '') === 'marketing') && $action === 'delete') {
-                return 'none';
-            }
-            if ($isAcademic && $action === 'delete') {
-                return 'own';
-            }
-            return 'all';
-        }
-
-        if (in_array(strtolower($auth['role'] ?? ''), ['sale', 'sales'], true) && $module === 'deals') {
-            return $action === 'delete' ? 'none' : 'own';
-        }
-
-        if ($permissionsJson && isset($permissionsJson[$module][$action])) {
-            $val = $permissionsJson[$module][$action];
-            if (in_array($val, ['all', 'team', 'own', 'none'], true)) {
-                if ($action !== 'delete' && $val === 'none' && in_array($auth['role'], ['sale', 'sales', 'manager', 'director', 'assistant'], true)) {
-                    return 'own';
-                }
-                return $val;
-            }
-        }
-
-        // Default fallbacks
-        $role = $auth['role'];
-        if ($role === 'director') {
-            if ($module === 'settings') {
-                return 'none';
-            }
-            return 'all';
-        }
-        if ($role === 'assistant') {
-            return $action === 'delete' ? 'none' : 'all';
-        }
-        if ($role === 'manager') {
-            return $action === 'delete' ? 'none' : 'team';
-        }
-        if (in_array($role, ['sale', 'sales'], true)) {
-            if ($module === 'projects') {
-                return $action === 'read' ? 'all' : 'none';
-            }
-            return $action === 'delete' ? 'none' : 'own';
-        }
-        if ($role === 'viewer') {
-            return $action === 'read' ? 'all' : 'none';
-        }
-        if ($role === 'marketing') {
-            return 'all';
-        }
-        if (in_array($role, ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
-            return $action === 'delete' ? 'own' : 'all';
-        }
-
-        return 'none';
+        return $resolved;
     }
 
     public function getStages(array $auth): void {
-        $tid = $auth['tenant_id'] ?? 1;
-        $stmt = $this->db->prepare("SELECT * FROM pipeline_stages WHERE tenant_id = ? OR tenant_id IS NULL ORDER BY order_index ASC");
-        $stmt->execute([$tid]);
-        $stages = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $stages = TenantConfigService::getPipelineStages($this->db, $tid);
         respond(200, $stages, 'Lấy danh sách giai đoạn thành công');
     }
 
-    private function getSetting(string $key, string $default): string { static $sc = null; if ($sc === null) { $sc = []; try { foreach ($this->db->query("SELECT setting_key, setting_value FROM system_settings")->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) { $sc[(string)$r['setting_key']] = (string)($r['setting_value'] ?? ''); } } catch (\Throwable $e) {} } return array_key_exists($key, $sc) ? $sc[$key] : $default; } private function getSettingLegacyUnused(string $key, string $default): string {
-        $stmt = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
-        $stmt->execute([$key]);
-        $val = $stmt->fetchColumn();
-        return $val !== false ? $val : $default;
+    private function getSetting(string $key, string $default): string {
+        $tid = (int)($GLOBALS['current_tenant_id'] ?? 1);
+        return (string)TenantConfigService::getSetting($this->db, $tid, $key, $default);
     }
 }

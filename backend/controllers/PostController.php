@@ -370,7 +370,8 @@ class PostController {
         }
 
         // Only author or admin/superadmin can delete
-        if ($userId !== (int)$post['user_id'] && !in_array($role, ['admin', 'superadmin', 'super_admin', 'director'])) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if ($userId !== (int)$post['user_id'] && !TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director'])) {
             respond(403, null, 'Bạn không có quyền xóa bài viết này', false);
         }
 
@@ -424,7 +425,8 @@ class PostController {
         }
 
         // Only author or admin/superadmin/director can edit
-        if ($userId !== (int)$post['user_id'] && !in_array($role, ['admin', 'superadmin', 'super_admin', 'director'])) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if ($userId !== (int)$post['user_id'] && !TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director'])) {
             respond(403, null, 'Bạn không có quyền chỉnh sửa bài viết này', false);
         }
 
@@ -876,7 +878,8 @@ class PostController {
             respond(404, null, 'Bình luận không tồn tại', false);
         }
 
-        if ($userId !== (int)$comment['user_id'] && !in_array($role, ['admin', 'superadmin', 'super_admin', 'director'])) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if ($userId !== (int)$comment['user_id'] && !TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director'])) {
             respond(403, null, 'Bạn không có quyền chỉnh sửa bình luận này', false);
         }
 
@@ -913,7 +916,8 @@ class PostController {
             respond(404, null, 'Bình luận không tồn tại', false);
         }
 
-        if ($userId !== (int)$comment['user_id'] && !in_array($role, ['admin', 'superadmin', 'super_admin', 'director'])) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if ($userId !== (int)$comment['user_id'] && !TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director'])) {
             respond(403, null, 'Bạn không có quyền xóa bình luận này', false);
         }
 

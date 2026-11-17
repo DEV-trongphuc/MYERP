@@ -82,12 +82,12 @@ $items[] = chk('BUG-H4 GET_LOCK return value checked',
     countInCode($FILES['webhook'], 'lockResult') >= 1 ? 'PASS' : 'FAIL',
     countInCode($FILES['webhook'], 'lockResult') . ' reference(s)');
 
-// QUAL-5: delete_contact cleans orphan tables
-$feHasMailLog  = countInCode($FILES['FlowExecutor'], 'DELETE FROM mail_delivery_logs');
-$feHasActBuf   = countInCode($FILES['FlowExecutor'], 'DELETE FROM activity_buffer');
-$items[] = chk('QUAL-5 delete_contact: mail_delivery_logs cleanup',
+// QUAL-5: delete_contact adheres to 100% soft-delete mandate
+$feHasMailLog  = countInCode($FILES['FlowExecutor'], '100% Soft-Delete Mandate');
+$feHasActBuf   = countInCode($FILES['FlowExecutor'], 'deleted_at');
+$items[] = chk('QUAL-5 delete_contact: 100% Soft-Delete Mandate',
     $feHasMailLog >= 1 ? 'PASS' : 'FAIL', "$feHasMailLog line(s)");
-$items[] = chk('QUAL-5 delete_contact: activity_buffer cleanup',
+$items[] = chk('QUAL-5 delete_contact: deleted_at column updated',
     $feHasActBuf >= 1 ? 'PASS' : 'FAIL', "$feHasActBuf line(s)");
 
 // QUAL-4: webhook debug log is conditional (POST only)

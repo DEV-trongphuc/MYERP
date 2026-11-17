@@ -15,8 +15,14 @@ if (!is_array($input)) {
 }
 
 $action = $input['action'] ?? '';
-$tenantId = 1;
-$createdBy = 100009; // Tunrio - Super admin
+$tenantId = max(1, (int)($input['tenant_id'] ?? 1));
+require_once __DIR__ . '/config/TenantConfigService.php';
+$defaultStageIds = TenantConfigService::getStageIdsBySlugs($pdo, $tenantId, ['new_lead']);
+$defaultStageId = !empty($defaultStageIds) ? (int)$defaultStageIds[0] : null;
+$stmtDefAdmin = $pdo->prepare("SELECT id FROM users WHERE tenant_id = ? AND is_active = 1 AND deleted_at IS NULL ORDER BY CASE WHEN LOWER(role) IN ('superadmin','super_admin','admin','director') THEN 0 ELSE 1 END, id ASC LIMIT 1");
+$stmtDefAdmin->execute([$tenantId]);
+$defaultOwnerId = (int)($stmtDefAdmin->fetchColumn() ?: 1);
+$createdBy = (int)($input['created_by'] ?? $defaultOwnerId);
 
 function parseDateToSql(?string $dateStr, ?string $fallbackDate = null): ?string {
     if (!$dateStr) return null;
@@ -100,7 +106,7 @@ if ($action === 'insert_new') {
                 $lead['full_name'] ?: 'Khách hàng',
                 $lead['phone'] ?: null,
                 $lead['email'] ?: null,
-                $lead['owner_id'] ?: 100062,
+                $lead['owner_id'] ?: $defaultOwnerId,
                 $lead['tags'] ?: '[]',
                 $lead['notes'] ?: '',
                 $source,
@@ -108,7 +114,7 @@ if ($action === 'insert_new') {
                 $lead['lead_status'] ?: 'active',
                 $lead['lost_reason'] ?: null,
                 $lead['nurture_reason'] ?: null,
-                $lead['stage_id'] ?: 31,
+                $lead['stage_id'] ?: $defaultStageId,
                 $lead['pipeline_status'] ?: 'new_lead',
                 $lead['created_at'] ?: date('Y-m-d H:i:s'),
                 $lead['updated_at'] ?: date('Y-m-d H:i:s')
@@ -128,7 +134,7 @@ if ($action === 'insert_new') {
 
                     $stmtInsertAct->execute([
                         $tenantId,
-                        $lead['owner_id'] ?: 100062,
+                        $lead['owner_id'] ?: $defaultOwnerId,
                         $createdBy,
                         $newContactId,
                         $newContactId,
@@ -250,7 +256,8 @@ if ($action === 'batch_update') {
 
             if (!empty($fields)) {
                 $params[] = $cid;
-                $sql = "UPDATE contacts SET " . implode(', ', $fields) . " WHERE id = ?";
+                $params[] = $tenantId;
+                $sql = "UPDATE contacts SET " . implode(', ', $fields) . " WHERE id = ? AND tenant_id = ?";
                 $stmtUp = $pdo->prepare($sql);
                 $stmtUp->execute($params);
                 $updatedContacts++;
@@ -258,7 +265,7 @@ if ($action === 'batch_update') {
 
             // Sync interactions
             if (!empty($up['interactions']) && is_array($up['interactions'])) {
-                $ownerId = $up['newOwnerId'] ?? ($up['owner_id'] ?? 100062);
+                $ownerId = $up['newOwnerId'] ?? ($up['owner_id'] ?? $defaultOwnerId);
                 foreach ($up['interactions'] as $it) {
                     $dateStr = $it['dateStr'] ?? '';
                     $body = trim($it['content'] ?? '');

@@ -21,6 +21,7 @@ import {
 } from 'recharts';
 import { fetchAPI } from '../../utils/api';
 import { Avatar } from '../ui/Avatar';
+import { getTenantOrganizationName } from '../../contexts/TenantConfigContext';
 import {
   rulesFor,
   fmt,
@@ -294,7 +295,7 @@ const CleanSearchBox: React.FC<{
 );
 
 function createInitialDb(ym: string): AzDatabase {
-  const c = newCompany('CÔNG TY TNHH VIỆN QUỐC TẾ IDEAS');
+  const c = newCompany(getTenantOrganizationName('DOANH NGHIỆP MẶC ĐỊNH'));
   c.id = 'myerp-primary';
   return {
     v: 2,
@@ -414,7 +415,7 @@ export const HrmAccountingAzWorkspace: React.FC<{
     }
     const firstKey = Object.keys(companies)[0];
     if (firstKey) return companies[firstKey];
-    return newCompany('CÔNG TY TNHH VIỆN QUỐC TẾ IDEAS');
+    return newCompany(getTenantOrganizationName('DOANH NGHIỆP MẶC ĐỊNH'));
   }, [azDb]);
 
   // Save to LocalStorage & optionally Cloud

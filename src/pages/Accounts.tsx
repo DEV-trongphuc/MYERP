@@ -14,6 +14,7 @@ import { TableSkeleton } from '../components/ui/Skeleton';
 import { useLanguage } from '../contexts/LanguageContext';
 import { withRouterFreezer } from '../components/RouterFreezer';
 import { useAuth } from '../contexts/AuthContext';
+import { isInternalTenantEmail, getTenantRoleOptions, useTenantConfig } from '../contexts/TenantConfigContext';
 import { CopyButton } from '../components/ui/CopyButton';
 
 const AccountDetailDrawer = React.lazy(() => import('../components/AccountDetailDrawer').then(m => ({ default: m.AccountDetailDrawer })));
@@ -21,6 +22,7 @@ const AccountDetailDrawer = React.lazy(() => import('../components/AccountDetail
 const AccountsInner = () => {
   const { t } = useLanguage();
   const { user } = useAuth();
+  useTenantConfig();
   const { showConfirm } = useUIStore();
   const isRestrictedRole = user && ['sale', 'viewer', 'hr', 'accountant', 'marketing'].includes(user.role);
 
@@ -956,19 +958,7 @@ const AccountsInner = () => {
               <div>
                 <label className="form-label">{t('Vai trò (Role)')}</label>
                 <CustomSelect
-                  options={[
-                    { value: 'admin', label: t('Quản trị viên (Admin)') },
-                    { value: 'director', label: t('Giám đốc (Director)') },
-                    { value: 'manager', label: t('Trưởng phòng / Trưởng nhóm (Manager)') },
-                    { value: 'assistant', label: t('Trợ lý (Assistant)') },
-                    { value: 'sale', label: t('Sale / Nhân viên (Sales)') },
-                    { value: 'sale_admin', label: t('Sale Admin') },
-                    { value: 'hr', label: t('Nhân sự (HR)') },
-                    { value: 'accountant', label: t('Kế toán (Accountant)') },
-                    { value: 'marketing', label: t('Marketing') },
-                    { value: 'academic', label: t('Học vụ - Học thuật (Academic)') },
-                    { value: 'viewer', label: t('Chỉ xem dữ liệu (Viewer)') }
-                  ]}
+                  options={getTenantRoleOptions({ includeSuperAdmin: user?.role === 'superadmin' }).map(o => ({ value: o.value, label: t(o.label) }))}
                   value={formData.role}
                   onChange={val => setFormData({ ...formData, role: val.toString() })}
                   disabled={editingAccount?.id === user?.id}
@@ -1236,7 +1226,7 @@ const AccountsInner = () => {
                             <span style={{ fontSize: '0.875rem' }}>{acc.email || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{t('Chưa có email')}</span>}</span>
                             {acc.email && <CopyButton text={acc.email} />}
                             {acc.email && (
-                              (Number(acc.is_confirmed) === 1 || acc.email.endsWith('@ideas.edu.vn')) ? (
+                              (Number(acc.is_confirmed) === 1 || isInternalTenantEmail(acc.email)) ? (
                                 <span 
                                   style={{ display: 'inline-flex', alignItems: 'center', color: '#10b981' }}
                                   title={t('Đã xác thực email')}

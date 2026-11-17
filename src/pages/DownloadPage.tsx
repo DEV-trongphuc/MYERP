@@ -581,7 +581,7 @@ export function DownloadPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.825rem' }}>
                   <span style={{ color: '#10B981', fontSize: '0.75rem' }}>🔒</span>
                   <span style={{ color: '#94A3B8' }}>https://</span>
-                  <span style={{ color: '#0F172A', fontWeight: 600 }}>myerp.ideas.edu.vn</span>
+                  <span style={{ color: '#0F172A', fontWeight: 600 }}>{typeof window !== 'undefined' && window.location?.host ? window.location.host : 'app.your-domain.com'}</span>
                   <span style={{ color: '#64748B' }}>/download</span>
                 </div>
 
@@ -967,7 +967,7 @@ export function DownloadPage() {
         <div style={{ marginTop: '8px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
           <span>Power by</span>
           <img 
-            src="https://myerp.ideas.edu.vn/backend/uploads/avatars/avatar_6aa50a529021c.webp" 
+            src="/cropped-logofavicon-1.webp" 
             alt="Turnio DEV" 
             style={{ 
               width: '22px', 

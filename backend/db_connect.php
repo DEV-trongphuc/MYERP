@@ -1,23 +1,25 @@
 <?php
-mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 require_once __DIR__ . '/env.php';
 
 date_default_timezone_set('Asia/Ho_Chi_Minh');
 
-$servername = $_ENV['DB_HOST'] ?? "localhost";
-$username = $_ENV['DB_USER'] ?? "vhvxoigh_mail_auto";
-$password = $_ENV['DB_PASS'] ?? "Ideas@812";
-$dbname = $_ENV['DB_NAME'] ?? "vhvxoigh_myerp";
+if (!defined('MYERP_SKIP_DB_CONNECT') || !MYERP_SKIP_DB_CONNECT) {
+    mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-$conn = new mysqli($servername, $username, $password, $dbname);
+    $servername = $_ENV['DB_HOST'] ?? "localhost";
+    $username = $_ENV['DB_USER'] ?? "vhvxoigh_mail_auto";
+    $password = $_ENV['DB_PASS'] ?? "Ideas@812";
+    $dbname = $_ENV['DB_NAME'] ?? "vhvxoigh_myerp";
 
-if ($conn->connect_error) {
-    die(json_encode(["success" => false, "message" => "Connection failed: " . $conn->connect_error]));
+    $conn = new mysqli($servername, $username, $password, $dbname);
+
+    if ($conn->connect_error) {
+        die(json_encode(["success" => false, "message" => "Connection failed: " . $conn->connect_error]));
+    }
+
+    $conn->set_charset("utf8mb4");
+    $conn->query("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci, time_zone = '+07:00'");
 }
-
-$conn->set_charset("utf8mb4");
-// BUG-FIX: Đảm bảo MySQL chạy cùng múi giờ với PHP và collation chuẩn trong 1 round-trip duy nhất
-$conn->query("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci, time_zone = '+07:00'");
 
 // Global helper: Log Zalo/Email/Telegram communications to database
 if (!function_exists('log_communication')) {
@@ -60,39 +62,141 @@ if (!function_exists('log_communication')) {
 
 // Global helper: Cache system_settings in memory to prevent N+1 Query bottlenecks during cron/webhook loops
 if (!function_exists('get_system_setting')) {
-    function get_system_setting($conn, $key = null) {
-        static $settings_cache = null;
-        if ($settings_cache === null) {
-            $settings_cache = [];
-            $cacheFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . "ideas_system_settings.json";
-            
+    function get_system_setting($conn, $key = null, $tenantId = null) {
+        $tid = (int)($tenantId ?: ($GLOBALS['current_tenant_id'] ?? 1));
+        if ($tid <= 0) $tid = 1;
+
+        if (!isset($GLOBALS['__system_settings_cache']) || !is_array($GLOBALS['__system_settings_cache'])) {
+            $GLOBALS['__system_settings_cache'] = [];
+        }
+
+        if (!isset($GLOBALS['__system_settings_cache'][$tid])) {
+            $cacheFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . "ideas_system_settings_t{$tid}.json";
+            $loaded = null;
+
             if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 300)) {
-                $settings_cache = json_decode(file_get_contents($cacheFile), true) ?: [];
+                $decoded = json_decode((string)@file_get_contents($cacheFile), true);
+                if (is_array($decoded)) {
+                    $loaded = $decoded;
+                }
             }
-            
-            if (empty($settings_cache)) {
-                $settings_cache = [];
+
+            if ($loaded === null) {
+                $loaded = [];
                 if ($conn instanceof PDO) {
-                    $stmt = $conn->query("SELECT setting_key, setting_value FROM system_settings");
-                    $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
-                    foreach ($rows as $row) {
-                        $settings_cache[$row['setting_key']] = $row['setting_value'];
+                    try {
+                        $stmt = $conn->prepare("SELECT setting_key, setting_value FROM system_settings WHERE tenant_id = ?");
+                        $stmt->execute([$tid]);
+                        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+                            $loaded[$row['setting_key']] = $row['setting_value'];
+                        }
+                    } catch (\Throwable $e) {
+                        $stmt = $conn->query("SELECT setting_key, setting_value FROM system_settings");
+                        foreach ($stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [] as $row) {
+                            $loaded[$row['setting_key']] = $row['setting_value'];
+                        }
                     }
-                } else {
-                    $res = $conn->query("SELECT setting_key, setting_value FROM system_settings");
-                    if ($res) {
-                        while ($row = $res->fetch_assoc()) {
-                            $settings_cache[$row['setting_key']] = $row['setting_value'];
+                } elseif ($conn instanceof mysqli) {
+                    try {
+                        $stmt = $conn->prepare("SELECT setting_key, setting_value FROM system_settings WHERE tenant_id = ?");
+                        if ($stmt) {
+                            $stmt->bind_param("i", $tid);
+                            $stmt->execute();
+                            $res = $stmt->get_result();
+                            while ($res && ($row = $res->fetch_assoc())) {
+                                $loaded[$row['setting_key']] = $row['setting_value'];
+                            }
+                            $stmt->close();
+                        }
+                    } catch (\Throwable $e) {
+                        $res = $conn->query("SELECT setting_key, setting_value FROM system_settings");
+                        if ($res) {
+                            while ($row = $res->fetch_assoc()) {
+                                $loaded[$row['setting_key']] = $row['setting_value'];
+                            }
                         }
                     }
                 }
-                @file_put_contents($cacheFile, json_encode($settings_cache));
+                @file_put_contents($cacheFile, json_encode($loaded, JSON_UNESCAPED_UNICODE));
             }
+            $GLOBALS['__system_settings_cache'][$tid] = $loaded;
         }
+
         if ($key === null) {
-            return $settings_cache;
+            return $GLOBALS['__system_settings_cache'][$tid];
         }
-        return $settings_cache[$key] ?? '';
+        return $GLOBALS['__system_settings_cache'][$tid][$key] ?? '';
+    }
+}
+
+if (!class_exists('TenantConfigService') && file_exists(__DIR__ . '/config/TenantConfigService.php')) {
+    require_once __DIR__ . '/config/TenantConfigService.php';
+}
+
+if (!function_exists('get_tenant_frontend_url')) {
+    function get_tenant_frontend_url($conn = null, $tenantId = null): string {
+        $dbRef = $conn ?? ($GLOBALS['db'] ?? $GLOBALS['pdo'] ?? $GLOBALS['conn'] ?? null);
+        $tid = (int)($tenantId ?: ($GLOBALS['current_tenant_id'] ?? 1));
+        if ($tid <= 0) $tid = 1;
+        if ($dbRef instanceof PDO && class_exists('TenantConfigService')) {
+            return TenantConfigService::getFrontendUrl($dbRef, $tid);
+        }
+        $cfgUrl = $dbRef ? rtrim(trim((string)get_system_setting($dbRef, 'frontend_url', $tid)), '/') : '';
+        if ($cfgUrl !== '') return $cfgUrl;
+        $envUrl = rtrim(trim((string)(getenv('APP_BASE_URL') ?: ($_ENV['APP_BASE_URL'] ?? ''))), '/');
+        if ($envUrl !== '') return $envUrl;
+        if (!empty($_SERVER['HTTP_HOST'])) {
+            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            return $scheme . '://' . $_SERVER['HTTP_HOST'];
+        }
+        return '';
+    }
+}
+
+if (!function_exists('get_tenant_brand_name')) {
+    function get_tenant_brand_name($conn = null, $tenantId = null): string {
+        $dbRef = $conn ?? ($GLOBALS['db'] ?? $GLOBALS['pdo'] ?? $GLOBALS['conn'] ?? null);
+        $tid = (int)($tenantId ?: ($GLOBALS['current_tenant_id'] ?? 1));
+        if ($tid <= 0) $tid = 1;
+        if ($dbRef instanceof PDO && class_exists('TenantConfigService')) {
+            return TenantConfigService::getBrandName($dbRef, $tid);
+        }
+        $name = $dbRef ? trim((string)(get_system_setting($dbRef, 'company_name', $tid) ?: get_system_setting($dbRef, 'organization_name', $tid))) : '';
+        return $name !== '' ? $name : 'ERP';
+    }
+}
+
+if (!function_exists('get_tenant_brand_prefix')) {
+    function get_tenant_brand_prefix($conn = null, $tenantId = null): string {
+        $dbRef = $conn ?? ($GLOBALS['db'] ?? $GLOBALS['pdo'] ?? $GLOBALS['conn'] ?? null);
+        $tid = (int)($tenantId ?: ($GLOBALS['current_tenant_id'] ?? 1));
+        if ($tid <= 0) $tid = 1;
+        if ($dbRef instanceof PDO && class_exists('TenantConfigService')) {
+            return TenantConfigService::getBrandPrefix($dbRef, $tid);
+        }
+        $short = $dbRef ? trim((string)(get_system_setting($dbRef, 'organization_short_name', $tid) ?: get_system_setting($dbRef, 'brand_prefix', $tid))) : '';
+        $label = $short !== '' ? trim($short, '[] ') : get_tenant_brand_name($dbRef, $tid);
+        return '[' . $label . ']';
+    }
+}
+
+if (!function_exists('get_tenant_sender_email')) {
+    function get_tenant_sender_email($conn = null, $tenantId = null): string {
+        $dbRef = $conn ?? ($GLOBALS['db'] ?? $GLOBALS['pdo'] ?? $GLOBALS['conn'] ?? null);
+        $tid = (int)($tenantId ?: ($GLOBALS['current_tenant_id'] ?? 1));
+        if ($tid <= 0) $tid = 1;
+        if ($dbRef instanceof PDO && class_exists('TenantConfigService')) {
+            return TenantConfigService::getDefaultSenderEmail($dbRef, $tid);
+        }
+        if ($dbRef) {
+            $sesSender = trim((string)get_system_setting($dbRef, 'ses_sender_email', $tid));
+            if ($sesSender !== '') return $sesSender;
+            $verified = array_values(array_filter(array_map('trim', explode(',', (string)get_system_setting($dbRef, 'verified_from_senders', $tid)))));
+            if (!empty($verified[0])) return $verified[0];
+            $dom = ltrim(trim((string)get_system_setting($dbRef, 'internal_email_domain', $tid)), '@');
+            if ($dom !== '') return 'noreply@' . $dom;
+        }
+        return 'noreply@myerp.local';
     }
 }
 
@@ -244,23 +348,25 @@ if (!function_exists('pruneAdminLogs')) {
 }
 
 $db_needs_migration = false;
-try {
-    $dbVer = (int) get_system_setting($conn, 'db_version');
-    if ($dbVer > 0 && $dbVer < 208) {
-        $db_needs_migration = true;
-    } elseif ($dbVer === 0) {
-        $vStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'db_version' LIMIT 1");
-        if ($vStmt && $vStmt->num_rows > 0) {
-            $dbVer = (int)$vStmt->fetch_assoc()['setting_value'];
-            if ($dbVer < 208) {
+if (isset($conn) && $conn) {
+    try {
+        $dbVer = (int) get_system_setting($conn, 'db_version');
+        if ($dbVer > 0 && $dbVer < 208) {
+            $db_needs_migration = true;
+        } elseif ($dbVer === 0) {
+            $vStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'db_version' LIMIT 1");
+            if ($vStmt && $vStmt->num_rows > 0) {
+                $dbVer = (int)$vStmt->fetch_assoc()['setting_value'];
+                if ($dbVer < 208) {
+                    $db_needs_migration = true;
+                }
+            } else {
                 $db_needs_migration = true;
             }
-        } else {
-            $db_needs_migration = true;
         }
+    } catch (Throwable $e) {
+        $db_needs_migration = true;
     }
-} catch (Throwable $e) {
-    $db_needs_migration = true;
 }
 $GLOBALS['db_needs_migration'] = $db_needs_migration;
 

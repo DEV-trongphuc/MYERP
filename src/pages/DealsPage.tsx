@@ -23,6 +23,7 @@ import { CustomCheckbox } from '../components/ui/CustomCheckbox';
 import { useDebounce } from '../hooks/useDebounce';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { isAcademic } from '../utils/roleUtils';
+import { getDynamicNonSalesTeamIds } from '../contexts/TenantConfigContext';
 const LEAD_SOURCES = [
   { value: 'facebook', label: 'Facebook' },
   { value: 'google', label: 'Google Ads' },
@@ -581,7 +582,7 @@ export const DealsPage: React.FC = () => {
     ) {
       return null;
     }
-    const nonSalesTeamIds = [1, 2, 3, 5, 99983];
+    const nonSalesTeamIds = getDynamicNonSalesTeamIds();
     if (currentUser.role === 'manager') {
       const managedTeam = teamsSource.find(t => Number(t.leader_id) === Number(currentUser.id));
       const candidateTeamId = Number(managedTeam?.id || (currentUser as any)?.team_id || 0);

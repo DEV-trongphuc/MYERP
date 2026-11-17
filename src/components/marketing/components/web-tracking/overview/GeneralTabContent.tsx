@@ -1,10 +1,18 @@
 import * as React from 'react';
 import { useMemo, useState } from 'react';
 import { Users, Zap, Eye, Clock, TrendingUp, BarChart2, Activity, Info, Table, BookOpen } from 'lucide-react';
+import {
+    ResponsiveContainer,
+    AreaChart,
+    Area,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend
+} from 'recharts';
 import Modal from '../../common/Modal';
 import StatCard from '../../common/StatCard';
-import Chart from '../../../shims/apexCharts';
-import type { ApexOptions } from '../../../shims/apexCharts';
 import { WebStats } from '../types';
 
 interface GeneralTabContentProps {
@@ -12,110 +20,43 @@ interface GeneralTabContentProps {
     formatDuration: (seconds: number) => string;
 }
 
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload || !payload.length) return null;
+    return (
+        <div className="bg-white/95 backdrop-blur-md p-3 rounded-[12px] border border-slate-200 shadow-xl text-xs space-y-1.5 font-sans min-w-[160px]">
+            <p className="font-bold text-slate-700 border-b border-slate-100 pb-1 mb-1">{label}</p>
+            {payload.map((entry: any, index: number) => {
+                const isSessions = entry.dataKey === 'sessions';
+                const name = isSessions ? 'Phiên truy cập' : 'Lượt xem trang';
+                const color = entry.stroke || (isSessions ? '#BD1D2D' : '#334155');
+                const valFormatted = new Intl.NumberFormat('vi-VN').format(entry.value);
+                return (
+                    <div key={`item-${index}`} className="flex items-center justify-between gap-3">
+                        <span className="flex items-center gap-1.5 text-slate-600 font-medium">
+                            <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: color }} />
+                            {name}:
+                        </span>
+                        <strong className="text-slate-900 font-bold tabular-nums" style={{ color: isSessions ? '#BD1D2D' : '#0f172a' }}>
+                            {valFormatted}
+                        </strong>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
 const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDuration }) => {
     const [isBounceInfoOpen, setIsBounceInfoOpen] = useState(false);
-    const chartOptions: ApexOptions = useMemo(() => ({
-        chart: {
-            type: 'area',
-            toolbar: { show: false },
-            zoom: { enabled: false },
-            fontFamily: 'Inter, system-ui, sans-serif',
-            animations: {
-                enabled: true,
-                easing: 'easeinout',
-                speed: 800,
-                animateGradually: { enabled: true, delay: 150 }
-            },
-            background: 'transparent'
-        },
-        dataLabels: { enabled: false },
-        stroke: {
-            curve: 'smooth',
-            width: [2.5, 2.5],
-            lineCap: 'round',
-            dashArray: [0, 0]
-        },
-        fill: {
-            type: 'gradient',
-            gradient: {
-                shadeIntensity: 1,
-                opacityFrom: 0.35,
-                opacityTo: 0.05,
-                stops: [0, 90, 100]
-            }
-        },
-        xaxis: {
-            categories: stats?.chart.map(c => c.date) || [],
-            labels: {
-                style: {
-                    colors: '#94a3b8',
-                    fontSize: '10px',
-                    fontWeight: 600,
-                    fontFamily: 'Inter, system-ui, sans-serif'
-                },
-                offsetY: 2,
-                rotate: 0
-            },
-            axisBorder: { show: false },
-            axisTicks: { show: false },
-            tooltip: { enabled: false }
-        },
-        yaxis: {
-            labels: {
-                style: {
-                    colors: '#94a3b8',
-                    fontSize: '10px',
-                    fontWeight: 600,
-                    fontFamily: 'Inter, system-ui, sans-serif'
-                },
-                formatter: (val) => val >= 1000 ? (val / 1000).toFixed(1) + 'k' : val.toString()
-            }
-        },
-        grid: {
-            borderColor: '#f1f5f9',
-            strokeDashArray: 3,
-            xaxis: { lines: { show: true } },
-            yaxis: { lines: { show: true } },
-            padding: { top: 10, right: 15, bottom: 5, left: 5 }
-        },
-        colors: ['#C6333D', '#334155'],
-        legend: {
-            show: true,
-            position: 'top',
-            horizontalAlign: 'right',
-            fontFamily: 'Inter, system-ui, sans-serif',
-            fontSize: '11px',
-            fontWeight: 700,
-            itemMargin: { horizontal: 12, vertical: 0 },
-            markers: {
-                radius: 12,
-                width: 10,
-                height: 10,
-                offsetY: 0,
-                strokeWidth: 0
-            },
-            labels: {
-                colors: '#475569'
-            }
-        },
-        tooltip: {
-            theme: 'light',
-            style: { fontSize: '11px', fontFamily: 'Inter, system-ui, sans-serif' },
-            x: { show: true },
-            y: {
-                formatter: (val) => val.toLocaleString(),
-                title: {
-                    formatter: (seriesName) => seriesName + ':'
-                }
-            },
-            marker: { show: true }
-        }
-    }), [stats]);
 
-    const chartSeries = useMemo(() => [
-        { name: 'Sessions', data: stats?.chart.map(c => c.sessions) || [] },
-        { name: 'Page Views', data: stats?.chart.map(c => c.pageViews) || [] }
-    ], [stats]);
+    const chartData = useMemo(() => {
+        if (!stats?.chart || !Array.isArray(stats.chart)) return [];
+        return stats.chart.map(item => ({
+            date: item.date,
+            sessions: Number(item.sessions || 0),
+            pageViews: Number(item.pageViews || 0)
+        }));
+    }, [stats?.chart]);
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
@@ -249,27 +190,87 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                     </Modal>
 
                     {/* Chart Section - Enhanced */}
-                    <div className="bg-gradient-to-br from-white to-slate-50/30 p-6 rounded-[18px] border border-slate-200/60 shadow-[0_8px_30px_-6px_rgba(0,0,0,0.08)]">
+                    <div className="bg-white p-6 rounded-[16px] border border-[#E2E8F0] shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
                         <div className="flex items-center justify-between mb-5">
                             <div>
                                 <h3 className="text-base font-black text-slate-800 flex items-center gap-2.5 tracking-tight">
-                                    <div className="p-2 bg-gradient-to-br from-indigo-500 to-blue-600 text-white rounded-xl shadow-lg shadow-indigo-500/30">
+                                    <div className="w-8 h-8 rounded-lg bg-[rgba(189,29,45,0.08)] text-[#BD1D2D] flex items-center justify-center">
                                         <BarChart2 className="w-4 h-4" />
                                     </div>
                                     Traffic Trend Analytics
                                 </h3>
-                                <p className="text-[10px] text-slate-500 mt-1.5 font-semibold ml-11">Thống kê lưu lượng truy cập theo Thời gian</p>
+                                <p className="text-[11px] text-slate-500 mt-1 font-semibold ml-10">Thống kê lưu lượng truy cập theo thời gian thực</p>
                             </div>
                         </div>
-                        <div className="min-h-[350px] bg-white rounded-[14px] p-4 border border-slate-100">
-                            {stats?.chart && stats.chart.length > 0 ? (
-                                <Chart options={chartOptions} series={chartSeries} type="area" height={350} />
+                        <div className="min-h-[350px] bg-white rounded-[14px] p-2 border border-slate-100">
+                            {chartData.length > 0 ? (
+                                <div className="w-full h-[350px]">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart
+                                            data={chartData}
+                                            margin={{ top: 10, right: 15, left: 0, bottom: 5 }}
+                                        >
+                                            <defs>
+                                                <linearGradient id="sessionsGradient" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#BD1D2D" stopOpacity={0.35} />
+                                                    <stop offset="95%" stopColor="#BD1D2D" stopOpacity={0.02} />
+                                                </linearGradient>
+                                                <linearGradient id="pageViewsGradient" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#334155" stopOpacity={0.3} />
+                                                    <stop offset="95%" stopColor="#334155" stopOpacity={0.02} />
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={true} horizontal={true} />
+                                            <XAxis
+                                                dataKey="date"
+                                                tickLine={false}
+                                                axisLine={{ stroke: '#e2e8f0' }}
+                                                tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }}
+                                                tickFormatter={(d: string) => {
+                                                    const parts = String(d).split('-');
+                                                    return parts.length === 3 ? `${parts[2]}/${parts[1]}` : d;
+                                                }}
+                                            />
+                                            <YAxis
+                                                tickLine={false}
+                                                axisLine={{ stroke: '#e2e8f0' }}
+                                                tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }}
+                                                tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v))}
+                                            />
+                                            <Tooltip content={<CustomTooltip />} />
+                                            <Legend
+                                                verticalAlign="top"
+                                                align="right"
+                                                wrapperStyle={{ paddingBottom: '16px', fontSize: '12px', fontWeight: 700 }}
+                                                formatter={(value: string) => (value === 'sessions' ? 'Phiên truy cập' : (value === 'pageViews' ? 'Lượt xem trang' : value))}
+                                            />
+                                            <Area
+                                                type="monotone"
+                                                dataKey="sessions"
+                                                name="sessions"
+                                                stroke="#BD1D2D"
+                                                strokeWidth={2.5}
+                                                fillOpacity={1}
+                                                fill="url(#sessionsGradient)"
+                                            />
+                                            <Area
+                                                type="monotone"
+                                                dataKey="pageViews"
+                                                name="pageViews"
+                                                stroke="#334155"
+                                                strokeWidth={2.5}
+                                                fillOpacity={1}
+                                                fill="url(#pageViewsGradient)"
+                                            />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
                             ) : (
                                 <div className="flex flex-col items-center justify-center py-20 text-slate-400 text-sm gap-3">
                                     <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center">
                                         <BarChart2 className="w-8 h-8 opacity-20" />
                                     </div>
-                                    <p className="font-bold">Chưa có dữ liệu biểu đồ cho khoảng Thời gian này</p>
+                                    <p className="font-bold">Chưa có dữ liệu biểu đồ cho khoảng thời gian này</p>
                                 </div>
                             )}
                         </div>

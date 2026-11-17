@@ -65,14 +65,12 @@ class CheckInController {
         $globalWorkStart = '08:00';
         $globalWorkEnd = '17:00';
         try {
-            $stmtSys = $this->db->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('global_work_start_time', 'global_work_end_time')");
-            while ($sysRow = $stmtSys->fetch(PDO::FETCH_ASSOC)) {
-                if ($sysRow['setting_key'] === 'global_work_start_time' && !empty($sysRow['setting_value'])) {
-                    $globalWorkStart = $sysRow['setting_value'];
-                } elseif ($sysRow['setting_key'] === 'global_work_end_time' && !empty($sysRow['setting_value'])) {
-                    $globalWorkEnd = $sysRow['setting_value'];
-                }
-            }
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $tidCi = (int)($auth['tenant_id'] ?? 1);
+            $ws = (string)TenantConfigService::getSetting($this->db, $tidCi, 'global_work_start_time', '');
+            $we = (string)TenantConfigService::getSetting($this->db, $tidCi, 'global_work_end_time', '');
+            if ($ws !== '') $globalWorkStart = $ws;
+            if ($we !== '') $globalWorkEnd = $we;
         } catch (\Throwable $eSys) {}
 
         if (isset($_GET['today_only']) && $_GET['today_only'] == '1') {
@@ -466,10 +464,8 @@ class CheckInController {
             return;
         }
 
-        // Fetch system settings for checkout & auto-approve requirements
-        $stmtSettings = $this->db->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('require_checkin_weekend_lead', 'require_checkin_holiday_lead', 'holiday_schedules', 'require_checkout', 'auto_approve_checkin', 'global_work_start_time', 'global_work_end_time', 'global_work_schedule', 'office_latitude', 'office_longitude', 'office_allowed_radius')");
-        $stmtSettings->execute();
-        $settingsMap = $stmtSettings->fetchAll(PDO::FETCH_KEY_PAIR);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $settingsMap = TenantConfigService::getSettings($this->db, (int)($auth['tenant_id'] ?? 1));
 
         $reqCheckout = isset($settingsMap['require_checkout']) ? (int)$settingsMap['require_checkout'] : 1;
         $autoApprove = isset($settingsMap['auto_approve_checkin']) ? (int)$settingsMap['auto_approve_checkin'] : 1;
@@ -780,8 +776,8 @@ class CheckInController {
         // Check-in status: All real-time check-ins are recorded directly as approved (no late approval needed)
         // Only manual supplementary requests (cập nhật công bù) require manager approval.
         // NẾU LÀ TRƯỞNG PHÒNG / QUẢN LÝ: Được tự tạo và tự phê duyệt chấm công cho chính mình
-        $userRole = strtolower($auth['role'] ?? '');
-        $isLeaderOrManager = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'leader', 'truongphong', 'head_of_department'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isLeaderOrManager = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'leader', 'truongphong', 'head_of_department'], 'attendance', 'approve');
         if (!$isLeaderOrManager) {
             try {
                 $stmtIsLeader = $this->db->prepare("
@@ -1146,7 +1142,8 @@ class CheckInController {
 
         // Allow creator or privileged role to delete/recall request
         $isCreator = ((int)$row['user_id'] === (int)$auth['user_id']);
-        $isPrivileged = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'hr', 'manager'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isPrivileged = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'hr', 'manager'], 'attendance', 'delete');
         if (!$isCreator && !$isPrivileged) {
             respond(403, null, 'Bạn không có quyền xóa bản ghi này', false);
         }
@@ -1278,13 +1275,8 @@ class CheckInController {
                 $endDate = $today;
             }
 
-            // Fetch system settings
-            $stmtSettings = $this->db->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('global_work_start_time', 'global_work_end_time', 'global_work_schedule', 'holiday_schedules')");
-            $stmtSettings->execute();
-            $settingsMap = [];
-            while ($row = $stmtSettings->fetch(PDO::FETCH_ASSOC)) {
-                $settingsMap[$row['setting_key']] = $row['setting_value'];
-            }
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $settingsMap = TenantConfigService::getSettings($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1));
 
             // Fetch user custom work hours and schedule
             $stmtUser = $this->db->prepare("SELECT work_start_time, work_end_time, use_custom_work_hours, work_schedule FROM users WHERE id = ?");
@@ -1543,48 +1535,11 @@ class CheckInController {
                 $existingReq = $stmtCheck->fetch(PDO::FETCH_ASSOC);
             }
 
-            // Look up manager/leader or HR as default if approver_id not provided
             $approverId = !empty($b['approver_id']) ? (int)$b['approver_id'] : null;
             $approverId2 = !empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : (!empty($b['approver2_id']) ? (int)$b['approver2_id'] : null);
             if (empty($approverId)) {
-                $stmtUser = $this->db->prepare("SELECT email, department, team_id FROM users WHERE id = ?");
-                $stmtUser->execute([$userId]);
-                $uInfo = $stmtUser->fetch(PDO::FETCH_ASSOC);
-                $uEmail = strtolower($uInfo['email'] ?? '');
-                $uDept = mb_strtolower($uInfo['department'] ?? '', 'UTF-8');
-
-                if ($uEmail === 'nganph@ideas.edu.vn' || str_contains($uDept, 'học vụ') || str_contains($uDept, 'học thuật')) {
-                    $stmtLead = $this->db->prepare("SELECT id FROM users WHERE email = 'tramlth@ideas.edu.vn' OR username = 'tramlth' OR full_name LIKE '%Huyền Trâm%' LIMIT 1");
-                    $stmtLead->execute();
-                    $foundLead = $stmtLead->fetchColumn();
-                    if (!empty($foundLead) && (int)$foundLead !== (int)$userId) {
-                        $approverId = (int)$foundLead;
-                    }
-                } elseif ($uEmail === 'cuongnph@ideas.edu.vn' || str_contains($uDept, 'nhân sự') || str_contains($uDept, 'hành chính')) {
-                    $stmtLead = $this->db->prepare("SELECT id FROM users WHERE email LIKE 'phuongntd%' OR username = 'phuongntd' OR full_name LIKE '%Duy Phương%' LIMIT 1");
-                    $stmtLead->execute();
-                    $foundLead = $stmtLead->fetchColumn();
-                    if (!empty($foundLead) && (int)$foundLead !== (int)$userId) {
-                        $approverId = (int)$foundLead;
-                    }
-                }
-
-                if (empty($approverId)) {
-                    $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
-                    $stmtLeader->execute([$userId]);
-                    $leadId = $stmtLeader->fetchColumn();
-                    if (!empty($leadId) && (int)$leadId !== (int)$userId) {
-                        $approverId = (int)$leadId;
-                    } else {
-                        // Fallback to HR Leader (Nguyễn Thị Duy Phương)
-                        $stmtHr = $this->db->prepare("SELECT id FROM users WHERE (full_name LIKE '%Duy Phương%' OR username = 'phuongntd' OR role = 'hr') AND id != ? LIMIT 1");
-                        $stmtHr->execute([$userId]);
-                        $hrId = $stmtHr->fetchColumn();
-                        if (!empty($hrId)) {
-                            $approverId = (int)$hrId;
-                        }
-                    }
-                }
+                require_once __DIR__ . '/../config/TenantConfigService.php';
+                $approverId = TenantConfigService::resolveUserApprover($this->db, (int)($auth['tenant_id'] ?? 1), (int)$userId, 'attendance');
             }
 
             // Kiểm tra người tạo có phải là Trưởng phòng / Quản lý / Ban giám đốc / Trưởng nhóm hay không
@@ -1850,8 +1805,9 @@ class CheckInController {
         }
 
         $userId = (int)$auth['user_id'];
+        require_once __DIR__ . '/../config/TenantConfigService.php';
         $userRole = strtolower($auth['role'] ?? '');
-        $isAdmin = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true);
+        $isAdmin = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], 'attendance', 'approve', ['all']);
         $isCreator = ((int)$req['user_id'] === $userId);
         if (!$isCreator && !$isAdmin) {
             respond(403, null, 'Chỉ người tạo hoặc Quản trị viên mới có quyền chỉnh sửa phiếu đề xuất này', false);
@@ -2412,7 +2368,8 @@ class CheckInController {
             respond(400, null, 'Không thể xóa phiếu đề xuất đã được duyệt', false);
         }
 
-        $isPrivileged = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isPrivileged = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'], 'attendance', 'delete');
         $isCreator = ((int)$req['user_id'] === (int)$auth['user_id']);
         if (!$isPrivileged && !$isCreator) {
             respond(403, null, 'Bạn không có quyền xóa phiếu này', false);
@@ -2655,11 +2612,10 @@ class CheckInController {
                 $stmtLeadUser->execute([$leadId]);
                 $approverUser = $stmtLeadUser->fetch(PDO::FETCH_ASSOC);
             }
-            // 2. Mặc định: Trưởng phòng Hành chính - Nhân sự (Nguyễn Thị Duy Phương)
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $tidRow = (int)($auth['tenant_id'] ?? 1);
             if (!$approverUser) {
-                $stmtHr = $this->db->prepare("SELECT id, full_name, avatar_url FROM users WHERE (full_name LIKE '%Duy Phương%' OR username = 'phuongntd' OR role = 'hr') AND id != ? LIMIT 1");
-                $stmtHr->execute([$row['user_id']]);
-                $approverUser = $stmtHr->fetch(PDO::FETCH_ASSOC);
+                $approverUser = TenantConfigService::resolveHrRepresentative($this->db, $tidRow, (int)$row['user_id']);
             }
             if ($approverUser) {
                 $row['manager_id'] = (int)$approverUser['id'];
@@ -2669,10 +2625,8 @@ class CheckInController {
             }
         }
 
-        // Tự động gắn Phương (HCNS) vào danh sách Người theo dõi / Người liên quan nếu chưa có
-        $stmtHrLead = $this->db->prepare("SELECT id, full_name, avatar_url, role FROM users WHERE (full_name LIKE '%Duy Phương%' OR username = 'phuongntd' OR role = 'hr') AND id != ? LIMIT 1");
-        $stmtHrLead->execute([$row['user_id']]);
-        $hrUser = $stmtHrLead->fetch(PDO::FETCH_ASSOC);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $hrUser = TenantConfigService::resolveHrRepresentative($this->db, (int)($auth['tenant_id'] ?? 1), (int)$row['user_id']);
 
         $currentRelated = !empty($row['related_users']) ? (is_string($row['related_users']) ? json_decode($row['related_users'], true) : $row['related_users']) : [];
         if (!is_array($currentRelated)) $currentRelated = [];
@@ -2752,11 +2706,9 @@ class CheckInController {
         $graceMale = 30;
         $graceFemale = 60;
         try {
-            $stmtGrace = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ? LIMIT 1");
-            $stmtGrace->execute(['hrm_late_grace_male']);
-            $graceMale = (int)($stmtGrace->fetchColumn() ?: 30);
-            $stmtGrace->execute(['hrm_late_grace_female']);
-            $graceFemale = (int)($stmtGrace->fetchColumn() ?: 60);
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $graceMale = (int)(TenantConfigService::getSetting($this->db, (int)$tid, 'hrm_late_grace_male', '') ?: 30);
+            $graceFemale = (int)(TenantConfigService::getSetting($this->db, (int)$tid, 'hrm_late_grace_female', '') ?: 60);
         } catch (\Throwable $eG) {}
 
         // Resolve gender & monthly late quota for the requested user

@@ -46,14 +46,6 @@ export const Login = () => {
     setLoading(true);
     setError('');
 
-    if (localStorage.getItem('IDEAS_DEMO_MODE') === 'true') {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      login('demo_token_12345', { id: 1, username: 'admin', email: 'admin@ideas.edu.vn', name: 'Admin Demo', role: 'admin' });
-      navigate('/');
-      setLoading(false);
-      return;
-    }
-
     try {
       const res = await fetch(`${API_BASE}/api.php?action=login_google`, {
         method: 'POST',
@@ -133,30 +125,6 @@ export const Login = () => {
       localStorage.setItem('ideas_remember_me', 'false');
       localStorage.removeItem('ideas_remembered_email');
       localStorage.removeItem('ideas_remembered_pw');
-    }
-
-    if (localStorage.getItem('IDEAS_DEMO_MODE') === 'true') {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const isSale = email.includes('sale') || email.includes('haidang') || email.includes('thao') || email.includes('dung') || email.includes('tuan');
-      if (typeof (window as any).showSplashScreen === 'function') {
-        (window as any).showSplashScreen('Đang đăng nhập...');
-      }
-      if (isSale) {
-        let cId = 1;
-        let name = 'Hải Đăng';
-        let cEmail = 'haidang@ideas.edu.vn';
-        if (email.includes('thao')) { cId = 2; name = 'Thanh Thảo'; cEmail = 'thanhthao@ideas.edu.vn'; }
-        else if (email.includes('dung')) { cId = 3; name = 'Việt Dũng'; cEmail = 'vietdung@ideas.edu.vn'; }
-        else if (email.includes('tuan')) { cId = 4; name = 'Minh Tuấn'; cEmail = 'minhtuan@ideas.edu.vn'; }
-
-        login(`demo_token_sale_${cId}`, { id: cId, username: cEmail.split('@')[0], email: cEmail, name: name, role: 'sale', consultant_id: cId });
-        navigate('/');
-      } else {
-        login('demo_token_12345', { id: 1, username: (email || 'admin@ideas.edu.vn').split('@')[0], email: email || 'admin@ideas.edu.vn', name: 'Admin Demo', role: 'admin' });
-        navigate('/');
-      }
-      setLoading(false);
-      return;
     }
 
     try {
@@ -402,7 +370,7 @@ export const Login = () => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="input-field"
-                    placeholder="linhdk@ideas.edu.vn"
+                    placeholder="name@company.com"
                     autoComplete="username"
                   />
                   <div className="input-icon">
@@ -563,7 +531,7 @@ export const Login = () => {
                     className="form-input"
                     value={forgotEmail}
                     onChange={e => setForgotEmail(e.target.value)}
-                    placeholder="email@ideas.edu.vn"
+                    placeholder="email@company.com"
                     required
                   />
                 </div>

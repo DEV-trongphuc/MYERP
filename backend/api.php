@@ -157,7 +157,8 @@ if (in_array($baseAction, [
     'qwen-agent',
     'customer-journey-summary',
     'academic',
-    'academic-affairs'
+    'academic-affairs',
+    'tenant-config'
 ], true)) {
     $_SERVER['REQUEST_URI'] = '/backend/' . $action . (!empty($_GET) ? '?' . http_build_query($_GET) : '');
     require_once __DIR__ . '/index.php';
@@ -264,120 +265,9 @@ function verify_jwt($jwt, $secret)
     return false;
 }
 
-function getModulePermissionScope($conn, $auth, $module, $action)
-{
-    // Admin / Superadmin always have 'all' permissions
-    if (in_array($auth['role'], ['admin', 'superadmin', 'super_admin'], true)) {
-        return 'all';
-    }
-
-    $role = isset($auth['role']) ? trim($auth['role']) : 'viewer';
-
-    // All roles can read departments and consultants
-    if ($module === 'users' && $action === 'read') {
-        return 'all';
-    }
-
-    // Sale Admin permission rules
-    if ($role === 'sale_admin' || $role === 'saleadmin') {
-        if (in_array($module, ['settings', 'hrm', 'attendance'], true)) {
-            return 'none';
-        }
-        return 'all';
-    }
-
-    // Force sales role to have only 'own' (or 'none' for delete) on deals module
-    if (in_array($role, ['sale', 'sales'], true) && $module === 'deals') {
-        return $action === 'delete' ? 'none' : 'own';
-    }
-
-    $permissionsJson = $auth['permissions'] ?? null;
-    if ($permissionsJson === null) {
-        $userId = $auth['id'] ?? $auth['user_id'] ?? 0;
-        $stmt = $conn->prepare("SELECT permissions_json FROM users WHERE id = ? LIMIT 1");
-        if ($stmt) {
-            $stmt->bind_param("i", $userId);
-            $stmt->execute();
-            $res = $stmt->get_result()->fetch_assoc();
-            $stmt->close();
-            if ($res && !empty($res['permissions_json'])) {
-                $permissionsJson = json_decode($res['permissions_json'], true);
-            }
-        }
-    }
-
-    if ($permissionsJson && isset($permissionsJson[$module][$action])) {
-        $val = $permissionsJson[$module][$action];
-        if (in_array($val, ['all', 'team', 'own', 'none'], true)) {
-            return $val;
-        }
-    }
-
-    // Default fallbacks based on role
-    $role = $auth['role'];
-    if ($role === 'hr') {
-        if (in_array($module, ['hrm', 'attendance', 'users', 'expenses'], true)) {
-            return 'all';
-        }
-        if ($module === 'settings') {
-            return 'none';
-        }
-        return 'own';
-    }
-    if ($role === 'accountant') {
-        if (in_array($module, ['deposits', 'expenses', 'finance', 'invoices', 'quotes'], true)) {
-            return 'all';
-        }
-        if ($module === 'settings') {
-            return 'none';
-        }
-        return 'own';
-    }
-    if ($role === 'marketing') {
-        if (in_array($module, ['leads', 'campaigns', 'projects', 'deals', 'tickets', 'gatekeeper', 'users', 'contacts', 'students', 'companies'], true)) {
-            return 'all';
-        }
-        if ($module === 'settings') {
-            return 'none';
-        }
-        return 'own';
-    }
-    if (in_array($role, ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
-        if (in_array($module, ['companies', 'lecturers'], true)) {
-            return 'all';
-        }
-        if (in_array($module, ['leads', 'contacts', 'students', 'deals', 'projects', 'campaigns', 'files', 'users', 'schedules', 'expenses', 'activities'], true)) {
-            return $action === 'delete' ? 'own' : 'all';
-        }
-        if (in_array($module, ['settings', 'hrm', 'finance', 'deposits', 'gatekeeper', 'rounds', 'rules', 'integrations'], true)) {
-            return 'none';
-        }
-        return 'own';
-    }
-    if ($role === 'director') {
-        if ($module === 'settings') {
-            return 'none';
-        }
-        return 'all';
-    }
-    if ($role === 'manager') {
-        return $action === 'delete' ? 'none' : 'team';
-    }
-    if ($role === 'assistant') {
-        return $action === 'delete' ? 'none' : 'all';
-    }
-    if (in_array($role, ['sale', 'sales'], true)) {
-        if ($module === 'projects') {
-            return $action === 'read' ? 'all' : 'none';
-        }
-        return $action === 'delete' ? 'none' : 'own';
-    }
-    if ($role === 'viewer') {
-        return $action === 'read' ? 'all' : 'none';
-    }
-
-    return 'none';
-}
+// getModulePermissionScope is provided by permission_matrix_helper.php (supports 3-arg and 4-arg signatures via TenantConfigService)
+require_once __DIR__ . '/config/TenantConfigService.php';
+require_once __DIR__ . '/permission_matrix_helper.php';
 
 function validateWorkSchedule($schedule)
 {
@@ -666,6 +556,7 @@ if (!in_array($action, $publicActions)) {
     if (!isset($decodedUser['user_id']) && isset($decodedUser['id'])) {
         $decodedUser['user_id'] = $decodedUser['id'];
     }
+    $GLOBALS['current_tenant_id'] = (int)($decodedUser['tenant_id'] ?? 1);
 
     $decodedUser['permissions'] = null;
     /** @var int $dbUserId */
@@ -932,26 +823,31 @@ function isManagerOfConsultant($conn, $managerUserId, $consultantId)
 function isMarketingUser($conn, $decodedUser)
 {
     if (!$decodedUser) return false;
-    $role = $decodedUser['role'] ?? '';
-    if ($role === 'marketing') return true;
+    $role = strtolower((string)($decodedUser['role'] ?? ''));
+    $tid = (int)($decodedUser['tenant_id'] ?? 1);
+    if ($role === 'marketing' || $role === 'mkt') return true;
+    if (function_exists('apiDoesUserSatisfyRoles') && apiDoesUserSatisfyRoles($conn, $decodedUser, ['marketing'], 'marketing', 'read')) {
+        return true;
+    }
 
     $userId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
     if ($userId <= 0) return false;
 
     try {
-        // Check user info in users table
-        $stmt = $conn->prepare("SELECT u.role, u.team_id, u.job_title, u.address, t.name as team_name 
+        // Check user info in users table (tenant-scoped)
+        $stmt = $conn->prepare("SELECT u.role, u.team_id, u.job_title, u.address, t.name as team_name, t.department_code 
                                FROM users u 
-                               LEFT JOIN teams t ON u.team_id = t.id 
-                               WHERE u.id = ? LIMIT 1");
+                               LEFT JOIN teams t ON u.team_id = t.id AND t.tenant_id = u.tenant_id 
+                               WHERE u.id = ? AND u.tenant_id = ? LIMIT 1");
         if ($stmt) {
-            $stmt->bind_param("i", $userId);
+            $stmt->bind_param("ii", $userId, $tid);
             $stmt->execute();
             $row = $stmt->get_result()->fetch_assoc();
             $stmt->close();
             if ($row) {
-                if ($row['role'] === 'marketing') return true;
-                if ((int)($row['team_id'] ?? 0) === 3) return true;
+                if (strtolower((string)$row['role']) === 'marketing') return true;
+                if (strtolower((string)($row['department_code'] ?? '')) === 'marketing') return true;
+                if ($tid === 1 && (int)($row['team_id'] ?? 0) === 3) return true;
                 $erpTitle = '';
                 $erpDept = '';
                 if (!empty($row['address'])) {
@@ -966,14 +862,14 @@ function isMarketingUser($conn, $decodedUser)
             }
         }
 
-        // Also check if user is leader of a marketing team
-        $stmtT = $conn->prepare("SELECT id, name FROM teams WHERE leader_id = ?");
+        // Also check if user is leader of a marketing team in this tenant
+        $stmtT = $conn->prepare("SELECT id, name, department_code FROM teams WHERE tenant_id = ? AND leader_id = ? AND deleted_at IS NULL");
         if ($stmtT) {
-            $stmtT->bind_param("i", $userId);
+            $stmtT->bind_param("ii", $tid, $userId);
             $stmtT->execute();
             $resT = $stmtT->get_result();
             while ($tRow = $resT->fetch_assoc()) {
-                if ((int)$tRow['id'] === 3 || stripos($tRow['name'], 'marketing') !== false) {
+                if (strtolower((string)($tRow['department_code'] ?? '')) === 'marketing' || ($tid === 1 && (int)$tRow['id'] === 3) || stripos($tRow['name'], 'marketing') !== false) {
                     $stmtT->close();
                     return true;
                 }
@@ -1992,43 +1888,7 @@ function processManualLead($conn, $leadData, $override_round_id, $override_consu
     }
 }
 
-if (!function_exists('getTicketNotifyAdmins')) {
-    function getTicketNotifyAdmins($conn)
-    {
-        $res = $conn->query("SELECT account_id FROM ticket_notify_settings");
-        $adminIds = [];
-        if ($res) {
-            while ($row = $res->fetch_assoc()) {
-                $adminIds[] = (int) $row['account_id'];
-            }
-        }
-
-        $admins = [];
-        if (!empty($adminIds)) {
-            $inPlaceholders = implode(',', array_fill(0, count($adminIds), '?'));
-            $types = str_repeat('i', count($adminIds));
-            $adminStmt = $conn->prepare("SELECT id, name, email, zalo_chat_id FROM accounts WHERE id IN ($inPlaceholders)");
-            $adminStmt->bind_param($types, ...$adminIds);
-            $adminStmt->execute();
-            $adminRes = $adminStmt->get_result();
-            if ($adminRes) {
-                while ($r = $adminRes->fetch_assoc()) {
-                    $admins[] = $r;
-                }
-            }
-            $adminStmt->close();
-        } else {
-            // Fallback: role = 'admin' OR id = 1
-            $adminRes = $conn->query("SELECT id, name, email, zalo_chat_id FROM accounts WHERE role = 'admin' OR role = 'superadmin' OR id = 1");
-            if ($adminRes) {
-                while ($r = $adminRes->fetch_assoc()) {
-                    $admins[] = $r;
-                }
-            }
-        }
-        return $admins;
-    }
-}
+// getTicketNotifyAdmins($conn) is provided by db_connect.php
 
 switch ($action) {
     case 'debug_companies_db':
@@ -5900,8 +5760,12 @@ switch ($action) {
         // Determine omitted dates (unchecked dates)
         $omittedDates = array_diff($allWeekDates, $validDates);
 
-        // Perform cancellations for omitted dates
+        // Perform cancellations for omitted dates (prepared batch SQL, zero string interpolation)
+        $cancelDates = [];
         foreach ($omittedDates as $date) {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$date)) {
+                continue;
+            }
             if ($date === $todayStr) {
                 // If today is omitted, check night shift deadline constraint
                 $deadline = strtotime($todayStr . ' ' . $nightShiftStart);
@@ -5917,11 +5781,21 @@ switch ($action) {
                     continue;
                 }
             }
-
-            // Safe to delete from all 3 tables
-            $conn->query("DELETE FROM night_shift_registrations WHERE user_id = $dbUserId AND shift_date = '$date'");
-            $conn->query("DELETE FROM weekend_shift_registrations WHERE user_id = $dbUserId AND shift_date = '$date'");
-            $conn->query("DELETE FROM holiday_shift_registrations WHERE user_id = $dbUserId AND shift_date = '$date'");
+            $cancelDates[] = (string)$date;
+        }
+        $cancelDates = array_values(array_unique($cancelDates));
+        if (!empty($cancelDates)) {
+            $phDates = implode(',', array_fill(0, count($cancelDates), '?'));
+            $bindTypes = 'i' . str_repeat('s', count($cancelDates));
+            $bindArgs = array_merge([(int)$dbUserId], $cancelDates);
+            foreach (['night_shift_registrations', 'weekend_shift_registrations', 'holiday_shift_registrations'] as $shiftTbl) {
+                $delStmt = $conn->prepare("DELETE FROM {$shiftTbl} WHERE user_id = ? AND shift_date IN ({$phDates})");
+                if ($delStmt) {
+                    $delStmt->bind_param($bindTypes, ...$bindArgs);
+                    $delStmt->execute();
+                    $delStmt->close();
+                }
+            }
         }
 
         // Perform batch registration
@@ -5974,19 +5848,29 @@ switch ($action) {
             $insertedCount++;
         }
 
-        // Send notification to admins about pending weekly registrations
+        // Send notification to tenant admins/managers about pending weekly registrations (tenant-isolated, zero self-notification)
+        $shiftTenantId = (int)($decodedUser['tenant_id'] ?? 1);
         $saleName = !empty($decodedUser['name']) ? $decodedUser['name'] : 'Nhân viên';
         $title = "Đăng ký trực ca tuần mới";
-        $body = "Sale {$saleName} đã lên lịch đăng ký trực cho {$insertedCount} ngày trong tuần này. Vui lòng kiểm duyệt.";
+        $body = "Nhân sự {$saleName} đã lên lịch đăng ký trực cho {$insertedCount} ngày trong tuần này. Vui lòng kiểm duyệt.";
         $link = "/attendance";
 
-        $admins = $conn->query("SELECT id FROM accounts WHERE role IN ('admin', 'superadmin', 'director') AND is_active = 1")->fetch_all(MYSQLI_ASSOC);
-        foreach ($admins as $admin) {
-            $stmtNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'shift_request', ?)");
-            if ($stmtNotif) {
-                $stmtNotif->bind_param("isss", $admin['id'], $title, $body, $link);
-                $stmtNotif->execute();
-                $stmtNotif->close();
+        $admStmt = $conn->prepare("SELECT id FROM users WHERE tenant_id = ? AND role IN ('admin', 'superadmin', 'super_admin', 'director', 'hr') AND is_active = 1 AND deleted_at IS NULL AND id != ?");
+        if ($admStmt) {
+            $admStmt->bind_param("ii", $shiftTenantId, $dbUserId);
+            $admStmt->execute();
+            $admins = $admStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $admStmt->close();
+            if (!empty($admins)) {
+                $stmtNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, ?, ?, 'shift_request', ?)");
+                if ($stmtNotif) {
+                    foreach ($admins as $admin) {
+                        $admUid = (int)$admin['id'];
+                        $stmtNotif->bind_param("iisss", $admUid, $shiftTenantId, $title, $body, $link);
+                        $stmtNotif->execute();
+                    }
+                    $stmtNotif->close();
+                }
             }
         }
 
@@ -6462,11 +6346,13 @@ switch ($action) {
     case 'get_consultants':
         $role = $decodedUser['role'] ?? '';
         $currentUserId = (int)($decodedUser['id'] ?? 0);
-        $where = "";
+        $tidConsultants = (int)($GLOBALS['current_tenant_id'] ?? ($decodedUser['tenant_id'] ?? 1));
+        $whereParts = ["c.tenant_id = {$tidConsultants}", "c.deleted_at IS NULL"];
 
         if (isset($_GET['active_only']) && ($_GET['active_only'] == '1' || $_GET['active_only'] === 'true')) {
-            $where = "WHERE (c.is_active = 1 OR c.is_active IS NULL) AND (a.is_active = 1 OR a.is_active IS NULL) AND c.id != 9000001 AND LOWER(COALESCE(c.role, a.role, '')) NOT IN ('bot', 'system') AND LOWER(COALESCE(c.email, a.email, '')) NOT IN ('turniodev@gmail.com', 'turnlodev@gmail.com', 'ideas.ai@ideas.vn', 'ai@ideas.edu.vn') AND LOWER(COALESCE(c.status, a.status, 'active')) NOT IN ('inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa')";
+            $whereParts[] = "(c.is_active = 1 OR c.is_active IS NULL) AND (a.is_active = 1 OR a.is_active IS NULL) AND c.id != 9000001 AND LOWER(COALESCE(c.role, a.role, '')) NOT IN ('bot', 'system') AND LOWER(COALESCE(c.email, a.email, '')) NOT LIKE 'ai@%' AND LOWER(COALESCE(c.email, a.email, '')) NOT IN ('turniodev@gmail.com', 'turnlodev@gmail.com') AND LOWER(COALESCE(c.status, a.status, 'active')) NOT IN ('inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa')";
         }
+        $where = "WHERE " . implode(" AND ", $whereParts);
 
         $res = $conn->query("
             SELECT 
@@ -6489,14 +6375,14 @@ switch ($action) {
                 IF(c.is_active = 0 OR a.is_active = 0 OR c.status = 'inactive' OR a.status = 'inactive', 0, COALESCE(a.is_active, c.is_active, 1)) AS is_active,
                 COALESCE(NULLIF(c.department, ''), t.name, '') AS department,
                 c.last_login_at AS last_login,
-                IF(c.use_custom_work_hours = 1, c.work_start_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1)) AS work_start_time,
-                IF(c.use_custom_work_hours = 1, c.work_end_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_end_time' LIMIT 1)) AS work_end_time,
-                IF(c.use_custom_work_hours = 1, c.work_schedule, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_schedule' LIMIT 1)) AS work_schedule,
+                IF(c.use_custom_work_hours = 1, c.work_start_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' AND tenant_id = {$tidConsultants} LIMIT 1)) AS work_start_time,
+                IF(c.use_custom_work_hours = 1, c.work_end_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_end_time' AND tenant_id = {$tidConsultants} LIMIT 1)) AS work_end_time,
+                IF(c.use_custom_work_hours = 1, c.work_schedule, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_schedule' AND tenant_id = {$tidConsultants} LIMIT 1)) AS work_schedule,
                 t.name as team_name, 
                 t.branch as team_branch 
             FROM users c 
-            LEFT JOIN accounts a ON (c.id = a.id OR (c.email IS NOT NULL AND c.email != '' AND c.email = a.email))
-            LEFT JOIN teams t ON c.team_id = t.id 
+            LEFT JOIN accounts a ON (c.id = a.id OR (c.email IS NOT NULL AND c.email != '' AND c.email = a.email AND a.tenant_id = c.tenant_id))
+            LEFT JOIN teams t ON c.team_id = t.id AND t.tenant_id = c.tenant_id
             $where
             ORDER BY 
                 IF(c.is_active = 0 OR a.is_active = 0 OR c.status = 'inactive' OR a.status = 'inactive', 1, 0) ASC,
@@ -7059,10 +6945,14 @@ switch ($action) {
             $stmtD1->execute();
             $stmtD1->close();
 
-            $stmtD2 = $conn->prepare("DELETE FROM data_reports WHERE consultant_id = ?");
-            $stmtD2->bind_param("i", $id);
-            $stmtD2->execute();
-            $stmtD2->close();
+            // Preserve historical data_reports audit trail (no hard delete)
+            $chkCol = $conn->query("SHOW COLUMNS FROM data_reports LIKE 'deleted_at'");
+            if ($chkCol && $chkCol->num_rows > 0) {
+                $stmtD2 = $conn->prepare("UPDATE data_reports SET deleted_at = NOW() WHERE consultant_id = ?");
+                $stmtD2->bind_param("i", $id);
+                $stmtD2->execute();
+                $stmtD2->close();
+            }
 
             $stmtD3 = $conn->prepare("DELETE FROM consultants WHERE id = ?");
             $stmtD3->bind_param("i", $id);
@@ -8397,7 +8287,13 @@ switch ($action) {
             $stmt1->execute();
             $stmt1->close();
 
-            $stmt2 = $conn->prepare("DELETE FROM data_reports WHERE round_id=?");
+            // Preserve data_reports audit trail: detach round_id instead of hard deleting reports
+            $chkCol = $conn->query("SHOW COLUMNS FROM data_reports LIKE 'deleted_at'");
+            if ($chkCol && $chkCol->num_rows > 0) {
+                $stmt2 = $conn->prepare("UPDATE data_reports SET deleted_at = NOW(), round_id = NULL WHERE round_id = ?");
+            } else {
+                $stmt2 = $conn->prepare("UPDATE data_reports SET round_id = NULL WHERE round_id = ?");
+            }
             $stmt2->bind_param("i", $id);
             $stmt2->execute();
             $stmt2->close();
@@ -9670,7 +9566,7 @@ switch ($action) {
 
     case 'get_support_tickets_count':
         $role = $decodedUser['role'] ?? '';
-        if (!in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true)) {
+        if (!apiDoesUserSatisfyRoles($conn, $decodedUser, ['admin', 'superadmin', 'super_admin', 'director'], 'tickets', 'read', ['all'])) {
             echo json_encode(['success' => true, 'count' => 0]);
             break;
         }
@@ -9712,10 +9608,10 @@ switch ($action) {
         $salesPendingSignCount = 0;
 
         $isMarketing = isMarketingUser($conn, $decodedUser);
-        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
-        $isHR = ($role === 'hr');
-        $isAccountant = ($role === 'accountant');
-        $isManager = ($role === 'manager');
+        $isGlobalAdmin = apiDoesUserSatisfyRoles($conn, $decodedUser, ['admin', 'superadmin', 'super_admin', 'director']);
+        $isHR = apiDoesUserSatisfyRoles($conn, $decodedUser, ['hr'], 'hrm', 'read') && !$isGlobalAdmin;
+        $isAccountant = apiDoesUserSatisfyRoles($conn, $decodedUser, ['accountant'], 'finance', 'read') && !$isGlobalAdmin;
+        $isManager = apiDoesUserSatisfyRoles($conn, $decodedUser, ['manager']) && !$isGlobalAdmin;
         $isAdminOrManager = $isGlobalAdmin || $isManager || $isHR || $isAccountant || $isMarketing;
 
         if ($isAdminOrManager) {
@@ -10280,6 +10176,12 @@ switch ($action) {
         break;
 
     case 'approve_report':
+        $callerRole = strtolower($decodedUser['role'] ?? '');
+        if (!apiDoesUserSatisfyRoles($conn, $decodedUser, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'marketing'], 'leads', 'write')) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Bạn không có thẩm quyền thực hiện thao tác này']);
+            break;
+        }
         require_once __DIR__ . '/webhook_logic.php';
         $input = json_decode(file_get_contents('php://input'), true);
         $report_id = (int) ($input['id'] ?? 0);
@@ -10642,6 +10544,12 @@ switch ($action) {
         break;
 
     case 'compensate_approved_no_comp':
+        $callerRole = strtolower($decodedUser['role'] ?? '');
+        if (!apiDoesUserSatisfyRoles($conn, $decodedUser, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'marketing'], 'leads', 'write')) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Bạn không có thẩm quyền thực hiện thao tác này']);
+            break;
+        }
         $input = json_decode(file_get_contents('php://input'), true);
         $report_id = (int) ($input['id'] ?? 0);
         if (!$report_id) {
@@ -10682,6 +10590,13 @@ switch ($action) {
             }
             if ($report['status'] !== 'approved_no_comp') {
                 throw new Exception("Báo cáo không ở trạng thái Duyệt không bù.");
+            }
+
+            if ($decodedUser['role'] === 'manager' && !isMarketingUser($conn, $decodedUser)) {
+                $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+                if (!isManagerOfConsultant($conn, $currentUserId, $report['consultant_id'])) {
+                    throw new Exception("Bạn không có quyền duyệt báo cáo này.");
+                }
             }
 
             // 1. Update report status to 'approved'
@@ -10781,6 +10696,12 @@ switch ($action) {
         break;
 
     case 'reject_report':
+        $callerRole = strtolower($decodedUser['role'] ?? '');
+        if (!apiDoesUserSatisfyRoles($conn, $decodedUser, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'marketing'], 'leads', 'write')) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Bạn không có thẩm quyền thực hiện thao tác này']);
+            break;
+        }
         $input = json_decode(file_get_contents('php://input'), true);
         $report_id = (int) ($input['id'] ?? 0);
         $reject_reason = trim($input['reject_reason'] ?? '');
@@ -12521,18 +12442,24 @@ switch ($action) {
         break;
 
     case 'get_settings':
-        $data = get_system_setting($conn, null);
+        $tid = (int)($decodedUser['tenant_id'] ?? 1);
+        $data = get_system_setting($conn, null, $tid);
         if (!is_array($data)) {
             $data = [];
-            $res = $conn->query("SELECT * FROM system_settings");
-            if ($res) {
-                while ($row = $res->fetch_assoc()) {
-                    $data[$row['setting_key']] = $row['setting_value'];
-                }
+        }
+        $callerRole = strtolower(trim((string)($decodedUser['role'] ?? 'viewer')));
+        if (!apiDoesUserSatisfyRoles($conn, $decodedUser, ['admin', 'superadmin', 'super_admin', 'director'], 'settings', 'write', ['all'])) {
+            $sensitiveSettingKeys = [
+                'ses_password', 'ses_secret_key', 'ses_access_key', 'ses_username',
+                'gemini_api_key', 'zalo_bot_token', 'zalo_webhook_secret',
+                'telegram_bot_token', 'appscript_webhook_url', 'meta_access_token'
+            ];
+            foreach ($sensitiveSettingKeys as $sk) {
+                unset($data[$sk]);
             }
         }
         $data['backend_version'] = defined('BACKEND_VERSION') ? BACKEND_VERSION : '1.5.3';
-        echo json_encode(['success' => true, 'data' => $data]);
+        echo json_encode(['success' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'save_workspace_settings':
@@ -12974,17 +12901,33 @@ switch ($action) {
             }
         }
 
-        $stmt = $conn->prepare("REPLACE INTO system_settings (setting_key, setting_value) VALUES (?, ?)");
-        foreach ($input as $k => $v) {
-            // Array values (e.g. daily_report_admins) must be JSON-encoded before storage
-            if (is_array($v)) {
-                $v = json_encode($v, JSON_UNESCAPED_UNICODE);
+        $tid = (int)($decodedUser['tenant_id'] ?? 1);
+        try {
+            $stmt = $conn->prepare("INSERT INTO system_settings (tenant_id, setting_key, setting_value) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+            foreach ($input as $k => $v) {
+                if (is_array($v)) {
+                    $v = json_encode($v, JSON_UNESCAPED_UNICODE);
+                }
+                $valStr = (string)($v ?? '');
+                $stmt->bind_param("iss", $tid, $k, $valStr);
+                $stmt->execute();
             }
-            $stmt->bind_param("ss", $k, $v);
-            $stmt->execute();
+            $stmt->close();
+        } catch (\Throwable $e) {
+            if ($tid === 1) {
+                $stmt = $conn->prepare("REPLACE INTO system_settings (setting_key, setting_value) VALUES (?, ?)");
+                foreach ($input as $k => $v) {
+                    if (is_array($v)) {
+                        $v = json_encode($v, JSON_UNESCAPED_UNICODE);
+                    }
+                    $valStr = (string)($v ?? '');
+                    $stmt->bind_param("ss", $k, $valStr);
+                    $stmt->execute();
+                }
+                $stmt->close();
+            }
         }
-        $stmt->close();
-        @unlink(sys_get_temp_dir() . '/ideas_system_settings.json');
+        TenantConfigService::invalidateCache($tid);
         if (isset($GLOBALS['__system_settings_cache'])) {
             unset($GLOBALS['__system_settings_cache']);
         }
@@ -13028,7 +12971,8 @@ switch ($action) {
             if (!empty($mktMirror)) {
                 $stmtMkt = $conn->prepare("INSERT INTO mkt_system_settings (workspace_id, `key`, `value`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)");
                 if ($stmtMkt) {
-                    foreach ([0, 1] as $wsId) {
+                    $targetWorkspaces = ($tid === 1) ? [0, 1] : [$tid];
+                    foreach ($targetWorkspaces as $wsId) {
                         foreach ($mktMirror as $mk => $mv) {
                             $stmtMkt->bind_param("iss", $wsId, $mk, $mv);
                             @$stmtMkt->execute();
@@ -13039,13 +12983,14 @@ switch ($action) {
             }
 
             if (!empty($verifiedEmailsToSync)) {
-                $defaultName = trim((string)($input['ses_sender_name'] ?? 'Viện Quốc Tế IDEAS'));
-                $stmtVs = $conn->prepare("INSERT INTO verified_senders (workspace_id, email, name, is_verified, is_default) VALUES (1, ?, ?, 1, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), is_verified = 1, is_default = VALUES(is_default)");
+                $fallbackOrgName = trim((string)(get_system_setting($conn, 'company_name', $tid) ?: 'Organization'));
+                $defaultName = trim((string)($input['ses_sender_name'] ?? $input['company_name'] ?? $fallbackOrgName));
+                $stmtVs = $conn->prepare("INSERT INTO verified_senders (workspace_id, email, name, is_verified, is_default) VALUES (?, ?, ?, 1, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), is_verified = 1, is_default = VALUES(is_default)");
                 if ($stmtVs) {
                     $idxVs = 0;
                     foreach ($verifiedEmailsToSync as $vEm) {
                         $isDef = ($idxVs === 0) ? 1 : 0;
-                        $stmtVs->bind_param("ssi", $vEm, $defaultName, $isDef);
+                        $stmtVs->bind_param("issi", $tid, $vEm, $defaultName, $isDef);
                         @$stmtVs->execute();
                         $idxVs++;
                     }
@@ -13055,44 +13000,49 @@ switch ($action) {
         } catch (\Throwable $ignoreMirror) {
         }
 
-        // Synchronize pipeline_stages table with pipeline_status_hierarchy settings
-        $resH = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'pipeline_status_hierarchy'");
-        $rowH = $resH->fetch_assoc();
-        $hierarchyJson = $rowH['setting_value'] ?? null;
-
-        $resL = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'pipeline_status_labels'");
-        $rowL = $resL->fetch_assoc();
-        $labelsJson = $rowL['setting_value'] ?? null;
+        // Synchronize pipeline_stages table with pipeline_status_hierarchy settings (tenant-isolated & soft-delete compliant)
+        $tenantId = (int)($decodedUser['tenant_id'] ?? 1);
+        $hierarchyJson = get_system_setting($conn, 'pipeline_status_hierarchy', $tenantId);
+        $labelsJson = get_system_setting($conn, 'pipeline_status_labels', $tenantId);
 
         if ($hierarchyJson && $labelsJson) {
-            $hierarchy = json_decode($hierarchyJson, true);
-            $labels = json_decode($labelsJson, true);
+            $hierarchy = json_decode((string)$hierarchyJson, true);
+            $labels = json_decode((string)$labelsJson, true);
             if (is_array($hierarchy) && is_array($labels)) {
-                $tenantId = (int)($decodedUser['tenant_id'] ?? 1);
-
-                // Get existing stages for this tenant
-                $resS = $conn->query("SELECT id FROM pipeline_stages WHERE tenant_id = $tenantId ORDER BY order_index");
                 $existingStages = [];
-                while ($rowS = $resS->fetch_assoc()) {
-                    $existingStages[] = $rowS;
+                $existingBySlug = [];
+                $stmtS = $conn->prepare("SELECT id, system_slug, color FROM pipeline_stages WHERE tenant_id = ? AND deleted_at IS NULL ORDER BY order_index ASC, id ASC");
+                if ($stmtS) {
+                    $stmtS->bind_param("i", $tenantId);
+                    $stmtS->execute();
+                    $resS = $stmtS->get_result();
+                    while ($rowS = $resS->fetch_assoc()) {
+                        $existingStages[] = $rowS;
+                        $sSlug = strtolower(trim((string)($rowS['system_slug'] ?? '')));
+                        if ($sSlug !== '' && !isset($existingBySlug[$sSlug])) {
+                            $existingBySlug[$sSlug] = $rowS;
+                        }
+                    }
+                    $stmtS->close();
                 }
 
                 $keepIds = [];
+                $usedStageIds = [];
                 $standardStageColors = [
-                    'new_lead'                => '#f97316', // 01: Orange (Màu cam)
-                    'contact_attempted'       => '#eab308', // 02: Yellow (Màu vàng)
-                    'connected'               => '#8b5cf6', // 03: Purple (Màu tím)
-                    'needed'                  => '#ef4444', // 04: Red (Màu đỏ)
-                    'discovery_completed'     => '#0d9488', // 05: Teal
-                    'program_matched'         => '#0284c7', // 06: Sky Blue
-                    'proposal_sent'           => '#d97706', // 07: Amber / Warm Gold
-                    'evaluation_objection'    => '#ea580c', // 08: Bright Orange
-                    'application_started'     => '#f59e0b', // 09: Amber / Yellow-Orange (Màu vàng cam)
-                    'application_completed'   => '#4338ca', // 10: Indigo / Deep Blue
-                    'admission_approved'      => '#65a30d', // 11: Lime Green
-                    'offer_accepted'          => '#16a34a', // 12: Vibrant Green
-                    'deposit_tuition_payment' => '#059669', // 13: Emerald Green
-                    'enrolled'                => '#db2777', // 14: Pink / Magenta
+                    'new_lead'                => '#f97316',
+                    'contact_attempted'       => '#eab308',
+                    'connected'               => '#8b5cf6',
+                    'needed'                  => '#ef4444',
+                    'discovery_completed'     => '#0d9488',
+                    'program_matched'         => '#0284c7',
+                    'proposal_sent'           => '#d97706',
+                    'evaluation_objection'    => '#ea580c',
+                    'application_started'     => '#f59e0b',
+                    'application_completed'   => '#4338ca',
+                    'admission_approved'      => '#65a34a',
+                    'offer_accepted'          => '#16a34a',
+                    'deposit_tuition_payment' => '#059669',
+                    'enrolled'                => '#db2777',
                 ];
 
                 $dealWonStatus = $input['deal_won_status'] ?? 'dong_deal';
@@ -13100,16 +13050,25 @@ switch ($action) {
                     $dealWonStatus = 'dong_deal';
                 }
 
-                foreach ($hierarchy as $idx => $slug) {
+                foreach (array_values($hierarchy) as $idx => $slug) {
+                    $slugKey = strtolower(trim((string)$slug));
+                    $matchedStage = null;
+                    if ($slugKey !== '' && isset($existingBySlug[$slugKey]) && !isset($usedStageIds[(int)$existingBySlug[$slugKey]['id']])) {
+                        $matchedStage = $existingBySlug[$slugKey];
+                    } elseif (isset($existingStages[$idx]) && !isset($usedStageIds[(int)$existingStages[$idx]['id']])) {
+                        $matchedStage = $existingStages[$idx];
+                    }
+
                     $name = $labels[$slug] ?? $slug;
-                    $color = $standardStageColors[$slug] ?? ($existingStages[$idx]['color'] ?? '#3b82f6');
+                    $color = $standardStageColors[$slug] ?? ($matchedStage['color'] ?? '#3b82f6');
                     $isWon = ($slug === $dealWonStatus || $slug === 'enrolled') ? 1 : 0;
                     $isLost = ($slug === 'that_bai' || $slug === 'lost') ? 1 : 0;
 
-                    if (isset($existingStages[$idx])) {
-                        $stageId = (int)$existingStages[$idx]['id'];
-                        $stmtUp = $conn->prepare("UPDATE pipeline_stages SET name = ?, color = ?, order_index = ?, is_won = ?, is_lost = ?, system_slug = ? WHERE id = ?");
-                        $stmtUp->bind_param("ssiiisi", $name, $color, $idx, $isWon, $isLost, $slug, $stageId);
+                    if ($matchedStage) {
+                        $stageId = (int)$matchedStage['id'];
+                        $usedStageIds[$stageId] = true;
+                        $stmtUp = $conn->prepare("UPDATE pipeline_stages SET name = ?, color = ?, order_index = ?, is_won = ?, is_lost = ?, system_slug = ?, deleted_at = NULL WHERE id = ? AND tenant_id = ?");
+                        $stmtUp->bind_param("ssiiisii", $name, $color, $idx, $isWon, $isLost, $slug, $stageId, $tenantId);
                         $stmtUp->execute();
                         $stmtUp->close();
                         $keepIds[] = $stageId;
@@ -13117,15 +13076,26 @@ switch ($action) {
                         $stmtIns = $conn->prepare("INSERT INTO pipeline_stages (tenant_id, name, color, order_index, is_won, is_lost, system_slug) VALUES (?, ?, ?, ?, ?, ?, ?)");
                         $stmtIns->bind_param("issiiis", $tenantId, $name, $color, $idx, $isWon, $isLost, $slug);
                         $stmtIns->execute();
-                        $keepIds[] = (int)$stmtIns->insert_id;
+                        $newId = (int)$stmtIns->insert_id;
+                        $usedStageIds[$newId] = true;
+                        $keepIds[] = $newId;
                         $stmtIns->close();
                     }
                 }
 
+                $keepIds = array_values(array_unique(array_filter(array_map('intval', $keepIds), fn($v) => $v > 0)));
                 if (!empty($keepIds)) {
-                    $inClause = implode(',', $keepIds);
-                    $conn->query("DELETE FROM pipeline_stages WHERE tenant_id = $tenantId AND id NOT IN ($inClause)");
+                    $phKeep = implode(',', array_fill(0, count($keepIds), '?'));
+                    $bindTypesKeep = 'i' . str_repeat('i', count($keepIds));
+                    $bindParamsKeep = array_merge([$tenantId], $keepIds);
+                    $stmtSoftDel = $conn->prepare("UPDATE pipeline_stages SET deleted_at = CURRENT_TIMESTAMP WHERE tenant_id = ? AND deleted_at IS NULL AND id NOT IN ({$phKeep})");
+                    if ($stmtSoftDel) {
+                        $stmtSoftDel->bind_param($bindTypesKeep, ...$bindParamsKeep);
+                        $stmtSoftDel->execute();
+                        $stmtSoftDel->close();
+                    }
                 }
+                TenantConfigService::invalidateCache($tenantId);
             }
         }
 
@@ -13367,7 +13337,7 @@ switch ($action) {
             $workStart = $input['work_start'] ?? '08:00';
             $userName = $input['user_name'] ?? 'Huỳnh Trọng Phúc';
             $userRole = $input['role'] ?? 'Marketing';
-            $frontendUrl = get_system_setting($conn, 'frontend_url') ?: 'https://myerp.ideas.edu.vn';
+            $frontendUrl = get_tenant_frontend_url($conn, (int)($decodedUser['tenant_id'] ?? 1)) ?: 'http://localhost:5173';
             $loginAttendanceLink = rtrim($frontendUrl, '/') . '/login?redirect=/attendance';
 
             $subject = "[MYERP] ⏰ Nhắc nhở: Sắp đến giờ chấm công vào ca [Ca $workStart]";
@@ -13384,7 +13354,7 @@ switch ($action) {
             $workStart = $input['work_start'] ?? '08:00';
             $userName = $input['user_name'] ?? 'Huỳnh Trọng Phúc';
             $userRole = $input['role'] ?? 'Marketing';
-            $frontendUrl = get_system_setting($conn, 'frontend_url') ?: 'https://myerp.ideas.edu.vn';
+            $frontendUrl = get_tenant_frontend_url($conn, (int)($decodedUser['tenant_id'] ?? 1)) ?: 'http://localhost:5173';
             $loginAttendanceLink = rtrim($frontendUrl, '/') . '/login?redirect=/attendance';
 
             $subject = "[MYERP] ⚠️ Cảnh báo: Bạn chưa thực hiện chấm công hôm nay [Ca $workStart]";
@@ -14387,10 +14357,16 @@ switch ($action) {
             $isTargetSelf = $id === (int)$decodedUser['id'];
             $isAdmin = $decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin' || $decodedUser['role'] === 'super_admin';
 
-            // Fetch target user's current role
-            $exRes = $conn->query("SELECT role, is_active, username FROM accounts WHERE id = " . $id);
+            $callerTid = (int)($decodedUser['tenant_id'] ?? 1);
+            // Fetch target user's current role within the same tenant
+            $exRes = $conn->query("SELECT role, is_active, username FROM accounts WHERE id = " . $id . " AND tenant_id = " . $callerTid);
             $exRow = $exRes ? $exRes->fetch_assoc() : null;
-            $targetRole = $exRow ? $exRow['role'] : '';
+            if (!$exRow) {
+                http_response_code(404);
+                echo json_encode(['success' => false, 'message' => 'Không tìm thấy tài khoản trong Tenant của bạn']);
+                break;
+            }
+            $targetRole = $exRow['role'];
 
             // If target is superadmin, only superadmin can edit
             if (($targetRole === 'superadmin' || $targetRole === 'super_admin') && $decodedUser['role'] !== 'superadmin') {
@@ -14720,8 +14696,9 @@ switch ($action) {
             exit;
         }
 
-        $stmtP = $conn->prepare("SELECT u.id, u.full_name AS name, u.email, u.phone, a.role, u.job_title, u.team_id, t.name AS team_name, u.status, COALESCE(u.is_active, a.is_active, 1) AS is_active, u.leave_start, u.leave_end, u.work_start_time, u.work_end_time, u.work_schedule, u.avatar_url AS avatar, u.signature_url, u.vacation_mode, u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account, u.zalo_chat_id, u.telegram_chat_id, u.overtime_mode, u.permissions_json, u.extra_fields_json, u.manager_behavior_mode, u.use_custom_work_hours, u.bio FROM users u LEFT JOIN accounts a ON u.id = a.id LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
-        $stmtP->bind_param("i", $targetUserId);
+        $callerTidP = (int)($decodedUser['tenant_id'] ?? 1);
+        $stmtP = $conn->prepare("SELECT u.id, u.full_name AS name, u.email, u.phone, a.role, u.job_title, u.team_id, t.name AS team_name, u.status, COALESCE(u.is_active, a.is_active, 1) AS is_active, u.leave_start, u.leave_end, u.work_start_time, u.work_end_time, u.work_schedule, u.avatar_url AS avatar, u.signature_url, u.vacation_mode, u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account, u.zalo_chat_id, u.telegram_chat_id, u.overtime_mode, u.permissions_json, u.extra_fields_json, u.manager_behavior_mode, u.use_custom_work_hours, u.bio FROM users u LEFT JOIN accounts a ON u.id = a.id LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? AND u.tenant_id = ?");
+        $stmtP->bind_param("ii", $targetUserId, $callerTidP);
         $stmtP->execute();
         $consultantProfile = $stmtP->get_result()->fetch_assoc();
         if ($consultantProfile) {
@@ -17576,6 +17553,12 @@ switch ($action) {
         break;
 
     case 'reassign_lead':
+        $callerRole = strtolower($decodedUser['role'] ?? '');
+        if (!apiDoesUserSatisfyRoles($conn, $decodedUser, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'marketing'], 'leads', 'write')) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Bạn không có thẩm quyền thực hiện thao tác này']);
+            break;
+        }
         require_once __DIR__ . '/webhook_logic.php';
         $input = json_decode(file_get_contents('php://input'), true);
         $log_id = (int) ($input['log_id'] ?? 0);
@@ -18027,6 +18010,12 @@ switch ($action) {
         break;
 
     case 'update_lead_fields':
+        $callerRole = strtolower($decodedUser['role'] ?? '');
+        if (!apiDoesUserSatisfyRoles($conn, $decodedUser, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'marketing'], 'leads', 'write')) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Bạn không có thẩm quyền thực hiện thao tác này']);
+            break;
+        }
         $input = json_decode(file_get_contents('php://input'), true);
         $lead_id = isset($input['lead_id']) ? (int) $input['lead_id'] : 0;
         $name = isset($input['name']) ? trim($input['name']) : '';
@@ -18289,6 +18278,12 @@ switch ($action) {
         break;
 
     case 'block_lead':
+        $callerRole = strtolower($decodedUser['role'] ?? '');
+        if (!apiDoesUserSatisfyRoles($conn, $decodedUser, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'marketing'], 'leads', 'write')) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Bạn không có thẩm quyền thực hiện thao tác này']);
+            break;
+        }
         $input = json_decode(file_get_contents('php://input'), true);
         $log_id = (int) ($input['log_id'] ?? 0);
         $compensate_sale = isset($input['compensate_sale']) ? (bool) $input['compensate_sale'] : false;

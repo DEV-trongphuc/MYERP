@@ -134,7 +134,8 @@ class InventoryController {
      * Handle stock-in
      */
     public function stockIn(array $auth): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'inventory', 'write')) {
             respond(403, null, 'Bạn không có quyền nhập kho', false);
         }
         $b = getBody();
@@ -201,7 +202,8 @@ class InventoryController {
      * Handle internal stock out (Damage, Gift, Loss)
      */
     public function internalExport(array $auth): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) respond(403, null, 'Bạn không có quyền thực hiện xuất kho nội bộ', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'inventory', 'write')) respond(403, null, 'Bạn không có quyền thực hiện xuất kho nội bộ', false);
         $b = getBody();
         $tid = (int)$auth['tenant_id'];
 
@@ -376,7 +378,8 @@ class InventoryController {
      * Manual adjustment
      */
     public function adjust(array $auth): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) respond(403, null, 'Bạn không có quyền điều chỉnh kho', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'inventory', 'write')) respond(403, null, 'Bạn không có quyền điều chỉnh kho', false);
         $b = getBody();
         $tid = (int)$auth['tenant_id'];
 
@@ -477,7 +480,8 @@ class InventoryController {
      * Archive a batch (when it's empty and no longer needed in active list)
      */
     public function archive(array $auth, int $id): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true)) respond(403, null, 'Chỉ admin mới có quyền lưu trữ lô hàng', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director'], 'inventory', 'delete')) respond(403, null, 'Chỉ admin mới có quyền lưu trữ lô hàng', false);
         
         $stmt = $this->db->prepare("SELECT current_qty FROM batches WHERE id=? AND tenant_id=?");
         $stmt->execute([$id, $auth['tenant_id']]);

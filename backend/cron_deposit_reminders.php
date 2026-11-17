@@ -54,10 +54,13 @@ try {
 
     $count = 0;
     while ($row = $stmt->fetch_assoc()) {
+        $rowTid = (int)($row['tenant_id'] ?? 1);
+        $GLOBALS['current_tenant_id'] = $rowTid;
+        $brandPrefix = get_tenant_brand_prefix($conn, $rowTid);
         $custName = trim($row['full_name'] ?? '');
         $studentId = trim($row['student_id'] ?? '');
         $programName = !empty($row['program']) ? trim($row['program']) : trim($row['project_name'] ?? '');
-        $admissionDateStr = !empty($row['admission_date']) ? date('d/m/Y', strtotime($row['admission_date'])) : 'Theo thông báo của Viện';
+        $admissionDateStr = !empty($row['admission_date']) ? date('d/m/Y', strtotime($row['admission_date'])) : 'Theo thông báo đào tạo';
         $payDateStr = date('d/m/Y', strtotime($row['expected_pay_date']));
         $amountStr = number_format($row['expected_amount']) . ' VND';
         $remindTarget = (int)($row['remind_target'] ?? 2);
@@ -69,7 +72,7 @@ try {
             // Option 1: Gửi trực tiếp cho Học viên (nếu không có email thì fallback về Sale)
             $hasEmail = !empty(trim($row['contact_email'] ?? ''));
             if ($hasEmail) {
-                $emailSubject = "[IDEAS] Nhắc nhở lịch thanh toán: " . $row['milestone_name'];
+                $emailSubject = "{$brandPrefix} Nhắc nhở lịch thanh toán: " . $row['milestone_name'];
                 $emailTitle = "NHẮC NHỞ THANH TOÁN";
 
                 $studentIdRow = !empty($studentId) 
@@ -94,7 +97,7 @@ try {
                 echo "  [Student] Sent payment reminder to student $custName ({$row['contact_email']})\n";
             } else if (!empty($saleEmail)) {
                 // Fallback về Sale
-                $emailSubject = "[IDEAS] [Fallback] Nhắc lịch thanh toán của học viên: " . $custName;
+                $emailSubject = "{$brandPrefix} [Fallback] Nhắc lịch thanh toán của học viên: " . $custName;
                 $emailTitle = "NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC";
                 $emailContent = "Chào <strong>" . htmlspecialchars($saleName) . "</strong>,<br/><br/>" .
                                 "Hệ thống gửi thông báo nhắc lịch thanh toán của học viên <strong>" . htmlspecialchars($custName) . "</strong> (SĐT: " . htmlspecialchars($row['contact_phone'] ?? '—') . "). Học viên chưa có email nên hệ thống fallback gửi cho Sale phụ trách.<br/><br/>" .
@@ -110,7 +113,7 @@ try {
         } else {
             // Option 2 (Mặc định): Chỉ gửi nhắc cho Sale chăm sóc
             if (!empty($saleEmail)) {
-                $emailSubject = "[IDEAS] Nhắc lịch thanh toán của học viên: " . $custName;
+                $emailSubject = "{$brandPrefix} Nhắc lịch thanh toán của học viên: " . $custName;
                 $emailTitle = "NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC";
                 $emailContent = "Chào <strong>" . htmlspecialchars($saleName) . "</strong>,<br/><br/>" .
                                 "Hệ thống gửi thông báo nhắc lịch thanh toán của học viên <strong>" . htmlspecialchars($custName) . "</strong> (SĐT: " . htmlspecialchars($row['contact_phone'] ?? '—') . ").<br/><br/>" .

@@ -36,7 +36,7 @@ try {
 
     echo "<h3>Hành động tiếp theo:</h3>";
     echo "Nếu thấy nhiều tin nhắn ở trạng thái <b>PENDING</b>, hãy thử chạy Worker thủ công tại đây: <br>";
-    echo "<a href='https://automation.ideas.edu.vn/mail_api/worker_queue.php' target='_blank'>Kích hoạt Worker thủ công</a>";
+    echo "<a href='worker_queue.php' target='_blank'>Kích hoạt Worker thủ công</a>";
 
 } catch (Exception $e) {
     echo "<p style='color:red'>❌ Lỗi: " . $e->getMessage() . "</p>";

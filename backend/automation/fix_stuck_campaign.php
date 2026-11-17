@@ -7,10 +7,10 @@ $cid = '6a3891f327c85'; // Campaign ID từ URL
 
 header('Content-Type: text/plain; charset=utf-8');
 
-// 1. Xóa tất cả processing_campaign locks cũ (stale) của campaign này
-$stmt = $pdo->prepare("DELETE FROM subscriber_activity WHERE campaign_id = ? AND type = 'processing_campaign'");
+// 1. Release tất cả processing_campaign locks cũ (stale) của campaign này (Axiom 4 soft-transition)
+$stmt = $pdo->prepare("UPDATE subscriber_activity SET type = 'released_campaign' WHERE campaign_id = ? AND type = 'processing_campaign'");
 $stmt->execute([$cid]);
-echo "1. Xoa stale processing_campaign locks: " . $stmt->rowCount() . " rows\n";
+echo "1. Released stale processing_campaign locks: " . $stmt->rowCount() . " rows\n";
 
 // 2. Kiểm tra số người đã xử lý theo từng loại
 $stmt2 = $pdo->query("SELECT type, COUNT(*) as cnt FROM subscriber_activity WHERE campaign_id = '$cid' GROUP BY type ORDER BY cnt DESC");

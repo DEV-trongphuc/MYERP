@@ -5,7 +5,8 @@
 
 // 1. Kiểm tra an toàn: Chỉ cho phép chạy từ CLI hoặc với Secure Token
 $isCli = (php_sapi_name() === 'cli');
-$hasValidToken = (($_GET['token'] ?? '') === 'Ideas_Diag_Secure_Token_2026_9e88d6c701fbc6b7') || defined('DIAG_TOKEN');
+$envDiagToken = trim((string)(getenv('MYERP_DIAG_TOKEN') ?: ($_ENV['MYERP_DIAG_TOKEN'] ?? '')));
+$hasValidToken = defined('DIAG_TOKEN') || ($envDiagToken !== '' && hash_equals($envDiagToken, (string)($_GET['token'] ?? '')));
 
 // BẮT BUỘC: Đặt chế độ TEST MODE để chặn 100% việc gửi Email, Zalo, Telegram, Thông báo ra ngoài người dùng thật
 putenv('MYERP_TEST_MODE=1');

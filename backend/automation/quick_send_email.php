@@ -346,7 +346,7 @@ unset($recRef);
 
 // 3. SEND BATCH
 try {
-    $mailer = new Mailer($pdo, API_BASE_URL, 'marketing@ideas.edu.vn', $workspaceId);
+    $mailer = new Mailer($pdo, API_BASE_URL, '', $workspaceId);
     
     // Set dynamic sender email and name if provided
     $fromEmail = trim((string)($input['from_email'] ?? ($input['sender_email'] ?? ($input['senderEmail'] ?? ''))));

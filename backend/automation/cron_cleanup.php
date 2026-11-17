@@ -7,10 +7,10 @@
  *
  * cPanel Cron Setup:
  *   Schedule : 0 * * * *   (every hour)
- *   Command  : php /home/vhvxoigh/automation.ideas.edu.vn/mail_api/cron_cleanup.php
+ *   Command  : php /path/to/backend/automation/cron_cleanup.php
  *
  * Hoặc via URL (cron service như cron-job.org):
- *   URL: https://automation.ideas.edu.vn/api/cron_cleanup.php?secret=autoflow_cron_2026
+ *   URL: https://your-domain.com/backend/automation/cron_cleanup.php?secret=autoflow_cron_2026
  * ============================================================
  */
 

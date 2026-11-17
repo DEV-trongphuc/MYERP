@@ -27,6 +27,7 @@ import { ClassGradebookModal } from './ClassGradebookModal';
 import { SubjectAnnouncementModal, cleanSubjectNameWithoutCode } from './SubjectAnnouncementModal';
 import { LecturerInvitationModal } from './LecturerInvitationModal';
 import { API_BASE } from '../../config/env';
+import { getCachedTenantBootstrap, useTenantConfig } from '../../contexts/TenantConfigContext';
 
 const API_URL = API_BASE;
 
@@ -268,9 +269,36 @@ export function matchStandardProgramKey(programName?: string | null): string | n
   return null;
 }
 
+export function getTenantCurriculumMap(): Record<string, Array<{ code: string; name: string; credits: number }>> {
+  const dbProgs = getCachedTenantBootstrap()?.academic_programs;
+  if (Array.isArray(dbProgs) && dbProgs.length > 0) {
+    const out: Record<string, Array<{ code: string; name: string; credits: number }>> = { ...STANDARD_PROGRAM_CURRICULUMS };
+    dbProgs.forEach((p) => {
+      if (p?.name && Array.isArray(p.curriculum) && p.curriculum.length > 0) {
+        out[p.name] = p.curriculum;
+      }
+    });
+    return out;
+  }
+  return STANDARD_PROGRAM_CURRICULUMS;
+}
+
 export function resolveCurriculumSubjects(
   programName?: string | null
 ): Array<{ code: string; name: string; credits: number }> {
+  const raw = String(programName || '').trim().toLowerCase();
+  const dbProgs = getCachedTenantBootstrap()?.academic_programs;
+  if (raw && Array.isArray(dbProgs) && dbProgs.length > 0) {
+    const exactOrKeyword = dbProgs.find(
+      (p) =>
+        String(p.name || '').toLowerCase() === raw ||
+        String(p.program_code || '').toLowerCase() === raw ||
+        (Array.isArray(p.match_keywords) && p.match_keywords.some((kw) => kw && raw.includes(String(kw).toLowerCase())))
+    );
+    if (exactOrKeyword && Array.isArray(exactOrKeyword.curriculum) && exactOrKeyword.curriculum.length > 0) {
+      return exactOrKeyword.curriculum;
+    }
+  }
   const key = matchStandardProgramKey(programName);
   if (!key) return [];
   return STANDARD_PROGRAM_CURRICULUMS[key] || [];
@@ -491,7 +519,7 @@ export const StudentAcademicWorkspace: React.FC<StudentAcademicWorkspaceProps> =
       '0',
       'SV-DEMO',
       'Học viên Mẫu (Ví dụ - Thang điểm 6.0)',
-      'demo.student@ideas.edu.vn',
+      'demo.student@example.com',
       '0901234567',
       '5.50',
       '5.50',
@@ -600,7 +628,7 @@ export const StudentAcademicWorkspace: React.FC<StudentAcademicWorkspaceProps> =
     form_file_name: '',
     admin_note: '',
     send_email_now: false,
-    cc_emails: 'it.dept@ideas.edu.vn, student.notice@ideas.edu.vn, support@ideas.edu.vn',
+    cc_emails: getCachedTenantBootstrap()?.organization?.academic_cc_emails || '',
   });
   const [postponeHistory, setPostponeHistory] = useState<any[]>([]);
   const [postponeNotice, setPostponeNotice] = useState<{

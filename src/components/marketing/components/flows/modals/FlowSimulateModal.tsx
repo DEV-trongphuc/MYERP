@@ -267,7 +267,7 @@ const FlowSimulateModal: React.FC<FlowSimulateModalProps> = ({ isOpen, onClose, 
                 } else {
                     const unit = step.config?.unit || 'hours';
                     // Robust duration parsing with defaults matched to WaitConfig
-                    const defaultDur = unit === 'minutes' ? 10 : 1;
+                    const defaultDur = unit === 'minutes' ? 5 : 1;
                     const dur = parseInt(String(step.config?.duration ?? defaultDur)) || defaultDur;
 
                     if (unit === 'minutes') simTime.setMinutes(simTime.getMinutes() + dur);

@@ -4,6 +4,7 @@
  */
 
 import { isExecutive } from './roleUtils';
+import { getCachedTenantBootstrap } from '../contexts/TenantConfigContext';
 
 export interface UserContext {
   id?: number | string;
@@ -28,6 +29,72 @@ export function hasModuleApprovalAccess(
 
   if (isExecutive(user)) {
     return true;
+  }
+
+  // Consult dynamic Tenant RBAC & Approval Workflows from bootstrap
+  const bootstrap = getCachedTenantBootstrap();
+  if (bootstrap) {
+    const permModMap: Record<string, string> = {
+      expense: 'expenses',
+      deposit: 'deposits',
+      purchase_order: 'purchase_orders',
+      sales_order: 'sales_orders',
+      quote_invoice: 'invoices',
+      cooperation: 'cooperations',
+      leave: 'hrm',
+      advance: 'hrm',
+      payroll: 'hrm',
+      attendance: 'attendance',
+      ticket: 'tickets',
+    };
+    const permMod = permModMap[moduleKey] || moduleKey;
+    const effPerm = bootstrap.effective_permissions?.[permMod];
+    if (effPerm) {
+      if (effPerm.approve === 'all' || effPerm.approve === 'team') {
+        return true;
+      }
+      if (effPerm.approve === 'none' && effPerm.read === 'none') {
+        return false;
+      }
+    }
+    const roleDefForWf = bootstrap.roles?.find((r) => String(r.role_slug || '').toLowerCase() === role);
+    const groupCanonMap: Record<string, string> = {
+      system_admin: 'admin',
+      executive: 'director',
+      management: 'manager',
+      finance: 'accountant',
+      hr: 'hr',
+      sales: 'sales',
+      marketing: 'marketing',
+      academic: 'academic',
+    };
+    const mappedGroupSlug = roleDefForWf?.role_group ? (groupCanonMap[String(roleDefForWf.role_group).toLowerCase()] || '') : '';
+    const matchesWfRole = (rolesArr: any) =>
+      Array.isArray(rolesArr) &&
+      rolesArr.some((r: string) => {
+        const rl = String(r || '').toLowerCase();
+        return rl === role || (mappedGroupSlug !== '' && rl === mappedGroupSlug);
+      });
+    const wf = bootstrap.approval_workflows?.find((w) => w.module_key === moduleKey);
+    if (wf?.levels_config) {
+      for (const lvlKey of ['level_1', 'level_2', 'level_3']) {
+        const lvl = wf.levels_config[lvlKey];
+        if (!lvl) continue;
+        if (Array.isArray(lvl.user_ids) && lvl.user_ids.some((id: any) => String(id) === String(user.id))) {
+          return true;
+        }
+        if (matchesWfRole(lvl.roles)) {
+          return true;
+        }
+      }
+      if (Array.isArray(wf.levels_config.money_tiers)) {
+        for (const tier of wf.levels_config.money_tiers) {
+          if (matchesWfRole(tier.roles)) {
+            return true;
+          }
+        }
+      }
+    }
   }
 
   if (['sale_admin', 'saleadmin'].includes(role)) {
@@ -123,8 +190,10 @@ export function isItemAtMyStepToApprove(item: any, user: any, usersByNameMap?: M
                         item.type === 'commission_payout' || 
                         (item.title && typeof item.title === 'string' && item.title.toLowerCase().includes('hoa hồng')) || 
                         (item.notes && typeof item.notes === 'string' && item.notes.toLowerCase().includes('hoa hồng')));
-  const isAccountantUser = ['accountant', 'ketoan'].includes(currentRole);
-  const canSelfApproveUser = isExecutiveUser || isManagerOrLeader || isAccountantUser;
+  const tenantCfg = getCachedTenantBootstrap();
+  const roleDef = tenantCfg?.roles?.find((r) => r.role_slug === currentRole);
+  const wfDef = tenantCfg?.approval_workflows?.find((w) => w.module_key === (item.module_key || item.type));
+  const canSelfApproveUser = isExecutiveUser || Boolean(roleDef?.can_self_approve) || Boolean(wfDef?.allow_creator_self_approve);
   if ((currentUid > 0 && itemUid === currentUid) || (currentUserName && itEmpName === currentUserName)) {
     if (!isCommission && (!isAttendance || !isManagerOrLeader) && !canSelfApproveUser) {
       const lvl1 = (item.status_level_1 || 'pending').toLowerCase();

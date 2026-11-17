@@ -2,18 +2,20 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { AppIcon } from '../common/AppIcons';
 import {
   AnimateIcon,
-  createAnimatedLucideFallback,
+  ChevronLeft,
+  Plus,
+} from '../animate-ui/icons';
+import { useAuth } from '../../contexts/AuthContext';
+import {
   LayoutDashboard,
   Users,
   GitBranch,
   Settings,
-  ChevronLeft,
   Webhook,
   Link2,
   Database,
   ShieldCheck,
   Ticket,
-  Plus,
   Scale,
   Filter,
   Cpu,
@@ -21,16 +23,13 @@ import {
   TrendingUp,
   FileText,
   Calendar,
-  Package,
   Receipt,
   CreditCard,
   BarChart2,
   Truck,
   File,
-  Boxes,
   Layers,
   Clock,
-  Home,
   CheckSquare,
   LifeBuoy,
   User,
@@ -39,16 +38,13 @@ import {
   GraduationCap,
   Bot,
   Brain,
-  DollarSign,
-} from '../animate-ui/icons';
-import { useAuth } from '../../contexts/AuthContext';
-
-const AnimatedAppIcon = createAnimatedLucideFallback(AppIcon, 'default');
+} from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useEffect, useState, useRef, Fragment } from 'react';
 import { fetchAPI } from '../../utils/api';
 import { hasModuleApprovalAccess } from '../../utils/approvalPermissions';
-import { isMarketing, isAcademic, isExecutive, isHR, isAccountant, canAccessMarketingRoute } from '../../utils/roleUtils';
+import { isMarketing, isAcademic, isExecutive, isHR, isAccountant, canAccessMarketingRoute, hasDynamicModulePermission, hasExplicitDynamicModuleGrant } from '../../utils/roleUtils';
+import { useTenantConfig } from '../../contexts/TenantConfigContext';
 import { prefetchRoute } from '../../utils/routePrefetcher';
 
 export interface SidebarItem {
@@ -123,6 +119,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
       { name: 'Social Bot', href: '/marketing/social-bot', icon: Bot, iconKey: 'social_bot' },
       { name: 'Đào tạo AI', href: '/marketing/ai-training', icon: Brain, iconKey: 'ai_training' },
       { name: 'Web Tracking', href: '/marketing/web-tracking', icon: Globe, iconKey: 'web_tracking' },
+      { name: 'Meta CAPI & Tệp Ads', href: '/marketing/capi', icon: Link2, iconKey: 'meta_capi' },
       { name: 'API & Webhook', href: '/marketing/api-triggers', icon: Webhook, iconKey: 'api_triggers' }
     ]
   },
@@ -206,9 +203,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' }
   ],
   accountant: [
-    { name: 'Nộp hồ sơ', href: '/students?tab=nop_ho_so', icon: GraduationCap, badgeKey: 'nopHoSo' },
-    { name: 'Lệ phí hồ sơ', href: '/students?tab=le_phi', icon: GraduationCap, badgeKey: 'lePhi' },
-    { name: 'Học viên chính thức', href: '/students?tab=chinh_thuc', icon: GraduationCap },
+    { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
     { name: 'Sales Order', href: '/deposits', icon: Receipt, badgeKey: 'pendingDeposits' },
     { name: 'Dự báo dòng tiền', href: '/cash-flow', icon: TrendingUp },
@@ -237,9 +232,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
   sale_admin: [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
-    { name: 'Nộp hồ sơ', href: '/students?tab=nop_ho_so', icon: GraduationCap, badgeKey: 'nopHoSo' },
-    { name: 'Lệ phí hồ sơ', href: '/students?tab=le_phi', icon: GraduationCap, badgeKey: 'lePhi' },
-    { name: 'Học viên chính thức', href: '/students?tab=chinh_thuc', icon: GraduationCap },
+    { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Ticket data lỗi', href: '/tickets', icon: Ticket, badgeKey: 'tickets' },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' }
@@ -247,9 +240,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
   saleadmin: [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
-    { name: 'Nộp hồ sơ', href: '/students?tab=nop_ho_so', icon: GraduationCap, badgeKey: 'nopHoSo' },
-    { name: 'Lệ phí hồ sơ', href: '/students?tab=le_phi', icon: GraduationCap, badgeKey: 'lePhi' },
-    { name: 'Học viên chính thức', href: '/students?tab=chinh_thuc', icon: GraduationCap },
+    { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Ticket data lỗi', href: '/tickets', icon: Ticket, badgeKey: 'tickets' },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' }
@@ -348,6 +339,7 @@ const GROUP_ORDER_BY_ROLE: Record<string, string[]> = {
 
 export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileClose }: { isCollapsed: boolean; onToggleCollapse: () => void; isMobileOpen?: boolean; onMobileClose?: () => void }) => {
   const { user } = useAuth();
+  const { config: tenantConfig } = useTenantConfig();
   const { t } = useLanguage();
   const location = useLocation();
   const [pendingTickets, setPendingTickets] = useState(0);
@@ -359,6 +351,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
   const [pendingDepositsCount, setPendingDepositsCount] = useState(0);
   const [nopHoSoCount, setNopHoSoCount] = useState(0);
   const [lePhiCount, setLePhiCount] = useState(0);
+  const [dynamicStudentBadges, setDynamicStudentBadges] = useState<Record<string, number>>({});
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(() => {
     if (typeof window !== 'undefined') {
       const cached = sessionStorage.getItem('pending_approvals_count') || localStorage.getItem('pending_approvals_count');
@@ -397,6 +390,9 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
           if (typeof d.coopSlips === 'number') setPendingCoopCount(d.coopSlips);
           if (typeof d.nopHoSo === 'number') setNopHoSoCount(d.nopHoSo);
           if (typeof d.lePhi === 'number') setLePhiCount(d.lePhi);
+          const nextDynBadges: Record<string, number> = {};
+          Object.keys(d).forEach((k) => { if (typeof d[k] === 'number') nextDynBadges[k] = d[k]; });
+          setDynamicStudentBadges((prev) => ({ ...prev, ...nextDynBadges }));
         }
       } catch {
         // Keep cached counts
@@ -425,9 +421,12 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
     };
 
     const handleStudentBadgeUpdated = (e: any) => {
-      if (e.detail) {
+      if (e.detail && typeof e.detail === 'object') {
         if (typeof e.detail.nop_ho_so === 'number') setNopHoSoCount(e.detail.nop_ho_so);
         if (typeof e.detail.le_phi === 'number') setLePhiCount(e.detail.le_phi);
+        const nextDyn: Record<string, number> = {};
+        Object.keys(e.detail).forEach((k) => { if (typeof e.detail[k] === 'number') nextDyn[k] = e.detail[k]; });
+        setDynamicStudentBadges((prev) => ({ ...prev, ...nextDyn }));
       }
     };
 
@@ -521,11 +520,24 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
 
     if (group.title === 'KHÁCH HÀNG' && isSpecialRole) {
       const newItems: typeof items = [];
+      const dynamicStudentTabs = Array.isArray(tenantConfig?.student_tabs) && tenantConfig.student_tabs.length > 0
+        ? [...tenantConfig.student_tabs].sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
+        : [
+            { tab_key: 'nop_ho_so', label: 'Nộp hồ sơ', badge_key: 'nopHoSo' },
+            { tab_key: 'le_phi', label: 'Lệ phí hồ sơ', badge_key: 'lePhi' },
+            { tab_key: 'chinh_thuc', label: 'Học viên chính thức', badge_key: null }
+          ];
       items.forEach(item => {
         if (item.name === 'Học viên') {
-          newItems.push({ name: 'Nộp hồ sơ', href: '/students?tab=nop_ho_so', icon: GraduationCap, badgeKey: 'nopHoSo' });
-          newItems.push({ name: 'Lệ phí hồ sơ', href: '/students?tab=le_phi', icon: GraduationCap, badgeKey: 'lePhi' });
-          newItems.push({ name: 'Học viên chính thức', href: '/students?tab=chinh_thuc', icon: GraduationCap });
+          dynamicStudentTabs.forEach(st => {
+            newItems.push({
+              name: st.label,
+              href: `/students?tab=${encodeURIComponent(st.tab_key)}`,
+              icon: GraduationCap,
+              iconKey: 'Học viên',
+              badgeKey: st.badge_key || (!st.include_customer_status ? st.tab_key : undefined)
+            });
+          });
         } else {
           newItems.push(item);
         }
@@ -551,24 +563,46 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       return null;
     };
 
+    const getRbacModuleForHref = (href: string): string | null => {
+      if (href.startsWith('/contacts')) return 'contacts';
+      if (href.startsWith('/deals')) return 'deals';
+      if (href.startsWith('/students')) return 'students';
+      if (href.startsWith('/expenses')) return 'expenses';
+      if (href.startsWith('/deposits')) return 'deposits';
+      if (href.startsWith('/approvals')) return 'approvals';
+      if (href.startsWith('/hrm')) return 'hrm';
+      if (href.startsWith('/settings') || href.startsWith('/rounds') || href.startsWith('/rules') || href.startsWith('/integrations')) return 'settings';
+      if (href.startsWith('/accounts')) return 'users';
+      if (href.startsWith('/accounting-az') || href.startsWith('/cash-flow')) return 'finance';
+      return null;
+    };
+
     const filteredItems = items.filter((item: any) => {
       const role = user?.role as string;
       const isAdmin = role === 'admin' || role === 'superadmin' || role === 'super_admin';
-      const isManagerOrAdmin = isAdmin || role === 'manager' || role === 'director';
+      const isManagerOrAdmin = isAdmin || role === 'manager' || role === 'director' || isExecutive(user) || Boolean(tenantConfig?.roles?.some((r) => r.role_slug === role && r.role_group === 'management'));
+      const rbacMod = getRbacModuleForHref(String(item.href || ''));
 
       if (group.title === 'MARKETING & AUTOMATION' || String(item.href || '').startsWith('/marketing')) {
         return canAccessMarketingRoute(user, item.href);
       }
 
-      // Strict role-based visibility for HR, Accounting A-Z, and Cash Flow
+      if (rbacMod && !hasDynamicModulePermission(user, rbacMod, 'read')) {
+        return false;
+      }
+
+      // Strict role-based visibility for HR, Accounting A-Z, and Cash Flow (with custom tenant RBAC grant support)
       if (item.href === '/hrm') {
-        return isExecutive(user) || isHR(user, false);
+        return isExecutive(user) || isHR(user, false) || hasExplicitDynamicModuleGrant(user, 'hrm', 'read');
       }
       if (item.href === '/accounting-az') {
-        return isExecutive(user) || isHR(user, false) || isAccountant(user, false);
+        return isExecutive(user) || isHR(user, false) || isAccountant(user, false) || hasExplicitDynamicModuleGrant(user, 'finance', 'read');
       }
       if (item.href === '/cash-flow') {
-        return isExecutive(user) || isAccountant(user, false);
+        return isExecutive(user) || isAccountant(user, false) || hasExplicitDynamicModuleGrant(user, 'finance', 'read');
+      }
+      if (rbacMod && hasExplicitDynamicModuleGrant(user, rbacMod, 'read') && !['sale', 'sales', 'viewer'].includes(role)) {
+        return true;
       }
 
       // Dynamic Unlocking for Approvers / Team Leaders
@@ -677,8 +711,8 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         style={{
-          width: effectiveCollapsed ? 60 : 220,
-          background: 'radial-gradient(ellipse at 15% 0%, rgba(189, 29, 45, 0.08) 0%, transparent 50%), linear-gradient(180deg, #100d0e 0%, #0b090a 40%, #070708 100%)',
+          width: effectiveCollapsed ? 64 : 232,
+          background: 'radial-gradient(ellipse at 20% 0%, rgba(189, 29, 45, 0.14) 0%, transparent 45%), radial-gradient(ellipse at 80% 100%, rgba(30, 41, 59, 0.22) 0%, transparent 50%), linear-gradient(180deg, #130e10 0%, #0d0a0b 50%, #070709 100%)',
           color: '#e2e8f0',
           display: 'flex',
           flexDirection: 'column',
@@ -686,8 +720,8 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
           flexShrink: 0,
           position: 'relative',
           zIndex: 50,
-          borderRight: '1px solid rgba(255, 255, 255, 0.06)',
-          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.35)',
+          borderRight: '1px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: '6px 0 32px rgba(0, 0, 0, 0.42), inset -1px 0 0 rgba(255, 255, 255, 0.03)',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)'
         }}
       >
@@ -723,7 +757,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
             flexShrink: 0,
             overflow: 'hidden'
           }}>
-            <img src="/LOGO.webp" style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            <img src={tenantConfig?.organization?.logo_url || '/LOGO.webp'} style={{ width: '100%', height: '100%', objectFit: 'contain' }}
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
               alt="logo" />
           </div>
@@ -842,26 +876,38 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
             scrollBehavior: 'smooth'
           }}
         >
-          <div style={{ position: 'relative', padding: '1rem 0', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ position: 'relative', padding: '0.75rem 0 1.25rem 0', display: 'flex', flexDirection: 'column' }}>
 
             {visibleGroups.map((group, groupIdx) => (
-              <div key={groupIdx} style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: effectiveCollapsed ? '0.375rem' : '0.875rem' }}>
+              <div
+                key={groupIdx}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '2px',
+                  marginBottom: effectiveCollapsed ? '0.35rem' : '0.65rem',
+                  paddingTop: groupIdx > 0 ? (effectiveCollapsed ? '0.35rem' : '0.55rem') : '0',
+                  borderTop: groupIdx > 0 ? '1px solid rgba(255, 255, 255, 0.06)' : 'none',
+                  marginLeft: effectiveCollapsed ? '6px' : '0',
+                  marginRight: effectiveCollapsed ? '6px' : '0'
+                }}
+              >
                 {!effectiveCollapsed && (
                   <span style={{
-                    fontSize: '0.65rem',
+                    fontSize: '0.625rem',
                     fontWeight: 800,
-                    letterSpacing: '0.08em',
+                    letterSpacing: '0.09em',
                     textTransform: 'uppercase',
-                    color: 'rgba(255, 255, 255, 0.35)',
-                    padding: '0.375rem 1rem',
+                    color: 'rgba(255, 255, 255, 0.42)',
+                    padding: '0.25rem 1.125rem 0.3rem 1.125rem',
                     whiteSpace: 'nowrap',
                     display: 'block'
                   }}>
                     {t(group.title)}
                   </span>
                 )}
-                 {group.items.map(({ name, href, icon: Icon, iconKey, end, badgeKey }) => {
-                   const badgeCount = badgeKey === 'tickets' ? pendingTickets : badgeKey === 'supportTickets' ? supportTicketsCount : badgeKey === 'gatekeeper' ? heldLeadsCount : badgeKey === 'coopSlips' ? pendingCoopCount : badgeKey === 'pendingExpenses' ? pendingExpensesCount : badgeKey === 'pendingDeposits' ? pendingDepositsCount : badgeKey === 'pendingApprovals' ? pendingApprovalsCount : badgeKey === 'workspaceTasks' ? undoneTasksCount : badgeKey === 'nopHoSo' ? nopHoSoCount : badgeKey === 'lePhi' ? lePhiCount : 0;
+                 {group.items.map(({ name, href, iconKey, end, badgeKey }) => {
+                   const badgeCount = badgeKey === 'tickets' ? pendingTickets : badgeKey === 'supportTickets' ? supportTicketsCount : badgeKey === 'gatekeeper' ? heldLeadsCount : badgeKey === 'coopSlips' ? pendingCoopCount : badgeKey === 'pendingExpenses' ? pendingExpensesCount : badgeKey === 'pendingDeposits' ? pendingDepositsCount : badgeKey === 'pendingApprovals' ? pendingApprovalsCount : badgeKey === 'workspaceTasks' ? undoneTasksCount : badgeKey === 'nopHoSo' ? nopHoSoCount : badgeKey === 'lePhi' ? lePhiCount : (badgeKey && typeof dynamicStudentBadges[badgeKey] === 'number' ? dynamicStudentBadges[badgeKey] : 0);
                    const isAccountant = String(user?.role).toLowerCase() === 'accountant';
                    const effectiveHref = (name === 'Lịch trình' && isAccountant) ? '/data?view=calendar' : href;
                    const checkIsActive = (locationPath: string, locationSearch: string, itemHref: string) => {
@@ -898,7 +944,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                       onMouseEnter={() => prefetchRoute(effectiveHref)}
                       onTouchStart={() => prefetchRoute(effectiveHref)}
                       onFocus={() => prefetchRoute(effectiveHref)}
-                      onClick={(e) => {
+                      onClick={() => {
                         const targetPath = href.split('?')[0];
                         if (location.pathname === targetPath) {
                           window.dispatchEvent(new CustomEvent('refresh-page', { detail: { path: targetPath } }));
@@ -907,14 +953,17 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                         setTimeout(() => scrollToActiveItem('smooth'), 50);
                       }}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: '0.75rem',
-                        padding: effectiveCollapsed ? '0.5rem 0' : '0.45rem 1rem',
+                        display: 'flex', alignItems: 'center', gap: '0.72rem',
+                        padding: effectiveCollapsed ? '0.45rem 0' : '0.45rem 1rem',
                         justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
-                        color: isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.65)',
-                        textDecoration: 'none', fontSize: '0.825rem',
-                        fontWeight: isActive ? 700 : 500, transition: 'all 0.2s ease',
+                        color: isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.72)',
+                        textDecoration: 'none', fontSize: '0.82rem',
+                        fontWeight: isActive ? 700 : 500,
+                        transition: 'all 0.2s ease',
                         position: 'relative',
-                        background: isActive ? 'linear-gradient(90deg, rgba(189, 29, 45, 0.16) 0%, rgba(189, 29, 45, 0.03) 100%)' : 'transparent',
+                        background: isActive
+                          ? 'linear-gradient(90deg, rgba(189, 29, 45, 0.16) 0%, rgba(189, 29, 45, 0.03) 100%)'
+                          : 'transparent',
                         whiteSpace: 'nowrap', overflow: 'hidden',
                       }}
                     >
@@ -924,7 +973,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                           style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '0.75rem',
+                            gap: '0.72rem',
                             width: '100%',
                             justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
                           }}
@@ -941,18 +990,23 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                               zIndex: 10
                             }} />
                           )}
-                          {/* Icon Box — Minimalist Executive Luxury (Monochrome Slate + Brand Crimson Active) */}
-                          <div style={{
-                            width: 28, height: 28,
-                            borderRadius: '7px',
-                            background: isActive ? '#BD1D2D' : 'rgba(255, 255, 255, 0.05)',
-                            border: isActive ? '1px solid rgba(255, 255, 255, 0.18)' : '1px solid rgba(255, 255, 255, 0.06)',
-                            color: isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.75)',
-                            boxShadow: isActive ? '0 2px 8px rgba(189, 29, 45, 0.35)' : 'none',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            flexShrink: 0, transition: 'all 0.2s cubic-bezier(0.22, 1, 0.36, 1)', position: 'relative'
-                          }}>
-                            {Icon ? <Icon size={16} /> : <AnimatedAppIcon name={iconKey || name} size={18} />}
+                          {/* Colorful AppIcon matching Header Navigation Menu */}
+                          <div
+                            className="sidebar-app-icon-wrap"
+                            style={{
+                              width: effectiveCollapsed ? 28 : 26,
+                              height: effectiveCollapsed ? 28 : 26,
+                              borderRadius: '7px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              transition: 'transform 0.2s cubic-bezier(0.22, 1, 0.36, 1)',
+                              filter: 'drop-shadow(0 2px 5px rgba(0, 0, 0, 0.35))',
+                              position: 'relative'
+                            }}
+                          >
+                            <AppIcon name={iconKey || name} size={effectiveCollapsed ? 28 : 26} />
                             {effectiveCollapsed && badgeCount > 0 && (
                               <div style={{
                                 position: 'absolute', top: -2, right: -2, width: 8, height: 8,
@@ -963,22 +1017,25 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                           </div>
 
                           {!effectiveCollapsed && (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1 }}>
-                              <span>{displayName}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 0, gap: '6px' }}>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</span>
                               {badgeCount > 0 && (
                                 <span style={{
                                   fontSize: '0.65rem',
-                                  minWidth: '15px',
-                                  height: '15px',
-                                  borderRadius: '8px',
+                                  minWidth: '17px',
+                                  height: '17px',
+                                  borderRadius: '999px',
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
                                   padding: badgeCount > 9 ? '0 5px' : '0',
-                                  background: '#BD1D2D',
+                                  background: 'linear-gradient(135deg, #ef4444 0%, #BD1D2D 100%)',
                                   color: 'white',
-                                  fontWeight: 700,
-                                  lineHeight: 1
+                                  fontWeight: 800,
+                                  lineHeight: 1,
+                                  boxShadow: '0 2px 6px rgba(189, 29, 45, 0.45)',
+                                  border: '1px solid rgba(255, 255, 255, 0.18)',
+                                  flexShrink: 0
                                 }}>
                                   {badgeCount}
                                 </span>
@@ -1014,6 +1071,9 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
           .sidebar-nav-item:hover:not(.active) {
             background: rgba(255, 255, 255, 0.07) !important;
             color: #ffffff !important;
+          }
+          .sidebar-nav-item:hover .sidebar-app-icon-wrap {
+            transform: scale(1.06) !important;
           }
         `}</style>
       </aside>

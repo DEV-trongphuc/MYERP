@@ -69,7 +69,7 @@ export const sanitizeUrl = (url?: string): string => {
 };
 
 /**
- * Check if a variable value is a valid URL or domain format (e.g. https://..., www...., ideas.edu.vn, domain.com/path)
+ * Check if a variable value is a valid URL or domain format (e.g. https://..., www...., domain.com/path)
  */
 export const isLinkOrDomain = (val: any): boolean => {
     if (!val || typeof val !== 'string') return false;
@@ -85,7 +85,7 @@ export const isLinkOrDomain = (val: any): boolean => {
     // 2. Starts with www.
     if (/^www\.[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}(?::[0-9]+)?(?:\/[^\s<>"'`]*)?$/i.test(str)) return true;
 
-    // 3. Domain pattern with valid TLD (e.g. ideas.edu.vn, domain.com, my-shop.vn/path)
+    // 3. Domain pattern with valid TLD (e.g. example.com, my-shop.vn/path)
     return /^[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*\.(?:[a-zA-Z]{2,63})(?::[0-9]+)?(?:\/[^\s<>"'`]*)?$/i.test(str);
 };
 
@@ -171,6 +171,32 @@ export const extractTemplateVariables = (html: string): ExtractedVariables => {
 };
 
 /**
+ * Parse custom attribute containers safely whether they arrive as objects or serialized JSON strings.
+ */
+export const parseSubscriberCustomAttrs = (raw: any): Record<string, any> => {
+    if (!raw) return {};
+    if (typeof raw === 'object' && !Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (!trimmed || (trimmed[0] !== '{' && trimmed[0] !== '[')) return {};
+        try {
+            const parsed = JSON.parse(trimmed);
+            return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+        } catch {
+            return {};
+        }
+    }
+    return {};
+};
+
+const cleanTitlePlaceholder = (val: any): string => {
+    if (val === undefined || val === null) return '';
+    const str = String(val).trim();
+    if (!str || str.toLowerCase() === 'chưa cập nhật') return '';
+    return str;
+};
+
+/**
  * Replace merge tags (e.g. {{firstName}}, {{program}}, {{consultant_name}}, {{deal_value}}, {{cert_no}}) in text/HTML,
  * with full support for:
  * 1. All 4 groups of MYERP CRM/Student, Consultant (Sale), Deal & Deposit, and System variables
@@ -194,14 +220,14 @@ export const interpolateMergeTags = (
     const phone = subscriber.phoneNumber || subscriber.phone_number || subscriber.phone || '';
     const subscriberId = subscriber.subscriberId || subscriber.subscriber_id || subscriber.id || '';
 
-    // Merge all custom attributes / fields from various possible properties
+    // Merge all custom attributes / fields (safely decoding JSON string payloads if present)
     const customAttrs: Record<string, any> = {
-        ...(subscriber.customAttributes || {}),
-        ...(subscriber.custom_attributes || {}),
-        ...(subscriber.custom_fields || {}),
-        ...(subscriber.customFields || {}),
-        ...(subscriber.attributes || {}),
-        ...(subscriber.metadata || {})
+        ...parseSubscriberCustomAttrs(subscriber.metadata),
+        ...parseSubscriberCustomAttrs(subscriber.attributes),
+        ...parseSubscriberCustomAttrs(subscriber.customFields),
+        ...parseSubscriberCustomAttrs(subscriber.custom_fields),
+        ...parseSubscriberCustomAttrs(subscriber.custom_attributes),
+        ...parseSubscriberCustomAttrs(subscriber.customAttributes),
     };
 
     // Also collect top-level non-standard properties on subscriber (e.g. cert_no, cert_link imported from CSV)
@@ -249,6 +275,37 @@ export const interpolateMergeTags = (
         : rawGender === 'female' || rawGender === 'nữ' || rawGender === 'nu' ? 'Chị'
         : (subscriber.gender || customAttrs.gender || '');
 
+    // Resolve job_title / jobtitle <-> salutation ("Danh xưng", "danh_xung", "salutation") cleanly in both directions
+    const explicitJobTitle = cleanTitlePlaceholder(subscriber.jobTitle || subscriber.job_title);
+    let attrSalutation = '';
+    const salutationKeys = [
+        'Danh xưng', 'danh xưng', 'danh_xung', 'danh xung', 'danhXung',
+        'Xưng hô', 'xưng hô', 'xung_ho', 'xung ho',
+        'salutation', 'Salutation', 'honorific', 'Honorific',
+        'job_title', 'jobTitle', 'jobtitle', 'Chức danh', 'chức danh', 'Chức vụ', 'chức vụ'
+    ];
+    for (const sk of salutationKeys) {
+        const cand = cleanTitlePlaceholder(customAttrs[sk] ?? subscriber[sk]);
+        if (cand) {
+            attrSalutation = cand;
+            break;
+        }
+    }
+    if (!attrSalutation) {
+        const titleCanonKeys = new Set(['danhxung', 'xungho', 'salutation', 'honorific', 'jobtitle', 'chucdanh', 'chucvu', 'hocham', 'hocvi']);
+        for (const [ak, av] of Object.entries(customAttrs)) {
+            if (titleCanonKeys.has(canonicalizeVarKey(ak))) {
+                const cand = cleanTitlePlaceholder(av);
+                if (cand) {
+                    attrSalutation = cand;
+                    break;
+                }
+            }
+        }
+    }
+    const resolvedJobTitle = explicitJobTitle || attrSalutation;
+    const resolvedSalutation = attrSalutation || resolvedJobTitle || normalizedGender;
+
     // Standard variable map (CRM Contact/Student + Consultant + Deal/Deposit + System)
     const map: Record<string, any> = {
         first_name: firstName || fullName.split(' ').pop() || '',
@@ -260,6 +317,8 @@ export const interpolateMergeTags = (
         customer_name: fullName,
         customerName: fullName,
         name: fullName,
+        salutation: resolvedSalutation,
+        danh_xung: resolvedSalutation,
         email: email,
         phone: phone,
         phoneNumber: phone,
@@ -276,8 +335,9 @@ export const interpolateMergeTags = (
         company: subscriber.companyName || subscriber.company_name || subscriber.company || customAttrs.company || '',
         company_name: subscriber.companyName || subscriber.company_name || subscriber.company || customAttrs.company || '',
         companyName: subscriber.companyName || subscriber.company_name || subscriber.company || customAttrs.company || '',
-        job_title: subscriber.jobTitle || subscriber.job_title || customAttrs.job_title || '',
-        jobTitle: subscriber.jobTitle || subscriber.job_title || customAttrs.job_title || '',
+        job_title: resolvedJobTitle,
+        jobTitle: resolvedJobTitle,
+        jobtitle: attrSalutation || resolvedJobTitle,
         city: subscriber.city || subscriber.last_city || customAttrs.city || '',
         district: subscriber.district || customAttrs.district || '',
         ward: subscriber.ward || customAttrs.ward || '',

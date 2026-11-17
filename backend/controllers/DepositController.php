@@ -395,7 +395,8 @@ class DepositController {
 
     public function update(array $auth, int $id): void {
         $tid = $auth['tenant_id'];
-        $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'accountant'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isPrivileged = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'accountant'], 'deposits', 'approve');
         if (!$isPrivileged) {
             respond(403, null, 'Bạn không có quyền chỉnh sửa toàn diện đơn hàng', false);
         }
@@ -905,9 +906,14 @@ class DepositController {
 
             $this->db->commit();
             
-            // Trigger Meta CAPI Purchase event (Pending state)
-            require_once __DIR__ . '/../config/CapiHelper.php';
-            CapiHelper::sendEvent($this->db, $contactId, 'Purchase', $price);
+            // Trigger Meta CAPI Purchase event only when price > 0 (so 0 VNĐ placeholders don't block future Purchase)
+            if ((float)$price > 0) {
+                require_once __DIR__ . '/../config/CapiHelper.php';
+                CapiHelper::sendEvent($this->db, (int)$contactId, 'Purchase', (float)$price, [
+                    'deposit_id' => (int)$depositId,
+                    'stage_slug' => 'deposit_tuition_payment',
+                ]);
+            }
 
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'CREATE_DEPOSIT', 'deposit', $depositId, "Tạo đơn hàng sản phẩm $unitCode cho khách hàng " . ($contact['full_name'] ?? ''));
             respond(200, [
@@ -1075,7 +1081,14 @@ class DepositController {
     }
 
     public function approveMilestone(array $auth, int $id, int $milestoneId): void {
-        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'assistant', 'director', 'accountant']);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'assistant', 'director', 'accountant'], 'deposits', 'approve')) {
+            respond(403, null, 'Bạn không có quyền phê duyệt đợt thanh toán đặt cọc', false);
+        }
+        $isSqlite = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite');
+        $forUpdate = $isSqlite ? '' : ' FOR UPDATE';
+        $nowExpr = $isSqlite ? 'CURRENT_TIMESTAMP' : 'NOW()';
+        $curDateExpr = $isSqlite ? "DATE('now')" : 'CURDATE()';
         
         $this->db->beginTransaction();
 
@@ -1088,7 +1101,7 @@ class DepositController {
             JOIN contacts c ON d.contact_id = c.id
             LEFT JOIN projects p ON d.project_id = p.id
             LEFT JOIN users u ON c.owner_id = u.id
-            WHERE d.id = ? AND (c.tenant_id = ? OR p.tenant_id = ?) FOR UPDATE
+            WHERE d.id = ? AND d.deleted_at IS NULL AND c.deleted_at IS NULL AND (c.tenant_id = ? OR p.tenant_id = ?){$forUpdate}
         ");
         $stmtDep->execute([$id, $auth['tenant_id'], $auth['tenant_id']]);
         $depositData = $stmtDep->fetch();
@@ -1098,8 +1111,32 @@ class DepositController {
             respond(404, null, 'Không tìm thấy phiếu đặt cọc', false);
             return;
         }
+        if (in_array($depositData['status'] ?? '', ['cancelled', 'rejected'], true)) {
+            $this->db->rollBack();
+            respond(422, null, 'Không thể phê duyệt đợt thanh toán của phiếu đặt cọc đã hủy hoặc từ chối', false);
+            return;
+        }
 
-        $stmtMile = $this->db->prepare("SELECT milestone_name, expected_amount, original_amount, status FROM deposit_milestones WHERE id = ? AND deposit_id = ? FOR UPDATE");
+        $authDecision = TenantConfigService::canUserApproveWorkflowLevel(
+            $this->db,
+            $auth,
+            'deposit',
+            'deposits',
+            (int)($depositData['created_by'] ?? 0),
+            !empty($depositData['accountant_id']) ? (int)$depositData['accountant_id'] : null,
+            1,
+            (float)($depositData['price'] ?? 0)
+        );
+        if (empty($authDecision['allowed'])) {
+            $this->db->rollBack();
+            if (($authDecision['reason'] ?? '') === 'self_approval_forbidden') {
+                respond(403, null, 'Không được tự phê duyệt đợt thanh toán của chính mình', false);
+            }
+            respond(403, null, 'Bạn không có quyền phê duyệt đợt thanh toán này', false);
+            return;
+        }
+
+        $stmtMile = $this->db->prepare("SELECT milestone_name, expected_amount, original_amount, status FROM deposit_milestones WHERE id = ? AND deposit_id = ?{$forUpdate}");
         $stmtMile->execute([$milestoneId, $id]);
         $mileData = $stmtMile->fetch();
 
@@ -1117,7 +1154,12 @@ class DepositController {
 
         // Read actual_amount from request body
         $b = getBody();
-        $actualAmount = isset($b['actual_amount']) ? (float)$b['actual_amount'] : null;
+        if (isset($b['actual_amount']) && $b['actual_amount'] !== '' && $b['actual_amount'] !== null && (float)$b['actual_amount'] < 0) {
+            $this->db->rollBack();
+            respond(422, null, 'Số tiền thực nhận không được âm', false);
+            return;
+        }
+        $actualAmount = (isset($b['actual_amount']) && $b['actual_amount'] !== '') ? (float)$b['actual_amount'] : null;
 
         if (!empty($depositData['currency']) && $depositData['currency'] !== 'VND') {
             if ($actualAmount === null || $actualAmount <= 0) {
@@ -1130,7 +1172,7 @@ class DepositController {
                 $actualAmount = (float)$mileData['expected_amount'];
             } else {
                 $expected = (float)$mileData['expected_amount'];
-                $isAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
+                $isAdmin = TenantConfigService::canUserSelfApprove($this->db, $auth, 'deposit');
                 if ($actualAmount < $expected && !$isAdmin) {
                     $this->db->rollBack();
                     respond(422, null, 'Số tiền thực nhận VND không được nhỏ hơn giá trị dự kiến của đợt thanh toán (' . number_format($expected, 0, ',', '.') . ' VND) khi chưa có phê duyệt từ Ban Giám đốc', false);
@@ -1142,8 +1184,8 @@ class DepositController {
             // Update milestone status and actual_amount
             $stmt = $this->db->prepare("
                 UPDATE deposit_milestones 
-                SET status = 'approved', approval_date = NOW(), approved_by = ?, actual_amount = ? 
-                WHERE id = ? AND deposit_id = ?
+                SET status = 'approved', approval_date = {$nowExpr}, approved_by = ?, actual_amount = ? 
+                WHERE id = ? AND deposit_id = ? AND status != 'approved'
             ");
             $stmt->execute([$auth['user_id'], $actualAmount, $milestoneId, $id]);
 
@@ -1153,7 +1195,7 @@ class DepositController {
             
             $stmtInv = $this->db->prepare("
                 INSERT INTO invoices (tenant_id, contact_id, company_id, created_by, invoice_number, title, status, issue_date, due_date, paid_at, subtotal, total, notes)
-                VALUES (?, ?, ?, ?, ?, ?, 'paid', CURDATE(), CURDATE(), NOW(), ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, 'paid', {$curDateExpr}, {$curDateExpr}, {$nowExpr}, ?, ?, ?)
             ");
             $stmtInv->execute([
                 $auth['tenant_id'],
@@ -1187,6 +1229,18 @@ class DepositController {
                         'amount' => $total
                     ]);
                 } catch (\Throwable $eAuto) {}
+                try {
+                    if ((float)$total > 0) {
+                        require_once __DIR__ . '/../config/CapiHelper.php';
+                        CapiHelper::sendEvent($this->db, (int)$depositData['contact_id'], 'Purchase', (float)$total, [
+                            'deposit_id' => (int)$id,
+                            'stage_slug' => 'deposit_tuition_payment',
+                            'event_id'   => 'myerp_purchase_c_' . (int)$depositData['contact_id'] . '_dep_' . (int)$id . '_ms_' . (int)$milestoneId,
+                        ]);
+                    }
+                } catch (\Throwable $eCapi) {
+                    error_log("CapiHelper error in approveMilestone: " . $eCapi->getMessage());
+                }
             }
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'APPROVE_DEPOSIT_MILESTONE', 'deposit_milestone', $milestoneId, "Duyệt đóng tiền đợt ID: $milestoneId, thực nhận: " . number_format($total, 0, ',', '.') . " VND");
              
@@ -1216,11 +1270,11 @@ class DepositController {
                 }
             }
 
-            $uIdsToNotify = array_keys($uIdsToNotify);
+            $uIdsToNotify = array_values(array_keys($uIdsToNotify));
             if (!empty($uIdsToNotify)) {
                 $inUsers = implode(',', array_fill(0, count($uIdsToNotify), '?'));
-                $stmtUsers = $this->db->prepare("SELECT id, full_name, email FROM users WHERE id IN ($inUsers)");
-                $stmtUsers->execute($uIdsToNotify);
+                $stmtUsers = $this->db->prepare("SELECT id, full_name, email FROM users WHERE tenant_id = ? AND id IN ($inUsers)");
+                $stmtUsers->execute(array_merge([(int)$auth['tenant_id']], $uIdsToNotify));
                 $usersList = $stmtUsers->fetchAll();
 
                 require_once __DIR__ . '/../NotificationService.php';
@@ -1238,6 +1292,10 @@ class DepositController {
 
             respond(200, null, 'Phê duyệt đợt thanh toán đơn hàng thành công');
         } catch (\Throwable $e) {
+            if (in_array(get_class($e), ['RespondException', 'ResponseException'], true)) {
+                if ($this->db->inTransaction()) $this->db->rollBack();
+                throw $e;
+            }
             error_log("Error in approveMilestone: " . $e->getMessage());
             try {
                 if ($this->db->inTransaction()) {
@@ -1251,7 +1309,10 @@ class DepositController {
     }
 
     public function rejectMilestone(array $auth, int $id, int $milestoneId): void {
-        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'assistant', 'director', 'accountant']);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'assistant', 'director', 'accountant'], 'deposits', 'approve')) {
+            respond(403, null, 'Bạn không có quyền từ chối đợt thanh toán đặt cọc', false);
+        }
         
         $b = getBody();
         $reason = trim($b['reason'] ?? 'Không rõ lý do');
@@ -1324,11 +1385,11 @@ class DepositController {
                 }
             }
 
-            $uIdsToNotify = array_keys($uIdsToNotify);
+            $uIdsToNotify = array_values(array_keys($uIdsToNotify));
             if (!empty($uIdsToNotify)) {
                 $inUsers = implode(',', array_fill(0, count($uIdsToNotify), '?'));
-                $stmtUsers = $this->db->prepare("SELECT id, full_name, email FROM users WHERE id IN ($inUsers)");
-                $stmtUsers->execute($uIdsToNotify);
+                $stmtUsers = $this->db->prepare("SELECT id, full_name, email FROM users WHERE tenant_id = ? AND id IN ($inUsers)");
+                $stmtUsers->execute(array_merge([(int)$auth['tenant_id']], $uIdsToNotify));
                 $usersList = $stmtUsers->fetchAll();
 
                     require_once __DIR__ . '/../NotificationService.php';
@@ -1351,7 +1412,10 @@ class DepositController {
     }
 
     public function cancelDeposit(array $auth, int $id): void {
-        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant']);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant'], 'deposits', 'approve')) {
+            respond(403, null, 'Bạn không có quyền hủy phiếu đặt cọc', false);
+        }
         $b = getBody();
         $reason = trim($b['reason'] ?? 'Khách hủy mua');
 
@@ -1478,7 +1542,7 @@ class DepositController {
             
             require_once __DIR__ . '/../mailer.php';
             if ($ownerRow && !empty($ownerRow['email'])) {
-                $emailSubject = "[IDEAS] Báo cáo hủy đơn hàng / Bể giao dịch khách hàng: " . $ownerRow['contact_name'];
+                $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Báo cáo hủy đơn hàng / Bể giao dịch khách hàng: " . $ownerRow['contact_name'];
                 $emailTitle = "BÁO CÁO HỦY ĐƠN HÀNG / BỂ GIAO DỊCH";
                 $emailContent = "Chào <strong>" . htmlspecialchars($ownerRow['full_name']) . "</strong>,<br/><br/>" .
                                 "Đơn hàng của khách hàng <strong>" . htmlspecialchars($ownerRow['contact_name']) . "</strong> (Đơn hàng #" . $id . ") đã bị hủy.<br/>" .
@@ -1503,7 +1567,8 @@ class DepositController {
         $tid = $auth['tenant_id'];
         $input = getBody();
         $milestones = $input['milestones'] ?? [];
-        $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'accountant'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isPrivileged = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'accountant'], 'deposits', 'approve');
 
         // 1. Verify deposit ownership/permissions
         $stmtDep = $this->db->prepare("
@@ -1556,7 +1621,7 @@ class DepositController {
                 $stmtRemTarget->execute([$remTarget, $id]);
             }
 
-            $isAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'assistant', 'accountant'], true);
+            $isAdmin = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'assistant', 'accountant'], 'deposits', 'approve');
             if ($isAdmin) {
                 if (isset($input['expected_commission'])) {
                     $expComm = (float)$input['expected_commission'];
@@ -1616,7 +1681,7 @@ class DepositController {
                             $stmtCust->execute([$dep['contact_id']]);
                             $custName = $stmtCust->fetchColumn() ?: "Khách hàng";
 
-                            $notifySubject = "[IDEAS] Admin cập nhật tỷ lệ phân chia hoa hồng";
+                            $notifySubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Admin cập nhật tỷ lệ phân chia hoa hồng";
                             $notifyTitle = "CẬP NHẬT TỶ LỆ PHÂN CHIA HOA HỒNG";
                             
                             $notifyContent = "Chào bạn,<br/><br/>" .
@@ -1897,7 +1962,7 @@ class DepositController {
             // Option 3: Gửi cho CẢ HAI (Học viên và Sale chăm sóc)
             $hasEmail = !empty(trim($row['contact_email'] ?? ''));
             if ($hasEmail) {
-                $emailSubject = "[IDEAS] Nhắc nhở lịch thanh toán: " . $row['milestone_name'];
+                $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Nhắc nhở lịch thanh toán: " . $row['milestone_name'];
                 $emailTitle = "NHẮC NHỞ THANH TOÁN";
                 $studentIdRow = !empty($studentId) 
                     ? "<tr><td style=\"padding: 6px 0; color: #64748b; width: 150px;\">Mã học viên (Student ID):</td><td style=\"padding: 6px 0; font-weight: 600; color: #0f172a;\">" . htmlspecialchars($studentId) . "</td></tr>" 
@@ -1918,7 +1983,7 @@ class DepositController {
                 sendEmailNotification($row['contact_email'], $emailSubject, $emailTitle, $emailContent, '', false, 0, true);
             }
             if (!empty($saleEmail)) {
-                $emailSubjectSale = "[IDEAS] Nhắc lịch thanh toán của học viên: " . $custName;
+                $emailSubjectSale = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Nhắc lịch thanh toán của học viên: " . $custName;
                 $emailTitleSale = "NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC";
                 $emailContentSale = "Chào <strong>" . htmlspecialchars($saleName) . "</strong>,<br/><br/>" .
                                     "Hệ thống gửi thông báo nhắc lịch thanh toán của học viên <strong>" . htmlspecialchars($custName) . "</strong> (SĐT: " . htmlspecialchars($row['contact_phone'] ?? '—') . ").<br/><br/>" .
@@ -1937,7 +2002,7 @@ class DepositController {
             // Option 1: Gửi trực tiếp cho Học viên (nếu không có email thì fallback về Sale)
             $hasEmail = !empty(trim($row['contact_email'] ?? ''));
             if ($hasEmail) {
-                $emailSubject = "[IDEAS] Nhắc nhở lịch thanh toán: " . $row['milestone_name'];
+                $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Nhắc nhở lịch thanh toán: " . $row['milestone_name'];
                 $emailTitle = "NHẮC NHỞ THANH TOÁN";
 
                 $studentIdRow = !empty($studentId) 
@@ -1970,7 +2035,7 @@ class DepositController {
                     respond(400, null, 'Học viên không có email và không tìm thấy email Sale chăm sóc để gửi nhắc nhở', false);
                 }
 
-                $emailSubject = "[IDEAS] [Fallback] Nhắc lịch thanh toán của học viên: " . $custName;
+                $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " [Fallback] Nhắc lịch thanh toán của học viên: " . $custName;
                 $emailTitle = "NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC";
                 $emailContent = "Chào <strong>" . htmlspecialchars($saleName) . "</strong>,<br/><br/>" .
                                 "Hệ thống gửi thông báo nhắc lịch thanh toán của học viên <strong>" . htmlspecialchars($custName) . "</strong> (SĐT: " . htmlspecialchars($row['contact_phone'] ?? '—') . "). Học viên chưa có email nên hệ thống fallback gửi cho Sale phụ trách.<br/><br/>" .
@@ -1994,7 +2059,7 @@ class DepositController {
                 respond(400, null, 'Không tìm thấy email của Sale chăm sóc để gửi nhắc nhở', false);
             }
 
-            $emailSubject = "[IDEAS] Nhắc lịch thanh toán của học viên: " . $custName;
+            $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Nhắc lịch thanh toán của học viên: " . $custName;
             $emailTitle = "NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC";
             $emailContent = "Chào <strong>" . htmlspecialchars($saleName) . "</strong>,<br/><br/>" .
                             "Hệ thống gửi thông báo nhắc lịch thanh toán của học viên <strong>" . htmlspecialchars($custName) . "</strong> (SĐT: " . htmlspecialchars($row['contact_phone'] ?? '—') . ").<br/><br/>" .
@@ -2193,41 +2258,75 @@ class DepositController {
     }
 
     private function getSetting(string $key, string $default): string {
-        $stmt = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
-        $stmt->execute([$key]);
-        $val = $stmt->fetchColumn();
-        return $val !== false ? $val : $default;
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $tid = (int)($GLOBALS['current_tenant_id'] ?? 1);
+        return (string)TenantConfigService::getSetting($this->db, $tid, $key, $default);
     }
 
     public function confirmPayment(array $auth, int $id): void {
-        if (!in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'accountant', 'director'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'accountant', 'director'], 'deposits', 'approve')) {
             respond(403, null, 'Bạn không có quyền xác nhận thanh toán đặt cọc', false);
         }
+
+        $isSqlite = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite');
+        $forUpdate = $isSqlite ? '' : ' FOR UPDATE';
+        $nowExpr = $isSqlite ? 'CURRENT_TIMESTAMP' : 'NOW()';
 
         $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare("
-                SELECT d.id, d.status, d.contact_id, COALESCE(d.unit_code, CONCAT('Đặt cọc #', d.id)) as title
+                SELECT d.id, d.status, d.contact_id, d.price, d.created_by, COALESCE(d.unit_code, 'Đặt cọc #' || d.id) as title
                 FROM deposits d
                 LEFT JOIN contacts c ON d.contact_id = c.id
                 LEFT JOIN projects p ON d.project_id = p.id
-                WHERE d.id = ? AND (c.tenant_id = ? OR p.tenant_id = ?) FOR UPDATE
+                WHERE d.id = ? AND d.deleted_at IS NULL AND (c.tenant_id = ? OR p.tenant_id = ?){$forUpdate}
             ");
+            if (!$isSqlite) {
+                $stmt = $this->db->prepare("
+                    SELECT d.id, d.status, d.contact_id, d.price, d.created_by, COALESCE(d.unit_code, CONCAT('Đặt cọc #', d.id)) as title
+                    FROM deposits d
+                    LEFT JOIN contacts c ON d.contact_id = c.id
+                    LEFT JOIN projects p ON d.project_id = p.id
+                    WHERE d.id = ? AND d.deleted_at IS NULL AND (c.tenant_id = ? OR p.tenant_id = ?) FOR UPDATE
+                ");
+            }
             $stmt->execute([$id, $auth['tenant_id'], $auth['tenant_id']]);
             $dep = $stmt->fetch();
             if (!$dep) {
                 $this->db->rollBack();
                 respond(404, null, 'Không tìm thấy phiếu đặt cọc', false);
             }
+            $authDecision = TenantConfigService::canUserApproveWorkflowLevel(
+                $this->db,
+                $auth,
+                'deposit',
+                'deposits',
+                (int)($dep['created_by'] ?? 0),
+                null,
+                1,
+                (float)($dep['price'] ?? 0)
+            );
+            if (empty($authDecision['allowed'])) {
+                $this->db->rollBack();
+                if (($authDecision['reason'] ?? '') === 'self_approval_forbidden') {
+                    respond(403, null, 'Không được tự xác nhận thanh toán phiếu đặt cọc của chính mình', false);
+                }
+                respond(403, null, 'Bạn không có quyền xác nhận thanh toán đặt cọc', false);
+            }
             if ($dep['status'] === 'approved') {
                 $this->db->rollBack();
                 respond(400, null, 'Phiếu đặt cọc đã được xác nhận thanh toán trước đó', false);
             }
+            if (in_array($dep['status'] ?? '', ['cancelled', 'rejected'], true)) {
+                $this->db->rollBack();
+                respond(422, null, 'Không thể xác nhận thanh toán cho phiếu đặt cọc đã hủy hoặc từ chối', false);
+            }
 
-            $this->db->prepare("UPDATE deposit_milestones SET status = 'approved' WHERE deposit_id = ?")
-                ->execute([$id]);
+            $this->db->prepare("UPDATE deposit_milestones SET status = 'approved', approval_date = COALESCE(approval_date, {$nowExpr}), approved_by = COALESCE(approved_by, ?) WHERE deposit_id = ?")
+                ->execute([$auth['user_id'], $id]);
 
-            $this->db->prepare("UPDATE deposits SET status = 'approved', updated_at = NOW() WHERE id = ?")
+            $this->db->prepare("UPDATE deposits SET status = 'approved', updated_at = {$nowExpr} WHERE id = ?")
                 ->execute([$id]);
 
             if (function_exists('logActivity')) {
@@ -2235,34 +2334,57 @@ class DepositController {
             }
 
             $this->db->commit();
+            if (!empty($dep['contact_id'])) {
+                try {
+                    require_once __DIR__ . '/../config/CapiHelper.php';
+                    CapiHelper::sendEvent($this->db, (int)$dep['contact_id'], 'Purchase', (float)($dep['price'] ?? 0), [
+                        'deposit_id' => (int)$id,
+                        'stage_slug' => 'deposit_tuition_payment',
+                    ]);
+                } catch (\Throwable $eCapi) {
+                    error_log("CapiHelper error in confirmPayment: " . $eCapi->getMessage());
+                }
+            }
             respond(200, ['id' => $id, 'status' => 'approved'], 'Xác nhận thanh toán đặt cọc thành công');
         } catch (\Throwable $e) {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
+            }
+            if (in_array(get_class($e), ['RespondException', 'ResponseException'], true)) {
+                throw $e;
             }
             respond(500, null, 'Lỗi xác nhận thanh toán: ' . $e->getMessage(), false);
         }
     }
 
     public function refundDeposit(array $auth, int $id): void {
-        if (!in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'accountant', 'director'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'accountant', 'director'], 'deposits', 'approve')) {
             respond(403, null, 'Bạn không có quyền thực hiện hoàn cọc', false);
         }
+        $isSqlite = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite');
+        $forUpdate = $isSqlite ? '' : ' FOR UPDATE';
+        $nowExpr = $isSqlite ? 'CURRENT_TIMESTAMP' : 'NOW()';
 
         $this->db->beginTransaction();
         try {
+            $titleExpr = $isSqlite ? "COALESCE(d.unit_code, 'Đặt cọc #' || d.id)" : "COALESCE(d.unit_code, CONCAT('Đặt cọc #', d.id))";
             $stmt = $this->db->prepare("
-                SELECT d.id, d.status, d.contact_id, COALESCE(d.unit_code, CONCAT('Đặt cọc #', d.id)) as title
+                SELECT d.id, d.status, d.contact_id, d.price, d.created_by, {$titleExpr} as title
                 FROM deposits d
                 LEFT JOIN contacts c ON d.contact_id = c.id
                 LEFT JOIN projects p ON d.project_id = p.id
-                WHERE d.id = ? AND (c.tenant_id = ? OR p.tenant_id = ?) FOR UPDATE
+                WHERE d.id = ? AND (c.tenant_id = ? OR p.tenant_id = ?){$forUpdate}
             ");
             $stmt->execute([$id, $auth['tenant_id'], $auth['tenant_id']]);
             $dep = $stmt->fetch();
             if (!$dep) {
                 $this->db->rollBack();
                 respond(404, null, 'Không tìm thấy phiếu đặt cọc', false);
+            }
+            if ((int)($dep['created_by'] ?? 0) === (int)$auth['user_id'] && !TenantConfigService::canUserSelfApprove($this->db, $auth, 'deposit')) {
+                $this->db->rollBack();
+                respond(403, null, 'Không được tự hoàn cọc cho phiếu của chính mình', false);
             }
             if ($dep['status'] === 'cancelled') {
                 $this->db->rollBack();
@@ -2271,7 +2393,7 @@ class DepositController {
 
             $b = getBody();
             $reason = trim($b['reason'] ?? $b['note'] ?? 'Hoàn cọc') ?: 'Hoàn cọc';
-            $this->db->prepare("UPDATE deposits SET status = 'cancelled', cancelled_reason = ?, updated_at = NOW() WHERE id = ?")
+            $this->db->prepare("UPDATE deposits SET status = 'cancelled', cancelled_reason = ?, updated_at = {$nowExpr} WHERE id = ?")
                 ->execute([$reason, $id]);
 
             if (function_exists('logActivity')) {
@@ -2283,6 +2405,9 @@ class DepositController {
         } catch (\Throwable $e) {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
+            }
+            if (in_array(get_class($e), ['RespondException', 'ResponseException'], true)) {
+                throw $e;
             }
             respond(500, null, 'Lỗi hoàn cọc: ' . $e->getMessage(), false);
         }

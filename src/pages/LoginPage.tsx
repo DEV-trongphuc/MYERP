@@ -9,7 +9,7 @@ import styles from './LoginPage.module.css';
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { setAuth } = useAuthStore();
-  const [form, setForm] = useState({ email: 'admin@ideas.edu.vn', password: 'password' });
+  const [form, setForm] = useState({ email: '', password: '' });
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -98,10 +98,6 @@ export const LoginPage: React.FC = () => {
             {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
           </button>
         </form>
-
-        <div className={styles.demoHint}>
-          <p>Demo: admin@ideas.edu.vn / password</p>
-        </div>
 
         {/*
         <div style={{ marginTop: '1.25rem', textAlign: 'center', borderTop: '1px solid rgba(148, 163, 184, 0.12)', paddingTop: '1rem' }}>

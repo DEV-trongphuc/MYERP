@@ -1,5 +1,6 @@
 // components/templates/EmailEditor/utils/blockUtils.ts
 import { EmailBlock, EmailBlockType, EmailBlockStyle, ListItem } from '../../../../types';
+import { getTenantOrganizationName, getTenantFrontendUrl } from '../../../../../../contexts/TenantConfigContext';
 
 const createUniqueId = () => crypto.randomUUID();
 
@@ -204,11 +205,13 @@ export const createBlock = (type: string, layout?: string): EmailBlock => {
 
     // NEW: Footer Block
     if (type === 'footer') {
+        const siteUrl = getTenantFrontendUrl() || '#';
+        const brandName = getTenantOrganizationName();
         content = '<p style="margin: 0; font-size: 12px; color: #64748b; text-align: center;">' +
-            '© {{current_year}} Viện Quốc Tế IDEAS. Bảo lưu mọi quyền.<br>' +
-            '<a href="https://ideas.edu.vn" style="text-decoration: underline; color: #64748b;">Trang chủ</a>' +
+            `© {{current_year}} ${brandName}. Bảo lưu mọi quyền.<br>` +
+            `<a href="${siteUrl}" style="text-decoration: underline; color: #64748b;">Trang chủ</a>` +
             '&nbsp;&nbsp;|&nbsp;&nbsp;' +
-            '<a href="https://ideas.edu.vn" style="text-decoration: underline; color: #64748b;">Chính sách bảo mật</a>' +
+            `<a href="${siteUrl}" style="text-decoration: underline; color: #64748b;">Chính sách bảo mật</a>` +
             '&nbsp;&nbsp;|&nbsp;&nbsp;' +
             '<a href="{{unsubscribe_url}}" style="text-decoration: underline; color: #64748b;">Hủy đăng ký</a>' +
             '</p>';
@@ -449,7 +452,7 @@ export const createBlock = (type: string, layout?: string): EmailBlock => {
                         children: [
                             { id: createUniqueId(), type: 'text' as const, content: '<div style="font-size: 14px; font-weight: bold; color: #0f172a;">Nguyễn Minh Anh</div>', style: createStyle({ textAlign: 'left', marginBottom: '4px' }) },
                             { id: createUniqueId(), type: 'text' as const, content: '<div style="color: #fbbf24; font-size: 12px;">★★★★★</div>', style: createStyle({ textAlign: 'left', marginBottom: '8px' }) },
-                            { id: createUniqueId(), type: 'text' as const, content: '<div style="font-size: 14px; color: #475569; line-height: 1.5; font-style: italic;">"Chương trình tại Viện Quốc Tế IDEAS đã giúp tôi nâng tầm tư duy quản trị chiến lược và kết nối với mạng lưới lãnh đạo tuyệt vời!"</div>', style: createStyle({ textAlign: 'left' }) }
+                            { id: createUniqueId(), type: 'text' as const, content: `<div style="font-size: 14px; color: #475569; line-height: 1.5; font-style: italic;">"Chương trình tại ${getTenantOrganizationName()} đã giúp tôi nâng tầm tư duy quản trị chiến lược và kết nối với mạng lưới lãnh đạo tuyệt vời!"</div>`, style: createStyle({ textAlign: 'left' }) }
                         ]
                     }
                 ]

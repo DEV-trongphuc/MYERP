@@ -70,7 +70,7 @@ export const apiCategories: ApiCategory[] = [
               "id": 1042,
               "username": "tuvanvien.lan",
               "name": "Nguyễn Thị Lan",
-              "email": "lan.nt@ideas.edu.vn",
+              "email": "lan.nt@company.com",
               "role": "sale",
               "tenant_id": 1,
               "department": "Phòng Tuyển Sinh",
@@ -126,7 +126,7 @@ export const apiCategories: ApiCategory[] = [
             "user": {
               "id": 1042,
               "name": "Nguyễn Thị Lan",
-              "email": "lan.nt@ideas.edu.vn",
+              "email": "lan.nt@company.com",
               "phone": "0901.234.567",
               "role": "sale",
               "zalo_chat_id": "zalo_uid_8819",
@@ -203,7 +203,7 @@ export const apiCategories: ApiCategory[] = [
               {
                 "id": 1042,
                 "name": "Nguyễn Thị Lan",
-                "email": "lan.nt@ideas.edu.vn",
+                "email": "lan.nt@company.com",
                 "role": "sale",
                 "department": "Tuyển Sinh",
                 "status": "active",
@@ -3322,7 +3322,7 @@ export const apiCategories: ApiCategory[] = [
                     "room": "Hội Trường B - Cơ Sở 1",
                     "format": "offline",
                     "zoom_link": null,
-                    "materials_url": "https://drive.ideas.edu.vn/materials/mba701-buoi1.pdf"
+                    "materials_url": "https://drive.company.com/materials/mba701-buoi1.pdf"
                   },
                   {
                     "session_number": 2,
@@ -3332,7 +3332,7 @@ export const apiCategories: ApiCategory[] = [
                     "format": "online",
                     "zoom_link": "https://zoom.us/j/88921981290",
                     "zoom_passcode": "IDEAS2026",
-                    "materials_url": "https://drive.ideas.edu.vn/materials/mba701-buoi2.pdf"
+                    "materials_url": "https://drive.company.com/materials/mba701-buoi2.pdf"
                   }
                 ]
               }
@@ -3418,7 +3418,7 @@ export const apiCategories: ApiCategory[] = [
           "lecturer_type": "visiting",
           "hourly_rate": 800000,
           "multiplier": 1.2,
-          "attendance_sheet_url": "https://drive.ideas.edu.vn/attendance/2026-09-18-mba24.pdf",
+          "attendance_sheet_url": "https://drive.company.com/attendance/2026-09-18-mba24.pdf",
           "notes": "Giảng Chuyên đề 1: Phân tích ma trận cạnh tranh Porter"
         },
         "sampleResponse": {
@@ -3526,7 +3526,7 @@ export const apiCategories: ApiCategory[] = [
               "supervisor": {
                 "id": 92,
                 "name": "TS. Nguyễn Hoàng Nam",
-                "email": "nam.nh@ideas.edu.vn"
+                "email": "nam.nh@company.com"
               },
               "current_stage": "independent_review",
               "turnitin_similarity": "12.4%",

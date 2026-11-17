@@ -462,7 +462,7 @@ function generateAuthUrl($pdo, $id = null)
 
     $stmt->execute([$session_id, $workspace_id ?: '1', $app_id, $app_secret, $verifier]);
 
-    // Also mirror the PKCE session row into peer DB in case Zalo Callback URL points to automation.ideas.edu.vn
+    // Also mirror the PKCE session row into peer DB if configured
     try {
         $pdo->exec("DELETE FROM `vhvxoigh_mail_auto`.`zalo_oa_configs` WHERE oa_id IS NULL OR oa_id = ''");
         $stmtPeer = $pdo->prepare("

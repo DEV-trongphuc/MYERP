@@ -35,8 +35,8 @@ foreach ($dupsPhone as $phone) {
         $stmtDelList = $pdo->prepare("DELETE FROM subscriber_lists WHERE subscriber_id IN ($placeholders)");
         $stmtDelList->execute($ids);
         
-        // Xóa khỏi subscribers
-        $stmtDelSub = $pdo->prepare("DELETE FROM subscribers WHERE id IN ($placeholders)");
+        // Soft-delete khỏi subscribers (Axiom 4 100% Soft-Delete Mandate)
+        $stmtDelSub = $pdo->prepare("UPDATE subscribers SET deleted_at = NOW(), status = 'archived', updated_at = NOW() WHERE id IN ($placeholders) AND deleted_at IS NULL");
         $stmtDelSub->execute($ids);
         
         $deletedCount += count($ids);

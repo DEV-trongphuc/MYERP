@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { Campaign, Flow, Segment, Subscriber, Template } from '../../types';
 import { api } from '../../services/storageAdapter';
-import { interpolateMergeTags, formatFileSize } from '../../utils/formatters';
+import { interpolateMergeTags, formatFileSize, extractTemplateVariables, parseSubscriberCustomAttrs } from '../../utils/formatters';
 import Badge from '../common/Badge';
 
 interface PreSendReviewModalProps {
@@ -37,14 +37,14 @@ const DEFAULT_SAMPLE_SUBSCRIBERS = [
         firstName: 'Phúc',
         lastName: 'Trần',
         fullName: 'Khách hàng mẫu',
-        email: 'trongphuc@ideas.edu.vn',
+        email: 'customer.sample@example.com',
         phone: '0901234567',
-        companyName: 'IDEAS Fullstack Corp',
+        companyName: 'Enterprise Corp',
         jobTitle: 'Giám đốc Công nghệ (CTO)',
         city: 'Hồ Chí Minh',
-        website: 'https://ideas.edu.vn',
+        website: 'https://example.com',
         cert_no: 'CERT-2026-8899',
-        cert_link: 'https://ideas.edu.vn/tra-cuu/CERT-2026-8899',
+        cert_link: 'https://example.com/tra-cuu/CERT-2026-8899',
         cert_img: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=600&auto=format&fit=crop'
     },
     {
@@ -115,17 +115,17 @@ export const PreSendReviewModal: React.FC<PreSendReviewModalProps> = ({
         const fetchSubscribers = async () => {
             setLoadingSamples(true);
             try {
-                const targetListId = formData.target?.listIds?.[0] || (formData as any).target_list_ids?.[0];
-                const targetSegmentId = formData.target?.segmentIds?.[0];
-                const targetTagId = formData.target?.tagIds?.[0];
+                const targetListIds = (formData.target?.listIds || (formData as any).target_list_ids || []).filter(Boolean);
+                const targetSegmentIds = (formData.target?.segmentIds || []).filter(Boolean);
+                const targetTagIds = (formData.target?.tagIds || []).filter(Boolean);
 
                 let url = 'subscribers?limit=10';
-                if (targetListId) {
-                    url = `subscribers?list_id=${targetListId}&limit=10`;
-                } else if (targetSegmentId) {
-                    url = `subscribers?segment_id=${targetSegmentId}&limit=10`;
-                } else if (targetTagId) {
-                    url = `subscribers?tag=${targetTagId}&limit=10`;
+                if (targetListIds.length > 0) {
+                    url = `subscribers?list_id=${encodeURIComponent(targetListIds.join(','))}&limit=10`;
+                } else if (targetSegmentIds.length > 0) {
+                    url = `subscribers?segment_id=${encodeURIComponent(targetSegmentIds[0])}&limit=10`;
+                } else if (targetTagIds.length > 0) {
+                    url = `subscribers?tag=${encodeURIComponent(targetTagIds.join(','))}&limit=10`;
                 }
                 
                 const extractList = (resData: any): any[] => {
@@ -151,9 +151,12 @@ export const PreSendReviewModal: React.FC<PreSendReviewModalProps> = ({
                         const fName = sub.firstName || sub.first_name || (sub.name ? sub.name.split(' ').slice(-1)[0] : '');
                         const lName = sub.lastName || sub.last_name || (sub.name ? sub.name.split(' ').slice(0, -1).join(' ') : '');
                         const full = sub.name || sub.fullName || [lName, fName].filter(Boolean).join(' ').trim() || sub.email?.split('@')[0] || 'Khách hàng';
-                        const cAttrs = typeof sub.customAttributes === 'object' && sub.customAttributes 
-                            ? sub.customAttributes 
-                            : (typeof sub.custom_attributes === 'object' && sub.custom_attributes ? sub.custom_attributes : {});
+                        const cAttrs = {
+                            ...parseSubscriberCustomAttrs(sub.custom_fields || sub.customFields),
+                            ...parseSubscriberCustomAttrs(sub.custom_attributes || sub.customAttributes),
+                        };
+                        const rawJobTitle = String(sub.jobTitle || sub.job_title || '').trim();
+                        const cleanJobTitle = rawJobTitle && rawJobTitle.toLowerCase() !== 'chưa cập nhật' ? rawJobTitle : '';
 
                         return {
                             id: sub.id || `sub-${idx}`,
@@ -170,11 +173,12 @@ export const PreSendReviewModal: React.FC<PreSendReviewModalProps> = ({
                             phoneNumber: sub.phoneNumber || sub.phone_number || sub.phone || '',
                             companyName: sub.companyName || sub.company_name || sub.company || '',
                             company_name: sub.companyName || sub.company_name || sub.company || '',
-                            jobTitle: sub.jobTitle || sub.job_title || 'Khách hàng',
-                            job_title: sub.jobTitle || sub.job_title || 'Khách hàng',
+                            jobTitle: cleanJobTitle,
+                            job_title: cleanJobTitle,
                             city: sub.city || 'Việt Nam',
                             address: sub.address || sub.city || '',
-                            website: sub.website || 'https://ideas.edu.vn',
+                            website: sub.website || window.location.origin,
+                            customAttributes: cAttrs,
                             ...cAttrs
                         };
                     });
@@ -207,7 +211,7 @@ export const PreSendReviewModal: React.FC<PreSendReviewModalProps> = ({
         let isMounted = true;
         const tid = formData.templateId;
         if (!isZns && tid && tid !== 'custom-html') {
-            const cached = templatePreviews?.[tid] || selectedTemplate?.htmlContent || (selectedTemplate as any)?.html_content || '';
+            const cached = selectedTemplate?.htmlContent || (selectedTemplate as any)?.html_content || templatePreviews?.[tid] || '';
             if (cached) {
                 setFetchedTemplateHtml(cached);
             } else {
@@ -227,7 +231,7 @@ export const PreSendReviewModal: React.FC<PreSendReviewModalProps> = ({
             return formData.contentBody || '';
         }
         const tid = formData.templateId || '';
-        return (tid && templatePreviews?.[tid]) || selectedTemplate?.htmlContent || (selectedTemplate as any)?.html_content || fetchedTemplateHtml || formData.contentBody || '';
+        return selectedTemplate?.htmlContent || (selectedTemplate as any)?.html_content || (tid && templatePreviews?.[tid]) || fetchedTemplateHtml || formData.contentBody || '';
     }, [formData.templateId, formData.contentBody, selectedTemplate, templatePreviews, fetchedTemplateHtml]);
 
     // Interpolated Subject & Content
@@ -390,7 +394,7 @@ export const PreSendReviewModal: React.FC<PreSendReviewModalProps> = ({
                                         {currentSubscriber.fullName}
                                     </span>
                                     <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/40 px-2 py-0.5 rounded-md">
-                                        {currentSubscriber.jobTitle || 'Khách hàng'}
+                                        {currentSubscriber['Danh xưng'] || currentSubscriber.danh_xung || currentSubscriber.salutation || currentSubscriber.jobTitle || 'Khách hàng'}
                                     </span>
                                 </div>
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">
@@ -403,9 +407,26 @@ export const PreSendReviewModal: React.FC<PreSendReviewModalProps> = ({
                                 )}
                             </div>
 
-                            <p className="text-[10px] text-blue-700/90 dark:text-blue-300/80 font-medium flex items-center gap-1.5">
+                            <p className="text-[10px] text-blue-700/90 dark:text-blue-300/80 font-medium flex items-center gap-1.5 flex-wrap">
                                 <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                                <span>Đã điền tự động các biến <code className="bg-blue-100/80 dark:bg-blue-900/80 px-1 py-0.5 rounded text-[9px] font-mono font-bold">{"{{first_name}}"}</code>, <code className="bg-blue-100/80 dark:bg-blue-900/80 px-1 py-0.5 rounded text-[9px] font-mono font-bold">{"{{email}}"}</code> vào email.</span>
+                                {(() => {
+                                    const detectedVars = extractTemplateVariables(`${rawContent || ''} ${formData.subject || ''}`).all;
+                                    if (detectedVars.length === 0) {
+                                        return <span>Nội dung email đã sẵn sàng hiển thị theo người nhận thực tế.</span>;
+                                    }
+                                    return (
+                                        <span>
+                                            Đã điền tự động các biến{' '}
+                                            {detectedVars.slice(0, 5).map((v, i) => (
+                                                <React.Fragment key={v}>
+                                                    {i > 0 && ', '}
+                                                    <code className="bg-blue-100/80 dark:bg-blue-900/80 px-1 py-0.5 rounded text-[9px] font-mono font-bold">{`{{${v}}}`}</code>
+                                                </React.Fragment>
+                                            ))}
+                                            {detectedVars.length > 5 ? ` (+${detectedVars.length - 5} biến)` : ''} vào email.
+                                        </span>
+                                    );
+                                })()}
                             </p>
                         </div>
 

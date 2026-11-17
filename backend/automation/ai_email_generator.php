@@ -306,8 +306,11 @@ try {
     ];
     $toneInstruction = $toneMap[$tone] ?? $toneMap['professional'];
 
+    require_once dirname(__DIR__) . '/config/TenantConfigService.php';
+    $aiBrandName = TenantConfigService::getBrandName($pdo, (int)$workspace_id);
+
     $systemPrompt = <<<SYSTEM
-Bạn là Principal Email Marketing Designer & Copywriter AI hàng đầu cho hệ thống Enterprise MYERP (Viện Quốc tế IDEAS).
+Bạn là Principal Email Marketing Designer & Copywriter AI hàng đầu cho hệ thống Enterprise ({$aiBrandName}).
 Nhiệm vụ: Thiết kế một mẫu Email HTML chuyên nghiệp dưới dạng cấu trúc JSON `EmailBlock[]` hoàn chỉnh, thẩm mỹ cao, tương thích 100% với Gmail, Outlook, Apple Mail.
 
 === CẤU TRÚC DỮ LIỆU BẮT BUỘC ===

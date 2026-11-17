@@ -81,13 +81,12 @@ try {
             'missing_field_stats' => empty($missingStats) ? new stdClass() : $missingStats
         ]
     ]);
-} catch (Throwable $e) {
+} catch (\Throwable $e) {
+    http_response_code(500);
+    header('Content-Type: application/json; charset=UTF-8');
     echo json_encode([
-        'success' => true,
-        'data' => [
-            'total_checked' => 0,
-            'total_missing' => 0,
-            'missing_field_stats' => new stdClass()
-        ]
-    ]);
+        'success' => false,
+        'error' => 'Campaign audit failed: ' . $e->getMessage()
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
 }

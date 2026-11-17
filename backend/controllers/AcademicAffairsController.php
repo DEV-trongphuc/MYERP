@@ -17,11 +17,18 @@ require_once __DIR__ . '/../utils/StudentDocOcrService.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 
+require_once __DIR__ . '/../config/TenantConfigService.php';
+
 class AcademicAffairsController {
     private PDO $db;
     private static bool $schemaEnsured = false;
 
-    public const DEFAULT_ACADEMIC_CC = 'it.dept@ideas.edu.vn, student.notice@ideas.edu.vn, support@ideas.edu.vn';
+    public const DEFAULT_ACADEMIC_CC = '';
+
+    private function getDefaultAcademicCc(int $tid): string {
+        $org = TenantConfigService::getOrganizationProfile($this->db, $tid);
+        return (string)($org['academic_cc_emails'] ?? '');
+    }
 
     public function __construct(PDO $db) {
         $this->db = $db;
@@ -355,20 +362,21 @@ class AcademicAffairsController {
         $projectId = (int)($contact['project_id'] ?? 0);
         $program = $overrideProgram !== '' ? trim($overrideProgram) : trim((string)($contact['program'] ?? ''));
 
+        $tid = (int)($contact['tenant_id'] ?? ($GLOBALS['current_tenant_id'] ?? 1));
         if ($campaignId <= 0) {
             if ($projectId <= 0 && $program !== '') {
-                $stmtP = $this->db->prepare("SELECT id FROM projects WHERE deleted_at IS NULL AND (LOWER(name) = LOWER(?) OR name LIKE ?) LIMIT 1");
-                $stmtP->execute([$program, "%{$program}%"]);
+                $stmtP = $this->db->prepare("SELECT id FROM projects WHERE tenant_id = ? AND deleted_at IS NULL AND (LOWER(name) = LOWER(?) OR name LIKE ?) LIMIT 1");
+                $stmtP->execute([$tid, $program, "%{$program}%"]);
                 $projectId = (int)$stmtP->fetchColumn();
             }
             if ($projectId > 0) {
                 $stmtMc = $this->db->prepare("
                     SELECT id FROM marketing_campaigns
-                    WHERE project_id = ? AND status NOT IN ('deleted', 'archived')
+                    WHERE tenant_id = ? AND project_id = ? AND status NOT IN ('deleted', 'archived')
                     ORDER BY (status = 'active') DESC, id DESC
                     LIMIT 1
                 ");
-                $stmtMc->execute([$projectId]);
+                $stmtMc->execute([$tid, $projectId]);
                 $campaignId = (int)$stmtMc->fetchColumn();
             }
         }
@@ -376,8 +384,8 @@ class AcademicAffairsController {
         $campaign = null;
         $subjects = [];
         if ($campaignId > 0) {
-            $stmtC = $this->db->prepare("SELECT id, name, project_id, subjects_json, status FROM marketing_campaigns WHERE id = ? LIMIT 1");
-            $stmtC->execute([$campaignId]);
+            $stmtC = $this->db->prepare("SELECT id, name, project_id, subjects_json, status FROM marketing_campaigns WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $stmtC->execute([$campaignId, $tid]);
             $campaign = $stmtC->fetch(PDO::FETCH_ASSOC) ?: null;
             if ($campaign && !empty($campaign['subjects_json'])) {
                 $decoded = is_string($campaign['subjects_json']) ? json_decode($campaign['subjects_json'], true) : $campaign['subjects_json'];
@@ -638,6 +646,25 @@ class AcademicAffairsController {
             $savedCount = 0;
             $updatedSubjectNames = [];
 
+            $stmtChk = $this->db->prepare("
+                SELECT id FROM student_subject_grades
+                WHERE tenant_id = ? AND contact_id = ?
+                  AND ((subject_code != '' AND LOWER(subject_code) = LOWER(?)) OR LOWER(subject_name) = LOWER(?))
+                LIMIT 1
+            ");
+            $stmtUpd = $this->db->prepare("
+                UPDATE student_subject_grades
+                SET campaign_id = ?, subject_code = ?, subject_name = ?,
+                    attendance_score = ?, assignment_score = ?, final_score = ?,
+                    letter_grade = ?, status = ?, note = ?, updated_by = ?, updated_at = NOW()
+                WHERE id = ?
+            ");
+            $stmtIns = $this->db->prepare("
+                INSERT INTO student_subject_grades
+                    (tenant_id, contact_id, campaign_id, subject_code, subject_name, attendance_score, assignment_score, final_score, letter_grade, status, note, updated_by, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ");
+
             foreach ($gradesList as $item) {
                 $sCode = trim((string)($item['subject_code'] ?? ''));
                 $sName = trim((string)($item['subject_name'] ?? ''));
@@ -670,23 +697,10 @@ class AcademicAffairsController {
                 }
 
                 // Check existing grade row
-                $stmtChk = $this->db->prepare("
-                    SELECT id FROM student_subject_grades
-                    WHERE tenant_id = ? AND contact_id = ?
-                      AND ((subject_code != '' AND LOWER(subject_code) = LOWER(?)) OR LOWER(subject_name) = LOWER(?))
-                    LIMIT 1
-                ");
                 $stmtChk->execute([$tid, $contactId, $sCode, $sName]);
                 $existingId = (int)$stmtChk->fetchColumn();
 
                 if ($existingId > 0) {
-                    $stmtUpd = $this->db->prepare("
-                        UPDATE student_subject_grades
-                        SET campaign_id = ?, subject_code = ?, subject_name = ?,
-                            attendance_score = ?, assignment_score = ?, final_score = ?,
-                            letter_grade = ?, status = ?, note = ?, updated_by = ?, updated_at = NOW()
-                        WHERE id = ?
-                    ");
                     $stmtUpd->execute([
                         $campaignId, $sCode, $sName,
                         $attScore, $assScore, $finScore,
@@ -694,11 +708,6 @@ class AcademicAffairsController {
                         $existingId
                     ]);
                 } else {
-                    $stmtIns = $this->db->prepare("
-                        INSERT INTO student_subject_grades
-                            (tenant_id, contact_id, campaign_id, subject_code, subject_name, attendance_score, assignment_score, final_score, letter_grade, status, note, updated_by, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-                    ");
                     $stmtIns->execute([
                         $tid, $contactId, $campaignId, $sCode, $sName,
                         $attScore, $assScore, $finScore, $letterGrade, $status, $note, $uid
@@ -745,9 +754,9 @@ class AcademicAffairsController {
                 SELECT mc.*, p.name as project_name
                 FROM marketing_campaigns mc
                 LEFT JOIN projects p ON p.id = mc.project_id
-                WHERE mc.id = ? LIMIT 1
+                WHERE mc.id = ? AND mc.tenant_id = ? LIMIT 1
             ");
-            $stmtC->execute([$campaignId]);
+            $stmtC->execute([$campaignId, $tid]);
             $campaign = $stmtC->fetch(PDO::FETCH_ASSOC);
             if ($campaign && $projectId <= 0) {
                 $projectId = (int)($campaign['project_id'] ?? 0);
@@ -931,6 +940,28 @@ class AcademicAffairsController {
             $updatedStudents = 0;
             $updatedGradesCount = 0;
 
+            $stmtChk = $this->db->prepare("
+                SELECT id FROM student_subject_grades
+                WHERE tenant_id = ? AND contact_id = ?
+                  AND ((subject_code != '' AND LOWER(subject_code) = LOWER(?)) OR LOWER(subject_name) = LOWER(?))
+                LIMIT 1
+            ");
+            $stmtUpd = $this->db->prepare("
+                UPDATE student_subject_grades
+                SET campaign_id = COALESCE(NULLIF(?, 0), campaign_id),
+                    subject_code = ?, subject_name = ?,
+                    attendance_score = COALESCE(?, attendance_score),
+                    assignment_score = COALESCE(?, assignment_score),
+                    final_score = ?, letter_grade = ?, status = ?,
+                    note = COALESCE(?, note), updated_by = ?, updated_at = NOW()
+                WHERE id = ?
+            ");
+            $stmtIns = $this->db->prepare("
+                INSERT INTO student_subject_grades
+                    (tenant_id, contact_id, campaign_id, subject_code, subject_name, attendance_score, assignment_score, final_score, letter_grade, status, note, updated_by, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ");
+
             foreach ($rows as $row) {
                 $cid = (int)($row['contact_id'] ?? 0);
                 if ($cid <= 0 || !isset($byId[$cid])) {
@@ -965,12 +996,6 @@ class AcademicAffairsController {
                     $status = strtolower(trim((string)($gData['status'] ?? '')));
                     $note = isset($gData['note']) ? trim((string)$gData['note']) : null;
 
-                    $stmtChk = $this->db->prepare("
-                        SELECT id FROM student_subject_grades
-                        WHERE tenant_id = ? AND contact_id = ?
-                          AND ((subject_code != '' AND LOWER(subject_code) = LOWER(?)) OR LOWER(subject_name) = LOWER(?))
-                        LIMIT 1
-                    ");
                     $stmtChk->execute([$tid, $cid, $sCode, $sName]);
                     $existingId = (int)$stmtChk->fetchColumn();
 
@@ -1003,27 +1028,12 @@ class AcademicAffairsController {
                     if ($status === '') $status = 'studying';
 
                     if ($existingId > 0) {
-                        $stmtUpd = $this->db->prepare("
-                            UPDATE student_subject_grades
-                            SET campaign_id = COALESCE(NULLIF(?, 0), campaign_id),
-                                subject_code = ?, subject_name = ?,
-                                attendance_score = COALESCE(?, attendance_score),
-                                assignment_score = COALESCE(?, assignment_score),
-                                final_score = ?, letter_grade = ?, status = ?,
-                                note = COALESCE(?, note), updated_by = ?, updated_at = NOW()
-                            WHERE id = ?
-                        ");
                         $stmtUpd->execute([
                             $campaignId, $sCode, $sName,
                             $attScore, $assScore, $finScore, $letterGrade, $status,
                             $note, $uid, $existingId
                         ]);
                     } else {
-                        $stmtIns = $this->db->prepare("
-                            INSERT INTO student_subject_grades
-                                (tenant_id, contact_id, campaign_id, subject_code, subject_name, attendance_score, assignment_score, final_score, letter_grade, status, note, updated_by, updated_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-                        ");
                         $stmtIns->execute([
                             $tid, $cid, $campaignId, $sCode, $sName,
                             $attScore, $assScore, $finScore, $letterGrade, $status, $note, $uid
@@ -1125,10 +1135,10 @@ class AcademicAffairsController {
             // Save into cloud_files so it appears in student's Hồ sơ & Tài liệu
             try {
                 $stmtCf = $this->db->prepare("
-                    INSERT INTO cloud_files (tenant_id, user_id, contact_id, name, file_path, file_type, file_size, is_link, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 0, NOW())
+                    INSERT INTO cloud_files (tenant_id, uploaded_by, updated_by, contact_id, name, file_path, mime_type, file_size, category, visibility, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'academic', 'shared', NOW())
                 ");
-                $stmtCf->execute([$tid, $uid, $contactId, "[Đơn Bảo Lưu] " . $origName, $relPath, $mimeType, $fileSize]);
+                $stmtCf->execute([$tid, $uid, $uid, $contactId, "[Đơn Bảo Lưu] " . $origName, $relPath, $mimeType, $fileSize]);
                 $cloudFileId = (int)$this->db->lastInsertId();
             } catch (\Throwable $eCf) {
                 error_log("Insert cloud_files for postpone form error: " . $eCf->getMessage());
@@ -1199,7 +1209,7 @@ class AcademicAffairsController {
         $formFileName = trim((string)($body['form_file_name'] ?? ''));
         $autoSwitchStage = !isset($body['auto_switch_stage']) || (bool)$body['auto_switch_stage'];
         $sendConfirmationEmail = !empty($body['send_confirmation_email']) || !empty($body['send_email_now']);
-        $ccEmails = !empty($body['cc_emails']) ? trim((string)$body['cc_emails']) : self::DEFAULT_ACADEMIC_CC;
+        $ccEmails = !empty($body['cc_emails']) ? trim((string)$body['cc_emails']) : $this->getDefaultAcademicCc($tid);
 
         $this->db->beginTransaction();
         try {
@@ -1261,11 +1271,13 @@ class AcademicAffairsController {
 
         // Optional: send confirmation email immediately if requested
         if ($sendConfirmationEmail && !empty($contact['email'])) {
+            $orgInfo = TenantConfigService::getOrganizationProfile($this->db, $tid);
+            $orgLabel = htmlspecialchars($orgInfo['name'] ?: 'Học viện');
             $prog = $contact['program'] ?: 'Chương trình Đào tạo Quốc tế';
-            $emailSubj = "[IDEAS] Thông báo Xác nhận Bảo lưu kết quả học tập - {$contact['full_name']}";
+            $emailSubj = TenantConfigService::getBrandPrefix($this->db, $tid) . " Thông báo Xác nhận Bảo lưu kết quả học tập - {$contact['full_name']}";
             $emailHtml = "
                 <p>Kính gửi Học viên <strong>" . htmlspecialchars($contact['full_name']) . "</strong>,</p>
-                <p>Ban Học vụ <strong>IDEAS</strong> xác nhận đã tiếp nhận và phê duyệt Đơn xin bảo lưu kết quả học tập của Anh/Chị với thông tin chi tiết như sau:</p>
+                <p>Ban Học vụ <strong>{$orgLabel}</strong> xác nhận đã tiếp nhận và phê duyệt Đơn xin bảo lưu kết quả học tập của Anh/Chị với thông tin chi tiết như sau:</p>
                 <div style='background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #d97706;border-radius:8px;padding:16px;margin:16px 0;'>
                     <p style='margin:4px 0;'>• <strong>Họ và tên học viên:</strong> " . htmlspecialchars($contact['full_name']) . "</p>
                     <p style='margin:4px 0;'>• <strong>Mã học viên:</strong> " . htmlspecialchars($contact['student_id'] ?: 'Đang cập nhật') . "</p>
@@ -1275,7 +1287,7 @@ class AcademicAffairsController {
                     <p style='margin:4px 0;'>• <strong>Lý do bảo lưu:</strong> " . htmlspecialchars($reason) . "</p>
                 </div>
                 <p>Hệ thống Học vụ sẽ gửi email nhắc lịch học lại cho Anh/Chị vào ngày <strong>{$fmtRemind}</strong> để hỗ trợ sắp xếp lịch học tiếp theo thuận lợi nhất.</p>
-                <p>Trân trọng,<br/><strong>Ban Học vụ — IDEAS</strong></p>
+                <p>Trân trọng,<br/><strong>Ban Học vụ — {$orgLabel}</strong></p>
             ";
             sendEmailNotification($contact['email'], $emailSubj, 'XÁC NHẬN BẢO LƯU HỌC TẬP', $emailHtml, $ccEmails, false, 0, true);
         }
@@ -1320,10 +1332,12 @@ class AcademicAffairsController {
             ];
         }
 
+        $orgInfo = TenantConfigService::getOrganizationProfile($this->db, $tid);
+        $orgLabelPlain = $orgInfo['name'] ?: 'Học viện';
         $ccEmail = array_key_exists('cc_emails', $body)
             ? trim((string)$body['cc_emails'])
-            : (array_key_exists('cc_email', $body) ? trim((string)$body['cc_email']) : self::DEFAULT_ACADEMIC_CC);
-        $subject = trim((string)($body['subject'] ?? 'Thư Mời Giảng Dạy & Hợp Đồng Nguyên Tắc - IDEAS'));
+            : (array_key_exists('cc_email', $body) ? trim((string)$body['cc_email']) : $this->getDefaultAcademicCc($tid));
+        $subject = trim((string)($body['subject'] ?? ('Thư Mời Giảng Dạy & Hợp Đồng Nguyên Tắc - ' . $orgLabelPlain)));
         $contentHtml = trim((string)($body['body_html'] ?? $body['content'] ?? $body['content_html'] ?? ''));
 
         if ($toEmail === '') {
@@ -1389,10 +1403,10 @@ class AcademicAffairsController {
                         $relPath = "uploads/tenant_{$tid}/{$safeName}";
                         $fSize = (int)@filesize($destPath);
                         $stmtInsCf = $this->db->prepare("
-                            INSERT INTO cloud_files (tenant_id, user_id, company_id, name, file_path, file_type, file_size, is_link, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, 0, NOW())
+                            INSERT INTO cloud_files (tenant_id, uploaded_by, updated_by, name, file_path, mime_type, file_size, category, visibility, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'shared', NOW())
                         ");
-                        $stmtInsCf->execute([$tid, $uid, $companyId, "[Hợp đồng Mời giảng] " . $origName, $relPath, $mimeType ?: 'application/pdf', $fSize]);
+                        $stmtInsCf->execute([$tid, $uid, $uid, "[Hợp đồng Mời giảng] " . $origName, $relPath, $mimeType ?: 'application/pdf', $fSize, 'company_' . $companyId]);
                     } catch (\Throwable $eCf) {}
                 }
             }
@@ -1443,11 +1457,20 @@ class AcademicAffairsController {
         ];
     }
 
-    private static function enrichConfigRow(array $cfg): array {
+    private static function enrichConfigRow(array $cfg, ?PDO $db = null): array {
         $code = (string)($cfg['booking_code'] ?? '');
-        $origin = (!empty($_SERVER['HTTP_HOST']))
-            ? ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'])
-            : 'https://myerp.ideas.edu.vn';
+        $cfgTid = (int)($cfg['tenant_id'] ?? 1);
+        $origin = '';
+        if ($db instanceof PDO) {
+            $org = TenantConfigService::getOrganizationProfile($db, $cfgTid);
+            $origin = rtrim((string)($org['frontend_url'] ?? ''), '/');
+        }
+        if ($origin === '' && !empty($_SERVER['HTTP_HOST'])) {
+            $origin = ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https://' : 'http://') . $_SERVER['HTTP_HOST']);
+        }
+        if ($origin === '') {
+            $origin = rtrim((string)(getenv('APP_BASE_URL') ?: ''), '/');
+        }
         $cfg['public_url'] = $origin . '/public-schedule/1on1/' . $code;
         $cfg['lecturer_company_id'] = (int)($cfg['lecturer_id'] ?? 0);
         $cfg['slot_duration'] = (int)($cfg['slot_duration_minutes'] ?? 30);
@@ -1515,7 +1538,7 @@ class AcademicAffairsController {
             }
             foreach ($configs as &$cfg) {
                 $cid = (int)$cfg['id'];
-                $cfg = self::enrichConfigRow($cfg);
+                $cfg = self::enrichConfigRow($cfg, $this->db);
                 $cfg['bookings'] = $bookingsByConfig[$cid] ?? [];
             }
             unset($cfg);
@@ -1620,7 +1643,7 @@ class AcademicAffairsController {
         }
 
         if ($saved) {
-            $saved = self::enrichConfigRow($saved);
+            $saved = self::enrichConfigRow($saved, $this->db);
         }
 
         respond(200, $saved, 'Đã lưu cấu hình Lịch Đăng ký Hướng dẫn 1:1 thành công!');
@@ -1761,7 +1784,7 @@ class AcademicAffairsController {
             }
         }
 
-        $config = self::enrichConfigRow($config);
+        $config = self::enrichConfigRow($config, $this->db);
 
         respond(200, [
             'config' => $config,
@@ -1923,18 +1946,13 @@ class AcademicAffairsController {
             ]);
             $bookingId = (int)$this->db->lastInsertId();
 
-            // Fire In-App Notification to Academic Affairs / Creator
             try {
                 $notifyUids = [];
                 if ($ownerUid > 0) $notifyUids[] = $ownerUid;
-                // Also include Academic Affairs / Mai Thị Nữ
-                $stmtAcUsers = $this->db->query("SELECT id FROM users WHERE is_active = 1 AND (email IN ('numt@ideas.edu.vn', 'tramlh@ideas.edu.vn', 'student.notice@ideas.edu.vn') OR full_name LIKE '%Huyền Trâm%' OR full_name LIKE '%Mai Thị Nữ%')");
-                if ($stmtAcUsers) {
-                    while ($uRow = $stmtAcUsers->fetch(PDO::FETCH_ASSOC)) {
-                        $uInt = (int)$uRow['id'];
-                        if ($uInt > 0 && !in_array($uInt, $notifyUids, true)) {
-                            $notifyUids[] = $uInt;
-                        }
+                foreach (TenantConfigService::resolveNotificationRecipients($this->db, (int)$tid, 'ACADEMIC_1ON1_BOOKED', ['owner_id' => $ownerUid]) as $rec) {
+                    $uInt = (int)($rec['id'] ?? 0);
+                    if ($uInt > 0 && !in_array($uInt, $notifyUids, true)) {
+                        $notifyUids[] = $uInt;
                     }
                 }
                 $notifTitle = "📅 Đăng ký Hướng dẫn 1:1 mới: {$studentName} ({$slotStart} {$fmtDate})";
@@ -1956,12 +1974,18 @@ class AcademicAffairsController {
             respond(500, null, 'Lỗi khi lưu đăng ký lịch 1:1: ' . $e->getMessage(), false);
         }
 
+        $orgBook = TenantConfigService::getOrganizationProfile($this->db, (int)$tid);
+        $orgBookPlain = $orgBook['name'] ?: 'Academy';
+        $orgBookHtml = htmlspecialchars($orgBookPlain);
+        $brandPrefix = TenantConfigService::getBrandPrefix($this->db, (int)$tid);
+        $defaultCc = $this->getDefaultAcademicCc((int)$tid);
+
         // Build Google Calendar URL & iCalendar (.ics) Content
         $calLinks = self::buildCalendarLinksAndIcs([
             'booking_id' => $bookingId,
-            'title' => "[IDEAS 1:1] Hướng dẫn 1:1: {$studentName} & GV {$lecturerName}",
+            'title' => "{$brandPrefix} Hướng dẫn 1:1: {$studentName} & GV {$lecturerName}",
             'description' => $actBody,
-            'location' => $config['zoom_link'] ?: 'Online (Zoom Meeting - IDEAS)',
+            'location' => $config['zoom_link'] ?: "Online (Zoom Meeting - {$orgBookPlain})",
             'slot_date' => $slotDate,
             'slot_time_start' => $slotStart,
             'slot_time_end' => $slotEnd,
@@ -2005,27 +2029,27 @@ class AcademicAffairsController {
 
             // 1. Send to Lecturer (if lecturer has email)
             if ($lecturerEmail !== '' && filter_var($lecturerEmail, FILTER_VALIDATE_EMAIL)) {
-                $lectSubj = "[IDEAS] Lịch Hướng Dẫn 1:1 Mới: HV {$studentName} ({$slotStart} - {$slotEnd} ngày {$fmtDate})";
+                $lectSubj = "{$brandPrefix} Lịch Hướng Dẫn 1:1 Mới: HV {$studentName} ({$slotStart} - {$slotEnd} ngày {$fmtDate})";
                 $lectHtml = "
                     <p>Kính gửi Giảng viên <strong>" . htmlspecialchars($lecturerName) . "</strong>,</p>
-                    <p>Ban Học vụ <strong>IDEAS</strong> trân trọng thông báo: Học viên <strong>" . htmlspecialchars($studentName) . "</strong> vừa đăng ký lịch hướng dẫn 1:1 với Thầy/Cô theo thông tin dưới đây:</p>
+                    <p>Ban Học vụ <strong>{$orgBookHtml}</strong> trân trọng thông báo: Học viên <strong>" . htmlspecialchars($studentName) . "</strong> vừa đăng ký lịch hướng dẫn 1:1 với Thầy/Cô theo thông tin dưới đây:</p>
                     {$commonCardHtml}
                     <p style='font-size:13px;color:#64748b;'><em>* File lịch chuẩn (.ics) đã được đính kèm trong email này để tự động hiển thị trên Google Calendar / Outlook của Thầy/Cô.</em></p>
-                    <p>Trân trọng,<br/><strong>Ban Học vụ — IDEAS</strong></p>
+                    <p>Trân trọng,<br/><strong>Ban Học vụ — {$orgBookHtml}</strong></p>
                 ";
-                $this->sendEmailWithAttachmentsAndIcs($lecturerEmail, $lectSubj, 'THÔNG BÁO LỊCH HƯỚNG DẪN 1:1', $lectHtml, self::DEFAULT_ACADEMIC_CC, [], $calLinks['ics_content']);
+                $this->sendEmailWithAttachmentsAndIcs($lecturerEmail, $lectSubj, 'THÔNG BÁO LỊCH HƯỚNG DẪN 1:1', $lectHtml, $defaultCc, [], $calLinks['ics_content']);
             }
 
             // 2. Send Confirmation to Student
-            $stuSubj = "[IDEAS] Xác nhận Đăng ký Lịch Hướng Dẫn 1:1 ({$slotStart} - {$slotEnd} ngày {$fmtDate})";
+            $stuSubj = "{$brandPrefix} Xác nhận Đăng ký Lịch Hướng Dẫn 1:1 ({$slotStart} - {$slotEnd} ngày {$fmtDate})";
             $stuHtml = "
                 <p>Thân gửi Học viên <strong>" . htmlspecialchars($studentName) . "</strong>,</p>
-                <p>Ban Học vụ <strong>IDEAS</strong> xác nhận bạn đã đăng ký thành công lịch hướng dẫn 1:1 cùng Giảng viên <strong>" . htmlspecialchars($lecturerName) . "</strong>:</p>
+                <p>Ban Học vụ <strong>{$orgBookHtml}</strong> xác nhận bạn đã đăng ký thành công lịch hướng dẫn 1:1 cùng Giảng viên <strong>" . htmlspecialchars($lecturerName) . "</strong>:</p>
                 {$commonCardHtml}
                 <p style='font-size:13px;color:#64748b;'><em>* Lưu ý: Học viên vui lòng vào phòng họp đúng khung giờ 30 phút đã đăng ký ({$slotStart} - {$slotEnd}) và chuẩn bị sẵn nội dung bài làm để buổi hướng dẫn đạt hiệu quả cao nhất.</em></p>
-                <p>Trân trọng,<br/><strong>Ban Học vụ — IDEAS</strong></p>
+                <p>Trân trọng,<br/><strong>Ban Học vụ — {$orgBookHtml}</strong></p>
             ";
-            $ccForStudent = ($lecturerEmail === '') ? self::DEFAULT_ACADEMIC_CC : '';
+            $ccForStudent = ($lecturerEmail === '') ? $defaultCc : '';
             $this->sendEmailWithAttachmentsAndIcs($studentEmail, $stuSubj, 'XÁC NHẬN LỊCH HƯỚNG DẪN 1:1', $stuHtml, $ccForStudent, [], $calLinks['ics_content']);
         } catch (\Throwable $eMail) {
             error_log("send 1on1 booking emails error: " . $eMail->getMessage());
@@ -2077,14 +2101,21 @@ class AcademicAffairsController {
         ]);
         $googleCalendarUrl = "https://calendar.google.com/calendar/render?" . $gcalParams;
 
-        $uidStr = 'ideas-1on1-' . ($info['booking_id'] ?? time()) . '@myerp.ideas.edu.vn';
+        $orgTid = (int)($info['tenant_id'] ?? ($GLOBALS['current_tenant_id'] ?? 1));
+        require_once __DIR__ . '/../config/Database.php';
+        $orgCfg = TenantConfigService::getOrganizationProfile(Database::getInstance(), $orgTid);
+        $orgDomain = $orgCfg['internal_email_domain'] ?: 'myerp.local';
+        $orgNameClean = preg_replace('/[,;]/', '', (string)($orgCfg['name'] ?: 'Academic Affairs'));
+        $organizerEmail = $orgCfg['support_email'] ?: ($orgCfg['sender_email'] ?: ('noreply@' . $orgDomain));
+
+        $uidStr = 'mentoring-1on1-' . ($info['booking_id'] ?? time()) . '@' . $orgDomain;
         $escDesc = str_replace(["\r\n", "\n", "\r", ",", ";"], ["\\n", "\\n", "", "\\,", "\\;"], $info['description']);
         $escTitle = str_replace([",", ";"], ["\\,", "\\;"], $info['title']);
         $escLoc = str_replace([",", ";"], ["\\,", "\\;"], $info['location']);
 
         $icsLines = [
             "BEGIN:VCALENDAR",
-            "PRODID:-//IDEAS Academy//MYERP 1on1 Mentoring//VI",
+            "PRODID:-//{$orgNameClean}//MYERP 1on1 Mentoring//VI",
             "VERSION:2.0",
             "CALSCALE:GREGORIAN",
             "METHOD:REQUEST",
@@ -2092,7 +2123,7 @@ class AcademicAffairsController {
             "DTSTART:{$utcStartStr}",
             "DTEND:{$utcEndStr}",
             "DTSTAMP:{$nowUtcStr}",
-            "ORGANIZER;CN=Hoc Vu IDEAS:mailto:student.notice@ideas.edu.vn",
+            "ORGANIZER;CN=Hoc Vu {$orgNameClean}:mailto:{$organizerEmail}",
             "UID:{$uidStr}",
             "STATUS:CONFIRMED",
             "SEQUENCE:0",
@@ -2133,17 +2164,17 @@ class AcademicAffairsController {
                 SELECT mc.id, mc.name, mc.project_id, mc.subjects_json, p.name as project_name
                 FROM marketing_campaigns mc
                 LEFT JOIN projects p ON p.id = mc.project_id
-                WHERE mc.id = ? LIMIT 1
+                WHERE mc.id = ? AND mc.tenant_id = ? LIMIT 1
             ");
-            $stmtC->execute([$campaignId]);
+            $stmtC->execute([$campaignId, $tid]);
             $campaign = $stmtC->fetch(PDO::FETCH_ASSOC);
             if ($campaign && $projectId <= 0) {
                 $projectId = (int)($campaign['project_id'] ?? 0);
             }
         } elseif ($projectId > 0 || $reqProgram !== '') {
             if ($projectId <= 0 && $reqProgram !== '') {
-                $stmtP = $this->db->prepare("SELECT id FROM projects WHERE deleted_at IS NULL AND (LOWER(name) = LOWER(?) OR name LIKE ?) LIMIT 1");
-                $stmtP->execute([$reqProgram, "%{$reqProgram}%"]);
+                $stmtP = $this->db->prepare("SELECT id FROM projects WHERE tenant_id = ? AND deleted_at IS NULL AND (LOWER(name) = LOWER(?) OR name LIKE ?) LIMIT 1");
+                $stmtP->execute([$tid, $reqProgram, "%{$reqProgram}%"]);
                 $projectId = (int)$stmtP->fetchColumn();
             }
             if ($projectId > 0) {
@@ -2151,11 +2182,11 @@ class AcademicAffairsController {
                     SELECT mc.id, mc.name, mc.project_id, mc.subjects_json, p.name as project_name
                     FROM marketing_campaigns mc
                     LEFT JOIN projects p ON p.id = mc.project_id
-                    WHERE mc.project_id = ? AND mc.status NOT IN ('deleted', 'archived')
+                    WHERE mc.tenant_id = ? AND mc.project_id = ? AND mc.status NOT IN ('deleted', 'archived')
                     ORDER BY (mc.status = 'active') DESC, mc.id DESC
                     LIMIT 1
                 ");
-                $stmtC->execute([$projectId]);
+                $stmtC->execute([$tid, $projectId]);
                 $campaign = $stmtC->fetch(PDO::FETCH_ASSOC);
                 if ($campaign) {
                     $campaignId = (int)$campaign['id'];
@@ -2173,11 +2204,10 @@ class AcademicAffairsController {
 
         $lecturersMap = [];
         try {
-            $resComp = $this->db->query("SELECT id, name FROM companies WHERE deleted_at IS NULL");
-            if ($resComp) {
-                while ($r = $resComp->fetch(PDO::FETCH_ASSOC)) {
-                    $lecturersMap[(string)$r['id']] = $r['name'];
-                }
+            $stmtComp = $this->db->prepare("SELECT id, name FROM companies WHERE tenant_id = ? AND deleted_at IS NULL");
+            $stmtComp->execute([$tid]);
+            while ($r = $stmtComp->fetch(PDO::FETCH_ASSOC)) {
+                $lecturersMap[(string)$r['id']] = $r['name'];
             }
         } catch (\Throwable $e) {}
 
@@ -2309,7 +2339,7 @@ class AcademicAffairsController {
         $bodyHtml = trim((string)($body['body_html'] ?? $body['content'] ?? ''));
         $ccEmails = array_key_exists('cc_emails', $body)
             ? trim((string)$body['cc_emails'])
-            : (array_key_exists('cc_email', $body) ? trim((string)$body['cc_email']) : self::DEFAULT_ACADEMIC_CC);
+            : (array_key_exists('cc_email', $body) ? trim((string)$body['cc_email']) : $this->getDefaultAcademicCc($tid));
         $aiAgentLink = trim((string)($body['ai_agent_link'] ?? ''));
         $schoolLecturer = trim((string)($body['school_lecturer'] ?? ''));
 
@@ -2343,16 +2373,16 @@ class AcademicAffairsController {
         $updatedSubject = false;
         if ($campaignId > 0 && ($aiAgentLink !== '' || $schoolLecturer !== '')) {
             try {
-                $stmtC = $this->db->prepare("SELECT subjects_json FROM marketing_campaigns WHERE id = ? LIMIT 1");
-                $stmtC->execute([$campaignId]);
+                $stmtC = $this->db->prepare("SELECT subjects_json FROM marketing_campaigns WHERE id = ? AND tenant_id = ? LIMIT 1");
+                $stmtC->execute([$campaignId, $tid]);
                 $subJsonStr = $stmtC->fetchColumn();
                 $subs = !empty($subJsonStr) ? json_decode((string)$subJsonStr, true) : [];
                 if (is_array($subs)) {
                     $changed = false;
                     foreach ($subs as &$sItem) {
                         $matchId = ($subjectId !== '' && (string)($sItem['id'] ?? '') === $subjectId);
-                        $matchCode = ($subjectCode !== '' && strtolower(trim((string)($sItem['code'] ?? ''))) === strtolower($subjectCode));
-                        $matchName = ($subjectName !== '' && strtolower(trim((string)($sItem['name'] ?? ''))) === strtolower($subjectName));
+                        $matchCode = ($subjectCode !== '' && strtolower(trim((string)$sItem['code'] ?? '')) === strtolower($subjectCode));
+                        $matchName = ($subjectName !== '' && strtolower(trim((string)$sItem['name'] ?? '')) === strtolower($subjectName));
                         if ($matchId || $matchCode || $matchName) {
                             if ($aiAgentLink !== '') {
                                 $sItem['ai_agent_link'] = $aiAgentLink;
@@ -2366,8 +2396,8 @@ class AcademicAffairsController {
                     }
                     unset($sItem);
                     if ($changed) {
-                        $stmtUpd = $this->db->prepare("UPDATE marketing_campaigns SET subjects_json = ? WHERE id = ?");
-                        $stmtUpd->execute([json_encode($subs, JSON_UNESCAPED_UNICODE), $campaignId]);
+                        $stmtUpd = $this->db->prepare("UPDATE marketing_campaigns SET subjects_json = ? WHERE id = ? AND tenant_id = ?");
+                        $stmtUpd->execute([json_encode($subs, JSON_UNESCAPED_UNICODE), $campaignId, $tid]);
                         $updatedSubject = true;
                     }
                 }
@@ -2422,13 +2452,25 @@ class AcademicAffairsController {
                     . "\nMôn học: " . trim("{$subjectCode} - {$subjectName}", " -")
                     . "\nCC: " . ($ccEmails ?: 'Không có')
                     . "\n----------------------------------------\n" . $bodyHtml;
-                $stmtAct = $this->db->prepare("
-                    INSERT INTO activities (tenant_id, user_id, contact_id, type, subject, description, status, completed_at, created_at)
-                    VALUES (?, ?, ?, 'email', ?, ?, 'completed', NOW(), NOW())
-                ");
-                foreach ($matchedContactIds as $cid) {
-                    $stmtAct->execute([$tid, $uid, $cid, $actSubject, $actDesc]);
-                    $loggedContactsCount++;
+                foreach (array_chunk(array_values($matchedContactIds), 200) as $cidChunk) {
+                    $rowPlaceholders = [];
+                    $batchParams = [];
+                    foreach ($cidChunk as $cid) {
+                        $rowPlaceholders[] = "(?, ?, ?, 'contact', ?, ?, 'email', ?, ?, 'done', NOW(), NOW())";
+                        $batchParams[] = $tid;
+                        $batchParams[] = $uid;
+                        $batchParams[] = $uid;
+                        $batchParams[] = $cid;
+                        $batchParams[] = $cid;
+                        $batchParams[] = $actSubject;
+                        $batchParams[] = $actDesc;
+                    }
+                    $stmtAct = $this->db->prepare("
+                        INSERT INTO activities (tenant_id, user_id, created_by, related_type, related_id, contact_id, type, subject, body, status, done_at, created_at)
+                        VALUES " . implode(', ', $rowPlaceholders)
+                    );
+                    $stmtAct->execute($batchParams);
+                    $loggedContactsCount += count($cidChunk);
                 }
             }
         } catch (\Throwable $eAct) {
@@ -2487,8 +2529,9 @@ class AcademicAffairsController {
                 $mail->CharSet = 'UTF-8';
                 $mail->Timeout = 20;
 
-                $senderEmail = $settings['ses_sender_email'] ?? 'systemnoti@ideas.edu.vn';
-                $senderName = $settings['ses_sender_name'] ?? 'IDEAS ACADEMY';
+                $orgProfile = TenantConfigService::getOrganizationProfile($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1));
+                $senderEmail = $settings['ses_sender_email'] ?? ($orgProfile['sender_email'] ?: 'noreply@myerp.local');
+                $senderName = $settings['ses_sender_name'] ?? ($orgProfile['name'] ?: 'Academic Portal');
                 $mail->setFrom($senderEmail, $senderName);
                 $mail->addAddress($to);
 

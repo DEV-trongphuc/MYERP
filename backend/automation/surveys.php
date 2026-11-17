@@ -16,6 +16,13 @@ $id     = $_GET['id'] ?? null;
 $input  = json_decode(file_get_contents('php://input'), true) ?? [];
 
 try {
+    $chkCol = $pdo->query("SHOW COLUMNS FROM surveys LIKE 'deleted_at'")->fetch();
+    if (!$chkCol) {
+        $pdo->exec("ALTER TABLE surveys ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL AFTER updated_at");
+    }
+} catch (\Throwable $t) {}
+
+try {
     switch ($action) {
 
         // ─── LIST ────────────────────────────────────────────────────────────
@@ -29,7 +36,7 @@ try {
                     u_creator.role AS creator_role
                 FROM surveys s
                 LEFT JOIN users u_creator ON u_creator.id = s.created_by
-                WHERE (s.workspace_id = ? OR (? = 1 AND s.workspace_id IS NULL))
+                WHERE (s.workspace_id = ? OR (? = 1 AND s.workspace_id IS NULL)) AND s.deleted_at IS NULL
                 ORDER BY s.updated_at DESC
             ");
             $stmt->execute([$workspace_id, $workspace_id]);
@@ -66,7 +73,7 @@ try {
                     u_creator.role AS creator_role
                 FROM surveys s
                 LEFT JOIN users u_creator ON u_creator.id = s.created_by
-                WHERE s.id = ? AND (s.workspace_id = ? OR (? = 1 AND s.workspace_id IS NULL))
+                WHERE s.id = ? AND (s.workspace_id = ? OR (? = 1 AND s.workspace_id IS NULL)) AND s.deleted_at IS NULL
             ");
             $stmt->execute([$id, $workspace_id, $workspace_id]);
             $survey = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -92,7 +99,7 @@ try {
 
         // ─── QR CODE GENERATOR ───────────────────────────────────────────────
         case 'qr': {
-            $stmt = $pdo->prepare("SELECT id, name, slug FROM surveys WHERE id = ? AND (workspace_id = ? OR (? = 1 AND workspace_id IS NULL))");
+            $stmt = $pdo->prepare("SELECT id, name, slug FROM surveys WHERE id = ? AND (workspace_id = ? OR (? = 1 AND workspace_id IS NULL)) AND deleted_at IS NULL");
             $stmt->execute([$id, $workspace_id, $workspace_id]);
             $survey = $stmt->fetch(PDO::FETCH_ASSOC);
             if (!$survey) {
@@ -101,7 +108,7 @@ try {
                 exit;
             }
             $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-            $host = $_SERVER['HTTP_HOST'] ?? 'crm.ideas.edu.vn';
+            $host = $_SERVER['HTTP_HOST'] ?? (parse_url(resolve_automation_app_base_url($pdo), PHP_URL_HOST) ?: 'localhost');
             $surveyUrl = $protocol . '://' . $host . '/s/' . ($survey['slug'] ?? $survey['id']);
             $qrImageUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=12&data=' . urlencode($surveyUrl);
             echo json_encode([
@@ -369,7 +376,7 @@ try {
             foreach ($allowedFields as $f) {
                 if (!array_key_exists($f, $input)) continue;
                 $val = in_array($f, ['blocks_json','settings_json','thank_you_page','cover_style'])
-                    ? json_encode($input[$f]) : $input[$f];
+                    ? json_encode($input[$f], JSON_UNESCAPED_UNICODE) : $input[$f];
                 $sets[]   = "`$f` = ?";
                 $params[] = $val;
             }
@@ -420,7 +427,7 @@ try {
 
         // ─── DELETE ──────────────────────────────────────────────────────────
         case 'delete': {
-            $stmtOwn = $pdo->prepare("SELECT id FROM surveys WHERE id = ? AND workspace_id = ?");
+            $stmtOwn = $pdo->prepare("SELECT id FROM surveys WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL");
             $stmtOwn->execute([$id, $workspace_id]);
             if (!$stmtOwn->fetchColumn()) {
                 echo json_encode(['success' => false, 'error' => 'Not found or forbidden']);
@@ -428,10 +435,7 @@ try {
             }
             $pdo->beginTransaction();
             try {
-                $pdo->prepare("DELETE FROM survey_answer_details WHERE survey_id = ?")->execute([$id]);
-                $pdo->prepare("DELETE FROM survey_responses WHERE survey_id = ?")->execute([$id]);
-                $pdo->prepare("DELETE FROM survey_questions WHERE survey_id = ?")->execute([$id]);
-                $pdo->prepare("DELETE FROM surveys WHERE id = ?")->execute([$id]);
+                $pdo->prepare("UPDATE surveys SET deleted_at = NOW() WHERE id = ? AND workspace_id = ?")->execute([$id, $workspace_id]);
                 $pdo->commit();
                 echo json_encode(['success' => true]);
             } catch (Exception $e) {

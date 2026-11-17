@@ -25,11 +25,13 @@ import {
 } from 'recharts';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomModal } from '../components/ui/CustomModal';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { withRouterFreezer } from '../components/RouterFreezer';
 import { fetchAPI, getDefaultDateFilter } from '../utils/api';
 import api from '../api/axios';
 import { useLanguage } from '../contexts/LanguageContext';
+import { getCachedTenantBootstrap } from '../contexts/TenantConfigContext';
+
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import toast from 'react-hot-toast';
 import { KpiCardSkeleton, Skeleton, ChartSkeleton, TableSkeleton } from '../components/ui/Skeleton';
@@ -211,13 +213,23 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   }, [user]);
 
   // Subtab and Marketing states
+  const location = useLocation();
   const [activeSubTab, setActiveSubTab] = useState<string>(() => {
+    const tabParam = new URLSearchParams(window.location.search).get('tab');
+    if (tabParam) return tabParam;
     if (isExecutive(user)) return 'persona';
     if (isAccountant(user, false) || String(user?.role || '').toLowerCase() === 'accountant') return 'finance';
     if (isHR(user, false) || String(user?.role || '').toLowerCase() === 'hr') return 'hrm';
     if (isMarketing(user) || String(user?.role || '').toLowerCase() === 'marketing') return 'meta_ads';
     return 'persona';
   });
+
+  useEffect(() => {
+    const tabParam = new URLSearchParams(location.search).get('tab');
+    if (tabParam && allowedSubTabKeys.includes(tabParam)) {
+      setActiveSubTab(tabParam);
+    }
+  }, [location.search, allowedSubTabKeys]);
   const [personaDrawerContact, setPersonaDrawerContact] = useState<any | null>(null);
   const [campaignsList, setCampaignsList] = useState<any[]>([]);
   const [mktFilterType, setMktFilterType] = useState<'close_date' | 'lead_date'>('close_date');
@@ -807,7 +819,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
   };
 
-  const hrColors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#0d9488'];
+  const hrColors = ['#C6333D', '#334155', '#E11D48', '#64748B', '#991B1B', '#475569', '#FB7185', '#94A3B8', '#1E293B', '#CBD5E1'];
 
   const hrPeriodOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -841,7 +853,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     const isExcludedLateUser = (prof: any, row: any) => {
       const emailStr = String(prof?.email || row?.email || row?.user_email || '').trim().toLowerCase();
       const nameStr = String(prof?.full_name || prof?.name || row?.user_name || row?.employee_name || row?.name || '').trim().toLowerCase();
-      return emailStr === 'phucht@ideas.edu.vn' || emailStr.startsWith('phucht@') || nameStr === 'huỳnh trọng phúc';
+      return isExecutive(prof || row) || (getCachedTenantBootstrap()?.organization?.excluded_system_emails || []).includes(emailStr);
     };
     // 1. Ưu tiên tính Realtime từ check-ins tháng (hoặc tuần)
     const map: Record<string, { id: any; name: string; avatar?: string; department?: string; count: number; value: number; grace: number; genderLabel: string }> = {};
@@ -3657,7 +3669,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                         paddingAngle={4}
                       >
                         {expenseCategories.map((_, idx) => (
-                          <Cell key={`cell-${idx}`} fill={['#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6', '#10b981', '#ec4899', '#6366f1'][idx % 7]} />
+                          <Cell key={`cell-${idx}`} fill={['#C6333D', '#334155', '#E11D48', '#64748B', '#991B1B', '#475569', '#FB7185', '#94A3B8', '#1E293B', '#CBD5E1'][idx % 10]} />
                         ))}
                       </Pie>
                       <Tooltip formatter={(value: any) => formatVND(value)} />
@@ -3674,7 +3686,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     color: 'var(--color-text-light)'
                   }}>
                     {expenseCategories.map((entry, index) => {
-                      const colors = ['#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6', '#10b981', '#ec4899', '#6366f1'];
+                      const colors = ['#C6333D', '#334155', '#E11D48', '#64748B', '#991B1B', '#475569', '#FB7185', '#94A3B8', '#1E293B', '#CBD5E1'];
                       return (
                         <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                           <div style={{ width: 8, height: 8, borderRadius: '50%', background: colors[index % colors.length], flexShrink: 0 }} />

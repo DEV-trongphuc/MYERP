@@ -142,6 +142,38 @@ if (!function_exists('indexCrmPipelineStageCatalog')) {
 }
 
 /**
+ * Ensures soft-delete columns (deleted_at) and composite indexes exist idempotently
+ * on core marketing automation tables (subscribers, lists, segments).
+ */
+function ensureMarketingSoftDeleteSchema(PDO $pdo): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+    try {
+        if ($pdo->inTransaction()) {
+            return;
+        }
+        $colsSub = $pdo->query("SHOW COLUMNS FROM `subscribers` LIKE 'deleted_at'")->fetch();
+        if (!$colsSub) {
+            $pdo->exec("ALTER TABLE `subscribers` ADD COLUMN `deleted_at` TIMESTAMP NULL DEFAULT NULL AFTER `updated_at`");
+        }
+        $colList = $pdo->query("SHOW COLUMNS FROM `lists` LIKE 'deleted_at'")->fetch();
+        if (!$colList) {
+            $pdo->exec("ALTER TABLE `lists` ADD COLUMN `deleted_at` TIMESTAMP NULL DEFAULT NULL AFTER `updated_at`");
+        }
+        $colSeg = $pdo->query("SHOW COLUMNS FROM `segments` LIKE 'deleted_at'")->fetch();
+        if (!$colSeg) {
+            $pdo->exec("ALTER TABLE `segments` ADD COLUMN `deleted_at` TIMESTAMP NULL DEFAULT NULL AFTER `updated_at`");
+        }
+    } catch (\Throwable $e) {
+        error_log("ensureMarketingSoftDeleteSchema warning: " . $e->getMessage());
+    }
+}
+
+/**
  * Fast batch synchronization of all active MYERP `/contacts` rows into `subscribers`
  * so Segment/List filter queries, estimates, previews, and campaign dispatches
  * always cover 100% of CRM contacts with up-to-date pipeline stage, lead status,
@@ -156,6 +188,19 @@ function ensureAllCrmContactsSyncedForFilter(PDO $pdo, int $workspaceId = 1): vo
     }
     $syncedWorkspaces[$wsId] = true;
 
+    $throttleFile = sys_get_temp_dir() . "/myerp_seg_crm_sync_ws_{$wsId}.lock";
+    if (file_exists($throttleFile) && (time() - (int)@filemtime($throttleFile)) < 60) {
+        return;
+    }
+    $lockFp = @fopen($throttleFile, 'c+');
+    if ($lockFp) {
+        if (!@flock($lockFp, LOCK_EX | LOCK_NB)) {
+            @fclose($lockFp);
+            return;
+        }
+        @touch($throttleFile);
+    }
+
     try {
         $GLOBALS['pdo'] = $pdo;
         if (!class_exists('DomationContactMatcher') && file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
@@ -165,44 +210,63 @@ function ensureAllCrmContactsSyncedForFilter(PDO $pdo, int $workspaceId = 1): vo
             DomationContactMatcher::ensureColumns($pdo);
         }
 
-        // 1a. Link existing unlinked subscribers to contacts by domation_subscriber_id
+        // Ensure soft delete schema is in place
+        ensureMarketingSoftDeleteSchema($pdo);
+
+        // 0. Propagate CRM soft-deletion to linked subscribers (Parity Mandate)
+        $pdo->prepare("
+            UPDATE subscribers s
+            INNER JOIN contacts c ON c.id = s.contact_id AND c.deleted_at IS NOT NULL AND c.tenant_id = ?
+            SET s.deleted_at = NOW(), s.status = 'archived', s.updated_at = NOW()
+            WHERE s.workspace_id = ? AND s.deleted_at IS NULL
+        ")->execute([$wsId, $wsId]);
+
+        // 1a. Link existing active unlinked subscribers to contacts by domation_subscriber_id
         $pdo->prepare("
             UPDATE subscribers s
             INNER JOIN contacts c
                 ON c.deleted_at IS NULL
+               AND c.tenant_id = ?
                AND c.domation_subscriber_id = s.id
             SET s.contact_id = c.id
             WHERE s.workspace_id = ?
+              AND s.deleted_at IS NULL
               AND (s.contact_id IS NULL OR s.contact_id = 0)
-        ")->execute([$wsId]);
+        ")->execute([$wsId, $wsId]);
 
-        // 1b. Link existing unlinked subscribers to contacts by indexed email
+        // 1b. Link existing active unlinked subscribers to contacts by indexed email
         $pdo->prepare("
             UPDATE subscribers s
             INNER JOIN contacts c
                 ON c.deleted_at IS NULL
+               AND c.tenant_id = ?
                AND c.email IS NOT NULL
                AND c.email != ''
                AND s.email = c.email
             SET s.contact_id = c.id
             WHERE s.workspace_id = ?
+              AND s.deleted_at IS NULL
               AND (s.contact_id IS NULL OR s.contact_id = 0)
-        ")->execute([$wsId]);
+        ")->execute([$wsId, $wsId]);
 
-        // 2. Link existing unlinked subscribers to contacts by indexed phone
+        // 2. Link existing active unlinked subscribers to contacts by indexed phone
         $pdo->prepare("
             UPDATE subscribers s
             INNER JOIN contacts c
                 ON c.deleted_at IS NULL
+               AND c.tenant_id = ?
                AND c.phone IS NOT NULL
                AND c.phone != ''
                AND s.phone_number = c.phone
             SET s.contact_id = c.id
             WHERE s.workspace_id = ?
+              AND s.deleted_at IS NULL
               AND (s.contact_id IS NULL OR s.contact_id = 0)
-        ")->execute([$wsId]);
+        ")->execute([$wsId, $wsId]);
 
         // 3. Batch-insert any remaining CRM contacts that do not yet have a subscriber row
+        // CRITICAL ANTI-ZOMBIE RULE: DO NOT append `AND s2.deleted_at IS NULL` inside the NOT EXISTS subquery!
+        // If s2 exists with deleted_at IS NOT NULL, NOT EXISTS is FALSE, preventing zombie resurrection.
         $pdo->prepare("
             INSERT IGNORE INTO subscribers (
                 id, workspace_id, contact_id, email, email_norm,
@@ -254,16 +318,27 @@ function ensureAllCrmContactsSyncedForFilter(PDO $pdo, int $workspaceId = 1): vo
             LEFT JOIN users u ON u.id = c.owner_id
             LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
             WHERE c.deleted_at IS NULL
+              AND c.tenant_id = ?
               AND NOT EXISTS (
                   SELECT 1 FROM subscribers s2
-                  WHERE s2.contact_id = c.id AND s2.workspace_id = ?
+                  WHERE s2.contact_id = c.id
+                    AND s2.workspace_id = ?
               )
-        ")->execute([$wsId, $wsId]);
+              AND (
+                  c.domation_subscriber_id IS NULL
+                  OR c.domation_subscriber_id = ''
+                  OR NOT EXISTS (
+                      SELECT 1 FROM subscribers s3
+                      WHERE s3.id = c.domation_subscriber_id
+                        AND s3.workspace_id = ?
+                  )
+              )
+        ")->execute([$wsId, $wsId, $wsId, $wsId]);
 
-        // 4. Sync CRM state (stage_id, pipeline_status, lead_status, program, owner_id, salesperson, city) onto linked subscribers
+        // 4. Sync CRM state onto active linked subscribers only (never touch soft-deleted subscribers)
         $pdo->prepare("
             UPDATE subscribers s
-            INNER JOIN contacts c ON c.id = s.contact_id AND c.deleted_at IS NULL
+            INNER JOIN contacts c ON c.id = s.contact_id AND c.deleted_at IS NULL AND c.tenant_id = ?
             LEFT JOIN users u ON u.id = c.owner_id
             LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
             SET
@@ -273,20 +348,22 @@ function ensureAllCrmContactsSyncedForFilter(PDO $pdo, int $workspaceId = 1): vo
                 s.program = COALESCE(NULLIF(c.program, ''), s.program),
                 s.owner_id = c.owner_id,
                 s.salesperson = COALESCE(u.full_name, s.salesperson),
-                s.city = COALESCE(NULLIF(c.city, ''), s.city)
+                s.city = COALESCE(NULLIF(c.city, ''), s.city),
+                s.updated_at = NOW()
             WHERE s.workspace_id = ?
+              AND s.deleted_at IS NULL
               AND (
                   NOT (s.stage_id <=> c.stage_id)
                   OR NOT (s.owner_id <=> c.owner_id)
                   OR (c.program IS NOT NULL AND c.program != '' AND (s.program IS NULL OR s.program != c.program))
                   OR (c.lead_status IS NOT NULL AND c.lead_status != '' AND (s.lead_status IS NULL OR s.lead_status != c.lead_status))
               )
-        ")->execute([$wsId]);
+        ")->execute([$wsId, $wsId]);
 
-        // 5. Backfill contacts.domation_subscriber_id where missing (preserve updated_at)
+        // 5. Backfill contacts.domation_subscriber_id from ACTIVE subscribers only (preserve updated_at)
         $pdo->prepare("
             UPDATE contacts c
-            INNER JOIN subscribers s ON s.contact_id = c.id AND s.workspace_id = ?
+            INNER JOIN subscribers s ON s.contact_id = c.id AND s.workspace_id = ? AND s.deleted_at IS NULL
             SET c.domation_subscriber_id = s.id,
                 c.updated_at = c.updated_at
             WHERE c.deleted_at IS NULL
@@ -294,6 +371,11 @@ function ensureAllCrmContactsSyncedForFilter(PDO $pdo, int $workspaceId = 1): vo
         ")->execute([$wsId]);
     } catch (Throwable $e) {
         error_log("ensureAllCrmContactsSyncedForFilter warning: " . $e->getMessage());
+    } finally {
+        if (!empty($lockFp)) {
+            @flock($lockFp, LOCK_UN);
+            @fclose($lockFp);
+        }
     }
 }
 
@@ -641,7 +723,7 @@ function buildSegmentWhereClause($criteriaJson, $workspaceId, $segmentId = null)
                         // Include both actual DB stage IDs (e.g. 31..44) and 1-based stage numbers (1..14) if legacy rows stored stage_num
                         $allCandidateStageIds = array_values(array_unique(array_filter(
                             array_merge($matchedStageIds, $matchedStageNums),
-                            fn($v) => (int)$v > 0
+                            fn($v) => (int)$v !== 0
                         )));
                         $matchedStageNums = array_values(array_unique($matchedStageNums));
                         $matchedSlugs = array_values(array_unique(array_filter($matchedSlugs, fn($v) => $v !== '')));
@@ -763,6 +845,16 @@ function buildSegmentWhereClause($criteriaJson, $workspaceId, $segmentId = null)
                     $colName = "COALESCE(NULLIF(s.lead_status, ''), (SELECT c.lead_status FROM contacts c WHERE c.id = s.contact_id AND c.deleted_at IS NULL LIMIT 1), 'active')";
                 } else if ($field === 'crm_program' || $field === 'program') {
                     $colName = "COALESCE(NULLIF(s.program, ''), (SELECT c.program FROM contacts c WHERE c.id = s.contact_id AND c.deleted_at IS NULL LIMIT 1))";
+                } else if ($field === 'crm_form_name' || $field === 'form_name' || $field === 'meta_form_name') {
+                    $colName = "COALESCE(NULLIF((SELECT COALESCE(NULLIF(c.form_name, ''), c.meta_form_name) FROM contacts c WHERE c.id = s.contact_id AND c.deleted_at IS NULL LIMIT 1), ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(IF(JSON_VALID(s.custom_attributes), s.custom_attributes, '{}'), '$.form_name')), ''))";
+                } else if ($field === 'crm_adset_name' || $field === 'adset_name' || $field === 'meta_adset_name') {
+                    $colName = "(SELECT c.meta_adset_name FROM contacts c WHERE c.id = s.contact_id AND c.deleted_at IS NULL LIMIT 1)";
+                } else if ($field === 'crm_ad_name' || $field === 'ad_name' || $field === 'meta_ad_name') {
+                    $colName = "(SELECT c.meta_ad_name FROM contacts c WHERE c.id = s.contact_id AND c.deleted_at IS NULL LIMIT 1)";
+                } else if ($field === 'crm_campaign_name' || $field === 'campaign_name' || $field === 'meta_campaign_name') {
+                    $colName = "(SELECT COALESCE(NULLIF(c.meta_campaign_name, ''), c.utm_campaign) FROM contacts c WHERE c.id = s.contact_id AND c.deleted_at IS NULL LIMIT 1)";
+                } else if ($field === 'crm_platform' || $field === 'meta_platform') {
+                    $colName = "(SELECT COALESCE(NULLIF(c.meta_platform, ''), c.platform) FROM contacts c WHERE c.id = s.contact_id AND c.deleted_at IS NULL LIMIT 1)";
                 } else if ($field === 'crm_branch_id' || $field === 'branch_id') {
                     if (is_numeric($val) && (int)$val > 0) {
                         $isNeg = in_array($op, ['is_not', 'not_contains', 'not_equals'], true);
@@ -1216,13 +1308,99 @@ function buildSegmentWhereClause($criteriaJson, $workspaceId, $segmentId = null)
                         $condSqls[] = "DATE($colName) = ?";
                         $allParams[] = $val;
                         break;
+                    case 'within_days':
+                    case 'in_the_last':
                     case 'in_last_days':
                         $condSqls[] = "$colName >= DATE_SUB(NOW(), INTERVAL ? DAY)";
                         $allParams[] = max(0, (int)$val);
                         break;
+                    case 'more_than_days':
+                    case 'not_in_the_last':
                     case 'before_days':
-                        $condSqls[] = "$colName < DATE_SUB(NOW(), INTERVAL ? DAY)";
+                        $condSqls[] = "($colName IS NULL OR $colName < DATE_SUB(NOW(), INTERVAL ? DAY))";
                         $allParams[] = max(0, (int)$val);
+                        break;
+                    case 'in':
+                        $rawVals = is_array($cond['value'] ?? null)
+                            ? $cond['value']
+                            : explode(',', (string)$val);
+                        $items = [];
+                        foreach ($rawVals as $vItem) {
+                            $vItemStr = trim((string)$vItem);
+                            if ($vItemStr !== '') {
+                                $items[] = $vItemStr;
+                            }
+                        }
+                        $items = array_values(array_unique($items));
+                        if (empty($items)) {
+                            $condSqls[] = "1=0";
+                        } else {
+                            $placeholders = implode(',', array_fill(0, count($items), '?'));
+                            $condSqls[] = "$colName IN ($placeholders)";
+                            foreach ($items as $item) {
+                                $allParams[] = $item;
+                            }
+                        }
+                        break;
+                    case 'not_in':
+                        $rawVals = is_array($cond['value'] ?? null)
+                            ? $cond['value']
+                            : explode(',', (string)$val);
+                        $items = [];
+                        foreach ($rawVals as $vItem) {
+                            $vItemStr = trim((string)$vItem);
+                            if ($vItemStr !== '') {
+                                $items[] = $vItemStr;
+                            }
+                        }
+                        $items = array_values(array_unique($items));
+                        if (empty($items)) {
+                            $condSqls[] = "1=1";
+                        } else {
+                            $placeholders = implode(',', array_fill(0, count($items), '?'));
+                            $condSqls[] = "($colName IS NULL OR $colName NOT IN ($placeholders))";
+                            foreach ($items as $item) {
+                                $allParams[] = $item;
+                            }
+                        }
+                        break;
+                    case 'between':
+                        $from = null;
+                        $to = null;
+                        if (isset($cond['from']) || isset($cond['to'])) {
+                            $from = isset($cond['from']) ? trim((string)$cond['from']) : null;
+                            $to = isset($cond['to']) ? trim((string)$cond['to']) : null;
+                        } elseif (isset($cond['min']) || isset($cond['max'])) {
+                            $from = isset($cond['min']) ? trim((string)$cond['min']) : null;
+                            $to = isset($cond['max']) ? trim((string)$cond['max']) : null;
+                        } elseif (is_array($cond['value'] ?? null)) {
+                            $vList = array_values($cond['value']);
+                            $from = isset($vList[0]) ? trim((string)$vList[0]) : null;
+                            $to = isset($vList[1]) ? trim((string)$vList[1]) : null;
+                        } elseif (is_string($val) && strpos($val, ',') !== false) {
+                            $parts = explode(',', $val, 2);
+                            $from = trim($parts[0]);
+                            $to = trim($parts[1]);
+                        } elseif (is_string($val) && strpos($val, ' - ') !== false) {
+                            $parts = explode(' - ', $val, 2);
+                            $from = trim($parts[0]);
+                            $to = trim($parts[1]);
+                        } elseif (is_string($val) && preg_match('/^(\d+)\s*-\s*(\d+)$/', $val, $m)) {
+                            $from = $m[1];
+                            $to = $m[2];
+                        }
+
+                        if ($from !== null && $from !== '' && $to !== null && $to !== '') {
+                            $condSqls[] = "$colName BETWEEN ? AND ?";
+                            $allParams[] = $from;
+                            $allParams[] = $to;
+                        } elseif ($from !== null && $from !== '') {
+                            $condSqls[] = "$colName >= ?";
+                            $allParams[] = $from;
+                        } elseif ($to !== null && $to !== '') {
+                            $condSqls[] = "$colName <= ?";
+                            $allParams[] = $to;
+                        }
                         break;
                     case 'is_today':
                         $condSqls[] = "DATE_FORMAT($colName, '%m-%d') = DATE_FORMAT(NOW(), '%m-%d')";
@@ -1310,6 +1488,9 @@ function ensureSegmentsTableSchema(PDO $pdo): void
         }
         if (!isset($cols['phone_count'])) {
             $pdo->exec("ALTER TABLE `segments` ADD COLUMN `phone_count` INT DEFAULT 0 AFTER `subscriber_count`");
+        }
+        if (!isset($cols['deleted_at'])) {
+            $pdo->exec("ALTER TABLE `segments` ADD COLUMN `deleted_at` TIMESTAMP NULL DEFAULT NULL AFTER `updated_at`, ADD INDEX `idx_segments_workspace_deleted` (`workspace_id`, `deleted_at`)");
         }
         // Keep criteria and conditions mirrored for any pre-existing rows
         $pdo->exec("UPDATE `segments` SET `criteria` = `conditions` WHERE (`criteria` IS NULL OR `criteria` = '') AND `conditions` IS NOT NULL AND `conditions` != ''");
@@ -1399,7 +1580,7 @@ function ensureDefaultPipelineSegments(PDO $pdo, int $workspaceId = 1, bool $for
             ],
         ];
 
-        $stmtCheck = $pdo->prepare("SELECT id, name, COALESCE(NULLIF(criteria, ''), conditions) AS criteria, subscriber_count, phone_count FROM segments WHERE workspace_id = ?");
+        $stmtCheck = $pdo->prepare("SELECT id, name, deleted_at, COALESCE(NULLIF(criteria, ''), conditions) AS criteria, subscriber_count, phone_count FROM segments WHERE workspace_id = ?");
         $stmtCheck->execute([$wsId]);
         $existingRows = $stmtCheck->fetchAll(PDO::FETCH_ASSOC);
 
@@ -1414,7 +1595,7 @@ function ensureDefaultPipelineSegments(PDO $pdo, int $workspaceId = 1, bool $for
         foreach ($defaultDefs as $def) {
             $nameKey = mb_strtolower($def['name'], 'UTF-8');
             $matched = $existingById[$def['id']] ?? $existingByName[$nameKey] ?? null;
-            if (!$matched || (int)($matched['subscriber_count'] ?? 0) === 0) {
+            if (!$matched || !empty($matched['deleted_at']) || (int)($matched['subscriber_count'] ?? 0) === 0) {
                 $needsSync = true;
                 break;
             }
@@ -1447,8 +1628,8 @@ function ensureDefaultPipelineSegments(PDO $pdo, int $workspaceId = 1, bool $for
                 [$cnt, $phoneCnt] = $cStmt->fetch(PDO::FETCH_NUM) ?: [0, 0];
 
                 $insStmt = $pdo->prepare("
-                    INSERT INTO segments (id, workspace_id, name, description, criteria, conditions, subscriber_count, phone_count, auto_cleanup_days, notify_on_join, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)
+                    INSERT INTO segments (id, workspace_id, name, description, criteria, conditions, subscriber_count, phone_count, auto_cleanup_days, notify_on_join, created_at, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, NULL)
                 ");
                 $insStmt->execute([$segId, $wsId, $def['name'], $def['description'], $conditionsJson, $conditionsJson, (int)$cnt, (int)$phoneCnt, $def['created_at']]);
                 $results[$def['name']] = ['id' => $segId, 'count' => (int)$cnt, 'phone_count' => (int)$phoneCnt, 'action' => 'inserted'];
@@ -1457,7 +1638,7 @@ function ensureDefaultPipelineSegments(PDO $pdo, int $workspaceId = 1, bool $for
                 $currConds = trim((string)($matchedRow['criteria'] ?? ''));
                 $useConds = ($forceSync || $currConds === '' || $currConds === '[]') ? $conditionsJson : $currConds;
 
-                if ($forceSync || $currConds === '' || $currConds === '[]' || (int)($matchedRow['subscriber_count'] ?? 0) === 0) {
+                if ($forceSync || !empty($matchedRow['deleted_at']) || $currConds === '' || $currConds === '[]' || (int)($matchedRow['subscriber_count'] ?? 0) === 0) {
                     $whereClause = buildSegmentWhereClause($useConds, $wsId, $segId);
                     $cStmt = $pdo->prepare("
                         SELECT
@@ -1477,7 +1658,8 @@ function ensureDefaultPipelineSegments(PDO $pdo, int $workspaceId = 1, bool $for
                             criteria = ?,
                             conditions = ?,
                             subscriber_count = ?,
-                            phone_count = ?
+                            phone_count = ?,
+                            deleted_at = NULL
                         WHERE id = ? AND workspace_id = ?
                     ");
                     $updStmt->execute([$def['description'], $useConds, $useConds, (int)$cnt, (int)$phoneCnt, $segId, $wsId]);

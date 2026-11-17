@@ -194,8 +194,8 @@ if ($method === 'GET' && $action === 'ping') {
         $stmt->execute([$updateId]);
         $rows = $stmt->rowCount();
         jsonResponse(true, ['user_id' => $updateId, 'affected' => $rows], 'ok');
-    } catch (Exception $e) {
-        jsonResponse(true, ['error' => $e->getMessage(), 'user_id' => $_SESSION['user_id'] ?? null], 'error'); 
+    } catch (\Throwable $e) {
+        jsonResponse(false, null, 'Error updating login timestamp: ' . $e->getMessage(), [], 500);
     }
 }
 

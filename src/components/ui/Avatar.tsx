@@ -64,7 +64,7 @@ export const getColorFromName = (name: string) => {
   return colors[Math.abs(hash) % colors.length];
 };
 
-export const IDEAS_SYSTEM_LOGO = 'https://ideas.edu.vn/wp-content/uploads/2023/04/cropped-logofavicon-1.webp';
+export const IDEAS_SYSTEM_LOGO = '/cropped-logofavicon-1.webp';
 
 export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', className = '', style, title, color, aiScreened, isAi }) => {
   const [hasError, setHasError] = React.useState(false);
@@ -102,11 +102,8 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
       if (cleanPath.startsWith('deposits/')) {
         cleanPath = 'uploads/' + cleanPath;
       }
-      const apiBase = import.meta.env.VITE_API_URL || 'https://myerp.ideas.edu.vn/backend';
-      let baseUrl = apiBase.split('api.php')[0].replace(/\/+$/, '');
-      if (!baseUrl.startsWith('http')) {
-        baseUrl = 'https://myerp.ideas.edu.vn/backend';
-      }
+      const apiBase = import.meta.env.VITE_API_URL || '/backend';
+      const baseUrl = apiBase.split('api.php')[0].replace(/\/+$/, '') || '/backend';
       resolvedSrc = `${baseUrl}/${cleanPath}`;
     }
   }

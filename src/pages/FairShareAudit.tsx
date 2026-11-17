@@ -778,7 +778,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
     };
   }) : [];
 
-  const sourceColors = ['#BD1D2D', '#10b981', '#fbbf24', '#f43f5e', '#BD1D2D', '#06b6d4'];
+  const sourceColors = ['#C6333D', '#334155', '#E11D48', '#64748B', '#991B1B', '#475569', '#FB7185', '#94A3B8', '#1E293B', '#CBD5E1'];
 
   // Custom legend renderer for balanced charts - Styled exactly like Tỷ lệ Nguồn Data
   const renderCustomLegend = (props: any) => {
@@ -871,10 +871,9 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
     if (isSimulating && fairness >= 75) {
       return (
         <div style={{
-          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(16, 185, 129, 0.08) 100%)',
-          border: '1px solid rgba(16, 185, 129, 0.2)',
-          borderLeft: '4px solid #10b981',
-          borderRadius: '12px',
+          background: '#ffffff',
+          border: '1px solid #E2E8F0',
+          borderRadius: '16px',
           padding: '1.25rem',
           marginBottom: '1.5rem',
           display: 'flex',
@@ -933,10 +932,9 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
 
     return (
       <div style={{
-        background: bgColor,
-        border: `1px solid ${borderColor}`,
-        borderLeft: `4px solid ${borderLeftColor}`,
-        borderRadius: '12px',
+        background: '#ffffff',
+        border: '1px solid #E2E8F0',
+        borderRadius: '16px',
         padding: '1.25rem',
         marginBottom: '1.5rem',
         display: 'flex',
@@ -1211,9 +1209,9 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
 
       {/* Intro explain card styled identically to RuleSettings */}
       <div className="hide-on-mobile responsive-hide-mobile" style={{
-        background: 'linear-gradient(135deg, rgba(189, 29, 45, 0.05) 0%, rgba(189, 29, 45, 0.1) 100%)',
-        border: '1px solid var(--color-primary-light)', borderLeft: '4px solid var(--color-primary)',
-        borderRadius: 'var(--radius-lg)', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.5rem'
+        background: '#ffffff',
+        border: '1px solid #E2E8F0',
+        borderRadius: '16px', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.5rem'
       }}>
         <div style={{
           background: 'var(--color-card, #fff)',
@@ -1243,7 +1241,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
             {(() => {
               const level = getFairnessLevel(activeData?.fairnessIndex || 0);
               return (
-                <div className="stat-card hover-lift" style={{ minHeight: '135px', display: 'flex', flexDirection: 'column', borderLeft: `4px solid ${level.color}`, position: 'relative', overflow: 'hidden' }}>
+                <div className="stat-card hover-lift" style={{ minHeight: '135px', display: 'flex', flexDirection: 'column', border: '1px solid #E2E8F0', borderRadius: '16px', position: 'relative', overflow: 'hidden' }}>
                   <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: 60, height: 60, borderRadius: '50%', background: `radial-gradient(circle, ${level.color}10 0%, transparent 70%)` }} />
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', zIndex: 1 }}>
                     <span className="stat-label" style={{ fontWeight: 800 }}>{t("CHỈ SỐ CÔNG BẰNG")}</span>
@@ -2070,14 +2068,11 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                 display: 'flex', 
                 gap: 12, 
                 padding: '1rem', 
-                background: 'rgba(59, 130, 246, 0.02)', 
-                borderLeft: '4px solid #3b82f6', 
-                borderTop: '1px solid var(--color-border-light)',
-                borderRight: '1px solid var(--color-border-light)',
-                borderBottom: '1px solid var(--color-border-light)',
-                borderRadius: '0 8px 8px 0'
+                background: '#ffffff', 
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px'
               }}>
-                <BarChart2 size={20} color="#3b82f6" style={{ flexShrink: 0, marginTop: 2 }} />
+                <BarChart2 size={20} color="#334155" style={{ flexShrink: 0, marginTop: 2 }} />
                 <div>
                   <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                     {t("1. Quy đổi công bằng theo tỉ lệ (Normalized Share)")}
@@ -2093,14 +2088,11 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                 display: 'flex', 
                 gap: 12, 
                 padding: '1rem', 
-                background: 'rgba(16, 185, 129, 0.02)', 
-                borderLeft: '4px solid #10b981', 
-                borderTop: '1px solid var(--color-border-light)',
-                borderRight: '1px solid var(--color-border-light)',
-                borderBottom: '1px solid var(--color-border-light)',
-                borderRadius: '0 8px 8px 0'
+                background: '#ffffff', 
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px'
               }}>
-                <TrendingUp size={20} color="#10b981" style={{ flexShrink: 0, marginTop: 2 }} />
+                <TrendingUp size={20} color="#BD1D2D" style={{ flexShrink: 0, marginTop: 2 }} />
                 <div>
                   <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                     {t("2. Chỉ số chênh lệch chia số (Gini Coefficient)")}
@@ -2116,14 +2108,11 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                 display: 'flex', 
                 gap: 12, 
                 padding: '1rem', 
-                background: 'rgba(245, 158, 11, 0.02)', 
-                borderLeft: '4px solid #f59e0b', 
-                borderTop: '1px solid var(--color-border-light)',
-                borderRight: '1px solid var(--color-border-light)',
-                borderBottom: '1px solid var(--color-border-light)',
-                borderRadius: '0 8px 8px 0'
+                background: '#ffffff', 
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px'
               }}>
-                <Sparkles size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 2 }} />
+                <Sparkles size={20} color="#BD1D2D" style={{ flexShrink: 0, marginTop: 2 }} />
                 <div>
                   <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                     {t("3. Hàng đợi đền bù ưu tiên (Compensation Queue)")}

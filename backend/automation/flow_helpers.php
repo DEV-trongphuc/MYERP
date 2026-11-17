@@ -49,13 +49,355 @@ if (!function_exists('extractClickedUrlFromDetails')) {
         if (!preg_match('/^https?:\/\//i', $clean) && preg_match('/(https?:\/\/\S+)/i', $clean, $m)) {
             $clean = $m[1];
         }
-        // Normalize bare domain URLs (e.g. "ideas.edu.vn/..." or "www.ideas.edu.vn")
+        // Normalize bare domain URLs (e.g. "example.com/..." or "www.example.com")
         if ($clean !== '' && !preg_match('/^(?:https?:\/\/|mailto:|tel:|#|\/)/i', $clean)) {
             if (preg_match('/^[a-z0-9-]+(\.[a-z0-9-]+)+/i', $clean)) {
                 $clean = 'https://' . $clean;
             }
         }
         return trim($clean);
+    }
+}
+
+if (!function_exists('normalizeWaitTimeString')) {
+    /**
+     * Normalize wait step time strings ('8:5', '20:00', '20:00:00', '', null) into 'HH:MM:SS'.
+     * Prevents strtotime("$date $time:00") from returning false on empty string or double seconds.
+     */
+    function normalizeWaitTimeString($rawTime, string $default = '09:00'): string
+    {
+        $candidate = is_scalar($rawTime) ? trim((string) $rawTime) : '';
+        if ($candidate !== '' && preg_match('/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/', $candidate, $m)) {
+            $h = (int) $m[1];
+            $min = (int) $m[2];
+            $s = isset($m[3]) ? (int) $m[3] : 0;
+            if ($h >= 0 && $h <= 23 && $min >= 0 && $min <= 59 && $s >= 0 && $s <= 59) {
+                return sprintf('%02d:%02d:%02d', $h, $min, $s);
+            }
+        }
+        $fallback = trim($default);
+        if (preg_match('/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/', $fallback, $fm)) {
+            return sprintf('%02d:%02d:%02d', min(23, max(0, (int) $fm[1])), min(59, max(0, (int) $fm[2])), isset($fm[3]) ? min(59, max(0, (int) $fm[3])) : 0);
+        }
+        return '09:00:00';
+    }
+}
+
+if (!function_exists('calculateWaitStepScheduledAt')) {
+    /**
+     * Single canonical calculator for all Flow 'wait' step modes
+     * ('duration', 'until', 'until_date', 'until_attribute').
+     *
+     * Options:
+     * - for_enrollment (bool): true when pre-calculating initial schedule on flow entry
+     * - now_string (string): explicit reference 'Y-m-d H:i:s'
+     * - past_fallback (string): datetime used on enrollment when wait is 0/already past
+     * - subscriber (array): subscriber data (required for runtime until_attribute evaluation)
+     * - duration_default (int): default duration if omitted (0 for enrollment, 1 for executor)
+     * - unit_default (string): default unit if omitted ('minutes' for enrollment, 'hours' for executor)
+     */
+    function calculateWaitStepScheduledAt(array $step, ?int $baseTimestamp = null, array $options = []): array
+    {
+        $nowTs = $baseTimestamp ?? time();
+        $nowStr = !empty($options['now_string']) ? (string) $options['now_string'] : date('Y-m-d H:i:s', $nowTs);
+        $pastFallback = !empty($options['past_fallback']) ? (string) $options['past_fallback'] : date('Y-m-d H:i:s', $nowTs - 1);
+        $forEnrollment = !empty($options['for_enrollment']);
+        $subscriber = is_array($options['subscriber'] ?? null) ? $options['subscriber'] : [];
+
+        $config = is_array($step['config'] ?? null) ? $step['config'] : [];
+        $mode = strtolower(trim((string) ($config['mode'] ?? ($config['waitType'] ?? 'duration'))));
+
+        if ($mode === 'until') {
+            $rawTime = $config['untilTime'] ?? ($config['specificTime'] ?? null);
+            $timeNorm = normalizeWaitTimeString($rawTime, '09:00');
+            $timeParts = explode(':', $timeNorm);
+            $targetDay = $config['untilDay'] ?? null;
+
+            try {
+                $dt = new DateTime($nowStr);
+            } catch (Throwable $e) {
+                $dt = new DateTime('@' . $nowTs);
+                $dt->setTimezone(new DateTimeZone(date_default_timezone_get()));
+            }
+            $dt->setTime((int) $timeParts[0], (int) $timeParts[1], (int) $timeParts[2]);
+
+            if ($targetDay !== null && $targetDay !== '') {
+                $currentDay = (int) date('w', $nowTs);
+                $daysToWait = ((int) $targetDay - $currentDay + 7) % 7;
+                if ($daysToWait === 0 && $dt->getTimestamp() <= $nowTs) {
+                    $daysToWait = 7;
+                }
+                if ($daysToWait > 0) {
+                    $dt->modify("+$daysToWait days");
+                }
+            } else {
+                if ($dt->getTimestamp() <= $nowTs) {
+                    $dt->modify('+1 day');
+                }
+            }
+
+            $scheduled = $dt->format('Y-m-d H:i:s');
+            return [
+                'scheduled_at' => $scheduled,
+                'is_wait_over' => false,
+                'log_detail'   => "Wait UNTIL $scheduled",
+            ];
+        }
+
+        if ($mode === 'until_date') {
+            $specDate = trim((string) ($config['specificDate'] ?? ''));
+            $rawTime = $config['untilTime'] ?? ($config['specificTime'] ?? null);
+            $timeNorm = normalizeWaitTimeString($rawTime, '09:00');
+
+            if ($specDate === '') {
+                return [
+                    'scheduled_at' => $forEnrollment ? $pastFallback : $nowStr,
+                    'is_wait_over' => true,
+                    'log_detail'   => 'Wait Skipped (No Date)',
+                ];
+            }
+
+            $tz = new DateTimeZone(date_default_timezone_get());
+            $dtTarget = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', "$specDate $timeNorm", $tz);
+            $parseErrors = DateTimeImmutable::getLastErrors();
+            $hasErrors = is_array($parseErrors) && (($parseErrors['warning_count'] ?? 0) > 0 || ($parseErrors['error_count'] ?? 0) > 0);
+            if ($dtTarget === false || $hasErrors) {
+                $dateTs = strtotime($specDate);
+                if ($dateTs !== false) {
+                    $dtTarget = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', date('Y-m-d', $dateTs) . " $timeNorm", $tz);
+                } else {
+                    $dtTarget = false;
+                }
+            }
+
+            if ($dtTarget === false) {
+                error_log("[WaitCalc] Invalid specificDate '$specDate' with time '$timeNorm'");
+                return [
+                    'scheduled_at' => $forEnrollment ? $pastFallback : $nowStr,
+                    'is_wait_over' => true,
+                    'log_detail'   => "Wait Skipped (Invalid Date: $specDate)",
+                ];
+            }
+
+            $targetTs = $dtTarget->getTimestamp();
+            $targetFormatted = $dtTarget->format('Y-m-d H:i:s');
+
+            if ($targetTs <= $nowTs) {
+                return [
+                    'scheduled_at' => $forEnrollment ? $pastFallback : $targetFormatted,
+                    'is_wait_over' => true,
+                    'log_detail'   => "Wait Date $targetFormatted",
+                ];
+            }
+
+            return [
+                'scheduled_at' => $targetFormatted,
+                'is_wait_over' => false,
+                'log_detail'   => "Wait Date $targetFormatted",
+            ];
+        }
+
+        if ($mode === 'until_attribute') {
+            if ($forEnrollment || empty($subscriber)) {
+                return [
+                    'scheduled_at' => $pastFallback,
+                    'is_wait_over' => true,
+                    'log_detail'   => 'Wait Attribute (Pending Evaluation)',
+                ];
+            }
+
+            $attrKey = $config['attributeKey'] ?? 'date_of_birth';
+            $offsetValue = (int) ($config['offsetValue'] ?? 0);
+            $offsetType = $config['offsetType'] ?? 'before';
+            $rawTime = $config['untilTime'] ?? ($config['specificTime'] ?? null);
+            $timeNorm = normalizeWaitTimeString($rawTime, '09:00');
+
+            $attrValue = $subscriber[$attrKey] ?? null;
+            if ((!$attrValue || $attrValue === '0000-00-00') && !empty($subscriber['custom_attributes'])) {
+                $customAttrs = is_array($subscriber['custom_attributes'])
+                    ? $subscriber['custom_attributes']
+                    : (json_decode($subscriber['custom_attributes'], true) ?: []);
+                $cleanAttrKey = preg_replace('/^custom_/', '', $attrKey);
+                $attrValue = $customAttrs[$attrKey] ?? $customAttrs[$cleanAttrKey] ?? null;
+            }
+
+            if (!$attrValue || $attrValue === '0000-00-00') {
+                return [
+                    'scheduled_at' => $nowStr,
+                    'is_wait_over' => true,
+                    'log_detail'   => 'Wait Skipped (Attributes missing)',
+                ];
+            }
+
+            try {
+                $dtAttr = new DateTime($attrValue);
+                $md = $dtAttr->format('m-d');
+                $targetDate = new DateTime(date('Y', $nowTs) . "-$md $timeNorm");
+                if ($offsetType === 'before') {
+                    $targetDate->modify("-$offsetValue days");
+                } elseif ($offsetType === 'after') {
+                    $targetDate->modify("+$offsetValue days");
+                }
+
+                if ($targetDate->getTimestamp() < $nowTs - 86400) {
+                    if ($targetDate->format('Y-m-d') < date('Y-m-d', $nowTs)) {
+                        $targetDate->modify('+1 year');
+                    }
+                }
+
+                $scheduled = $targetDate->format('Y-m-d H:i:s');
+                $isOver = ($targetDate->getTimestamp() <= $nowTs);
+                return [
+                    'scheduled_at' => $scheduled,
+                    'is_wait_over' => $isOver,
+                    'log_detail'   => "Wait Attribute $scheduled",
+                ];
+            } catch (Throwable $e) {
+                return [
+                    'scheduled_at' => $nowStr,
+                    'is_wait_over' => true,
+                    'log_detail'   => 'Wait Skipped (Invalid Attribute Date)',
+                ];
+            }
+        }
+
+        // Default: duration mode
+        $defaultDur = array_key_exists('duration_default', $options) ? (int) $options['duration_default'] : ($forEnrollment ? 0 : 1);
+        $defaultUnit = (string) ($options['unit_default'] ?? ($forEnrollment ? 'minutes' : 'hours'));
+        $dur = max(0, (int) ($config['duration'] ?? $defaultDur));
+        $unit = strtolower(trim((string) ($config['unit'] ?? $defaultUnit)));
+        if ($unit === 'mins') {
+            $unit = 'minutes';
+        }
+        $unitSeconds = match ($unit) {
+            'weeks'   => 604800,
+            'days'    => 86400,
+            'hours'   => 3600,
+            'minutes' => 60,
+            default   => 3600,
+        };
+
+        if ($dur <= 0) {
+            return [
+                'scheduled_at' => $forEnrollment ? $pastFallback : $nowStr,
+                'is_wait_over' => $forEnrollment,
+                'log_detail'   => "Wait Duration 0 $unit",
+            ];
+        }
+
+        $scheduled = date('Y-m-d H:i:s', $nowTs + ($unitSeconds * $dur));
+        return [
+            'scheduled_at' => $scheduled,
+            'is_wait_over' => false,
+            'log_detail'   => "Wait Duration $dur $unit",
+        ];
+    }
+}
+
+if (!function_exists('extractFlowStepMeta')) {
+    /**
+     * Find a step definition inside decoded flow steps array and return normalized metadata.
+     */
+    function extractFlowStepMeta(array $steps, ?string $stepId): array
+    {
+        $needle = trim((string) ($stepId ?? ''));
+        if ($needle === '') {
+            return ['step' => null, 'type' => null];
+        }
+        foreach ($steps as $s) {
+            if (trim((string) ($s['id'] ?? '')) === $needle) {
+                $t = isset($s['type']) && is_string($s['type']) ? trim($s['type']) : null;
+                return ['step' => $s, 'type' => ($t !== '' ? $t : null)];
+            }
+        }
+        return ['step' => null, 'type' => null];
+    }
+}
+
+if (!function_exists('syncWaitingSubscribersOnFlowSave')) {
+    /**
+     * Synchronize scheduled_at for waiting/processing subscribers whenever a Wait step config
+     * changes during a flow save (works uniformly across duration, until, until_date, and all flow statuses).
+     */
+    function syncWaitingSubscribersOnFlowSave(PDO $pdo, string $flowId, int $workspaceId, array $oldSteps, array $newSteps): int
+    {
+        $oldWaitConfigs = [];
+        foreach ($oldSteps as $os) {
+            if (strtolower(trim((string) ($os['type'] ?? ''))) === 'wait' && !empty($os['id'])) {
+                $oldWaitConfigs[trim((string) $os['id'])] = is_array($os['config'] ?? null) ? $os['config'] : [];
+            }
+        }
+
+        $rescheduledCount = 0;
+        foreach ($newSteps as $ns) {
+            $nsId = trim((string) ($ns['id'] ?? ''));
+            if (strtolower(trim((string) ($ns['type'] ?? ''))) !== 'wait' || $nsId === '' || !isset($oldWaitConfigs[$nsId])) {
+                continue;
+            }
+
+            $newConf = is_array($ns['config'] ?? null) ? $ns['config'] : [];
+            $oldConf = $oldWaitConfigs[$nsId];
+
+            $oldMode = strtolower(trim((string) ($oldConf['mode'] ?? ($oldConf['waitType'] ?? 'duration'))));
+            $newMode = strtolower(trim((string) ($newConf['mode'] ?? ($newConf['waitType'] ?? 'duration'))));
+            $oldTime = (string) ($oldConf['untilTime'] ?? ($oldConf['specificTime'] ?? ''));
+            $newTime = (string) ($newConf['untilTime'] ?? ($newConf['specificTime'] ?? ''));
+
+            $waitConfigChanged =
+                $oldMode !== $newMode ||
+                (string) ($oldConf['duration'] ?? '') !== (string) ($newConf['duration'] ?? '') ||
+                (string) ($oldConf['unit'] ?? '') !== (string) ($newConf['unit'] ?? '') ||
+                (string) ($oldConf['specificDate'] ?? '') !== (string) ($newConf['specificDate'] ?? '') ||
+                $oldTime !== $newTime ||
+                (string) ($oldConf['untilDay'] ?? '') !== (string) ($newConf['untilDay'] ?? '') ||
+                (string) ($oldConf['attributeKey'] ?? '') !== (string) ($newConf['attributeKey'] ?? '') ||
+                (string) ($oldConf['offsetValue'] ?? '') !== (string) ($newConf['offsetValue'] ?? '') ||
+                (string) ($oldConf['offsetType'] ?? '') !== (string) ($newConf['offsetType'] ?? '');
+
+            if (!$waitConfigChanged) {
+                continue;
+            }
+
+            if ($newMode === 'duration') {
+                $dur = max(0, (int) ($newConf['duration'] ?? 1));
+                $unit = strtolower(trim((string) ($newConf['unit'] ?? 'hours')));
+                $unitSeconds = match ($unit) {
+                    'minutes', 'mins' => 60,
+                    'hours' => 3600,
+                    'days' => 86400,
+                    'weeks' => 604800,
+                    default => 1,
+                };
+                $seconds = $dur * $unitSeconds;
+
+                // Anchor relative to last_step_at (or created_at) so elapsed wait time is preserved
+                $stmtUpdateWait = $pdo->prepare("
+                    UPDATE subscriber_flow_states
+                    SET scheduled_at = DATE_ADD(IFNULL(last_step_at, created_at), INTERVAL ? SECOND)
+                    WHERE flow_id = ? AND workspace_id = ? AND step_id = ? AND status IN ('waiting', 'processing')
+                ");
+                $stmtUpdateWait->execute([$seconds, $flowId, $workspaceId, $nsId]);
+                $rescheduledCount += $stmtUpdateWait->rowCount();
+            } elseif ($newMode === 'until_date' || $newMode === 'until') {
+                $waitCalc = calculateWaitStepScheduledAt($ns, time(), [
+                    'duration_default' => 1,
+                    'unit_default' => 'hours',
+                ]);
+                if (!empty($waitCalc['scheduled_at'])) {
+                    $stmtUpdateWait = $pdo->prepare("
+                        UPDATE subscriber_flow_states
+                        SET scheduled_at = ?
+                        WHERE flow_id = ? AND workspace_id = ? AND step_id = ? AND status IN ('waiting', 'processing')
+                    ");
+                    $stmtUpdateWait->execute([$waitCalc['scheduled_at'], $flowId, $workspaceId, $nsId]);
+                    $rescheduledCount += $stmtUpdateWait->rowCount();
+                }
+            } elseif ($newMode === 'until_attribute') {
+                error_log("[Flow Save] 'until_attribute' wait config changed at step {$nsId} — subscribers will be re-evaluated on next execution cycle.");
+            }
+        }
+
+        return $rescheduledCount;
     }
 }
 
@@ -318,34 +660,83 @@ if (!function_exists('logActivity')) {
 
         if (in_array($type, $triggerTypes) && $subscriberId) {
             try {
-                // Find flows where this subscriber is WAITING (Scoped by workspace_id)
-                $sqlWait = "SELECT id, flow_id, step_type FROM subscriber_flow_states WHERE subscriber_id = ? AND status = 'waiting'";
+                // Only inspect waiting states on CONDITION steps (or legacy NULL/unknown step_type for runtime resolution).
+                // Time-based WAIT steps ('wait') MUST NEVER be woken up or have scheduled_at overwritten by tracking/activity events.
+                $sqlWait = "SELECT sfs.id, sfs.flow_id, sfs.step_id, sfs.step_type, f.steps
+                            FROM subscriber_flow_states sfs
+                            LEFT JOIN flows f ON f.id = sfs.flow_id
+                            WHERE sfs.subscriber_id = ?
+                              AND sfs.status = 'waiting'
+                              AND (sfs.step_type = 'condition' OR sfs.step_type IS NULL OR sfs.step_type = '' OR sfs.step_type = 'unknown')";
                 $paramsWait = [$subscriberId];
                 if ($workspaceId) {
-                    $sqlWait .= " AND workspace_id = ?";
+                    $sqlWait .= " AND sfs.workspace_id = ?";
                     $paramsWait[] = $workspaceId;
                 }
                 $stmtWait = $pdo->prepare($sqlWait);
                 $stmtWait->execute($paramsWait);
-                $waitingFlows = $stmtWait->fetchAll(PDO::FETCH_ASSOC);
+                $waitingCandidates = $stmtWait->fetchAll(PDO::FETCH_ASSOC);
 
-                if (!empty($waitingFlows)) {
-                    // [BUG-FLOW-09] Update scheduled_at = NOW() so worker_flow.php STALE-GUARD does not skip the woken item
-                    $waitIds = array_column($waitingFlows, 'id');
-                    if (!empty($waitIds)) {
-                        $wPh = implode(',', array_fill(0, count($waitIds), '?'));
-                        $pdo->prepare("UPDATE subscriber_flow_states SET scheduled_at = NOW() WHERE id IN ($wPh) AND status = 'waiting'")
-                            ->execute($waitIds);
+                $decodedFlowSteps = [];
+                $conditionFlows = [];
+                $conditionWaitIds = [];
+
+                foreach ($waitingCandidates as $wf) {
+                    $rawStepType = strtolower(trim((string) ($wf['step_type'] ?? '')));
+                    $effectiveType = $rawStepType;
+
+                    if ($effectiveType === '' || $effectiveType === 'unknown') {
+                        $fId = (string) ($wf['flow_id'] ?? '');
+                        if (!isset($decodedFlowSteps[$fId])) {
+                            $decodedFlowSteps[$fId] = json_decode($wf['steps'] ?? '[]', true) ?: [];
+                        }
+                        $meta = extractFlowStepMeta($decodedFlowSteps[$fId], $wf['step_id'] ?? null);
+                        $effectiveType = strtolower((string) ($meta['type'] ?? ''));
+
+                        // Self-heal legacy NULL/unknown step_type so subsequent checks stay O(1)
+                        if ($effectiveType !== '') {
+                            try {
+                                $pdo->prepare("UPDATE subscriber_flow_states SET step_type = ? WHERE id = ? AND (step_type IS NULL OR step_type = '' OR step_type = 'unknown')")
+                                    ->execute([$effectiveType, $wf['id']]);
+                            } catch (Exception $eHeal) {
+                            }
+                        }
                     }
 
-                    $apiUrl = defined('API_BASE_URL') ? API_BASE_URL : 'https://automation.ideas.edu.vn/mail_api';
-                    if (strpos($apiUrl, 'http') === false)
-                        $apiUrl = 'https://automation.ideas.edu.vn/mail_api';
+                    if ($effectiveType !== 'condition') {
+                        continue;
+                    }
+
+                    $conditionFlows[] = $wf;
+                    $conditionWaitIds[] = (int) $wf['id'];
+                }
+
+                $conditionWaitIds = array_values(array_unique(array_filter($conditionWaitIds)));
+
+                if (!empty($conditionFlows) && !empty($conditionWaitIds)) {
+                    // [BUG-FLOW-09] Update scheduled_at = NOW() ONLY for condition steps so worker_flow.php wakes them cleanly
+                    $wPh = implode(',', array_fill(0, count($conditionWaitIds), '?'));
+                    $sqlWake = "UPDATE subscriber_flow_states
+                                SET scheduled_at = NOW()
+                                WHERE id IN ($wPh)
+                                  AND status = 'waiting'
+                                  AND (step_type = 'condition' OR step_type IS NULL OR step_type = '' OR step_type = 'unknown')
+                                  AND scheduled_at > NOW()";
+                    $wakeParams = $conditionWaitIds;
+                    if ($workspaceId) {
+                        $sqlWake .= " AND workspace_id = ?";
+                        $wakeParams[] = $workspaceId;
+                    }
+                    $pdo->prepare($sqlWake)->execute(array_values($wakeParams));
+
+                    $apiUrl = function_exists('resolve_automation_api_base_url')
+                        ? resolve_automation_api_base_url($pdo, (int)($workspaceId ?: 1))
+                        : (defined('API_BASE_URL') ? API_BASE_URL : '');
 
                     $mh = curl_multi_init();
                     $channels = [];
 
-                    foreach ($waitingFlows as $wf) {
+                    foreach ($conditionFlows as $wf) {
                         // [HARDENING] Pass workspace_id to background worker
                         $url = $apiUrl . "/worker_flow.php?priority_queue_id=" . $wf['id'] . "&priority_sub_id=" . $subscriberId . "&priority_flow_id=" . $wf['flow_id'];
                         if ($workspaceId) {
@@ -499,9 +890,9 @@ if (!function_exists('flushActivityLogBuffer')) {
  */
 function dispatchFlowWorker($pdo, $type, $payload)
 {
-    $apiUrl = defined('API_BASE_URL') ? API_BASE_URL : 'https://automation.ideas.edu.vn/mail_api';
-    if (strpos($apiUrl, 'http') === false)
-        $apiUrl = 'https://automation.ideas.edu.vn/mail_api';
+    $apiUrl = function_exists('resolve_automation_api_base_url')
+        ? resolve_automation_api_base_url($pdo, (int)($payload['workspace_id'] ?? 1))
+        : (defined('API_BASE_URL') ? API_BASE_URL : '');
 
     // 1. Recursive Priority Trigger (Immediate Chaining)
     if (isset($payload['priority_queue_id']) || ($payload['mode'] ?? '') === 'batch') {
@@ -604,24 +995,121 @@ if (!function_exists('sesAcquireRateSlot')) {
 }
 
 /**
- * Dispatch a campaign background job (Trigger worker_campaign.php)
+ * Detect available PHP CLI binary for detached background shard workers.
  */
-function dispatchCampaignWorker($pdo, $campaignId)
+if (!function_exists('findAutomationPhpCli')) {
+    function findAutomationPhpCli(): ?string
+    {
+        if (stripos(PHP_OS, 'WIN') === 0) {
+            return null;
+        }
+        $candidates = [
+            '/opt/alt/php81/usr/bin/php',
+            '/usr/local/bin/ea-php81',
+            '/usr/local/bin/php',
+            '/usr/bin/php',
+        ];
+        if (defined('PHP_BINARY') && PHP_BINARY && stripos(basename(PHP_BINARY), 'fpm') === false && stripos(basename(PHP_BINARY), 'lsphp') === false && stripos(basename(PHP_BINARY), 'cgi') === false) {
+            array_unshift($candidates, PHP_BINARY);
+        }
+        foreach ($candidates as $bin) {
+            if (@is_executable($bin)) {
+                return $bin;
+            }
+        }
+        return null;
+    }
+}
+
+/**
+ * Dispatch campaign background worker(s).
+ * Spawns bounded parallel CLI shard workers when available for maximum safe throughput;
+ * falls back cleanly to WorkerTriggerService / async HTTP loopback otherwise.
+ */
+function dispatchCampaignWorker($pdo, $campaignId, $numShards = null)
 {
-    $apiUrl = defined('API_BASE_URL') ? API_BASE_URL : 'https://automation.ideas.edu.vn/mail_api';
-    if (strpos($apiUrl, 'http') === false)
-        $apiUrl = 'https://automation.ideas.edu.vn/mail_api';
+    $campaignId = trim((string)$campaignId);
+    if ($campaignId === '') {
+        return;
+    }
 
-    $workerUrl = $apiUrl . "/worker_campaign.php?campaign_id=" . $campaignId;
+    // Never dispatch workers for paused, cancelled, or already completed campaigns
+    try {
+        if ($pdo instanceof PDO) {
+            $stCheck = $pdo->prepare("SELECT status, type, total_target_audience FROM campaigns WHERE id = ? LIMIT 1");
+            $stCheck->execute([$campaignId]);
+            $rowCheck = $stCheck->fetch(PDO::FETCH_ASSOC);
+            if ($rowCheck) {
+                $curSt = strtolower((string)($rowCheck['status'] ?? ''));
+                if (in_array($curSt, ['paused', 'cancelled', 'sent', 'completed', 'draft'], true)) {
+                    return;
+                }
+                if ($numShards === null) {
+                    $cType = strtolower((string)($rowCheck['type'] ?? 'email'));
+                    $aud = (int)($rowCheck['total_target_audience'] ?? 0);
+                    $numShards = ($cType !== 'zalo_zns' && ($aud === 0 || $aud >= 80)) ? 6 : 1;
+                }
+            }
+        }
+    } catch (\Throwable $e) {
+        // Proceed with single shard if pre-check unavailable
+    }
 
-    // Use non-blocking CURL if possible, otherwise standard curl
+    $shards = max(1, min(8, (int)($numShards ?? 1)));
+    $workerScript = __DIR__ . '/worker_campaign.php';
+    $phpBin = function_exists('exec') ? findAutomationPhpCli() : null;
+
+    if ($phpBin && file_exists($workerScript)) {
+        $spawnedAny = false;
+        for ($s = 0; $s < $shards; $s++) {
+            try {
+                if ($pdo instanceof PDO) {
+                    $lockStmt = $pdo->prepare("SELECT IS_FREE_LOCK(?)");
+                    $lockStmt->execute(["campaign_worker_{$campaignId}_s{$s}"]);
+                    if ((int)$lockStmt->fetchColumn() !== 1) {
+                        continue; // This shard is already actively running
+                    }
+                }
+            } catch (\Throwable $eLock) {}
+
+            $cmd = sprintf(
+                'nohup %s %s %s 0 %d %d >/dev/null 2>&1 &',
+                escapeshellarg($phpBin),
+                escapeshellarg($workerScript),
+                escapeshellarg($campaignId),
+                $s,
+                $shards
+            );
+            @exec($cmd);
+            $spawnedAny = true;
+        }
+        if ($spawnedAny || $shards > 0) {
+            return;
+        }
+    }
+
+    // Fallback: Non-blocking internal HTTP trigger (passes X-Cron-Secret if WorkerTriggerService loaded)
+    if (class_exists('WorkerTriggerService')) {
+        WorkerTriggerService::triggerAsync('/backend/automation/worker_campaign.php?campaign_id=' . urlencode($campaignId) . '&shard=0&shards=1');
+        return;
+    }
+    if (function_exists('triggerAsyncWorker')) {
+        triggerAsyncWorker('/worker_campaign.php?campaign_id=' . urlencode($campaignId) . '&shard=0&shards=1');
+        return;
+    }
+
+    $apiUrl = function_exists('resolve_automation_api_base_url')
+        ? resolve_automation_api_base_url($pdo, 1)
+        : (defined('API_BASE_URL') ? API_BASE_URL : '');
+
+    $workerUrl = rtrim($apiUrl, '/') . "/worker_campaign.php?campaign_id=" . urlencode($campaignId) . "&shard=0&shards=1";
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $workerUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT_MS, 200);
+    curl_setopt($ch, CURLOPT_TIMEOUT_MS, 250);
     curl_setopt($ch, CURLOPT_NOSIGNAL, 1);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2); // [FIX P36-FH] hostname verification
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     @curl_exec($ch);
     curl_close($ch);
 }
@@ -690,7 +1178,7 @@ function resolveEmailContent($pdo, $templateId, $customHtml, $fallbackBody = '',
 }
 
 /**
- * Helper to detect if a value is an active URL or domain name (e.g. https://..., www...., ideas.edu.vn, domain.com/path).
+ * Helper to detect if a value is an active URL or domain name (e.g. https://..., www...., example.com/path).
  */
 function isLinkOrDomainValue($val, &$normalizedHref = null)
 {
@@ -934,8 +1422,17 @@ if (!function_exists('enrichSubscriberWithCrmData')) {
         if ($dobVal !== '') {
             $subscriber['date_of_birth'] = $dobVal;
         }
-        if (empty($subscriber['job_title']) && !empty($c['job_title'])) {
-            $subscriber['job_title'] = $c['job_title'];
+        $crmJobTitle = trim((string)($c['job_title'] ?? ''));
+        if ($crmJobTitle !== '' && mb_strtolower($crmJobTitle, 'UTF-8') === 'chưa cập nhật') {
+            $crmJobTitle = '';
+        }
+        $subJobTitle = trim((string)($subscriber['job_title'] ?? ''));
+        if ($subJobTitle !== '' && mb_strtolower($subJobTitle, 'UTF-8') === 'chưa cập nhật') {
+            $subscriber['job_title'] = '';
+            $subJobTitle = '';
+        }
+        if ($subJobTitle === '' && $crmJobTitle !== '') {
+            $subscriber['job_title'] = $crmJobTitle;
         }
         if (empty($subscriber['company_name']) && !empty($c['company'])) {
             $subscriber['company_name'] = $c['company'];
@@ -1058,6 +1555,63 @@ function replaceMergeTags($html, $subscriber, $context = [], $pdo = null)
         ? (strtotime($subscriber['joined_at']) ? date('d/m/Y', strtotime($subscriber['joined_at'])) : $subscriber['joined_at'])
         : '';
 
+    // Custom Attributes (CSV / Form / Dynamic JSON) — parsed early so job_title/salutation fallbacks share parity with frontend.
+    // Static LRU cache avoids re-parsing JSON when FlowExecutor renders multiple tags on the same subscriber
+    // (e.g. "Update Field" step followed by "Send Email" in the same worker run).
+    // Capped at 500 slots (FIFO) to prevent memory leak during long worker runs.
+    static $customAttrCache = [];
+    $subId = $subscriber['id'] ?? $subscriber['subscriber_id'] ?? '';
+    $attrRaw = $subscriber['custom_attributes'] ?? null;
+    $attrCacheKey = $subId ? ($subId . ':' . crc32(is_string($attrRaw) ? $attrRaw : '')) : '';
+    if ($attrCacheKey && !isset($customAttrCache[$attrCacheKey])) {
+        $customAttrCache[$attrCacheKey] = is_array($attrRaw) ? $attrRaw : (json_decode((string) $attrRaw, true) ?: []);
+        if (count($customAttrCache) >= 500) {
+            reset($customAttrCache);
+            unset($customAttrCache[key($customAttrCache)]);
+        }
+    }
+    $customAttrs = $attrCacheKey ? ($customAttrCache[$attrCacheKey] ?? []) : (
+        is_array($attrRaw) ? $attrRaw : (json_decode((string) ($attrRaw ?? ''), true) ?: [])
+    );
+    if (!is_array($customAttrs)) {
+        $customAttrs = [];
+    }
+
+    $cleanPlaceholderTitle = static function ($val): string {
+        $s = trim((string) ($val ?? ''));
+        if ($s === '' || (function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower($s)) === 'chưa cập nhật') {
+            return '';
+        }
+        return $s;
+    };
+
+    $explicitJobTitle = $cleanPlaceholderTitle($subscriber['job_title'] ?? ($subscriber['jobTitle'] ?? ''));
+    $attrSalutation = '';
+    foreach (['Danh xưng', 'danh xưng', 'danh_xung', 'danh xung', 'danhXung', 'Xưng hô', 'xưng hô', 'xung_ho', 'salutation', 'Salutation', 'honorific', 'job_title', 'jobTitle', 'jobtitle', 'Chức danh', 'chức danh', 'Chức vụ', 'chức vụ'] as $ak) {
+        if (isset($customAttrs[$ak]) && is_scalar($customAttrs[$ak])) {
+            $cand = $cleanPlaceholderTitle($customAttrs[$ak]);
+            if ($cand !== '') {
+                $attrSalutation = $cand;
+                break;
+            }
+        }
+    }
+    if ($attrSalutation === '' && !empty($customAttrs)) {
+        foreach ($customAttrs as $ak => $av) {
+            if (!is_scalar($av)) continue;
+            $cKey = canonicalizeVarKey((string) $ak);
+            if (in_array($cKey, ['danhxung', 'xungho', 'salutation', 'honorific', 'jobtitle', 'chucdanh', 'chucvu', 'hocham', 'hocvi'], true)) {
+                $cand = $cleanPlaceholderTitle($av);
+                if ($cand !== '') {
+                    $attrSalutation = $cand;
+                    break;
+                }
+            }
+        }
+    }
+    $resolvedJobTitle = $explicitJobTitle !== '' ? $explicitJobTitle : $attrSalutation;
+    $resolvedSalutation = $attrSalutation !== '' ? $attrSalutation : ($resolvedJobTitle !== '' ? $resolvedJobTitle : $salutation);
+
     $consultantTitle = $subscriber['consultant_title'] ?? ($subscriber['consultant_role'] ?? 'Chuyên viên tư vấn');
 
     $map = [
@@ -1070,8 +1624,8 @@ function replaceMergeTags($html, $subscriber, $context = [], $pdo = null)
         'fullName' => $fullName ?: 'Bạn',
         'customer_name' => $fullName ?: 'Bạn',
         'customerName' => $fullName ?: 'Bạn',
-        'salutation' => $salutation,
-        'danh_xung' => $salutation,
+        'salutation' => $resolvedSalutation,
+        'danh_xung' => $resolvedSalutation,
         'email' => $email,
         'company_name' => $subscriber['company_name'] ?? '',
         'companyName' => $subscriber['company_name'] ?? '',
@@ -1079,8 +1633,9 @@ function replaceMergeTags($html, $subscriber, $context = [], $pdo = null)
         'phone' => $phoneNumber,
         'phone_number' => $phoneNumber,
         'phoneNumber' => $phoneNumber,
-        'job_title' => $subscriber['job_title'] ?? '',
-        'jobTitle' => $subscriber['job_title'] ?? '',
+        'job_title' => $resolvedJobTitle,
+        'jobTitle' => $resolvedJobTitle,
+        'jobtitle' => $attrSalutation !== '' ? $attrSalutation : $resolvedJobTitle,
         'city' => $subscriber['city'] ?? ($subscriber['last_city'] ?? ''),
         'district' => $subscriber['district'] ?? '',
         'ward' => $subscriber['ward'] ?? '',
@@ -1175,27 +1730,8 @@ function replaceMergeTags($html, $subscriber, $context = [], $pdo = null)
         'campaignName' => $context['campaign_name'] ?? ($context['campaignName'] ?? ''),
     ];
 
-    // [PERF] Static cache: avoid json_decode(custom_attributes) on each call.
-    // Cache key = "subId:crc32(raw)" — invalidates automatically if attributes change
-    // (e.g. "Update Field" step followed by "Send Email" in the same worker run).
-    // Capped at 500 slots (FIFO) to prevent memory leak during long worker runs.
-    static $customAttrCache = [];
-    $subId = $subscriber['id'] ?? $subscriber['subscriber_id'] ?? '';
-    $attrRaw = $subscriber['custom_attributes'] ?? null;
-    $attrCacheKey = $subId ? ($subId . ':' . crc32(is_string($attrRaw) ? $attrRaw : '')) : '';
-    if ($attrCacheKey && !isset($customAttrCache[$attrCacheKey])) {
-        $customAttrCache[$attrCacheKey] = is_array($attrRaw) ? $attrRaw : (json_decode((string) $attrRaw, true) ?: []);
-        if (count($customAttrCache) >= 500) {
-            reset($customAttrCache);
-            unset($customAttrCache[key($customAttrCache)]);
-        }
-    }
-    $customAttrs = $attrCacheKey ? ($customAttrCache[$attrCacheKey] ?? []) : (
-        is_array($attrRaw) ? $attrRaw : (json_decode((string) ($attrRaw ?? ''), true) ?: [])
-    );
-
     foreach ($customAttrs as $k => $v) {
-        if (is_string($v) || is_numeric($v)) {
+        if ((is_string($v) || is_numeric($v)) && trim((string) $v) !== '') {
             $map[$k] = $v;
         }
     }
@@ -1419,7 +1955,7 @@ function replaceMergeTags($html, $subscriber, $context = [], $pdo = null)
             return (string)($fallbacks[$tag] ?? ($canonicalFallbacks[$canon] ?? ''));
         }
 
-        // Check if the variable value is a Link or Domain (https://..., www...., ideas.edu.vn, domain.com, etc.)
+        // Check if the variable value is a Link or Domain (https://..., www...., domain.com, etc.)
         $normalizedHref = null;
         if (isLinkOrDomainValue($val, $normalizedHref)) {
             if ($isInsideSrc || $isInsideHref || $htmlContext === 'inside_tag') {
@@ -1480,7 +2016,7 @@ function isSubscriberMatch($sub, $criteriaJson)
                     $actualVal = $sub['stats_opened'] ?? 0;
                 else if ($statKey == 'linksClicked')
                     $actualVal = $sub['stats_clicked'] ?? 0;
-            } else if ($field === 'tags') {
+            } else if ($field === 'tag' || $field === 'tags' || $field === 'crm_tags') {
                 // 10M UPGRADE: Cache relational tags for this call
                 $sid = $sub['id'] ?? $sub['sub_id'] ?? $sub['subscriber_id'] ?? null;
                 static $lastSubIdForTags = null;
@@ -1494,17 +2030,23 @@ function isSubscriberMatch($sub, $criteriaJson)
                 }
 
                 $hasTag = false;
+                $valTargets = array_filter(array_map('trim', preg_split('/[,|]/', (string)($cond['value'] ?? ''), -1, PREG_SPLIT_NO_EMPTY)));
+                if (empty($valTargets)) {
+                    $valTargets = [trim((string)($cond['value'] ?? ''))];
+                }
                 foreach ($currentSubTags as $st) {
-                    if (strcasecmp($st, $cond['value'] ?? '') === 0 || mb_stripos((string)$st, (string)($cond['value'] ?? '')) !== false) {
-                        $hasTag = true;
-                        break;
+                    foreach ($valTargets as $vt) {
+                        if ($vt !== '' && (strcasecmp((string)$st, $vt) === 0 || mb_stripos((string)$st, $vt, 0, 'UTF-8') !== false)) {
+                            $hasTag = true;
+                            break 2;
+                        }
                     }
                 }
 
-                if ($op === 'contains' && !$hasTag) {
+                if (in_array($op, ['contains', 'has_tag', 'equals', 'is', 'in'], true) && !$hasTag) {
                     $groupMatch = false;
                     break;
-                } else if ($op === 'not_contains' && $hasTag) {
+                } else if (in_array($op, ['not_contains', 'not_has_tag', 'is_not', 'not_equals'], true) && $hasTag) {
                     $groupMatch = false;
                     break;
                 } else if (($op === 'is_set' || $op === 'is_not_empty') && empty($currentSubTags)) {
@@ -2119,6 +2661,17 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
 
         $field = $cond['field'] ?? '';
         $op = $cond['operator'] ?? 'equals';
+        if (empty($field) && isset($cond['type'])) {
+            if ($cond['type'] === 'has_tag' || $cond['type'] === 'not_has_tag') {
+                $field = 'tag';
+                $op = $cond['type'];
+            } elseif ($cond['type'] === 'has_done' || $cond['type'] === 'not_has_done') {
+                $field = 'activity_history';
+                $op = $cond['type'];
+            } else {
+                $op = $cond['type'];
+            }
+        }
         $val = trim((string)($cond['value'] ?? ''));
 
         // -----------------------------------------------------------------
@@ -2212,13 +2765,18 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
             'erp_has_certificate' => 'erp_has_certificate',
         ];
 
-        if ($field === 'tags' || $field === 'crm_tags') {
+        if ($field === 'tag' || $field === 'tags' || $field === 'crm_tags') {
             if (isset($subProfile['tags_array'])) {
                 $actualVal = $subProfile['tags_array'];
+            } elseif (!empty($subProfile['tags'])) {
+                $actualVal = is_array($subProfile['tags']) ? $subProfile['tags'] : array_filter(array_map('trim', explode(',', (string)$subProfile['tags'])));
             } else {
                 $stmtT = $pdo->prepare("SELECT t.name FROM subscriber_tags st JOIN domation_tags t ON st.tag_id = t.id WHERE st.subscriber_id = ?");
                 $stmtT->execute([$subscriberId]);
                 $actualVal = $stmtT->fetchAll(PDO::FETCH_COLUMN);
+            }
+            if (!is_array($actualVal)) {
+                $actualVal = is_string($actualVal) ? (json_decode($actualVal, true) ?: array_filter(array_map('trim', explode(',', $actualVal)))) : [];
             }
             $isArrayField = true;
 
@@ -2361,7 +2919,7 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
                     break;
                 }
             }
-            $condMatch = ($op === 'not_contains' || $op === 'is_not_set' || $op === 'is_empty') ? !$found : $found;
+            $condMatch = in_array($op, ['not_has_done', 'not_contains', 'is_not_set', 'is_empty', 'not_equals', 'is_not'], true) ? !$found : $found;
 
         } elseif ($field === 'activity_history') {
             $isSpecialField = true;
@@ -2369,7 +2927,7 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
             $lookbackLimit = max(1, (int) ($cond['lookback'] ?? 50));
             $lookbackDays = (int) ($cond['days'] ?? 0);
 
-            $sql = "SELECT CONCAT(COALESCE(details,''), ' ', COALESCE(reference_name,''), ' ', COALESCE(reference_id,''))
+            $sql = "SELECT CONCAT(COALESCE(type,''), ' ', COALESCE(details,''), ' ', COALESCE(reference_name,''), ' ', COALESCE(reference_id,''))
                     FROM subscriber_activity
                     WHERE subscriber_id = ?";
             $params = [$subscriberId];
@@ -2403,7 +2961,7 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
                     }
                 }
             }
-            $condMatch = ($op === 'not_contains' || $op === 'is_not_set' || $op === 'is_empty') ? !$found : $found;
+            $condMatch = in_array($op, ['not_has_done', 'not_contains', 'is_not_set', 'is_empty', 'not_equals', 'is_not'], true) ? !$found : $found;
 
         } else {
             // Fallback: try custom_attributes JSON field
@@ -2435,23 +2993,39 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
         // --- A. ARRAY LOGIC (tags, channel_available) ---
         if ($isArrayField && is_array($actualVal)) {
             switch ($op) {
+                case 'has_tag':
                 case 'contains':
                 case 'equals':
                 case 'is':
+                case 'in':
+                    $targets = array_filter(array_map('trim', preg_split('/[,|]/', (string)$val, -1, PREG_SPLIT_NO_EMPTY)));
+                    if (empty($targets)) {
+                        $targets = [trim((string)$val)];
+                    }
                     foreach ($actualVal as $item) {
-                        if (mb_stripos((string)$item, $val) !== false) {
-                            $condMatch = true;
-                            break;
+                        foreach ($targets as $target) {
+                            if ($target !== '' && (strcasecmp((string)$item, $target) === 0 || mb_stripos((string)$item, $target, 0, 'UTF-8') !== false)) {
+                                $condMatch = true;
+                                break 2;
+                            }
                         }
                     }
                     break;
+                case 'not_has_tag':
                 case 'not_contains':
                 case 'is_not':
+                case 'not_equals':
+                    $targets = array_filter(array_map('trim', preg_split('/[,|]/', (string)$val, -1, PREG_SPLIT_NO_EMPTY)));
+                    if (empty($targets)) {
+                        $targets = [trim((string)$val)];
+                    }
                     $condMatch = true;
                     foreach ($actualVal as $item) {
-                        if (mb_stripos((string)$item, $val) !== false) {
-                            $condMatch = false;
-                            break;
+                        foreach ($targets as $target) {
+                            if ($target !== '' && (strcasecmp((string)$item, $target) === 0 || mb_stripos((string)$item, $target, 0, 'UTF-8') !== false)) {
+                                $condMatch = false;
+                                break 2;
+                            }
                         }
                     }
                     break;
@@ -2479,7 +3053,7 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
             if (in_array($field, ['os', 'device', 'browser', 'last_os', 'last_device', 'last_browser'])) {
                 if ($op === 'equals')
                     $op = 'contains';
-                elseif ($op === 'is_not')
+                elseif ($op === 'is_not' || $op === 'not_equals' || $op === '!=')
                     $op = 'not_contains';
             }
 
@@ -2489,7 +3063,19 @@ function evaluateAdvancedConditionGroup($pdo, $subscriberId, $subProfile, $condi
                     $condMatch = ($checkVal === $targetVal);
                     break;
                 case 'is_not':
-                    $condMatch = ($checkVal !== $targetVal);
+                case 'not_equals':
+                case '!=':
+                    if (is_numeric($actualVal) && is_numeric($val)) {
+                        $condMatch = ((float) $actualVal != (float) $val);
+                    } else {
+                        $condMatch = ($checkVal !== $targetVal);
+                    }
+                    break;
+                case 'is_true':
+                    $condMatch = !empty($checkVal) && !in_array($checkVal, ['0', 'false', 'no', 'null', 'none'], true);
+                    break;
+                case 'is_false':
+                    $condMatch = empty($checkVal) || in_array($checkVal, ['0', 'false', 'no', 'null', 'none'], true);
                     break;
                 case 'contains':
                     $condMatch = ($targetVal !== '' && mb_strpos($checkVal, $targetVal, 0, 'UTF-8') !== false);

@@ -20,6 +20,7 @@ import { numberToVietnameseText } from '../utils/numberToText';
 import { VietnameseDateInput } from './ui/VietnameseDateInput';
 import { formatCommentBody } from '../utils/commentFormatter';
 import { pushOverlay } from '../utils/overlayStack';
+import { getTenantBrandPrefix } from '../contexts/TenantConfigContext';
 
 interface Deposit {
   id: number;
@@ -2667,8 +2668,8 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
           const isSendBoth = manualRemindTarget === 3;
 
           const subject = isSendCustomer
-            ? `[IDEAS] Nhắc nhở lịch thanh toán: ${previewReminderMilestone.milestone_name}`
-            : `[IDEAS] Nhắc lịch thanh toán của học viên: ${custName}`;
+            ? `${getTenantBrandPrefix()} Nhắc nhở lịch thanh toán: ${previewReminderMilestone.milestone_name}`
+            : `${getTenantBrandPrefix()} Nhắc lịch thanh toán của học viên: ${custName}`;
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

@@ -270,7 +270,7 @@ try {
     if (!isset($propCache[$propertyId])) {
         // [FIX P35-T1] Fetch both domain AND workspace_id from web_properties.
         // Previously only 'domain' was cached, so auto-created subscribers had no workspace_id.
-        $stmtDomain = $pdo->prepare("SELECT domain, workspace_id FROM web_properties WHERE id = ?");
+        $stmtDomain = $pdo->prepare("SELECT domain, workspace_id FROM web_properties WHERE id = ? AND (status IS NULL OR status NOT IN ('archived', 'deleted'))");
         $stmtDomain->execute([$propertyId]);
         $propRow = $stmtDomain->fetch(PDO::FETCH_ASSOC);
         if (!$propRow) {
@@ -752,6 +752,54 @@ try {
 
                 if ($email) {
                     dispatchQueueJob($pdo, 'high', ['action' => 'identify_visitor', 'visitor_id' => $visitorUuid, 'email' => $email, 'phone_number' => $phone]);
+                }
+
+                // Enrich matching MYERP CRM Contact with Web Attribution (_fbc, _fbp, visitor IP & UA) for Dual-Pixel CAPI
+                if ($email || $phone) {
+                    try {
+                        $webFbc = trim((string)($data['_fbc'] ?? $data['fbc'] ?? $_COOKIE['_fbc'] ?? ''));
+                        $webFbclid = trim((string)($data['fbclid'] ?? ($data['traffic_source']['fbclid'] ?? '')));
+                        if ($webFbc === '' && $webFbclid !== '') {
+                            $webFbc = 'fb.1.' . (int)round(microtime(true) * 1000) . '.' . $webFbclid;
+                        }
+                        $webFbp = trim((string)($data['_fbp'] ?? $data['fbp'] ?? $_COOKIE['_fbp'] ?? ''));
+                        $webUrl = trim((string)($data['url'] ?? $event['url'] ?? $_SERVER['HTTP_REFERER'] ?? ''));
+                        $webPixelId = preg_replace('/[^0-9]/', '', (string)($data['fb_pixel_id'] ?? $data['pixel_id'] ?? ''));
+                        if ($webFbc !== '' || $webFbp !== '' || $webUrl !== '') {
+                            $conds = [];
+                            $cParams = [];
+                            if ($emailNorm) {
+                                $conds[] = "LOWER(TRIM(email)) = ?";
+                                $cParams[] = $emailNorm;
+                            }
+                            if ($phoneNorm9 && strlen($phoneNorm9) >= 9) {
+                                $conds[] = "RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(phone,''),'+',''),' ',''),'.',''),'-',''), 9) = ?";
+                                $cParams[] = $phoneNorm9;
+                            }
+                            if (!empty($conds)) {
+                                $stmtFindC = $pdo->prepare("
+                                    SELECT id, tenant_id FROM contacts
+                                    WHERE deleted_at IS NULL AND (" . implode(' OR ', $conds) . ")
+                                    ORDER BY id DESC LIMIT 1
+                                ");
+                                $stmtFindC->execute(array_values($cParams));
+                                $matchedC = $stmtFindC->fetch(PDO::FETCH_ASSOC);
+                                if ($matchedC) {
+                                    require_once __DIR__ . '/../config/CapiHelper.php';
+                                    CapiHelper::upsertWebAttribution($pdo, (int)$matchedC['id'], (int)($matchedC['tenant_id'] ?: 1), [
+                                        'fbc'               => $webFbc,
+                                        'fbp'               => $webFbp,
+                                        'client_ip_address' => $ip,
+                                        'client_user_agent' => $ua,
+                                        'event_source_url'  => $webUrl,
+                                        'fb_pixel_id'       => $webPixelId ?: CapiHelper::DEFAULT_WEB_PIXEL_ID,
+                                    ]);
+                                }
+                            }
+                        }
+                    } catch (\Throwable $eWebCapi) {
+                        error_log("Web CAPI attribution enrich failed: " . $eWebCapi->getMessage());
+                    }
                 }
                 
                 // [NEW] Trigger flow for AI Lead Capture / Autofill (Web Tracking)

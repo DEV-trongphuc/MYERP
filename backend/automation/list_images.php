@@ -41,7 +41,7 @@ if ($files !== false) {
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
 $host = $_SERVER['HTTP_HOST'];
 if (strpos($host, 'localhost') !== false || strpos($host, '127.0.0.1') !== false) {
-    $baseUrl = "https://automation.ideas.edu.vn/uploadss/";
+    $baseUrl = rtrim(resolve_automation_app_base_url($pdo ?? null), '/') . '/backend/uploads/';
 } else {
     $baseUrl = $protocol . $host . "/uploadss/";
 }

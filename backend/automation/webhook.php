@@ -28,6 +28,60 @@ require_once 'flow_helpers.php'; // [FIX] Moved to top — logActivity() used in
 // Setting both sides to the same timezone guarantees consistent comparisons.
 date_default_timezone_set('Asia/Ho_Chi_Minh');
 
+/**
+ * Strict Redirect URL Sanitizer & Protocol Whitelist Guard
+ */
+if (!function_exists('sanitize_redirect_url')) {
+    function sanitize_redirect_url(?string $rawUrl, ?string $fallbackUrl = null): string {
+        $fallback = $fallbackUrl ?: (rtrim(function_exists('resolve_automation_app_base_url') ? resolve_automation_app_base_url() : (getenv('APP_BASE_URL') ?: 'http://localhost'), '/') . '/');
+        if ($rawUrl === null || trim($rawUrl) === '') {
+            return $fallback;
+        }
+
+        // 1. HTML entity decode and strip control characters / CRLF
+        $url = html_entity_decode(trim($rawUrl), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $url = preg_replace('/[\x00-\x1F\x7F]+/', '', $url);
+        if (trim($url) === '') {
+            return $fallback;
+        }
+
+        // 2. Reject dangerous schemes
+        if (preg_match('/^(?:javascript|data|vbscript|file|about|blob):/i', $url)) {
+            return $fallback;
+        }
+
+        // 3. Protocol-relative normalization
+        if (strpos($url, '//') === 0) {
+            $url = 'https:' . $url;
+        } elseif (!preg_match('/^[a-z][a-z0-9+\-.]*:\/\//i', $url)) {
+            $url = 'https://' . ltrim($url, '/');
+        }
+
+        // 4. Encode non-ASCII for validation
+        $encodedUrl = preg_replace_callback('/[^\x21-\x7E]/', function ($m) {
+            return rawurlencode($m[0]);
+        }, $url);
+
+        $parsed = @parse_url($encodedUrl);
+        if (!$parsed || !is_array($parsed)) {
+            return $fallback;
+        }
+
+        $scheme = strtolower($parsed['scheme'] ?? '');
+        $host   = $parsed['host'] ?? '';
+
+        if (!in_array($scheme, ['http', 'https'], true) || empty($host)) {
+            return $fallback;
+        }
+
+        if (!filter_var($encodedUrl, FILTER_VALIDATE_URL)) {
+            return $fallback;
+        }
+
+        return str_replace(["\r", "\n"], '', $encodedUrl);
+    }
+}
+
 mb_internal_encoding("UTF-8");
 
 // --- ADVANCED TRACKING HELPERS ---
@@ -1179,23 +1233,6 @@ if ($method === 'POST') {
         // Note: For OPEN events, we already skipped this. Now we skip for CLICK too.
         // worker_tracking_aggregator.php will resolve these lazily.
 
-        if ($type === 'click') {
-            $debugUrl = isset($_GET['url']) ? base64_decode($_GET['url']) : 'N/A';
-            $debugMsg = date('[Y-m-d H:i:s] ') . "Click Tracking Debug:\n";
-            $debugMsg .= "Received Link: " . $debugUrl . "\n"; // Log the actual URL
-            $debugMsg .= "IP: " . ($ip ?? 'NULL') . "\n";
-            $debugMsg .= "UA: " . ($ua ?? 'NULL') . "\n";
-            $debugMsg .= "Location: " . ($location ?? 'NULL') . "\n";
-            $debugMsg .= "Device: " . json_encode($deviceInfo) . "\n";
-            // [FIX F-7] Auto-rotate at 5MB — prevents disk exhaustion on high-volume campaigns.
-            // Without this: 100k subs × 15% CTR = 15k click events per campaign → unbounded growth.
-            $debugLogFile = __DIR__ . '/webhook_debug.log';
-            if (file_exists($debugLogFile) && filesize($debugLogFile) > 5 * 1024 * 1024) {
-                rename($debugLogFile, $debugLogFile . '.' . date('YmdHis') . '.bak');
-            }
-            file_put_contents($debugLogFile, $debugMsg, FILE_APPEND);
-        }
-
         $extraData = [
             'ip' => $ip,
             'user_agent' => $ua,
@@ -1205,56 +1242,37 @@ if ($method === 'POST') {
             'location' => $location
         ];
 
-        // [AUTO-UPDATE] Subscriber City & Workspace Context from IP/DB (Click Events Only)
-        $wId = 1; // Default
-        if ($sid) {
+        // Workspace Context (Click/Open)
+        $wId = (int)($_GET['ws'] ?? $_GET['workspace_id'] ?? $_SERVER['HTTP_X_WORKSPACE_ID'] ?? 0);
+        if ($wId <= 0 && !empty($sid)) {
             try {
-                $stmtSub = $pdo->prepare("SELECT city, workspace_id FROM subscribers WHERE id = ?");
-                $stmtSub->execute([$sid]);
-                $subRow = $stmtSub->fetch(PDO::FETCH_ASSOC);
-
-                if ($subRow) {
-                    $wId = $subRow['workspace_id'] ?? 1;
-                    $currentCity = $subRow['city'];
-
-                    // [USER REQ] Only update city if current data is EMPTY
-                    if ($type === 'click' && $location && empty($currentCity)) {
-                        $pdo->prepare("UPDATE subscribers SET city = ?, country = ? WHERE id = ?")->execute([$location, $location, $sid]);
-                    }
-                }
-            } catch (Exception $e) {
-                // Ignore errors during city update to not break tracking
-            }
+                $stmtSubWs = $pdo->prepare("SELECT workspace_id FROM subscribers WHERE id = ? LIMIT 1");
+                $stmtSubWs->execute([$sid]);
+                $wId = (int)$stmtSubWs->fetchColumn();
+            } catch (\Throwable $eSubWs) {}
+        }
+        if ($wId <= 0 && !empty($cid)) {
+            try {
+                $stmtCmpWs = $pdo->prepare("SELECT workspace_id FROM campaigns WHERE id = ? LIMIT 1");
+                $stmtCmpWs->execute([$cid]);
+                $wId = (int)$stmtCmpWs->fetchColumn();
+            } catch (\Throwable $eCmpWs) {}
+        }
+        if ($wId <= 0 && !empty($fid)) {
+            try {
+                $stmtFlwWs = $pdo->prepare("SELECT workspace_id FROM flows WHERE id = ? LIMIT 1");
+                $stmtFlwWs->execute([$fid]);
+                $wId = (int)$stmtFlwWs->fetchColumn();
+            } catch (\Throwable $eFlwWs) {}
+        }
+        if ($wId <= 0) {
+            $wId = 1;
         }
 
-        // [SECURITY FIX] Validate URL before redirect.
-        // Original regex could be bypassed: javascript:@https://legit.com is valid per FILTER_VALIDATE_URL
-        // because FILTER_VALIDATE_URL only checks structure, not scheme safety.
-        // Fix: Explicitly allow only http:// and https:// scheme AND check host is not empty.
+        // [SECURITY FIX & FAST-PATH] Validate & Sanitize URL before redirect
         $rawEncodedUrl = isset($_GET['url']) ? str_replace(' ', '+', (string)$_GET['url']) : '';
-        $url = $rawEncodedUrl !== '' ? base64_decode($rawEncodedUrl) : 'https://automation.ideas.edu.vn';
-        if ($url === false || trim($url) === '') {
-            $url = 'https://automation.ideas.edu.vn';
-        }
-        // Decode HTML entities if any (e.g. &amp; -> &) and strip control characters / CRLF
-        $url = html_entity_decode(trim($url), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $url = preg_replace('/[\x00-\x1F\x7F]+/', '', $url);
-        if (strpos($url, '//') === 0) {
-            $url = 'https:' . $url;
-        } elseif (!preg_match('/^[a-z][a-z0-9+\-.]*:\/\//i', $url) && strpos($url, '/') !== 0 && !preg_match('/^(?:javascript:|data:|mailto:|tel:)/i', $url)) {
-            $url = 'https://' . ltrim($url, '/');
-        }
-        // Percent-encode spaces and UTF-8 / non-ASCII characters so FILTER_VALIDATE_URL does not
-        // reject valid URLs with Vietnamese slugs or query params
-        $url = preg_replace_callback('/[^\x21-\x7E]/', function ($m) {
-            return rawurlencode($m[0]);
-        }, $url);
-        $parsedUrl = parse_url($url);
-        $urlScheme = strtolower($parsedUrl['scheme'] ?? '');
-        $urlHost = $parsedUrl['host'] ?? '';
-        if (!in_array($urlScheme, ['http', 'https']) || empty($urlHost) || !filter_var($url, FILTER_VALIDATE_URL)) {
-            $url = 'https://automation.ideas.edu.vn';
-        }
+        $decodedUrl = $rawEncodedUrl !== '' ? base64_decode($rawEncodedUrl) : '';
+        $url = sanitize_redirect_url($decodedUrl, resolve_automation_app_base_url($pdo));
 
         if ($sid) {
             // [PERFORMANCE] BUFFER-FIRST ARCHITECTURE
@@ -1371,165 +1389,146 @@ if ($method === 'POST') {
             }
 
             if ($type === 'open' || ($type === 'click' && !$isBotClick)) {
-
-                // [DEBOUNCE FIX] Pre-buffer deduplication
-                // Checks raw_event_buffer for identical recent events to prevent redundant logs
-                // from multi-threaded scanners or rapid user clicks.
-                $isDebounced = false;
                 try {
-                    $stmtCheck = $pdo->prepare("
-                        SELECT 1 FROM raw_event_buffer 
-                        WHERE type = ? 
-                        AND created_at >= DATE_SUB(NOW(), INTERVAL 30 SECOND)
-                        AND payload LIKE ? 
-                        LIMIT 1
-                    ");
-                    $likePattern = '%"sid":"' . $sid . '"%' . ($rid ? '%"rid":"' . $rid . '"%' : '');
-                    if ($type === 'click' && $url) {
-                        $jsonEscapedUrl = trim(json_encode($url), '"');
-                        $likePattern .= '%"url":"' . $jsonEscapedUrl . '"%';
-                    }
-                    $stmtCheck->execute([$type, $likePattern]);
-                    if ($stmtCheck->fetchColumn()) {
-                        $isDebounced = true;
-                    }
-                } catch (Exception $e) {
-                }
+                    $rawPayload = json_encode([
+                        'sid'          => $sid,
+                        'rid'          => $rid,
+                        'fid'          => $fid,
+                        'cid'          => $cid,
+                        'var'          => $_GET['var'] ?? null,
+                        'workspace_id' => $wId,
+                        'extra_data'   => array_merge($extraData, ['url' => $url]),
+                        'timestamp'    => microtime(true)
+                    ]);
 
-                if (!$isDebounced) {
-                    try {
-                        $rawPayload = json_encode([
-                            'sid' => $sid,
-                            'rid' => $rid,
-                            'fid' => $fid,
-                            'cid' => $cid,
-                            'var' => $_GET['var'] ?? null,
-                            'workspace_id' => $wId, // [HARDENING] Pass workspace_id into buffer
-                            // user_agent is already inside $extraData['user_agent'] — no need to duplicate at root
-                            'extra_data' => array_merge($extraData, ['url' => $url]),
-                            'timestamp' => microtime(true)
-                        ]);
+                    $stmt = $pdo->prepare("INSERT INTO raw_event_buffer (type, event_type, payload, workspace_id, created_at) VALUES (?, ?, ?, ?, UNIX_TIMESTAMP())");
+                    $stmt->execute([$type, $type, $rawPayload, $wId]);
+                } catch (\Throwable $e) {
+                    // Fallback: If table doesn't exist, create it and retry
+                    if (strpos($e->getMessage(), "doesn't exist") !== false) {
+                        try {
+                            $pdo->exec("CREATE TABLE IF NOT EXISTS raw_event_buffer (
+                                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                                type VARCHAR(50) NOT NULL,
+                                event_type VARCHAR(50) NOT NULL,
+                                payload JSON NOT NULL,
+                                workspace_id INT(11) DEFAULT 1,
+                                processed TINYINT(1) DEFAULT 0,
+                                created_at INT(10) UNSIGNED DEFAULT 0,
+                                INDEX idx_processed (processed)
+                            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
-                        $stmt = $pdo->prepare("INSERT INTO raw_event_buffer (type, payload) VALUES (?, ?)");
-                        $stmt->execute([$type, $rawPayload]);
-                    } catch (Exception $e) {
-                        // Fallback: If table doesn't exist, create it and retry
-                        if (strpos($e->getMessage(), "doesn't exist") !== false) {
-                            try {
-                                $pdo->exec("CREATE TABLE IF NOT EXISTS raw_event_buffer (
-                                    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                                    type VARCHAR(50) NOT NULL,
-                                    payload JSON NOT NULL,
-                                    processed TINYINT(1) DEFAULT 0,
-                                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                                    INDEX idx_processed (processed)
-                                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
-
-                                $stmt = $pdo->prepare("INSERT INTO raw_event_buffer (type, payload) VALUES (?, ?)");
-                                $stmt->execute([$type, $rawPayload]);
-                            } catch (Exception $ex) {
-                                // If still fails, log and ignore (don't break redirect)
-                                file_put_contents(__DIR__ . '/webhook_error.log', date('[Y-m-d H:i:s] ') . "Buffer Insert Failed: " . $ex->getMessage() . "\n", FILE_APPEND);
-                            }
-                        } else {
-                            file_put_contents(__DIR__ . '/webhook_error.log', date('[Y-m-d H:i:s] ') . $e->getMessage() . "\n", FILE_APPEND);
-                        }
+                            $stmt = $pdo->prepare("INSERT INTO raw_event_buffer (type, event_type, payload, workspace_id, created_at) VALUES (?, ?, ?, ?, UNIX_TIMESTAMP())");
+                            $stmt->execute([$type, $type, $rawPayload, $wId]);
+                        } catch (\Throwable $ex) {}
                     }
                 }
             } elseif ($type === 'unsubscribe') {
-                // [CRITICAL FIX] Explicit 'unsubscribe' type check.
-                // Old code used bare 'else' — if type='click' and $isBotClick=true,
-                // the bot request would accidentally trigger processTrackingEvent('unsubscribe'),
-                // potentially unsubscribing real users via Google's security scanner!
                 try {
                     $trackPayload = [
-                        'type' => 'unsubscribe',
+                        'type'          => 'unsubscribe',
                         'subscriber_id' => $sid,
-                        'reference_id' => $rid,
-                        'flow_id' => $fid,
-                        'campaign_id' => $cid,
-                        'extra_data' => array_merge($extraData, ['url' => $url])
+                        'reference_id'  => $rid,
+                        'flow_id'       => $fid,
+                        'campaign_id'   => $cid,
+                        'workspace_id'  => $wId,
+                        'extra_data'    => array_merge($extraData, ['url' => $url])
                     ];
                     processTrackingEvent($pdo, 'unsubscribe', $trackPayload);
-                } catch (Exception $e) {
-                    file_put_contents(__DIR__ . '/webhook_error.log', date('[Y-m-d H:i:s] ') . $e->getMessage() . "\n", FILE_APPEND);
+                } catch (\Throwable $e) {
+                    error_log('[webhook] Unsubscribe tracking error: ' . $e->getMessage());
                 }
-                // Bot clicks ($isBotClick=true) fall through here silently — just redirect, no tracking.
             }
 
         }
 
-        // 2. RESPONSE & REDIRECT
+        // 2. RESPONSE & FAST REDIRECT
         if ($type === 'open') {
             header('Content-Type: image/gif');
+            header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+            header('Pragma: no-cache');
             echo base64_decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            }
             exit;
         }
 
         if ($type === 'click') {
-            // [SURVEY & SUBSCRIBER PREFILL] Forward subscriber context to surveys and verified domains
-            if ($sid) {
+            // [SURVEY & SUBSCRIBER PREFILL] Forward subscriber context ONLY if survey or internal domain
+            $isSurveyUrl = (
+                (isset($_GET['v']) && $_GET['v'] === '1') ||
+                strpos($url, '/surveys/') !== false ||
+                strpos($url, '/s/') !== false ||
+                strpos($url, 'survey_public.php') !== false
+            );
+            $effClickTid = (!empty($wId) && (int)$wId > 0) ? (int)$wId : 1;
+            $isSurveyOrInternal = (
+                $isSurveyUrl ||
+                strpos($url, 'forms.php') !== false ||
+                ($internalDom = (class_exists('TenantConfigService') ? TenantConfigService::getOrganizationProfile($pdo, $effClickTid)['internal_email_domain'] : '')) !== '' && strpos($url, $internalDom) !== false
+            );
+
+            if ($sid && $isSurveyOrInternal) {
                 try {
-                    $stmtE = $pdo->prepare("SELECT id, email, first_name, last_name, phone_number, company_name FROM subscribers WHERE id = ? LIMIT 1");
+                    $stmtE = $pdo->prepare("SELECT id, email, first_name, last_name, phone_number FROM subscribers WHERE id = ? LIMIT 1");
                     $stmtE->execute([$sid]);
                     $sub = $stmtE->fetch(PDO::FETCH_ASSOC);
                     if ($sub) {
-                        $isSurveyOrInternal = (
-                            (isset($_GET['v']) && $_GET['v'] === '1') ||
-                            strpos($url, '/surveys/') !== false ||
-                            strpos($url, '/s/') !== false ||
-                            strpos($url, 'survey_public.php') !== false ||
-                            strpos($url, 'forms.php') !== false ||
-                            strpos($url, 'ideas.edu.vn') !== false
-                        );
-                        if ($isSurveyOrInternal) {
-                            $fragment = '';
-                            $hashPos = strpos($url, '#');
-                            if ($hashPos !== false) {
-                                $fragment = substr($url, $hashPos);
-                                $url = substr($url, 0, $hashPos);
-                            }
-                            $connector = (strpos($url, '?') !== false) ? '&' : '?';
-                            $paramsToAdd = [];
-                            if (!empty($sub['id']) && strpos($url, 'sid=') === false) {
-                                $paramsToAdd['sid'] = $sub['id'];
-                            }
-                            if (!empty($sub['email'])) {
-                                if (strpos($url, 'email=') === false) $paramsToAdd['email'] = $sub['email'];
-                                if (strpos($url, 'uid=') === false) $paramsToAdd['uid'] = $sub['email'];
-                            }
-                            if (!empty($sub['first_name']) && strpos($url, 'name=') === false) {
-                                $fullName = trim(($sub['first_name'] ?? '') . ' ' . ($sub['last_name'] ?? ''));
-                                $paramsToAdd['name'] = $fullName ?: $sub['first_name'];
-                            }
-                            if (!empty($sub['phone_number']) && strpos($url, 'phone=') === false) {
-                                $paramsToAdd['phone'] = $sub['phone_number'];
-                            }
-                            if (!empty($paramsToAdd)) {
-                                $url .= $connector . http_build_query($paramsToAdd);
-                            }
-                            $url .= $fragment;
+                        $fragment = '';
+                        $hashPos = strpos($url, '#');
+                        if ($hashPos !== false) {
+                            $fragment = substr($url, $hashPos);
+                            $url = substr($url, 0, $hashPos);
                         }
+                        $connector = (strpos($url, '?') !== false) ? '&' : '?';
+                        $paramsToAdd = [];
+                        if (!empty($sub['id']) && strpos($url, 'sid=') === false) {
+                            $paramsToAdd['sid'] = $sub['id'];
+                        }
+                        if (!empty($sub['email'])) {
+                            if (strpos($url, 'email=') === false) $paramsToAdd['email'] = $sub['email'];
+                            if (strpos($url, 'uid=') === false) $paramsToAdd['uid'] = $sub['email'];
+                        }
+                        // Use ?name= only on survey URLs; WordPress reserves ?name= for post slug lookup (404 on articles/pages)
+                        $nameParamKey = $isSurveyUrl ? 'name' : 'lead_name';
+                        if (!empty($sub['first_name']) && strpos($url, $nameParamKey . '=') === false) {
+                            $fullName = trim(($sub['first_name'] ?? '') . ' ' . ($sub['last_name'] ?? ''));
+                            $paramsToAdd[$nameParamKey] = $fullName ?: $sub['first_name'];
+                        }
+                        if (!empty($sub['phone_number']) && strpos($url, 'phone=') === false) {
+                            $paramsToAdd['phone'] = $sub['phone_number'];
+                        }
+                        if (!empty($paramsToAdd)) {
+                            $url .= $connector . http_build_query($paramsToAdd);
+                        }
+                        $url .= $fragment;
                     }
-                } catch (Exception $e) {
-                    error_log('[webhook] Subscriber info append failed for sid=' . $sid . ': ' . $e->getMessage());
-                }
+                } catch (\Throwable $e) {}
             }
-            header("Location: $url");
+
+            $url = str_replace(["\r", "\n"], '', $url);
+            header("Location: " . $url, true, 302);
+            header("Connection: close");
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            }
             exit;
         }
 
         if ($type === 'unsubscribe') {
-            // [BUG-J1 FIX] rawurlencode() params to prevent HTTP header injection
-            // [FIX R4-H02] Use APP_BASE_URL env var instead of hardcoded domain.
-            // Hardcoded domain breaks if: (a) domain changes, (b) domain expires/hijacked.
-            $appBase = rtrim(getenv('APP_BASE_URL') ?: 'https://automation.ideas.edu.vn', '/');
-            $redirect = $appBase . '/crm/manage_subscription.php?sid=' . rawurlencode($sid);
+            $apiBase = resolve_automation_api_base_url($pdo);
+            $redirect = $apiBase . '/manage_subscription.php?sid=' . rawurlencode($sid);
             if ($fid)
                 $redirect .= '&fid=' . rawurlencode($fid);
             if ($cid)
                 $redirect .= '&cid=' . rawurlencode($cid);
-            header('Location: ' . $redirect);
+            $redirect = str_replace(["\r", "\n"], '', $redirect);
+            header('Location: ' . $redirect, true, 302);
+            header("Connection: close");
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            }
             exit;
         }
 

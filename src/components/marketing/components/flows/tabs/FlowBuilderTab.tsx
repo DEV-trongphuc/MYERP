@@ -13,6 +13,7 @@ interface FlowBuilderTabProps {
     flow: Flow;
     allFlows?: Flow[];
     allForms?: FormDefinition[];
+    allSurveys?: any[];
     isViewMode?: boolean;
     onEditStep: (step: FlowStep) => void;
     onAddStep: (parentId: string, branch?: string, isInsert?: boolean) => void;
@@ -29,7 +30,7 @@ interface FlowBuilderTabProps {
 }
 
 const FlowBuilderTab: React.FC<FlowBuilderTabProps> = memo(({
-    flow, allFlows = [], allForms = [], isViewMode = false,
+    flow, allFlows = [], allForms = [], allSurveys = [], isViewMode = false,
     onEditStep, onAddStep,
     canUndo, canRedo, onUndo, onRedo,
     onQuickAddWait, onSwapSteps,
@@ -367,7 +368,7 @@ const FlowBuilderTab: React.FC<FlowBuilderTabProps> = memo(({
                 >
                     {trigger ? (
                         <FlowTree
-                            stepId={trigger.id} flow={flow} allFlows={allFlows} allForms={allForms} isViewMode={isViewMode} onEditStep={onEditStep} onAddStep={onAddStep}
+                            stepId={trigger.id} flow={flow} allFlows={allFlows} allForms={allForms} allSurveys={allSurveys} isViewMode={isViewMode} onEditStep={onEditStep} onAddStep={onAddStep}
                             onQuickAddWait={onQuickAddWait} onSwapSteps={onSwapSteps}
                             draggedStepId={draggedStepId} setDraggedStepId={setDraggedStepId}
                             isReportMode={isReportMode} realtimeDistribution={realtimeDistribution} onReportClick={onReportClick}

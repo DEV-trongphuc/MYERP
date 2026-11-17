@@ -824,8 +824,10 @@ class AgentTaskProjectTools {
             return ['success' => false, 'message' => 'Tài khoản Viewer chỉ có quyền xem, không có quyền tạo hoặc chỉnh sửa công việc.'];
         }
 
-        $isAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'general_director', 'sale_director', 'ceo'], true);
-        $isManager = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+        require_once __DIR__ . '/../../config/TenantConfigService.php';
+        $taskToolScope = TenantConfigService::resolvePermissionScope($db, $auth, 'workspace', 'read');
+        $isAdmin = ($taskToolScope === 'all');
+        $isManager = ($taskToolScope === 'team');
         $isAdminOrMgr = $isAdmin || $isManager;
 
         $action = strtolower(trim((string)($args['action'] ?? 'create_or_delegate')));
@@ -1345,8 +1347,10 @@ class AgentTaskProjectTools {
         $role = strtolower(trim((string)($auth['role'] ?? 'user')));
         $actorName = (string)($auth['full_name'] ?? ($auth['username'] ?? 'Đồng nghiệp'));
 
-        $isAdminOrDirector = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'general_director', 'sale_director', 'ceo', 'marketing', 'academic', 'hoc_vu'], true);
-        $isManager = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+        require_once __DIR__ . '/../../config/TenantConfigService.php';
+        $projToolScope = TenantConfigService::resolvePermissionScope($db, $auth, 'projects', 'read');
+        $isAdminOrDirector = ($projToolScope === 'all');
+        $isManager = ($projToolScope === 'team');
         $isRosterRestricted = in_array($role, ['sale', 'sales', 'manager'], true);
 
         $action = strtolower(trim((string)($args['action'] ?? 'list')));
@@ -2429,8 +2433,10 @@ class AgentTaskProjectTools {
      */
     private static function resolveTargetTaskWithRbac(PDO $db, int $tid, int $uid, array $auth, array $args): array {
         $role = strtolower(trim((string)($auth['role'] ?? 'user')));
-        $isAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'general_director', 'sale_director', 'ceo'], true);
-        $isManager = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+        require_once __DIR__ . '/../../config/TenantConfigService.php';
+        $taskToolScope = TenantConfigService::resolvePermissionScope($db, $auth, 'workspace', 'read');
+        $isAdmin = ($taskToolScope === 'all');
+        $isManager = ($taskToolScope === 'team');
 
         $taskId = (int)($args['task_id'] ?? 0);
         $taskTitle = trim((string)($args['task_title'] ?? ($args['subject'] ?? '')));

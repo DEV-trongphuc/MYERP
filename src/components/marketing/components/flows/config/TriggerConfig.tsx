@@ -658,6 +658,17 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                             )}
 
                             {/* CASE: FORM SUBMIT */}
+                            {triggerType === 'form' && config.targetId && !forms.some(f => f.id === config.targetId) && (
+                                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-rose-800 text-xs mb-2">
+                                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="font-bold">Biểu mẫu liên kết trước đây đã bị xóa</p>
+                                        <p className="text-[11px] text-rose-600 mt-0.5">
+                                            Mã biểu mẫu cũ: <code className="bg-rose-100 px-1 py-0.5 rounded text-[10px]">{config.targetId}</code>. Vui lòng chọn một biểu mẫu mới bên dưới để kịch bản hoạt động chính xác.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                             {triggerType === 'form' && forms
                                 .filter(f => String(f?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
                                 .map(f => (
@@ -673,6 +684,17 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                             }
 
                             {/* CASE: SURVEY SUBMIT */}
+                            {triggerType === 'survey' && config.targetId && !surveys.some(s => s.id === config.targetId) && (
+                                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-rose-800 text-xs mb-2">
+                                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="font-bold">Khảo sát liên kết trước đây đã bị xóa</p>
+                                        <p className="text-[11px] text-rose-600 mt-0.5">
+                                            Mã khảo sát cũ: <code className="bg-rose-100 px-1 py-0.5 rounded text-[10px]">{config.targetId}</code>. Vui lòng chọn một khảo sát mới bên dưới để kịch bản hoạt động chính xác.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                             {triggerType === 'survey' && surveys
                                 .filter(s => String(s?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
                                 .map(s => (

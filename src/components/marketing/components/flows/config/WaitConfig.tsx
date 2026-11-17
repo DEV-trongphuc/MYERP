@@ -60,7 +60,7 @@ const WaitConfig: React.FC<WaitConfigProps> = ({ config, onChange, disabled }) =
       return `Chờ đến ngày ${cfg.specificDate || ''} ${cfg.untilTime || ''}`;
     }
     const unit = cfg.unit || 'hours';
-    const dur = cfg.duration || (unit === 'minutes' ? 10 : 1);
+    const dur = cfg.duration || (unit === 'minutes' ? 5 : 1);
     const uLabel = unitOptions.find(o => o.value === unit)?.label || 'Giờ';
     return `Chờ ${dur} ${uLabel}`;
   };
@@ -103,7 +103,7 @@ const WaitConfig: React.FC<WaitConfigProps> = ({ config, onChange, disabled }) =
           </p>
           <p className="text-[10px] opacity-70 font-medium leading-tight mt-0.5">
             {mode === 'duration'
-              ? (config.unit === 'minutes' ? 'Đã chọn phút: Tối thiểu phải là 10 phút.' : 'Khách hàng sẽ đứng ở bước này trước khi sang bước tiếp theo (Tối thiểu 1 giờ).')
+              ? (config.unit === 'minutes' ? 'Đã chọn phút: Tối thiểu phải là 5 phút.' : 'Khách hàng sẽ đứng ở bước này trước khi sang bước tiếp theo (Tối thiểu 1 giờ).')
               : (mode === 'until'
                 ? 'Hệ thống sẽ giữ Khách hàng lại cho đến khi đạt tới ngày/giờ đã thiết lập.'
                 : (mode === 'until_attribute'
@@ -121,16 +121,16 @@ const WaitConfig: React.FC<WaitConfigProps> = ({ config, onChange, disabled }) =
           <Input
             label="Giá trị"
             type="number"
-            min={config.unit === 'minutes' ? 10 : 1}
-            value={config.duration || (config.unit === 'minutes' ? 10 : 1)}
-            onChange={(e) => updateConfig({ duration: Math.max(config.unit === 'minutes' ? 10 : 1, parseInt(e.target.value) || 0) })}
+            min={config.unit === 'minutes' ? 5 : 1}
+            value={config.duration || (config.unit === 'minutes' ? 5 : 1)}
+            onChange={(e) => updateConfig({ duration: Math.max(config.unit === 'minutes' ? 5 : 1, parseInt(e.target.value) || 0) })}
             disabled={disabled}
           />
           <Select
             label="Đơn vị"
             options={unitOptions}
             value={config.unit || 'hours'}
-            onChange={(unit) => updateConfig({ unit, duration: unit === 'minutes' && (config.duration || 0) < 10 ? 10 : (config.duration || 1) })}
+            onChange={(unit) => updateConfig({ unit, duration: unit === 'minutes' && (config.duration || 0) < 5 ? 5 : (config.duration || 1) })}
             disabled={disabled}
             direction="bottom"
           />

@@ -34,8 +34,8 @@ if (!function_exists('runWorkerSegmentNotify')) {
         $mailer = new Mailer($pdo, $apiUrl, $defaultSender);
 
         try {
-            // Fetch segments configured for notify_on_join - Include workspace_id
-            $stmtSegs = $pdo->prepare("SELECT id, workspace_id, name, criteria, notify_email, notify_subject, notify_cc FROM segments WHERE notify_on_join = 1");
+            // Fetch segments configured for notify_on_join - Include workspace_id & filter soft-delete
+            $stmtSegs = $pdo->prepare("SELECT id, workspace_id, name, criteria, notify_email, notify_subject, notify_cc FROM segments WHERE notify_on_join = 1 AND deleted_at IS NULL");
             $stmtSegs->execute();
             $notificationSegments = $stmtSegs->fetchAll(PDO::FETCH_ASSOC);
 
@@ -49,11 +49,11 @@ if (!function_exists('runWorkerSegmentNotify')) {
                 }
 
                 $segId = $seg['id'];
-                $wsId = $seg['workspace_id']; // [FIX] Extract workspace_id for scoping
+                $wsId = (int)($seg['workspace_id'] ?? 1);
                 $segName = $seg['name'];
                 $criteria = $seg['criteria'];
 
-                $res = buildSegmentWhereClause($criteria, $workspace_id, $segId);
+                $res = buildSegmentWhereClause($criteria, $wsId, $segId);
                 if ($res['sql'] === '1=1' || empty($res['sql'])) {
                     continue; // Skip invalid or empty criteria
                 }
@@ -61,7 +61,7 @@ if (!function_exists('runWorkerSegmentNotify')) {
                 $pdo->beginTransaction();
 
                 // Find up to 20 subscribers who match the segment BUT haven't been notified yet.
-                // [FIX] Added workspace_id = ? to ensure we only notify about subscribers in the segment's own workspace.
+                // Added workspace_id = ? to ensure we only notify about subscribers in the segment's own workspace.
                 
                 $skipLockedClause = isDatabaseSkipLockedSupported($pdo) ? 'FOR UPDATE SKIP LOCKED' : 'FOR UPDATE';
 
@@ -69,18 +69,19 @@ if (!function_exists('runWorkerSegmentNotify')) {
                     SELECT s.id, s.email, s.first_name, s.last_name, s.phone_number, s.joined_at, s.custom_attributes
                     FROM subscribers s 
                     WHERE s.workspace_id = ? 
+                    AND s.deleted_at IS NULL
                     AND s.status IN ('active', 'lead', 'customer') 
                     AND (" . $res['sql'] . ") 
                     AND NOT EXISTS (
                         SELECT 1 FROM subscriber_activity sa 
-                        WHERE sa.subscriber_id = s.id AND sa.type = 'segment_notify' AND sa.reference_id = ?
+                        WHERE sa.workspace_id = ? AND sa.subscriber_id = s.id AND sa.type = 'segment_notify' AND sa.reference_id = ?
                     )
                     ORDER BY s.id ASC
                     LIMIT 20
                     $skipLockedClause
                 ";
 
-                $params = array_merge([$wsId], $res['params'], [$segId]);
+                $params = array_values(array_merge([$wsId], $res['params'], [$wsId, $segId]));
                 $stmtCheck = $pdo->prepare($sqlCheck);
                 
                 try {
@@ -162,9 +163,9 @@ if (!function_exists('runWorkerSegmentNotify')) {
                     $sent = $mailer->dispatchRaw($primaryTo, $personalSubject, $htmlContent, [], $error, $ccEmails);
 
                     if ($sent) {
-                        // Mark as notified in subscriber_activity cache to prevent duplicate alerts
-                        $pdo->prepare("INSERT INTO subscriber_activity (subscriber_id, type, reference_id, reference_name, details, created_at) VALUES (?, 'segment_notify', ?, ?, 'Email sent to admin', NOW())")
-                            ->execute([$sub['id'], $segId, $segName]);
+                        // Mark as notified in subscriber_activity cache with workspace scoping to prevent duplicate alerts
+                        $pdo->prepare("INSERT INTO subscriber_activity (workspace_id, subscriber_id, type, reference_id, reference_name, details, created_at) VALUES (?, ?, 'segment_notify', ?, ?, 'Email sent to admin', NOW())")
+                            ->execute([$wsId, $sub['id'], $segId, $segName]);
                     } else {
                         // Failed to send, we do NOT insert to subscriber_activity so it retries next run
                         $logs[] = "  -> Failed to notify Admin for sub {$sub['id']}: $error";

@@ -8,6 +8,7 @@ import Button from '../common/Button';
 import Select from '../common/Select';
 import Input from '../common/Input';
 import Badge from '../common/Badge';
+import { attachCustomAttributesForImport, parseSubscriberImportData, VALID_SUBSCRIBER_HEADERS } from '../../utils/importMapping';
 
 interface ImportSubscribersModalProps {
     isOpen: boolean;
@@ -44,6 +45,10 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
     const [createVirtualEmail, setCreateVirtualEmail] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [importWarnings, setImportWarnings] = useState<string[]>([]);
+    const [importColumnMeta, setImportColumnMeta] = useState<{
+        columnMapping: Record<number, string>;
+        originalHeaders: Record<number, string>;
+    }>({ columnMapping: {}, originalHeaders: {} });
 
     useEffect(() => {
         if (isOpen) {
@@ -57,6 +62,7 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
             setImportMode('new');
             setInputMethod(defaultTab);
             setImportWarnings([]);
+            setImportColumnMeta({ columnMapping: {}, originalHeaders: {} });
         }
     }, [isOpen, defaultTab]);
 
@@ -92,161 +98,24 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
         }
     };
 
-    const detectDelimiter = (str: string) => {
-        const firstLine = str.split('\n')[0];
-        if (firstLine.includes('\t')) return '\t';
-        if (firstLine.includes(';')) return ';';
-        return ',';
-    };
-
-    const formatNameFromEmail = (email: string) => {
-        if (!email) return 'User';
-        const localPart = email.split('@')[0];
-        // Loại bỏ số và ký tự đặc biệt, chỉ giữ lại chữ cái
-        const cleaned = localPart.replace(/[^a-zA-Z]/g, '');
-        if (!cleaned) return 'User';
-        // Viết hoa chữ đầu, còn lại viết thường
-        return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
-    };
-
-    const VALID_HEADERS = {
-        email: ['email', 'mail', 'hòm thư', 'hom thu', 'địa chỉ email', 'dia chi email', 'e-mail'],
-        firstName: [
-            'firstname', 'tên', 'first name', 'given name', 'ten', 'họ tên', 'ho ten',
-            'họ và tên', 'ho va ten', 'full name', 'fullname', 'tên khách hàng', 'ten khach hang',
-            'name', 'tên khách', 'ten khach', 'họ và tên khách hàng', 'ho va ten khach hang',
-            'người liên hệ', 'nguoi lien he', 'customer name', 'customer_name', 'user name', 'username'
-        ],
-        lastName: ['lastname', 'họ', 'last name', 'family name', 'ho', 'họ đệm', 'ho dem', 'surname', 'last_name'],
-        phoneNumber: ['phone', 'số điện thoại', 'sđt', 'telephone', 'mobile', 'dien thoai', 'so dien thoai', 'SDT', 'sdt', 'di động', 'di dong'],
-        jobTitle: ['job', 'chức vụ', 'vị trí', 'title', 'cong viec', 'chuc vu', 'vi tri', 'chức danh', 'chuc danh'],
-        companyName: ['company', 'công ty', 'tổ chức', 'organization', 'cong ty', 'to chuc', 'đơn vị', 'don vi'],
-        city: ['city', 'thành phố', 'tỉnh', 'thanh pho', 'tinh'],
-        country: ['country', 'quốc gia', 'quoc gia'],
-        gender: ['gender', 'giới tính', 'sex', 'gioi tinh'],
-        dateOfBirth: ['birth', 'ngày sinh', 'dob', 'birthday', 'ngay sinh', 'ngaysinh'],
-        anniversaryDate: ['anniversary', 'ngày kỷ niệm', 'ngay kỷ niem'],
-        tags: ['tags', 'nhãn', 'tag', 'nhan'],
-        source: ['source', 'nguồn', 'origin', 'nguon'],
-        salesperson: ['salesperson', 'sales', 'nhân viên', 'nv kinh doanh', 'nhan vien'],
-        joinedAt: ['joinedat', 'ngày tham gia', 'date', 'ngày', 'ngay tham gia']
-    };
-
-    const parseCSV = (text: string, delimiter: string = ','): string[][] => {
-        const result: string[][] = [];
-        let row: string[] = [];
-        let current = '';
-        let inQuotes = false;
-        
-        const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-        const textToParse = cleanText.endsWith('\n') ? cleanText : cleanText + '\n';
-        
-        for (let i = 0; i < textToParse.length; i++) {
-            const char = textToParse[i];
-            
-            if (char === '"') {
-                if (inQuotes && textToParse[i + 1] === '"') {
-                    current += '"';
-                    i++;
-                } else {
-                    inQuotes = !inQuotes;
-                }
-            } else if (char === delimiter && !inQuotes) {
-                row.push(current);
-                current = '';
-            } else if (char === '\n' && !inQuotes) {
-                row.push(current);
-                if (row.length > 1 || (row.length === 1 && row[0] !== '')) {
-                    result.push(row);
-                }
-                row = [];
-                current = '';
-            } else {
-                current += char;
-            }
-        }
-        return result;
-    };
-
     const parseData = () => {
         if (!rawData.trim()) return;
 
-        const delimiter = detectDelimiter(rawData);
-        const parsedAll = parseCSV(rawData.trim(), delimiter);
-        if (parsedAll.length === 0) return;
-
-        const headerRow = parsedAll[0].map(h => h.trim());
-
-        // Xác định các cột hợp lệ và cột tùy chỉnh
-        const columnMapping: { [index: number]: string } = {};
-        headerRow.forEach((header, index) => {
-            const lowerHeader = header.toLowerCase().trim();
-            let matched = false;
-            for (const [key, patterns] of Object.entries(VALID_HEADERS)) {
-                if (patterns.some(p => lowerHeader === p.toLowerCase() || lowerHeader.split(/[\s_-]+/).some(word => word === p.toLowerCase()))) {
-                    columnMapping[index] = key;
-                    matched = true;
-                    break;
-                }
+        const parsed = parseSubscriberImportData(rawData);
+        if (parsed.missingRequiredIdentifiers) {
+            if (parsed.headers.length > 0) {
+                toast.error('Thiếu cả hai cột tiêu đề quan trọng: Email và Số điện thoại. Vui lòng bổ sung ít nhất một trong hai cột này.');
             }
-            // Nếu không khớp với trường chuẩn, giữ header gốc làm key tùy chỉnh
-            if (!matched) {
-                columnMapping[index] = header;
-            }
-        });
-
-        const mappedKeys = Object.values(columnMapping);
-        const hasEmail = mappedKeys.includes('email');
-        const hasPhone = mappedKeys.includes('phoneNumber');
-        const hasName = mappedKeys.includes('firstName') || mappedKeys.includes('lastName');
-
-        // Check if first row contains data instead of headers
-        const isHeaderRowData = headerRow.some(header => {
-            if (header.includes('@') && header.includes('.')) return true;
-            const cleanPhone = header.replace(/[^0-9]/g, '');
-            if ((cleanPhone.startsWith('0') || cleanPhone.startsWith('84')) && cleanPhone.length >= 9 && cleanPhone.length <= 12) return true;
-            return false;
-        });
-
-        if (!hasEmail && !hasPhone) {
-            toast.error('Thiếu cả hai cột tiêu đề quan trọng: Email và Số điện thoại. Vui lòng bổ sung ít nhất một trong hai cột này.');
             return;
         }
 
-        const currentWarnings: string[] = [];
-        if (isHeaderRowData) {
-            currentWarnings.push('Phát hiện dòng tiêu đề đầu tiên có thể chứa dữ liệu khách hàng (Email/SĐT). Có vẻ như tệp của bạn đang thiếu hàng tiêu đề cột.');
-        }
-        if (!hasEmail) {
-            currentWarnings.push('Thiếu cột tiêu đề Email (hệ thống sẽ không thể gửi email cho các liên hệ này).');
-        }
-        if (!hasPhone) {
-            currentWarnings.push('Thiếu cột tiêu đề Số điện thoại (hệ thống sẽ không thể gửi tin nhắn ZNS/SMS cho các liên hệ này).');
-        }
-        if (!hasName) {
-            currentWarnings.push('Thiếu cột tiêu đề Họ & Tên (liên hệ sẽ được đặt tên tạm thời dựa trên Email/SĐT).');
-        }
-        setImportWarnings(currentWarnings);
+        setImportWarnings(parsed.warnings);
+        setImportColumnMeta({
+            columnMapping: parsed.columnMapping,
+            originalHeaders: parsed.originalHeaders,
+        });
 
-        const dataRows = parsedAll.slice(1).map(values => {
-            const trimmedValues = values.map(v => v.trim());
-            if (trimmedValues.length === 0 || (trimmedValues.length === 1 && !trimmedValues[0])) return null;
-
-            const rowObj: any = {};
-
-            Object.keys(columnMapping).forEach(indexStr => {
-                const index = parseInt(indexStr);
-                const key = columnMapping[index];
-                rowObj[key] = trimmedValues[index] || '';
-            });
-
-            if (rowObj.email && !rowObj.firstName) {
-                rowObj.firstName = formatNameFromEmail(rowObj.email);
-            }
-
-            return rowObj;
-        }).filter(r => r && ((r.email && r.email.includes('@')) || r.phoneNumber));
-
+        const dataRows = parsed.rows;
         let dupCount = 0;
         let updateCount = 0;
         let newCount = 0;
@@ -261,7 +130,6 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
             if (!phone) {
                 row.phoneNumber = '';
             }
-            // Simple normalization for frontend check
             let normPhone = phone;
             if (phone.startsWith('84') && phone.length > 9) normPhone = '0' + phone.substring(2);
 
@@ -271,7 +139,7 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
 
             // Only treat phone as CSV-duplicate when the row does NOT have a distinct email
             const isDuplicateInCsv = (email && seenEmailsInCsv.has(email)) || (!email && normPhone && seenPhonesInCsv.has(normPhone));
-            
+
             if (isDuplicateInCsv) {
                 dupCount++;
             } else {
@@ -279,7 +147,7 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
                 if (normPhone) seenPhonesInCsv.add(normPhone);
 
                 const isExisting = (email && (existingEmails.has(row.email) || existingEmails.has(email))) ||
-                                   (normPhone && (existingPhones.has(phone) || existingPhones.has(normPhone)));
+                    (normPhone && (existingPhones.has(phone) || existingPhones.has(normPhone)));
                 if (isExisting) {
                     updateCount++;
                 } else {
@@ -290,12 +158,10 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
             }
         });
 
-        // Chỉ hiển thị các label chuẩn trong setHeaders để preview đẹp hơn, 
-        // hoặc hiển thị tất cả keys thực tế. Ở đây hiển thị tất cả keys thực tế từ rowObj đầu tiên.
         if (validRows.length > 0) {
             setHeaders(Object.keys(validRows[0]));
         } else {
-            setHeaders(Object.values(columnMapping));
+            setHeaders(parsed.headers);
         }
 
         setParsedRows(validRows);
@@ -315,8 +181,13 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
         if (isLoading) return;
         setIsLoading(true);
         try {
+            const subscribersPayload = attachCustomAttributesForImport(
+                parsedRows,
+                importColumnMeta.columnMapping,
+                importColumnMeta.originalHeaders
+            );
             await Promise.resolve(onImport({
-                subscribers: parsedRows,
+                subscribers: subscribersPayload,
                 targetListId: importMode === 'existing' ? targetListId : null,
                 newListName: importMode === 'new' ? newListName : null,
                 duplicates: stats.duplicates,
@@ -385,7 +256,7 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
                             <h4 className="text-sm font-bold text-blue-800 uppercase tracking-tight">Quy định định dạng (Hợp lệ)</h4>
                             <p className="text-xs text-blue-600 leading-relaxed font-medium flex flex-wrap gap-1.5 items-center mt-1">
                                 Hệ thống hỗ trợ:
-                                {Object.keys(VALID_HEADERS).map(key => (
+                                {Object.keys(VALID_SUBSCRIBER_HEADERS).map(key => (
                                     <Badge key={key} variant="brand" className="text-[8px] px-1.5 py-0.5">{key}</Badge>
                                 ))}
                             </p>

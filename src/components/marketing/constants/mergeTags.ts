@@ -21,7 +21,7 @@ export const MYERP_MERGE_TAG_GROUPS: MergeTagGroup[] = [
             { key: 'full_name', tag: '{{full_name}}', label: 'Họ và tên đầy đủ', group: 'Hồ sơ Khách hàng / Học viên', sampleValue: 'Nguyễn Văn An', isBuiltInBasic: true },
             { key: 'first_name', tag: '{{first_name}}', label: 'Tên gọi (First Name)', group: 'Hồ sơ Khách hàng / Học viên', sampleValue: 'An', isBuiltInBasic: true },
             { key: 'last_name', tag: '{{last_name}}', label: 'Họ & Tên đệm (Last Name)', group: 'Hồ sơ Khách hàng / Học viên', sampleValue: 'Nguyễn Văn', isBuiltInBasic: true },
-            { key: 'email', tag: '{{email}}', label: 'Địa chỉ Email', group: 'Hồ sơ Khách hàng / Học viên', sampleValue: 'an.nguyen@ideas.edu.vn', isBuiltInBasic: true },
+            { key: 'email', tag: '{{email}}', label: 'Địa chỉ Email', group: 'Hồ sơ Khách hàng / Học viên', sampleValue: 'an.nguyen@example.com', isBuiltInBasic: true },
             { key: 'phone', tag: '{{phone}}', label: 'Số điện thoại', group: 'Hồ sơ Khách hàng / Học viên', sampleValue: '0901234567', isBuiltInBasic: true },
             { key: 'gender', tag: '{{gender}}', label: 'Giới tính / Xưng hô', group: 'Hồ sơ Khách hàng / Học viên', sampleValue: 'Anh/Chị' },
             { key: 'birthday', tag: '{{birthday}}', label: 'Ngày sinh nhật', group: 'Hồ sơ Khách hàng / Học viên', sampleValue: '15/08/1992' },
@@ -49,7 +49,7 @@ export const MYERP_MERGE_TAG_GROUPS: MergeTagGroup[] = [
         tags: [
             { key: 'consultant_name', tag: '{{consultant_name}}', label: 'Tên Tư vấn viên phụ trách', group: 'Tư vấn viên Phụ trách (Sale)', sampleValue: 'Chuyên viên Tư vấn IDEAS' },
             { key: 'consultant_phone', tag: '{{consultant_phone}}', label: 'SĐT Tư vấn viên', group: 'Tư vấn viên Phụ trách (Sale)', sampleValue: '028 3925 3399' },
-            { key: 'consultant_email', tag: '{{consultant_email}}', label: 'Email Tư vấn viên', group: 'Tư vấn viên Phụ trách (Sale)', sampleValue: 'admissions@ideas.edu.vn' },
+            { key: 'consultant_email', tag: '{{consultant_email}}', label: 'Email Tư vấn viên', group: 'Tư vấn viên Phụ trách (Sale)', sampleValue: 'admissions@example.com' },
             { key: 'consultant_title', tag: '{{consultant_title}}', label: 'Chức danh Tư vấn viên', group: 'Tư vấn viên Phụ trách (Sale)', sampleValue: 'Chuyên viên Tư vấn Tuyển sinh' },
             { key: 'team_name', tag: '{{team_name}}', label: 'Đội ngũ / Phòng ban tư vấn', group: 'Tư vấn viên Phụ trách (Sale)', sampleValue: 'Ban Tuyển sinh Quốc tế' },
         ],

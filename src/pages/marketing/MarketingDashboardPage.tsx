@@ -41,6 +41,7 @@ export const ALL_MODULES: Module[] = [
     { id: 'zalo-oa', title: 'Zalo OA', sub: 'Kết nối Zalo Official Account, gửi ZNS và quản lý hội thoại tập trung.', icon: MessageSquare, path: '/settings?tab=marketing_automation' },
     { id: 'meta-api', title: 'Meta Messenger', sub: 'Kết nối Facebook Messenger, tự động trả lời và đồng bộ khách hàng.', icon: MessageSquare, path: '/marketing/web-tracking?tab=meta' },
     { id: 'web-tracking', title: 'Web Tracking', sub: 'Theo dõi lượt xem, click, cuộn trang và hành trình khách trên website.', icon: Globe, path: '/marketing/web-tracking' },
+    { id: 'meta-capi', title: 'Meta CAPI & Tệp Ads', sub: 'Bắn conversion chất lượng từ 04 - Needed, Backfill 7d & đồng bộ VIP Lookalike.', icon: ShieldCheck, path: '/marketing/capi' },
     { id: 'audience', title: 'Tệp khách hàng', sub: 'Quản lý subscriber, phân khúc tự động theo hành vi và lịch sử tương tác.', icon: Users, path: '/marketing/audience' },
     { id: 'api-triggers', title: 'API & OTP', sub: 'Webhook, API hai chiều và OTP để kích hoạt Automation từ hệ thống ngoài.', icon: Code2, path: '/marketing/web-tracking?tab=api-triggers' },
     { id: 'settings', title: 'Cấu hình', sub: 'Thiết lập kết nối kênh gửi, phân quyền và tích hợp API ngoại vi.', icon: Settings, path: '/settings?tab=marketing_automation' },
@@ -50,7 +51,7 @@ const MODULE_GROUPS: { title: string; desc: string; ids: string[] }[] = [
     { title: 'Automation & Chiến dịch', desc: 'Kịch bản chăm sóc tự động và chiến dịch gửi hàng loạt', ids: ['campaigns', 'flows', 'templates'] },
     { title: 'AI & Báo cáo', desc: 'Huấn luyện AI hỗ trợ khách hàng và đo lường hiệu suất', ids: ['ai-training', 'ai-space', 'reports'] },
     { title: 'Tương tác khách hàng', desc: 'Voucher ưu đãi, biểu mẫu khảo sát và QR tracking', ids: ['vouchers', 'surveys', 'links-qr'] },
-    { title: 'Kênh tích hợp & Dữ liệu', desc: 'Zalo OA, Meta, tệp khách hàng, web tracking và API', ids: ['zalo-oa', 'meta-api', 'web-tracking', 'audience', 'api-triggers', 'settings'] },
+    { title: 'Kênh tích hợp & Dữ liệu', desc: 'Zalo OA, Meta, tệp khách hàng, web tracking & CAPI', ids: ['zalo-oa', 'meta-api', 'web-tracking', 'meta-capi', 'audience', 'api-triggers', 'settings'] },
 ];
 
 const BRAND_RED = '#C6333D';

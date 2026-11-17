@@ -1403,6 +1403,7 @@ function evaluateRules($conn, $data, $source, $type, $connId = null, $connection
 
         $logicalOperator = strtoupper($row['logical_operator'] ?? 'AND');
         $isMatch = false;
+        $matchedBranch = null;
 
         if (!empty($row['conditions_json'])) {
             $parsed = json_decode($row['conditions_json'], true);
@@ -2172,7 +2173,12 @@ function insertLead($conn, $data, $assignedConsultantId, $phone, $email, $name, 
                 
                 if ($contactId) {
                     require_once __DIR__ . '/config/CapiHelper.php';
-                    CapiHelper::sendEvent(null, (int)$contactId, 'CompleteRegistration');
+                    $capiResolved = CapiHelper::resolveEventForStage(CapiHelper::ensureDb(), 'new_lead', null, 1);
+                    if (($capiResolved['event_name'] ?? 'Skip') !== 'Skip') {
+                        CapiHelper::sendEvent(null, (int)$contactId, $capiResolved['event_name'], 0.0, [
+                            'stage_slug' => 'new_lead',
+                        ]);
+                    }
                 }
             }
         } catch (Exception $e) {
@@ -2344,7 +2350,7 @@ if (!function_exists('syncRealtimeMarketingAndMetaAttribution')) {
             $campaignId = $stripMetaPrefix($pickVal(['campaign_id'], ['campaign_id', 'meta_campaign_id']));
             $campaignName = $pickVal(['campaign_name', 'utm_campaign'], ['campaign_name', 'meta_campaign_name', 'utm_campaign']);
             $formId = $stripMetaPrefix($pickVal(['form_id'], ['form_id', 'meta_form_id']));
-            $formName = $pickVal(['form_name'], ['form_name', 'meta_form_name']);
+            $formName = $pickVal(['form_name'], ['form_name', 'meta_form_name', 'chuong_trinh', 'program_interest']);
             $platformRaw = $pickVal(['platform'], ['platform', 'meta_platform', 'utm_source']);
             $platform = $platformRaw;
             if (strtolower($platformRaw) === 'fb') $platform = 'fb';
@@ -2720,6 +2726,29 @@ if (!function_exists('syncRealtimeMarketingAndMetaAttribution')) {
                     }
                 }
 
+                // Capture Web CAPI Attribution (_fbc, _fbp, customer IP/UA, source URL) if present on payload
+                $wFbc = $pickVal(['fbc', '_fbc'], ['fbc', '_fbc']);
+                $wFbclid = $pickVal(['fbclid'], ['fbclid']);
+                if ($wFbc === '' && $wFbclid !== '') {
+                    $wFbc = 'fb.1.' . (int)round(microtime(true) * 1000) . '.' . $wFbclid;
+                }
+                $wFbp = $pickVal(['fbp', '_fbp'], ['fbp', '_fbp']);
+                $wUrl = $pickVal(['event_source_url', 'url'], ['event_source_url', 'page_url', 'landing_url', 'referer']);
+                $wPixel = $pickVal(['fb_pixel_id', 'pixel_id'], ['fb_pixel_id', 'pixel_id']);
+                $wIp = $pickVal(['client_ip_address', 'ip'], ['client_ip_address', 'visitor_ip', 'ip']);
+                $wUa = $pickVal(['client_user_agent', 'user_agent'], ['client_user_agent', 'visitor_ua', 'user_agent']);
+                if ($wFbc !== '' || $wFbp !== '' || $wUrl !== '' || $wPixel !== '') {
+                    require_once __DIR__ . '/config/CapiHelper.php';
+                    CapiHelper::upsertWebAttribution(CapiHelper::ensureDb(), $cid, $tenantId, [
+                        'fbc'               => $wFbc,
+                        'fbp'               => $wFbp,
+                        'client_ip_address' => $wIp,
+                        'client_user_agent' => $wUa,
+                        'event_source_url'  => $wUrl,
+                        'fb_pixel_id'       => $wPixel,
+                    ]);
+                }
+
                 // 4c. Đồng bộ sang bảng `subscribers` (Marketing Audience & Dynamic Segments)
                 $cPhone = sanitizePhoneNumber($cInfo['phone'] ?: $phone);
                 $cEmail = sanitizeEmailAddress($cInfo['email'] ?: $email);
@@ -2734,44 +2763,58 @@ if (!function_exists('syncRealtimeMarketingAndMetaAttribution')) {
                     $lastName = implode(' ', $parts);
                 }
 
-                $subId = (int)($cInfo['domation_subscriber_id'] ?? 0);
+                $subId = trim((string)($cInfo['domation_subscriber_id'] ?? ''));
                 $existingCustomAttrs = [];
-                if ($subId > 0) {
-                    $sChk = $conn->prepare("SELECT id, custom_attributes FROM subscribers WHERE id = ? LIMIT 1");
+                if ($subId !== '') {
+                    $sChk = $conn->prepare("SELECT id, custom_attributes FROM subscribers WHERE id = ? AND deleted_at IS NULL LIMIT 1");
                     if ($sChk) {
-                        $sChk->bind_param("i", $subId);
+                        $sChk->bind_param("s", $subId);
                         $sChk->execute();
                         $sRow = $sChk->get_result()->fetch_assoc();
                         $sChk->close();
                         if ($sRow) {
+                            $subId = trim((string)$sRow['id']);
                             $existingCustomAttrs = json_decode((string)($sRow['custom_attributes'] ?? '{}'), true) ?: [];
                         } else {
-                            $subId = 0;
+                            $subId = '';
                         }
                     }
                 }
-                if ($subId <= 0) {
-                    $sChk = $conn->prepare("SELECT id, custom_attributes FROM subscribers WHERE contact_id = ? LIMIT 1");
+                if ($subId === '') {
+                    $sChk = $conn->prepare("SELECT id, custom_attributes FROM subscribers WHERE contact_id = ? AND deleted_at IS NULL LIMIT 1");
                     if ($sChk) {
                         $sChk->bind_param("i", $cid);
                         $sChk->execute();
                         $sRow = $sChk->get_result()->fetch_assoc();
                         $sChk->close();
                         if ($sRow) {
-                            $subId = (int)$sRow['id'];
+                            $subId = trim((string)$sRow['id']);
                             $existingCustomAttrs = json_decode((string)($sRow['custom_attributes'] ?? '{}'), true) ?: [];
                         }
                     }
                 }
-                if ($subId <= 0 && $phoneNorm9 !== '') {
-                    $sChk = $conn->prepare("SELECT id, custom_attributes FROM subscribers WHERE phone_norm9 = ? LIMIT 1");
+                if ($subId === '' && $phoneNorm9 !== '') {
+                    $sChk = $conn->prepare("SELECT id, custom_attributes FROM subscribers WHERE phone_norm9 = ? AND workspace_id = ? AND deleted_at IS NULL LIMIT 1");
                     if ($sChk) {
-                        $sChk->bind_param("s", $phoneNorm9);
+                        $sChk->bind_param("si", $phoneNorm9, $tenantId);
                         $sChk->execute();
                         $sRow = $sChk->get_result()->fetch_assoc();
                         $sChk->close();
                         if ($sRow) {
-                            $subId = (int)$sRow['id'];
+                            $subId = trim((string)$sRow['id']);
+                            $existingCustomAttrs = json_decode((string)($sRow['custom_attributes'] ?? '{}'), true) ?: [];
+                        }
+                    }
+                }
+                if ($subId === '' && $emailNorm !== '') {
+                    $sChk = $conn->prepare("SELECT id, custom_attributes FROM subscribers WHERE email_norm = ? AND workspace_id = ? AND deleted_at IS NULL LIMIT 1");
+                    if ($sChk) {
+                        $sChk->bind_param("si", $emailNorm, $tenantId);
+                        $sChk->execute();
+                        $sRow = $sChk->get_result()->fetch_assoc();
+                        $sChk->close();
+                        if ($sRow) {
+                            $subId = trim((string)$sRow['id']);
                             $existingCustomAttrs = json_decode((string)($sRow['custom_attributes'] ?? '{}'), true) ?: [];
                         }
                     }
@@ -2806,7 +2849,7 @@ if (!function_exists('syncRealtimeMarketingAndMetaAttribution')) {
                 $subTemp = trim((string)($cInfo['temperature'] ?? 'cold'));
                 $subPersonId = !empty($cInfo['person_id']) ? (int)$cInfo['person_id'] : ($personId > 0 ? $personId : null);
 
-                if ($subId > 0) {
+                if ($subId !== '') {
                     $uSub = $conn->prepare("
                         UPDATE subscribers
                         SET contact_id = COALESCE(contact_id, ?),
@@ -2832,7 +2875,7 @@ if (!function_exists('syncRealtimeMarketingAndMetaAttribution')) {
                     ");
                     if ($uSub) {
                         $uSub->bind_param(
-                            "iissssssssssiissssi",
+                            "iissssssssssiisssss",
                             $cid,
                             $subPersonId,
                             $phoneNorm9,
@@ -2857,14 +2900,15 @@ if (!function_exists('syncRealtimeMarketingAndMetaAttribution')) {
                         $uSub->close();
                     }
                 } elseif ($cPhone !== '' || $cEmail !== '') {
+                    $newSubId = bin2hex(random_bytes(16));
                     $iSub = $conn->prepare("
                         INSERT INTO subscribers (
-                            workspace_id, contact_id, person_id, phone_norm9, email_norm, email,
+                            id, workspace_id, contact_id, person_id, phone_norm9, email_norm, email,
                             first_name, last_name, status, source, phone_number, phone,
                             city, program, owner_id, stage_id, pipeline_status, lead_status,
                             temperature, custom_attributes, created_at, updated_at
                         ) VALUES (
-                            ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''),
+                            ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?,
                             ?, ?, 'active', ?, NULLIF(?, ''), NULLIF(?, ''),
                             NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?,
                             ?, ?, NOW(), NOW()
@@ -2872,7 +2916,8 @@ if (!function_exists('syncRealtimeMarketingAndMetaAttribution')) {
                     ");
                     if ($iSub) {
                         $iSub->bind_param(
-                            "iiissssssssssiissss",
+                            "siiissssssssssiissss",
+                            $newSubId,
                             $tenantId,
                             $cid,
                             $subPersonId,
@@ -2893,17 +2938,17 @@ if (!function_exists('syncRealtimeMarketingAndMetaAttribution')) {
                             $subTemp,
                             $customAttrsJson
                         );
-                        if (@$iSub->execute()) {
-                            $subId = (int)$iSub->insert_id;
+                        if ($iSub->execute()) {
+                            $subId = $newSubId;
                         }
                         $iSub->close();
                     }
                 }
 
-                if ($subId > 0 && (int)($cInfo['domation_subscriber_id'] ?? 0) !== $subId) {
+                if ($subId !== '' && trim((string)($cInfo['domation_subscriber_id'] ?? '')) !== $subId) {
                     $uDom = $conn->prepare("UPDATE contacts SET domation_subscriber_id = ? WHERE id = ?");
                     if ($uDom) {
-                        $uDom->bind_param("ii", $subId, $cid);
+                        $uDom->bind_param("si", $subId, $cid);
                         $uDom->execute();
                         $uDom->close();
                     }

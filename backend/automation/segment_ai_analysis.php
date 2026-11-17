@@ -67,7 +67,7 @@ try {
     $res = buildSegmentWhereClause($segment['criteria'], $workspace_id, $segmentId);
     $sql = "SELECT s.id, s.email, s.first_name, s.last_name, s.status, s.lead_score, s.last_activity_at 
             FROM subscribers s 
-            WHERE s.workspace_id = ? AND s.status IN ('active', 'lead', 'customer') AND " . $res['sql'] . " 
+            WHERE s.workspace_id = ? AND s.deleted_at IS NULL AND s.status IN ('active', 'lead', 'customer') AND " . $res['sql'] . " 
             ORDER BY RAND() LIMIT 100";
 
     $stmtSubs = $pdo->prepare($sql);
@@ -78,30 +78,70 @@ try {
         jsonResponse(false, null, 'No members found in this segment to analyze');
     }
 
-    // 3. Gather Detailed Data for each member (Journey & Activities)
+    // 3. Gather Detailed Data for each member (Journey & Activities) - BATCH SET-BASED (0 N+1 Queries)
+    $subscriberIds = array_column($subscribers, 'id');
+    $activitiesBySub = [];
+    $journeyBySub = [];
+
+    if (!empty($subscriberIds)) {
+        // Chunk by 500 to guarantee safe parameter binding (Anti-SQLSTATE[HY093])
+        foreach (array_chunk($subscriberIds, 500) as $chunk) {
+            $ph = implode(',', array_fill(0, count($chunk), '?'));
+
+            // Batch fetch top 5 activities per subscriber using ROW_NUMBER() window pushdown
+            $stmtAct = $pdo->prepare("
+                SELECT t.subscriber_id, t.type, t.details, t.created_at
+                FROM (
+                    SELECT sa.subscriber_id, sa.type, sa.details, sa.created_at,
+                           ROW_NUMBER() OVER (PARTITION BY sa.subscriber_id ORDER BY sa.created_at DESC) AS rn
+                    FROM subscriber_activity sa
+                    WHERE sa.subscriber_id IN ($ph)
+                ) t
+                WHERE t.rn <= 5
+            ");
+            $stmtAct->execute(array_values($chunk));
+            while ($row = $stmtAct->fetch(PDO::FETCH_ASSOC)) {
+                $activitiesBySub[$row['subscriber_id']][] = [
+                    'type' => $row['type'],
+                    'details' => $row['details'],
+                    'created_at' => $row['created_at']
+                ];
+            }
+
+            // Batch fetch top 5 web journeys per subscriber using ROW_NUMBER() window pushdown
+            $stmtJourney = $pdo->prepare("
+                SELECT t.subscriber_id, t.page_url, t.page_title, t.created_at
+                FROM (
+                    SELECT v.subscriber_id, pv.url AS page_url, pv.title AS page_title, pv.loaded_at AS created_at,
+                           ROW_NUMBER() OVER (PARTITION BY v.subscriber_id ORDER BY pv.loaded_at DESC) AS rn
+                    FROM web_page_views pv
+                    JOIN web_visitors v ON pv.visitor_id = v.id
+                    WHERE v.subscriber_id IN ($ph)
+                ) t
+                WHERE t.rn <= 5
+            ");
+            $stmtJourney->execute(array_values($chunk));
+            while ($row = $stmtJourney->fetch(PDO::FETCH_ASSOC)) {
+                $journeyBySub[$row['subscriber_id']][] = [
+                    'page_url' => $row['page_url'],
+                    'page_title' => $row['page_title'],
+                    'created_at' => $row['created_at']
+                ];
+            }
+        }
+    }
+
+    // Single O(N) memory hydration pass
     $membersData = [];
     foreach ($subscribers as $sub) {
-        // Fetch last 5 items to keep payload size reasonable for 100 people
-        $stmtAct = $pdo->prepare("SELECT type, details, created_at FROM subscriber_activity WHERE subscriber_id = ? ORDER BY created_at DESC LIMIT 5");
-        $stmtAct->execute([$sub['id']]);
-        $activities = $stmtAct->fetchAll(PDO::FETCH_ASSOC);
-
-        // Fetch last 5 web journey steps
-        $stmtJourney = $pdo->prepare("SELECT pv.url as page_url, pv.title as page_title, pv.loaded_at as created_at 
-                                      FROM web_page_views pv 
-                                      JOIN web_visitors v ON pv.visitor_id = v.id 
-                                      WHERE v.subscriber_id = ? 
-                                      ORDER BY pv.loaded_at DESC LIMIT 5");
-        $stmtJourney->execute([$sub['id']]);
-        $journey = $stmtJourney->fetchAll(PDO::FETCH_ASSOC);
-
+        $sid = $sub['id'];
         $membersData[] = [
-            'id' => $sub['id'],
+            'id' => $sid,
             'email' => $sub['email'],
             'name' => trim(($sub['first_name'] ?? '') . ' ' . ($sub['last_name'] ?? '')),
             'info' => $sub,
-            'activities' => $activities,
-            'journey' => $journey
+            'activities' => $activitiesBySub[$sid] ?? [],
+            'journey' => $journeyBySub[$sid] ?? []
         ];
     }
 

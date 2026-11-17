@@ -39,6 +39,10 @@ try {
     $nowTime = time();
 
     while ($camp = $res->fetch_assoc()) {
+        $campTid = (int)($camp['tenant_id'] ?? 1);
+        $GLOBALS['current_tenant_id'] = $campTid;
+        $brandPrefix = get_tenant_brand_prefix($conn, $campTid);
+        $brandName = get_tenant_brand_name($conn, $campTid);
         $reminders = !empty($camp['reminders_json']) ? json_decode($camp['reminders_json'], true) : [];
         if (empty($reminders)) {
             continue;
@@ -46,8 +50,9 @@ try {
 
         // --- FETCH CAMPAIGN STUDENTS (CONTACTS) ---
         $studentsList = [];
-        $stmtC = $conn->prepare("SELECT id, name, email, phone FROM contacts WHERE campaign_id = ? AND tenant_id = ? AND pipeline_status = (SELECT COALESCE(setting_value, 'hoc_vien') FROM system_settings WHERE setting_key = 'deal_won_status' LIMIT 1) AND deleted_at IS NULL");
-        $stmtC->bind_param("ii", $camp['id'], $camp['tenant_id']);
+        $wonStatus = get_system_setting($conn, 'deal_won_status', $campTid) ?: 'hoc_vien';
+        $stmtC = $conn->prepare("SELECT id, full_name AS name, email, phone FROM contacts WHERE campaign_id = ? AND tenant_id = ? AND (pipeline_status = ? OR status = 'customer') AND deleted_at IS NULL");
+        $stmtC->bind_param("iis", $camp['id'], $campTid, $wonStatus);
         $stmtC->execute();
         $resStudents = $stmtC->get_result();
         while ($student = $resStudents->fetch_assoc()) {
@@ -131,7 +136,7 @@ try {
 
                                 if (!empty($lectEmail)) {
                                     try {
-                                        sendEmailNotification($lectEmail, "[IDEAS] Nhắc nhở lịch giảng dạy chuyên đề - Thầy/Cô $lectName", $msgTitle, nl2br($msgBody));
+                                        sendEmailNotification($lectEmail, "{$brandPrefix} Nhắc nhở lịch giảng dạy chuyên đề - Thầy/Cô $lectName", $msgTitle, nl2br($msgBody));
                                         echo "  [Lecturer] Email sent to $lectName ($lectEmail)\n";
                                     } catch (\Throwable $emEx) {
                                         echo "  [Lecturer] Email send error: " . $emEx->getMessage() . "\n";
@@ -193,7 +198,7 @@ try {
 
                             if (!empty($studEmail)) {
                                 try {
-                                    sendEmailNotification($studEmail, "[IDEAS] Nhắc nhở hạn nộp luận văn: {$ms['milestone']}", $msgTitle, nl2br($msgBody), '', false, 0, true);
+                                    sendEmailNotification($studEmail, "{$brandPrefix} Nhắc nhở hạn nộp luận văn: {$ms['milestone']}", $msgTitle, nl2br($msgBody), '', false, 0, true);
                                     echo "  [Thesis] Email sent to student $studName ($studEmail)\n";
                                 } catch (\Throwable $emEx) {
                                     echo "  [Thesis] Email send error: " . $emEx->getMessage() . "\n";
@@ -247,7 +252,7 @@ try {
                                 $msgBody = "Chào Anh/Chị $studName, đây là thông báo nhắc nhở tự động về buổi học chính thức tại trường của môn: \"{$sub['name']}\" ({$sub['code']}) diễn ra vào ngày " . date('d/m/Y', strtotime($session['date'])) . " lúc $timeStart. Vui lòng tham gia lớp học đầy đủ và đúng giờ.";
 
                                 try {
-                                    sendEmailNotification($studEmail, "[IDEAS] Nhắc nhở lịch học chính thức - Môn {$sub['name']}", $msgTitle, nl2br($msgBody), '', false, 0, true);
+                                    sendEmailNotification($studEmail, "{$brandPrefix} Nhắc nhở lịch học chính thức - Môn {$sub['name']}", $msgTitle, nl2br($msgBody), '', false, 0, true);
                                     echo "  [School] Email sent to student $studName ($studEmail)\n";
                                 } catch (\Throwable $emEx) {}
 
@@ -305,11 +310,11 @@ try {
                                 $studEmail = $student['email'];
 
                                 $msgTitle = "⏰ NHẮC NHỞ LỊCH HỌC LỚP CHUYÊN ĐỀ";
-                                $msgBody = "Chào Anh/Chị $studName, đây là thông báo nhắc nhở tự động về lớp học chuyên đề IDEAS: \"{$sem['topic']}\" của môn: \"{$sub['name']}\" diễn ra vào ngày " . date('d/m/Y', strtotime($sem['date'])) . " lúc $startTime. Địa điểm: " . ($sem['location'] ?? 'Online') . ". Vui lòng tham gia đầy đủ và đúng giờ.";
+                                $msgBody = "Chào Anh/Chị $studName, đây là thông báo nhắc nhở tự động về lớp học chuyên đề {$brandName}: \"{$sem['topic']}\" của môn: \"{$sub['name']}\" diễn ra vào ngày " . date('d/m/Y', strtotime($sem['date'])) . " lúc $startTime. Địa điểm: " . ($sem['location'] ?? 'Online') . ". Vui lòng tham gia đầy đủ và đúng giờ.";
 
                                 try {
-                                    sendEmailNotification($studEmail, "[IDEAS] Nhắc nhở lịch học chuyên đề - Môn {$sub['name']}", $msgTitle, nl2br($msgBody), '', false, 0, true);
-                                    echo "  [Ideas] Email sent to student $studName ($studEmail)\n";
+                                    sendEmailNotification($studEmail, "{$brandPrefix} Nhắc nhở lịch học chuyên đề - Môn {$sub['name']}", $msgTitle, nl2br($msgBody), '', false, 0, true);
+                                    echo "  [Seminar] Email sent to student $studName ($studEmail)\n";
                                 } catch (\Throwable $emEx) {}
 
                                 $ins = $conn->prepare("INSERT INTO sent_notifications (user_id, notify_type, notify_date) VALUES (?, ?, ?)");
@@ -364,7 +369,7 @@ try {
                                 $msgBody = "Chào Anh/Chị $studName, đây là nhắc nhở tự động về hạn chót (Deadline) nộp bài tập: \"{$asn['name']}\" của môn: \"{$sub['name']}\" vào lúc " . date('H:i d/m/Y', $dueTimestamp) . ". Anh/Chị vui lòng hoàn thành và nộp bài đúng hạn.";
 
                                 try {
-                                    sendEmailNotification($studEmail, "[IDEAS] Nhắc nhở hạn nộp bài tập: {$asn['name']}", $msgTitle, nl2br($msgBody), '', false, 0, true);
+                                    sendEmailNotification($studEmail, "{$brandPrefix} Nhắc nhở hạn nộp bài tập: {$asn['name']}", $msgTitle, nl2br($msgBody), '', false, 0, true);
                                     echo "  [Assign] Email sent to student $studName ($studEmail)\n";
                                 } catch (\Throwable $emEx) {}
 
@@ -494,7 +499,7 @@ try {
                                      . "\n\nAnh/Chị vui lòng chuẩn bị thiết bị và truy cập lớp học đúng giờ.";
 
                             try {
-                                sendEmailNotification($studEmail, "[IDEAS] Lớp học sắp bắt đầu - {$sess['title']}", $msgTitle, nl2br($msgBody), '', false, 0, true);
+                                sendEmailNotification($studEmail, "{$brandPrefix} Lớp học sắp bắt đầu - {$sess['title']}", $msgTitle, nl2br($msgBody), '', false, 0, true);
                                 echo "  [Upcoming] Email sent to student $studName ($studEmail)\n";
                             } catch (\Throwable $emEx) {}
 

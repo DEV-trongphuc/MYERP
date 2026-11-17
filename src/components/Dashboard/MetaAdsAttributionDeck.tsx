@@ -2658,8 +2658,8 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                 <div className="custom-scrollbar" style={{ overflowX: 'auto', border: '1px solid #f1f5f9', borderRadius: 12 }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem', minWidth: 980 }}>
                     <thead>
-                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b', textTransform: 'uppercase', fontSize: '0.69rem', letterSpacing: '0.03em' }}>
-                        <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 800, minWidth: 270 }}>
+                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b', textTransform: 'uppercase', fontSize: '0.67rem', letterSpacing: '0.02em' }}>
+                        <th style={{ padding: '9px 12px', textAlign: 'left', fontWeight: 800, minWidth: 245 }}>
                           BÀI QUẢNG CÁO
                         </th>
                         <th
@@ -2668,12 +2668,12 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                               prev === 'leads' ? 'spend' : prev === 'spend' ? 'qualified_pct' : 'leads'
                             )
                           }
-                          style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 800, minWidth: 185, cursor: 'pointer', color: '#BD1D2D', userSelect: 'none' }}
+                          style={{ padding: '9px 10px', textAlign: 'left', fontWeight: 800, minWidth: 165, cursor: 'pointer', color: '#BD1D2D', userSelect: 'none' }}
                           title="Bấm để đổi sắp xếp theo Số lượng Lead / Chi phí / Tỷ lệ Tiềm năng"
                         >
                           HIỆU SUẤT &amp; CHI PHÍ ▼
                         </th>
-                        <th style={{ padding: '10px 10px', textAlign: 'center', fontWeight: 800, minWidth: 64 }}>
+                        <th style={{ padding: '9px 6px', textAlign: 'center', fontWeight: 800, minWidth: 48 }}>
                           TỔNG
                         </th>
                         {visibleMatrixColumns.map((col: any) => {
@@ -2691,12 +2691,18 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                             <th
                               key={col.key}
                               style={{
-                                padding: '10px 8px',
+                                padding: '8px 4px',
                                 textAlign: 'center',
                                 fontWeight: 800,
                                 color: headerColor,
-                                minWidth: 82,
-                                whiteSpace: 'nowrap'
+                                width: 70,
+                                minWidth: 64,
+                                maxWidth: 82,
+                                fontSize: '0.62rem',
+                                lineHeight: 1.2,
+                                whiteSpace: 'normal',
+                                wordBreak: 'break-word',
+                                verticalAlign: 'middle'
                               }}
                               title={col.stage_name}
                             >
@@ -2704,7 +2710,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                             </th>
                           );
                         })}
-                        <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, minWidth: 96 }}>
+                        <th style={{ padding: '9px 8px', textAlign: 'center', fontWeight: 800, minWidth: 82 }}>
                           CHI TIẾT
                         </th>
                       </tr>
@@ -2717,7 +2723,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                         const totalAdLeads = Number(ad.leads || 0);
                         const qualCount = Number(ad.qualified || 0);
                         const qualPct = totalAdLeads > 0 ? Math.round((qualCount / totalAdLeads) * 1000) / 10 : 0;
-                        const isExpanded = expandedMatrixAds[adKey] ?? (adIdx === 0 && totalAdLeads > 0 && Object.keys(expandedMatrixAds).length === 0);
+                        const isExpanded = Boolean(expandedMatrixAds[adKey]);
                         const adLeadsList: any[] = Array.isArray(ad.filtered_leads)
                           ? ad.filtered_leads
                           : Array.isArray(ad.attributed_leads)
@@ -2732,17 +2738,24 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                         return (
                           <React.Fragment key={adKey}>
                             <tr
+                              onClick={() => adLeadsList.length > 0 && toggleMatrixAdExpand(adKey)}
                               style={{
                                 borderBottom: '1px solid #f1f5f9',
                                 background: isExpanded ? '#fcfcfd' : '#ffffff',
+                                cursor: adLeadsList.length > 0 ? 'pointer' : 'default',
                                 transition: 'background 0.15s ease'
                               }}
+                              title={adLeadsList.length > 0 ? (isExpanded ? 'Bấm để thu gọn danh sách Lead' : 'Bấm vào dòng để xem danh sách Lead') : undefined}
                             >
                               {/* Col 1: BÀI QUẢNG CÁO */}
-                              <td style={{ padding: '11px 14px', verticalAlign: 'middle' }}>
+                              <td style={{ padding: '10px 12px', verticalAlign: 'middle' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                   <div
-                                    onClick={() => rawAdId && setPreviewAdModal(ad)}
+                                    onClick={(e) => {
+                                      if (!rawAdId) return;
+                                      e.stopPropagation();
+                                      setPreviewAdModal(ad);
+                                    }}
                                     style={{
                                       width: 44,
                                       height: 44,
@@ -2799,7 +2812,10 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                                       {rawAdId && (
                                         <button
                                           type="button"
-                                          onClick={() => setPreviewAdModal(ad)}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setPreviewAdModal(ad);
+                                          }}
                                           style={{
                                             padding: '2px 7px',
                                             borderRadius: 5,
@@ -2900,19 +2916,20 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                               </td>
 
                               {/* Col 3: TỔNG */}
-                              <td style={{ padding: '11px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
+                              <td style={{ padding: '9px 6px', textAlign: 'center', verticalAlign: 'middle' }}>
                                 <span
                                   style={{
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    minWidth: 30,
-                                    padding: '3px 8px',
+                                    minWidth: 26,
+                                    height: 24,
+                                    padding: '0 6px',
                                     borderRadius: 6,
                                     background: totalAdLeads > 0 ? '#fef2f2' : '#f8fafc',
                                     color: totalAdLeads > 0 ? '#BD1D2D' : '#94a3b8',
                                     fontWeight: 800,
-                                    fontSize: '0.78rem',
+                                    fontSize: '0.74rem',
                                     fontVariantNumeric: 'tabular-nums'
                                   }}
                                 >
@@ -2927,19 +2944,19 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                                 let cellColor = '#cbd5e1';
                                 if (cnt > 0) {
                                   if (col.bucket === 'win_13_14') {
-                                    cellBg = 'rgba(236, 72, 153, 0.08)';
+                                    cellBg = 'rgba(236, 72, 153, 0.1)';
                                     cellColor = '#be185d';
                                   } else if (col.bucket === 'qualified_3_12') {
-                                    cellBg = 'rgba(22, 163, 74, 0.08)';
+                                    cellBg = 'rgba(22, 163, 74, 0.1)';
                                     cellColor = '#15803d';
                                   } else if (col.bucket === 'lost') {
-                                    cellBg = 'rgba(225, 29, 72, 0.07)';
+                                    cellBg = 'rgba(225, 29, 72, 0.08)';
                                     cellColor = '#e11d48';
                                   } else if (col.bucket === 'nurture') {
-                                    cellBg = 'rgba(2, 132, 199, 0.08)';
+                                    cellBg = 'rgba(2, 132, 199, 0.1)';
                                     cellColor = '#0369a1';
                                   } else {
-                                    cellBg = '#f8fafc';
+                                    cellBg = '#f1f5f9';
                                     cellColor = '#0f172a';
                                   }
                                 }
@@ -2947,35 +2964,50 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                                   <td
                                     key={col.key}
                                     style={{
-                                      padding: '11px 8px',
+                                      padding: '9px 4px',
                                       textAlign: 'center',
                                       verticalAlign: 'middle',
-                                      background: cellBg,
-                                      color: cellColor,
-                                      fontWeight: cnt > 0 ? 800 : 500,
-                                      fontSize: '0.78rem',
                                       fontVariantNumeric: 'tabular-nums'
                                     }}
                                   >
-                                    {cnt}
+                                    <span
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        minWidth: 26,
+                                        height: 24,
+                                        padding: '0 6px',
+                                        borderRadius: 6,
+                                        background: cellBg,
+                                        color: cellColor,
+                                        fontWeight: cnt > 0 ? 800 : 500,
+                                        fontSize: '0.74rem'
+                                      }}
+                                    >
+                                      {cnt}
+                                    </span>
                                   </td>
                                 );
                               })}
 
                               {/* Sticky Right: CHI TIẾT */}
-                              <td style={{ padding: '11px 12px', textAlign: 'center', verticalAlign: 'middle' }}>
+                              <td style={{ padding: '9px 8px', textAlign: 'center', verticalAlign: 'middle' }}>
                                 <button
                                   type="button"
                                   disabled={adLeadsList.length === 0}
-                                  onClick={() => toggleMatrixAdExpand(adKey)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleMatrixAdExpand(adKey);
+                                  }}
                                   style={{
-                                    height: '28px',
-                                    padding: '0 10px',
+                                    height: '26px',
+                                    padding: '0 9px',
                                     borderRadius: 7,
                                     border: isExpanded ? '1px solid #BD1D2D' : '1px solid #e2e8f0',
                                     background: isExpanded ? '#fef2f2' : '#f8fafc',
                                     color: isExpanded ? '#BD1D2D' : adLeadsList.length > 0 ? '#0f172a' : '#94a3b8',
-                                    fontSize: '0.73rem',
+                                    fontSize: '0.71rem',
                                     fontWeight: 700,
                                     cursor: adLeadsList.length > 0 ? 'pointer' : 'not-allowed',
                                     whiteSpace: 'nowrap'
@@ -2988,18 +3020,17 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
 
                             {/* INLINE EXPANDED SUB-TABLE OF LEADS FOR THIS AD */}
                             {isExpanded && adLeadsList.length > 0 && (
-                              <tr>
+                              <tr className="no-hover">
                                 <td
                                   colSpan={4 + visibleMatrixColumns.length}
                                   style={{
-                                    padding: '0 14px 14px 14px',
-                                    background: '#f8fafc',
+                                    padding: 0,
                                     borderBottom: '2px solid #e2e8f0'
                                   }}
                                 >
+                                  <div style={{ padding: '8px 14px 14px 14px', background: '#f8fafc' }}>
                                   <div
                                     style={{
-                                      marginTop: 8,
                                       borderRadius: 12,
                                       border: '1px solid #e2e8f0',
                                       background: '#ffffff',
@@ -3183,6 +3214,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                                         </div>
                                       )}
                                     </div>
+                                  </div>
                                   </div>
                                 </td>
                               </tr>

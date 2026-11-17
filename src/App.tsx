@@ -11,7 +11,8 @@ import { CustomModal } from './components/ui/CustomModal';
 import { getDefaultDateFilter } from './utils/api';
 import { GlobalConfirmModal } from './components/ui/GlobalConfirmModal';
 import { hasModuleApprovalAccess } from './utils/approvalPermissions';
-import { isMarketing, isAcademic, isExecutive, isHR, isAccountant } from './utils/roleUtils';
+import { isMarketing, isAcademic, isExecutive, isHR, isAccountant, canAccessMarketingRoute, hasDynamicModulePermission, hasExplicitDynamicModuleGrant } from './utils/roleUtils';
+import { TenantConfigProvider } from './contexts/TenantConfigContext';
 import { AutoUpdateChecker } from './components/AutoUpdateChecker';
 import { NetworkStatusIndicator } from './components/ui/NetworkStatusIndicator';
 import { GlobalEntityDrawers } from './components/ui/GlobalEntityDrawers';
@@ -89,6 +90,7 @@ const WebTrackingOmnichannelPage = lazy(() => import('./pages/marketing/WebTrack
 const SocialBotPage = lazy(() => import('./pages/marketing/SocialBotPage'));
 const AITrainingMarketingPage = lazy(() => import('./pages/marketing/AITrainingPage'));
 const ApiTriggersPage = lazy(() => import('./pages/marketing/ApiTriggersPage'));
+const CapiPage = lazy(() => import('./pages/CapiPage'));
 import { RouteTabSkeleton } from './components/ui/Skeleton';
 
 // Instant route-aware skeleton fallback so no tab ever flashes a blank white screen while lazy chunks load
@@ -221,27 +223,27 @@ const AppTabs = () => {
       case '/consultants':
         return <Consultants key="consultants" />;
       case '/rounds':
-        if (!['admin', 'superadmin', 'super_admin', 'director', 'marketing'].includes(user?.role || '') && !isMarketing(user)) {
+        if (!['admin', 'superadmin', 'super_admin', 'director', 'marketing'].includes(user?.role || '') && !isMarketing(user) && !hasExplicitDynamicModuleGrant(user, 'settings', 'read')) {
           return <AccessDeniedView key="access-denied-rounds" />;
         }
         return <Rounds key="rounds" />;
       case '/rules':
-        if (!['admin', 'superadmin', 'super_admin', 'director', 'marketing'].includes(user?.role || '') && !isMarketing(user)) {
+        if (!['admin', 'superadmin', 'super_admin', 'director', 'marketing'].includes(user?.role || '') && !isMarketing(user) && !hasExplicitDynamicModuleGrant(user, 'settings', 'read')) {
           return <AccessDeniedView key="access-denied-rules" />;
         }
         return <RuleSettings key="rules" />;
       case '/integrations':
-        if (!['admin', 'superadmin', 'super_admin', 'director', 'marketing'].includes(user?.role || '') && !isMarketing(user)) {
+        if (!['admin', 'superadmin', 'super_admin', 'director', 'marketing'].includes(user?.role || '') && !isMarketing(user) && !hasExplicitDynamicModuleGrant(user, 'settings', 'read')) {
           return <AccessDeniedView key="access-denied-integrations" />;
         }
         return <Integrations key="integrations" />;
       case '/settings':
-        if (!['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'manager'].includes(user?.role || '') && !isMarketing(user)) {
+        if (!['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'manager'].includes(user?.role || '') && !isMarketing(user) && !hasExplicitDynamicModuleGrant(user, 'settings', 'read')) {
           return <AccessDeniedView key="access-denied-settings" />;
         }
         return <Settings key="settings" />;
       case '/accounts':
-        if (!['admin', 'superadmin', 'super_admin', 'director', 'hr'].includes(user?.role || '')) {
+        if (!['admin', 'superadmin', 'super_admin', 'director', 'hr'].includes(user?.role || '') && !isHR(user, false) && !hasExplicitDynamicModuleGrant(user, 'users', 'read')) {
           return <AccessDeniedView key="access-denied-accounts" />;
         }
         return <Accounts key="accounts" />;
@@ -258,22 +260,25 @@ const AppTabs = () => {
       case '/projects':
         return <ProjectsPage key="projects" />;
       case '/deposits':
+        if (!hasDynamicModulePermission(user, 'deposits', 'read')) {
+          return <AccessDeniedView key="access-denied-deposits" />;
+        }
         return <DepositsPage key="deposits" defaultTab="list" />;
       case '/cooperation-slips':
       case '/cooperations':
         return <CooperationSlipsPage key="cooperation-slips" />;
       case '/cash-flow':
-        if (!(isExecutive(user) || isAccountant(user, false))) {
+        if (!(isExecutive(user) || isAccountant(user, false) || hasExplicitDynamicModuleGrant(user, 'finance', 'read'))) {
           return <AccessDeniedView key="access-denied-cash-flow" />;
         }
         return <DepositsPage key="cash-flow" defaultTab="stats" />;
       case '/hrm':
-        if (!(isExecutive(user) || isHR(user, false) || isAccountant(user, false))) {
+        if (!(isExecutive(user) || isHR(user, false) || isAccountant(user, false) || hasExplicitDynamicModuleGrant(user, 'hrm', 'read'))) {
           return <AccessDeniedView key="access-denied-hrm" />;
         }
         return <HRM key="hrm" />;
       case '/accounting-az':
-        if (!(isExecutive(user) || isHR(user, false) || isAccountant(user, false))) {
+        if (!(isExecutive(user) || isHR(user, false) || isAccountant(user, false) || hasExplicitDynamicModuleGrant(user, 'finance', 'read'))) {
           return <AccessDeniedView key="access-denied-accounting-az" />;
         }
         return (
@@ -286,39 +291,84 @@ const AppTabs = () => {
       case '/approvals':
         return <Approvals key="approvals" />;
       case '/financial-dashboard':
-        if (!(isExecutive(user) || isAccountant(user, false))) {
+        if (!(isExecutive(user) || isAccountant(user, false) || hasExplicitDynamicModuleGrant(user, 'finance', 'read'))) {
           return <AccessDeniedView key="access-denied-financial" />;
         }
         return <FinancialDashboard key="financial-dashboard" />;
       case '/marketing':
+        if (!canAccessMarketingRoute(user, '/marketing')) {
+          return <AccessDeniedView key="access-denied-marketing" />;
+        }
         return <div className="mkt-scope" key="marketing-dashboard"><MarketingDashboardPage /></div>;
       case '/marketing/flows':
+        if (!canAccessMarketingRoute(user, '/marketing/flows')) {
+          return <AccessDeniedView key="access-denied-marketing" />;
+        }
         return <div className="mkt-scope" key="marketing-flows"><AutomationFlowsPage /></div>;
       case '/marketing/campaigns':
+        if (!canAccessMarketingRoute(user, '/marketing/campaigns')) {
+          return <AccessDeniedView key="access-denied-marketing" />;
+        }
         return <div className="mkt-scope" key="marketing-campaigns"><EmailCampaignsPage /></div>;
       case '/marketing/templates':
+        if (!canAccessMarketingRoute(user, '/marketing/templates')) {
+          return <AccessDeniedView key="access-denied-marketing" />;
+        }
         return <div className="mkt-scope" key="marketing-templates"><EmailTemplatesPage /></div>;
       case '/marketing/audience':
+        if (!canAccessMarketingRoute(user, '/marketing/audience')) {
+          return <AccessDeniedView key="access-denied-marketing" />;
+        }
         return <div className="mkt-scope" key="marketing-audience"><AudienceSegmentsPage /></div>;
       case '/marketing/surveys':
+        if (!canAccessMarketingRoute(user, '/marketing/surveys')) {
+          return <AccessDeniedView key="access-denied-marketing" />;
+        }
         return <div className="mkt-scope" key="marketing-surveys"><SurveysQuizPage /></div>;
       case '/marketing/vouchers':
+        if (!canAccessMarketingRoute(user, '/marketing/vouchers')) {
+          return <AccessDeniedView key="access-denied-marketing" />;
+        }
         return <div className="mkt-scope" key="marketing-vouchers"><VouchersQrPage /></div>;
       case '/marketing/social-bot':
+        if (!canAccessMarketingRoute(user, '/marketing/social-bot')) {
+          return <AccessDeniedView key="access-denied-marketing" />;
+        }
         return <div className="mkt-scope" key="marketing-social-bot"><SocialBotPage /></div>;
       case '/marketing/ai-training':
+        if (!canAccessMarketingRoute(user, '/marketing/ai-training')) {
+          return <AccessDeniedView key="access-denied-marketing" />;
+        }
         return <div className="mkt-scope" key="marketing-ai-training"><AITrainingMarketingPage /></div>;
       case '/marketing/web-tracking':
+        if (!canAccessMarketingRoute(user, '/marketing/web-tracking')) {
+          return <AccessDeniedView key="access-denied-marketing" />;
+        }
         return <div className="mkt-scope" key="marketing-web-tracking"><WebTrackingOmnichannelPage /></div>;
       case '/marketing/api-triggers':
+        if (!canAccessMarketingRoute(user, '/marketing/api-triggers')) {
+          return <AccessDeniedView key="access-denied-marketing" />;
+        }
         return <div className="mkt-scope" key="marketing-api-triggers"><ApiTriggersPage /></div>;
+      case '/capi':
+      case '/marketing/capi':
+        if (!canAccessMarketingRoute(user, '/marketing/capi')) {
+          return <AccessDeniedView key="access-denied-capi" />;
+        }
+        return <CapiPage key="capi-page" />;
       case '/about-erp':
         return <AboutErpPage key="about-erp" />;
       default:
         if (path.startsWith('/marketing/surveys/') && path.endsWith('/edit')) {
+          if (!canAccessMarketingRoute(user, '/marketing/surveys')) {
+            return <AccessDeniedView key="access-denied-marketing" />;
+          }
           return <div className="mkt-scope" key={path}><SurveysQuizPage /></div>;
         }
         if (path.startsWith('/ai-space/') || path.startsWith('/chat/') || path.startsWith('/marketing/ai-space/')) {
+          if (path.startsWith('/marketing/ai-space/') && !canAccessMarketingRoute(user, '/marketing/ai-training')) {
+            return <AccessDeniedView key="access-denied-marketing" />;
+          }
           return <div className="mkt-scope" key={path}><AITrainingMarketingPage /></div>;
         }
         return <SalePortal embedMode={true} activeTabProp="workspace" key="workspace" />;
@@ -783,57 +833,59 @@ export default function App() {
     <ErrorBoundary>
       <LanguageProvider>
         <AuthProvider>
-          <UploadProgressProvider>
-            {typeof document !== 'undefined' ? createPortal(
-              <Toaster position="top-right" containerStyle={{ zIndex: 2147483647, top: 20 }} toastOptions={{ className: 'custom-toast' }} />,
-              document.body
-            ) : null}
-            <Router>
-              <Suspense fallback={<PageLoader />}>
-                <Routes>
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/report-data" element={<ReportData />} />
-                  <Route path="/demo" element={<DemoEntry />} />
-                  <Route path="/download" element={<DownloadPage />} />
-                  <Route path="/splash-preview" element={<SplashPreviewPage />} />
-                  <Route path="/public-schedule/1on1/:bookingCode" element={<PublicBooking1on1Page />} />
-                  <Route path="/public-booking/1on1/:bookingCode" element={<PublicBooking1on1Page />} />
-                  <Route path="/public-schedule/course/:campaignId" element={<PublicSchedulePage />} />
-                  <Route path="/public-schedule/lecturer/:lecturerId" element={<PublicSchedulePage />} />
-                  <Route path="/public-schedule/:customerId" element={<PublicSchedulePage />} />
-                  <Route path="/docs" element={<DocumentationPage />} />
-                  <Route path="/documentation" element={<DocumentationPage />} />
-                  <Route path="/about-erp" element={<AboutErpPage />} />
-                  <Route path="/api-docs" element={<ApiV1DocumentationPage />} />
-                  <Route path="/api-v1-docs" element={<ApiV1DocumentationPage />} />
-                  <Route path="/api/v1/docs" element={<ApiV1DocumentationPage />} />
-                  <Route path="/api-docs-legacy" element={<ApiDocumentationPage />} />
-                  <Route path="/s/:slug" element={<div className="mkt-scope"><PublicSurveyPage /></div>} />
-                  <Route path="/claim/:id" element={<div className="mkt-scope"><PublicVoucherClaimPage /></div>} />
+          <TenantConfigProvider>
+            <UploadProgressProvider>
+              {typeof document !== 'undefined' ? createPortal(
+                <Toaster position="top-right" containerStyle={{ zIndex: 2147483647, top: 20 }} toastOptions={{ className: 'custom-toast' }} />,
+                document.body
+              ) : null}
+              <Router>
+                <Suspense fallback={<PageLoader />}>
+                  <Routes>
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/report-data" element={<ReportData />} />
+                    <Route path="/demo" element={<DemoEntry />} />
+                    <Route path="/download" element={<DownloadPage />} />
+                    <Route path="/splash-preview" element={<SplashPreviewPage />} />
+                    <Route path="/public-schedule/1on1/:bookingCode" element={<PublicBooking1on1Page />} />
+                    <Route path="/public-booking/1on1/:bookingCode" element={<PublicBooking1on1Page />} />
+                    <Route path="/public-schedule/course/:campaignId" element={<PublicSchedulePage />} />
+                    <Route path="/public-schedule/lecturer/:lecturerId" element={<PublicSchedulePage />} />
+                    <Route path="/public-schedule/:customerId" element={<PublicSchedulePage />} />
+                    <Route path="/docs" element={<DocumentationPage />} />
+                    <Route path="/documentation" element={<DocumentationPage />} />
+                    <Route path="/about-erp" element={<AboutErpPage />} />
+                    <Route path="/api-docs" element={<ApiV1DocumentationPage />} />
+                    <Route path="/api-v1-docs" element={<ApiV1DocumentationPage />} />
+                    <Route path="/api/v1/docs" element={<ApiV1DocumentationPage />} />
+                    <Route path="/api-docs-legacy" element={<ApiDocumentationPage />} />
+                    <Route path="/s/:slug" element={<div className="mkt-scope"><PublicSurveyPage /></div>} />
+                    <Route path="/claim/:id" element={<div className="mkt-scope"><PublicVoucherClaimPage /></div>} />
 
-                  {/* All authenticated users (sharing a single persistent AppTabs instance) */}
-                  <Route element={<ProtectedRoute />}>
-                    <Route path="/*" element={<AppTabs />} />
-                  </Route>
-                </Routes>
-                <KeyboardShortcutsController />
-                <GlobalConfirmModal />
-                <Suspense fallback={null}>
-                  <QRCodeCallModal />
+                    {/* All authenticated users (sharing a single persistent AppTabs instance) */}
+                    <Route element={<ProtectedRoute />}>
+                      <Route path="/*" element={<AppTabs />} />
+                    </Route>
+                  </Routes>
+                  <KeyboardShortcutsController />
+                  <GlobalConfirmModal />
+                  <Suspense fallback={null}>
+                    <QRCodeCallModal />
+                  </Suspense>
+                  <Suspense fallback={null}>
+                    <ProfileModal />
+                  </Suspense>
+                  <AutoUpdateChecker />
+                  <NetworkStatusIndicator />
+                  <Suspense fallback={null}>
+                    <CommandPalette />
+                  </Suspense>
+                  <GlobalEntityDrawers />
+                  <ChatFloatingLauncher />
                 </Suspense>
-                <Suspense fallback={null}>
-                  <ProfileModal />
-                </Suspense>
-                <AutoUpdateChecker />
-                <NetworkStatusIndicator />
-                <Suspense fallback={null}>
-                  <CommandPalette />
-                </Suspense>
-                <GlobalEntityDrawers />
-                <ChatFloatingLauncher />
-              </Suspense>
-            </Router>
-          </UploadProgressProvider>
+              </Router>
+            </UploadProgressProvider>
+          </TenantConfigProvider>
         </AuthProvider>
 
       </LanguageProvider>

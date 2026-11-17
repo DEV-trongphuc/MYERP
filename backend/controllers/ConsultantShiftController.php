@@ -56,7 +56,8 @@ class ConsultantShiftController {
         $tid = $auth['tenant_id'];
         $body = getBody();
         $role = strtolower($auth['role'] ?? '');
-        $isManagerOrAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'hr'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isManagerOrAdmin = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'hr'], 'attendance', 'approve');
         $userId = $isManagerOrAdmin ? (int)($body['user_id'] ?? $auth['user_id']) : (int)$auth['user_id'];
         $shiftType = trim($body['shift_type'] ?? 'regular'); // regular, night, weekend, holiday
         $shiftDate = trim($body['shift_date'] ?? date('Y-m-d'));
@@ -110,7 +111,8 @@ class ConsultantShiftController {
         }
 
         $role = strtolower($auth['role'] ?? '');
-        $isManagerOrAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'hr'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isManagerOrAdmin = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'hr'], 'attendance', 'approve');
         if (!$isManagerOrAdmin && (int)$shift['user_id'] !== (int)$auth['user_id']) {
             respond(403, null, 'Bạn không có quyền cập nhật ca trực của nhân sự khác', false);
         }
@@ -151,7 +153,8 @@ class ConsultantShiftController {
         }
 
         $role = strtolower($auth['role'] ?? '');
-        $isManagerOrAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'hr'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isManagerOrAdmin = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'hr'], 'attendance', 'approve');
         if (!$isManagerOrAdmin && (int)$shift['user_id'] !== (int)$auth['user_id']) {
             respond(403, null, 'Bạn không có quyền hủy ca trực của nhân sự khác', false);
         }
@@ -165,7 +168,8 @@ class ConsultantShiftController {
         $tid = $auth['tenant_id'];
         $body = getBody();
         $role = strtolower($auth['role'] ?? '');
-        $isManagerOrAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'hr'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isManagerOrAdmin = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'hr'], 'attendance', 'approve');
         $userId = $isManagerOrAdmin ? (int)($body['user_id'] ?? $auth['user_id']) : (int)$auth['user_id'];
         
         $stmt = $this->db->prepare("SELECT vacation_mode FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");

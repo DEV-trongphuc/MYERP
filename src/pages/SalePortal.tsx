@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { resolveTeamDepartmentCode } from '../contexts/TenantConfigContext';
 import { withRouterFreezer } from '../components/RouterFreezer';
 import {
   LogOut, LogIn, Search, Filter, AlertCircle, CheckCircle2,
@@ -63,6 +64,8 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { Avatar } from '../components/ui/Avatar';
 import { prewarmSmartCheckInGPS } from '../components/ui/SmartCheckInModal';
 import { getUserDisplayRoleOrTitle } from '../utils/roleUtils';
+
+const PALETTE = ['#C6333D', '#334155', '#E11D48', '#64748B', '#991B1B', '#475569', '#FB7185', '#94A3B8', '#1E293B', '#CBD5E1'];
 
 const getRoleDisplayName = (user: any) => {
   if (!user) return '';
@@ -3079,7 +3082,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   }, [profileActiveTab]);
 
   useEffect(() => {
-    const isSale = ['sale', 'sales'].includes(String(user?.role || '').toLowerCase()) || ((user as any)?.team_id === 4);
+    const isSale = ['sale', 'sales'].includes(String(user?.role || '').toLowerCase()) || resolveTeamDepartmentCode((user as any)?.team_id) === 'sales';
     if (!isSale && profileActiveTab === 'schedule') {
       setProfileActiveTab('personal');
     }
@@ -10922,7 +10925,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   const percentage = data.stats.total_received > 0
                     ? ((r.count / data.stats.total_received) * 100).toFixed(1)
                     : '0.0';
-                  const colors = ['#BD1D2D', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#BD1D2D'];
+                  const colors = PALETTE;
                   const themeColor = colors[idx % colors.length];
 
                   return (
@@ -10998,12 +11001,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     const name = lead.connection_name || t('Nhập tay');
                     counts[name] = (counts[name] || 0) + 1;
                   });
-                  const colors = ['#BD1D2D', '#3b82f6', '#ec4899', '#f59e0b', '#10b981', '#BD1D2D', '#06b6d4'];
                   return Object.entries(counts)
                     .map(([name, value], idx) => ({
                       name,
                       value,
-                      color: colors[idx % colors.length]
+                      color: PALETTE[idx % PALETTE.length]
                     }))
                     .sort((a, b) => b.value - a.value);
                 };
@@ -11014,12 +11016,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     const name = lead.source?.trim() || t('Không xác định');
                     counts[name] = (counts[name] || 0) + 1;
                   });
-                  const colors = ['#BD1D2D', '#3b82f6', '#ec4899', '#f59e0b', '#10b981', '#BD1D2D', '#06b6d4'];
                   return Object.entries(counts)
                     .map(([name, value], idx) => ({
                       name,
                       value,
-                      color: colors[idx % colors.length]
+                      color: PALETTE[idx % PALETTE.length]
                     }))
                     .sort((a, b) => b.value - a.value);
                 };
@@ -13082,7 +13083,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       flexDirection: 'column',
                       boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
                     }}>
-                      {Boolean(['sale', 'sales'].includes(String(user?.role || '').toLowerCase()) || ((user as any)?.team_id === 4)) && (
+                      {Boolean(['sale', 'sales'].includes(String(user?.role || '').toLowerCase()) || resolveTeamDepartmentCode((user as any)?.team_id) === 'sales') && (
                         <button
                           type="button"
                           onClick={() => setProfileActiveTab('schedule')}
@@ -13363,7 +13364,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 ) : (
                   /* ── Desktop Tab Menu ── */
                   <>
-                    {Boolean(['sale', 'sales'].includes(String(user?.role || '').toLowerCase()) || ((user as any)?.team_id === 4)) && (
+                    {Boolean(['sale', 'sales'].includes(String(user?.role || '').toLowerCase()) || resolveTeamDepartmentCode((user as any)?.team_id) === 'sales') && (
                       <button
                         type="button"
                         className={`${styles.sidebarTabBtn} ${profileActiveTab === 'schedule' ? styles.sidebarTabActive : ''}`}
@@ -13947,7 +13948,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           backgroundSize: '12px 12px'
                         }}>
                           <img 
-                            src={saleSignatureUrl ? (saleSignatureUrl.startsWith('http') || saleSignatureUrl.startsWith('data:') ? saleSignatureUrl : `https://myerp.ideas.edu.vn/backend/${saleSignatureUrl.replace(/^\/+/, '')}`) : ''} 
+                            src={saleSignatureUrl ? (saleSignatureUrl.startsWith('http') || saleSignatureUrl.startsWith('data:') ? saleSignatureUrl : `/backend/${saleSignatureUrl.replace(/^\/+/, '')}`) : ''} 
                             alt="Chữ ký mẫu" 
                             style={{ maxHeight: '110px', objectFit: 'contain' }} 
                           />
@@ -20531,12 +20532,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(198, 51, 61, 0.04)' : 'rgba(198, 51, 61, 0.02)', 
-              borderLeft: '4px solid #C6333D', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
+              background: '#FFFFFF', 
+              border: '1px solid #E2E8F0', 
+              borderRadius: '12px'
             }}>
               <AlertCircle size={20} color="#C6333D" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
@@ -20553,12 +20551,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(198, 51, 61, 0.04)' : 'rgba(198, 51, 61, 0.02)', 
-              borderLeft: '4px solid #C6333D', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
+              background: '#FFFFFF', 
+              border: '1px solid #E2E8F0', 
+              borderRadius: '12px'
             }}>
               <Clock size={20} color="#C6333D" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
@@ -20575,12 +20570,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(198, 51, 61, 0.04)' : 'rgba(198, 51, 61, 0.02)', 
-              borderLeft: '4px solid #C6333D', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
+              background: '#FFFFFF', 
+              border: '1px solid #E2E8F0', 
+              borderRadius: '12px'
             }}>
               <CheckCircle2 size={20} color="#C6333D" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
@@ -20901,12 +20893,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(59, 130, 246, 0.04)' : 'rgba(59, 130, 246, 0.02)', 
-              borderLeft: '4px solid #3b82f6', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
+              background: '#FFFFFF', 
+              border: '1px solid #E2E8F0', 
+              borderRadius: '12px'
             }}>
               <Scale size={20} color="#3b82f6" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
@@ -20927,12 +20916,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(245, 158, 11, 0.04)' : 'rgba(245, 158, 11, 0.02)', 
-              borderLeft: '4px solid #f59e0b', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
+              background: '#FFFFFF', 
+              border: '1px solid #E2E8F0', 
+              borderRadius: '12px'
             }}>
               <Clock size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
@@ -20953,12 +20939,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(239, 68, 68, 0.04)' : 'rgba(239, 68, 68, 0.02)', 
-              borderLeft: '4px solid #ef4444', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
+              background: '#FFFFFF', 
+              border: '1px solid #E2E8F0', 
+              borderRadius: '12px'
             }}>
               <AlertTriangle size={20} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>

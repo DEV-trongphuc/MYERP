@@ -43,11 +43,8 @@ const resolveAttachmentUrl = (url: string | null | undefined): string => {
     cleanPath = 'uploads/' + cleanPath;
   }
   
-  const apiBase = import.meta.env.VITE_API_URL || 'https://myerp.ideas.edu.vn/backend/api.php';
-  let baseUrl = apiBase.split('api.php')[0].replace(/\/+$/, '');
-  if (!baseUrl.startsWith('http')) {
-    baseUrl = 'https://myerp.ideas.edu.vn/backend';
-  }
+  const apiBase = import.meta.env.VITE_API_URL || '/backend/api.php';
+  const baseUrl = apiBase.split('api.php')[0].replace(/\/+$/, '') || '/backend';
   return `${baseUrl}/${cleanPath}`;
 };
 

@@ -18,7 +18,7 @@ class FlowExecutor
     private static $tagCache = [];     // Max 200 entries Ã¢â‚¬â€ see pruneStaticCache() calls below
     private static $profileCache = []; // Max 200 entries
 
-    public function __construct($pdo, $mailer, $apiUrl)
+    public function __construct($pdo, $mailer = null, $apiUrl = '')
     {
         $this->pdo = $pdo;
         $this->mailer = $mailer;
@@ -510,8 +510,31 @@ class FlowExecutor
 
                     if (empty($phone) || !$normalizedPhone) {
                         $reason = empty($phone) ? 'missing_phone' : 'invalid_phone';
-                        $logs[] = "  -> ZNS Skipped: $reason ($phone).";
-                        logActivity($this->pdo, $subscriberId, 'zns_skipped', $currentStepId, $flowName, "ZNS Skipped: $reason", $flowId, $campaignId, [], $subscriber['workspace_id']);
+                        $detailReason = "ZNS Skipped: $reason" . ($phone ? " ($phone)" : '');
+                        $logs[] = "  -> $detailReason.";
+                        logActivity($this->pdo, $subscriberId, 'zns_skipped', $currentStepId, $flowName, $detailReason, $flowId, $campaignId, [], $subscriber['workspace_id']);
+                        try {
+                            $zdlSkipId = bin2hex(random_bytes(16));
+                            $stmtZdlSkip = $this->pdo->prepare("
+                                INSERT INTO zalo_delivery_logs
+                                (id, workspace_id, oa_config_id, subscriber_id, phone_number, status, error_code, error_message, created_at, flow_id, step_id, template_id, campaign_id)
+                                VALUES (?, ?, ?, ?, ?, 'skipped', -2, ?, NOW(), ?, ?, ?, ?)
+                            ");
+                            $stmtZdlSkip->execute([
+                                $zdlSkipId,
+                                $subscriber['workspace_id'] ?? 1,
+                                $oaConfigId,
+                                $subscriberId,
+                                $phone ?: null,
+                                $detailReason,
+                                $flowId,
+                                $currentStepId,
+                                $templateId,
+                                $campaignId,
+                            ]);
+                        } catch (\Throwable $eZdlSkip) {
+                            error_log('[FlowExecutor] Failed logging skipped ZNS to zalo_delivery_logs: ' . $eZdlSkip->getMessage());
+                        }
                         if (($config['fallback_behavior'] ?? 'skip') === 'mark_failed') {
                             $this->bufferStatsUpdate('flows', $flowId, 'stat_zns_failed', 1, $subscriber['workspace_id']);
                         }
@@ -761,92 +784,16 @@ class FlowExecutor
                         $isWaitOver = true;
                         $logDetail = "Wait Finished (Resumed)";
                     } else {
-                        // Calculate Wait
-                        if ($mode === 'until') {
-                            $targetTime = $step['config']['untilTime'] ?? '09:00';
-                            $targetDay = $step['config']['untilDay'] ?? null;
-                            $dt = new DateTime($scheduleNow);
-                            $targetTimeParts = explode(':', $targetTime);
-                            $dt->setTime((int) $targetTimeParts[0], (int) ($targetTimeParts[1] ?? 0), 0);
-
-                            if ($targetDay !== null && $targetDay !== '') {
-                                $currentDay = (int) date('w', strtotime($scheduleNow));
-                                $daysToWait = ((int) $targetDay - $currentDay + 7) % 7;
-                                if ($daysToWait === 0 && $dt->getTimestamp() <= time()) {
-                                    $daysToWait = 7;
-                                }
-                                if ($daysToWait > 0)
-                                    $dt->modify("+$daysToWait days");
-                            } else {
-                                if ($dt->getTimestamp() <= time())
-                                    $dt->modify("+1 day");
-                            }
-                            $nextScheduledAt = $dt->format('Y-m-d H:i:s');
-                            $logDetail = "Wait UNTIL $nextScheduledAt";
-
-                        } elseif ($mode === 'until_attribute') {
-                            $attrKey = $step['config']['attributeKey'] ?? 'date_of_birth';
-                            $offsetValue = (int) ($step['config']['offsetValue'] ?? 0);
-                            $offsetType = $step['config']['offsetType'] ?? 'before';
-                            $untilTime = $step['config']['untilTime'] ?? '09:00';
-                            $attrValue = $subscriber[$attrKey] ?? null;
-                            if ((!$attrValue || $attrValue === '0000-00-00') && !empty($subscriber['custom_attributes'])) {
-                                $customAttrs = is_array($subscriber['custom_attributes'])
-                                    ? $subscriber['custom_attributes']
-                                    : (json_decode($subscriber['custom_attributes'], true) ?: []);
-                                $cleanAttrKey = preg_replace('/^custom_/', '', $attrKey);
-                                $attrValue = $customAttrs[$attrKey] ?? $customAttrs[$cleanAttrKey] ?? null;
-                            }
-
-                            if (!$attrValue || $attrValue === '0000-00-00') {
-                                // Skip
-                                $isWaitOver = true;
-                                $logDetail = "Wait Skipped (Attributes missing)";
-                            } else {
-                                $dtAttr = new DateTime($attrValue);
-                                $md = $dtAttr->format('m-d');
-                                $targetDate = new DateTime(date('Y') . "-$md $untilTime:00");
-                                if ($offsetType === 'before')
-                                    $targetDate->modify("-$offsetValue days");
-                                elseif ($offsetType === 'after')
-                                    $targetDate->modify("+$offsetValue days");
-
-                                if ($targetDate->getTimestamp() < time() - 86400) {
-                                    if ($targetDate->format('Y-m-d') < date('Y-m-d'))
-                                        $targetDate->modify("+1 year");
-                                }
-                                $nextScheduledAt = $targetDate->format('Y-m-d H:i:s');
-                                if ($targetDate->getTimestamp() <= time())
-                                    $isWaitOver = true;
-                                $logDetail = "Wait Attribute $nextScheduledAt";
-                            }
-
-                        } elseif ($mode === 'until_date') {
-                            $specDate = $step['config']['specificDate'] ?? '';
-                            $targetTime = $step['config']['untilTime'] ?? '09:00';
-                            if ($specDate) {
-                                $targetTs = strtotime("$specDate $targetTime:00");
-                                if ($targetTs <= time())
-                                    $isWaitOver = true;
-                                else
-                                    $nextScheduledAt = date('Y-m-d H:i:s', $targetTs);
-                                $logDetail = "Wait Date $nextScheduledAt";
-                            } else {
-                                $isWaitOver = true;
-                                $logDetail = "Wait Skipped (No Date)";
-                            }
-                        } else {
-                            // Duration
-                            $dur = (int) ($step['config']['duration'] ?? 1);
-                            $unit = $step['config']['unit'] ?? 'hours';
-                            // [FIX] Use $scheduleNow (from $contextData['now']) for consistency
-                            // with other wait modes. 'new DateTime()' uses PHP runtime which
-                            // may drift if worker runs for a long time.
-                            $dt = new DateTime($scheduleNow);
-                            $dt->modify("+$dur $unit");
-                            $nextScheduledAt = $dt->format('Y-m-d H:i:s');
-                            $logDetail = "Wait Duration $dur $unit";
-                        }
+                        // Canonical wait calculation for duration, until, until_date, and until_attribute modes
+                        $waitCalc = calculateWaitStepScheduledAt($step, strtotime($scheduleNow) ?: time(), [
+                            'now_string' => $scheduleNow,
+                            'subscriber' => $subscriber,
+                            'duration_default' => 1,
+                            'unit_default' => 'hours',
+                        ]);
+                        $nextScheduledAt = $waitCalc['scheduled_at'];
+                        $isWaitOver = !empty($waitCalc['is_wait_over']);
+                        $logDetail = $waitCalc['log_detail'];
                     }
 
                     if ($isWaitOver) {
@@ -1428,22 +1375,17 @@ class FlowExecutor
                         $this->pdo->prepare("UPDATE subscribers SET status='unsubscribed' WHERE id=? AND workspace_id = ?")->execute([$subscriberId, $subscriber['workspace_id']]);
                         logActivity($this->pdo, $subscriberId, 'unsubscribe', $currentStepId, $flowName, "Unsubscribed via flow", $flowId, null, [], $subscriber['workspace_id']);
                     } elseif ($aType === 'delete_contact') {
-                        // [FIX] Log BEFORE delete — logActivity would fail (FK/orphan) if run after DELETE
+                        // [100% Soft-Delete Mandate] Transition flow state to cancelled, archive subscriber with deleted_at = NOW()
                         logActivity($this->pdo, $subscriberId, 'delete_contact', $currentStepId, $flowName, "Deleted via flow", $flowId, null, [], $subscriber['workspace_id']);
-                        // Delete all related records to prevent orphan data
                         $this->pdo->prepare("DELETE FROM subscriber_lists WHERE workspace_id = ? AND subscriber_id=?")->execute([$subscriber['workspace_id'], $subscriberId]);
                         $this->pdo->prepare("DELETE FROM subscriber_tags WHERE workspace_id = ? AND subscriber_id=?")->execute([$subscriber['workspace_id'], $subscriberId]);
-                        $this->pdo->prepare("DELETE FROM subscriber_flow_states WHERE workspace_id = ? AND subscriber_id=?")->execute([$subscriber['workspace_id'], $subscriberId]);
-                        $this->pdo->prepare("DELETE FROM subscriber_activity WHERE workspace_id = ? AND subscriber_id=?")->execute([$subscriber['workspace_id'], $subscriberId]);
-                        // [FIX QUAL-5] Also clean up orphan records in related log tables
-                        $this->pdo->prepare("DELETE FROM mail_delivery_logs WHERE workspace_id = ? AND subscriber_id=?")->execute([$subscriber['workspace_id'], $subscriberId]);
-                        $this->pdo->prepare("DELETE FROM activity_buffer WHERE workspace_id = ? AND subscriber_id=?")->execute([$subscriber['workspace_id'], $subscriberId]);
-                        $this->pdo->prepare("DELETE FROM zalo_delivery_logs WHERE workspace_id = ? AND subscriber_id=?")->execute([$subscriber['workspace_id'], $subscriberId]);
+                        $this->pdo->prepare("UPDATE subscriber_flow_states SET status = 'cancelled', updated_at = NOW() WHERE workspace_id = ? AND subscriber_id=?")->execute([$subscriber['workspace_id'], $subscriberId]);
+                        // Preserve audit history in subscriber_activity, mail_delivery_logs, zalo_delivery_logs
                         // [FIX V3-M2] Unlink subscriber from zalo_subscribers
                         $this->pdo->prepare("UPDATE zalo_subscribers SET subscriber_id = NULL WHERE workspace_id = ? AND subscriber_id = ?")->execute([$subscriber['workspace_id'], $subscriberId]);
                         // [FIX F-4] Reclaim voucher codes
                         $this->pdo->prepare("UPDATE voucher_codes SET subscriber_id = NULL, status = 'unused', sent_at = NULL WHERE workspace_id = ? AND subscriber_id = ? AND status = 'available'")->execute([$subscriber['workspace_id'], $subscriberId]);
-                        $this->pdo->prepare("DELETE FROM subscribers WHERE id=? AND workspace_id = ?")->execute([$subscriberId, $subscriber['workspace_id']]);
+                        $this->pdo->prepare("UPDATE subscribers SET deleted_at = NOW(), status = 'archived' WHERE id=? AND workspace_id = ?")->execute([$subscriberId, $subscriber['workspace_id']]);
                     }
                     $this->bufferStatsUpdate('flows', $flowId, 'stat_completed', 1, $subscriber['workspace_id']);
                     $shouldContinueChain = false;
@@ -1895,37 +1837,13 @@ class FlowExecutor
                                     // [SMART SCHEDULE FIX] Calculate future wait date if first step of linked flow is wait
                                     foreach ($lSteps as $fs) {
                                         if (($fs['id'] ?? '') === $lStart && strtolower($fs['type'] ?? '') === 'wait') {
-                                            $fsWaitConfig = $fs['config'] ?? [];
-                                            $fsWaitMode = $fsWaitConfig['mode'] ?? 'duration';
-                                            if ($fsWaitMode === 'duration') {
-                                                $dur = (int) ($fsWaitConfig['duration'] ?? 0);
-                                                $unit = $fsWaitConfig['unit'] ?? 'minutes';
-                                                $unitSeconds = match ($unit) {
-                                                    'weeks' => 604800,
-                                                    'days' => 86400,
-                                                    'hours' => 3600,
-                                                    default => 60,
-                                                };
-                                                if (($unitSeconds * $dur) > 0) {
-                                                    $linkedInitialSchedule = date('Y-m-d H:i:s', time() + ($unitSeconds * $dur));
-                                                }
-                                            } elseif ($fsWaitMode === 'until_date') {
-                                                $specDate = $fsWaitConfig['specificDate'] ?? '';
-                                                $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                                                if ($specDate) {
-                                                    $targetTs = strtotime("$specDate $targetTime:00");
-                                                    if ($targetTs > time()) {
-                                                        $linkedInitialSchedule = date('Y-m-d H:i:s', $targetTs);
-                                                    }
-                                                }
-                                            } elseif ($fsWaitMode === 'until') {
-                                                $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                                                $dt = new DateTime();
-                                                $parts2 = explode(':', $targetTime);
-                                                $dt->setTime((int)$parts2[0], (int)($parts2[1] ?? 0), 0);
-                                                if ($dt->getTimestamp() <= time()) $dt->modify('+1 day');
-                                                $linkedInitialSchedule = $dt->format('Y-m-d H:i:s');
-                                            }
+                                            $waitCalc = calculateWaitStepScheduledAt($fs, null, [
+                                                'for_enrollment' => true,
+                                                'past_fallback' => $linkedInitialSchedule,
+                                                'duration_default' => 0,
+                                                'unit_default' => 'minutes',
+                                            ]);
+                                            $linkedInitialSchedule = $waitCalc['scheduled_at'];
                                             break;
                                         }
                                     }
@@ -1943,13 +1861,27 @@ class FlowExecutor
                                         }
                                     }
 
-                                    $this->pdo->prepare(
+                                    $stmtLinkedEnroll = $this->pdo->prepare(
                                         "INSERT INTO subscriber_flow_states (subscriber_id, workspace_id, contact_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
-                                         VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW())"
-                                    )->execute([$subscriberId, $subscriber['workspace_id'] ?? 1, $subscriber['contact_id'] ?? null, $linkedId, $lStart, $lStartType, $linkedInitialSchedule]);
+                                         VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW())
+                                         ON DUPLICATE KEY UPDATE
+                                             id = LAST_INSERT_ID(id),
+                                             contact_id = COALESCE(VALUES(contact_id), contact_id),
+                                             step_id = VALUES(step_id),
+                                             step_type = VALUES(step_type),
+                                             scheduled_at = VALUES(scheduled_at),
+                                             waiting_until = NULL,
+                                             branch_taken = NULL,
+                                             last_error = NULL,
+                                             status = 'waiting',
+                                             created_at = NOW(),
+                                             updated_at = NOW(),
+                                             last_step_at = NOW()"
+                                    );
+                                    $stmtLinkedEnroll->execute([$subscriberId, $subscriber['workspace_id'] ?? 1, $subscriber['contact_id'] ?? null, $linkedId, $lStart, $lStartType, $linkedInitialSchedule]);
                                     $newQ = $this->pdo->lastInsertId();
                                     if ($newQ) {
-                                        dispatchFlowWorker($this->pdo, 'flows', ['priority_queue_id' => $newQ, 'subscriber_id' => $subscriberId, 'priority_flow_id' => $linkedId]);
+                                        dispatchFlowWorker($this->pdo, 'flows', ['priority_queue_id' => $newQ, 'subscriber_id' => $subscriberId, 'priority_flow_id' => $linkedId, 'depth' => 1]);
                                         logActivity($this->pdo, $subscriberId, 'enter_flow', $linkedId, "Linked Flow", "Linked to $linkedId", $linkedId, null, [], $subscriber['workspace_id']);
                                         $logs[] = "  -> Linked to flow $linkedId.";
                                     }

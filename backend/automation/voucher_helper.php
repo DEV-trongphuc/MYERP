@@ -143,7 +143,7 @@ function claimVoucherAtomic($pdo, $campaignId, $subscriberId, $rewardItemId = nu
 
     try {
         require_once 'WorkerTriggerService.php';
-        $apiUrl = (defined('API_BASE_URL') ? API_BASE_URL : 'https://automation.ideas.edu.vn/mail_api');
+        $apiUrl = resolve_automation_api_base_url($pdo);
         $workerService = new WorkerTriggerService($pdo, $apiUrl);
         
         $workerService->trigger('/worker_priority.php?' . http_build_query([

@@ -893,8 +893,8 @@ export const ExpensesPage: React.FC = () => {
             label: 'Tổng chi phí kỳ này',
             value: FMT(totalAmt),
             icon: TrendingDown,
-            color: '#ef4444',
-            bg: 'rgba(239, 68, 68, 0.08)',
+            color: '#BD1D2D',
+            bg: 'rgba(189, 29, 45, 0.08)',
             sub: `${summary.total_count || 0} khoản`,
             change: getChangePercent(totalAmt, prevTotal),
             badWhenUp: true,
@@ -913,8 +913,8 @@ export const ExpensesPage: React.FC = () => {
             label: 'Đã phê duyệt',
             value: FMT(approvedAmt),
             icon: CheckCircle2,
-            color: '#10b981',
-            bg: 'rgba(16, 185, 129, 0.08)',
+            color: '#BD1D2D',
+            bg: 'rgba(189, 29, 45, 0.08)',
             sub: `${summary.approved_count || 0} khoản đã duyệt`,
             change: getChangePercent(approvedAmt, prevApproved),
             badWhenUp: false,
@@ -929,8 +929,8 @@ export const ExpensesPage: React.FC = () => {
             label: 'Chờ phê duyệt',
             value: FMT(pendingAmt),
             icon: Clock,
-            color: '#f59e0b',
-            bg: 'rgba(245, 158, 11, 0.08)',
+            color: '#334155',
+            bg: 'rgba(15, 23, 42, 0.06)',
             sub: `${summary.pending_count || 0} khoản đang chờ`,
             change: getChangePercent(pendingAmt, prevPending),
             badWhenUp: true,
@@ -945,8 +945,8 @@ export const ExpensesPage: React.FC = () => {
             label: 'Chi phí lớn nhất',
             value: summary.max_amount ? FMT(summary.max_amount) : '—',
             icon: DollarSign,
-            color: '#a31422',
-            bg: 'rgba(163, 20, 34, 0.08)',
+            color: '#334155',
+            bg: 'rgba(15, 23, 42, 0.06)',
             sub: summary.max_title ? summary.max_title : 'Chưa có dữ liệu',
             change: 0,
             badWhenUp: true,
@@ -979,25 +979,27 @@ export const ExpensesPage: React.FC = () => {
                 flexDirection: 'column', 
                 minHeight: '135px',
                 padding: '1.25rem',
+                borderRadius: '16px',
+                border: '1px solid #E2E8F0',
                 position: 'relative',
                 overflow: 'hidden',
                 cursor: k.onClick ? 'pointer' : 'default'
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-light)' }}>{k.label}</span>
+                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.73rem', color: '#64748b' }}>{k.label}</span>
                 <div className="stat-icon" style={{
-                  background: k.bg,
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
+                  background: i < 2 ? 'rgba(189, 29, 45, 0.08)' : 'rgba(15, 23, 42, 0.06)',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: k.color,
+                  color: i < 2 ? '#BD1D2D' : '#334155',
                   flexShrink: 0
                 }}>
-                  <Icon size={18} />
+                  <Icon size={16} />
                 </div>
               </div>
 
@@ -1005,15 +1007,21 @@ export const ExpensesPage: React.FC = () => {
                 {loading ? (
                   <div className="skeleton" style={{ height: 28, width: '80%', borderRadius: 6, marginBottom: 8 }} />
                 ) : (
-                  <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '1.2rem', lineHeight: 1.2 }}>{k.value}</div>
+                  <div className="stat-value" style={{
+                    fontWeight: 800,
+                    color: i === 1 ? '#BD1D2D' : '#0f172a',
+                    fontSize: 'clamp(1.15rem, 1.4vw, 1.42rem)',
+                    fontVariantNumeric: 'tabular-nums',
+                    lineHeight: 1.25
+                  }}>{k.value}</div>
                 )}
-                <div className="stat-desc" style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '100%', fontWeight: 500 }} title={k.sub}>{k.sub}</div>
+                <div className="stat-desc" style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '100%', fontWeight: 500 }} title={k.sub}>{k.sub}</div>
                 
                 {!isZero && (
                   <div className="stat-change" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, color: trendColor, marginTop: 'auto' }}>
                     {TrendIcon}
                     <span>{isDecrease ? '' : '+'}{k.change}%</span>
-                    <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>{getPeriodCompareText(period)}</span>
+                    <span style={{ color: '#64748b', fontWeight: 400 }}>{getPeriodCompareText(period)}</span>
                   </div>
                 )}
               </div>

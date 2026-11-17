@@ -4052,7 +4052,7 @@ export const DocumentationPage: React.FC = () => {
                   <li>
                     <strong>Email Gửi Khách Hàng / Học Viên:</strong>
                     <ul>
-                      <li>Tiêu đề tiền tố chuẩn hóa: <code>[IDEAS] + [Tiêu đề thư] + [H:i d/m/Y]</code> (loại bỏ tuyệt đối các tiền tố nội bộ như <em>[MYERP]</em>).</li>
+                      <li>Tiêu đề tiền tố chuẩn hóa theo thương hiệu Tenant: <code>[BRAND_PREFIX] + [Tiêu đề thư] + [H:i d/m/Y]</code> (cấu hình động trong <em>Cài đặt Tổ chức</em>).</li>
                       <li>Khung nội dung: Khung viền đỏ thương hiệu <code>#BD1D2D</code> với font chữ Inter hiện đại, nền xám thanh lịch <code>#f8fafc</code>.</li>
                       <li><strong>Bỏ nút "Đăng Nhập Hệ Thống":</strong> Thay thế bằng dòng lưu ý pháp lý tự động: <em>"Đây là tin tự động theo lịch thanh toán trên hợp đồng, vui lòng bỏ qua nếu bạn đã thanh toán."</em> để bảo mật đường dẫn nội bộ.</li>
                     </ul>
@@ -4061,7 +4061,7 @@ export const DocumentationPage: React.FC = () => {
                     <strong>Email Gửi Nội Bộ Nhân Sự:</strong>
                     <ul>
                       <li>Tiêu đề tiền tố chuẩn hóa: <code>[MYERP] + [Nội dung cảnh báo] + [H:i d/m/Y]</code>.</li>
-                      <li>Khung nội dung: Kèm nút bấm kêu gọi hành động (Call To Action) đỏ nổi bật <strong>"ĐĂNG NHẬP HỆ THỐNG"</strong> trỏ trực tiếp về địa chỉ ERP <code>https://myerp.ideas.edu.vn</code> để xử lý công việc ngay.</li>
+                      <li>Khung nội dung: Kèm nút bấm kêu gọi hành động (Call To Action) đỏ nổi bật <strong>"ĐĂNG NHẬP HỆ THỐNG"</strong> trỏ trực tiếp về địa chỉ <code>frontend_url</code> riêng của từng Tenant để xử lý công việc ngay.</li>
                     </ul>
                   </li>
                 </ul>
@@ -4072,7 +4072,7 @@ export const DocumentationPage: React.FC = () => {
                 Nhằm ngăn chặn triệt để rủi ro lộ dữ liệu khách hàng hoặc gửi nhầm danh sách CC, mailer tích hợp bộ lọc bảo mật tự động:
               </p>
               <ul>
-                <li><strong>Security Shield Lọc Sạch CC:</strong> Khi chuẩn bị danh sách gửi, hệ thống tự động tải bản đồ email người dùng nội bộ (<code>internalEmailsMap</code>). Mọi địa chỉ CC không thuộc đuôi <code>@ideas.edu.vn</code> hoặc không tồn tại trong bảng <code>users</code> sẽ bị bóc tách và loại bỏ ngay lập tức, kèm dòng cảnh báo an ninh ghi vào log: <code>[SECURITY SHIELD] Removed customer email from CC</code>.</li>
+                <li><strong>Security Shield Lọc Sạch CC:</strong> Khi chuẩn bị danh sách gửi, hệ thống tự động tải bản đồ email người dùng nội bộ (<code>internalEmailsMap</code>) của Tenant. Mọi địa chỉ CC không thuộc tên miền nội bộ (<code>organization_internal_domain</code>) hoặc không tồn tại trong bảng <code>users</code> sẽ bị bóc tách và loại bỏ ngay lập tức, kèm dòng cảnh báo an ninh ghi vào log: <code>[SECURITY SHIELD] Removed customer email from CC</code>.</li>
                 <li><strong>Chống Gửi Trùng Lặp (5-Minute Deduplication Shield):</strong> Khi phát sinh thông báo gắn với <code>lead_id</code>, hệ thống kiểm tra nếu cùng một người nhận đã nhận email cho lead này trong vòng 5 phút trước, yêu cầu mới sẽ được coi là hợp lệ mà không nhân bản thêm bản ghi vào hàng đợi.</li>
                 <li><strong>Tự Động Dọn Dẹp Dữ Liệu Cũ (Auto-Prune 30 Days):</strong> Bảng <code>mail_queue</code> tự động dọn dẹp các email có trạng thái <code>sent</code> hoặc <code>failed</code> cũ hơn 30 ngày, giữ cho dung lượng cơ sở dữ liệu luôn gọn nhẹ và truy vấn tốc độ cao.</li>
               </ul>

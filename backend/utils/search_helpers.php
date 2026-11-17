@@ -698,7 +698,7 @@ function applyCrmStudyStatusFilter(PDO $db, string $alias, array $input, array &
         }
         if ($includesStudying) {
             // Note: contacts.study_status has DEFAULT 'studying', so require actual enrollment/student indicators for 'studying'
-            $studyOrClauses[] = "(LOWER(TRIM(COALESCE({$a}study_status, 'studying'))) IN ('studying', 'dang_hoc', 'đang học', '') AND ({$a}status = 'customer' OR {$a}stage_id = 44 OR {$a}pipeline_status IN ('enrolled', 'hoc_vien', 'won') OR ({$a}student_id IS NOT NULL AND TRIM({$a}student_id) != '') OR {$a}admission_date IS NOT NULL))";
+            $studyOrClauses[] = "(LOWER(TRIM(COALESCE({$a}study_status, 'studying'))) IN ('studying', 'dang_hoc', 'đang học', '') AND ({$a}status = 'customer' OR EXISTS (SELECT 1 FROM pipeline_stages ps_std WHERE ps_std.id = {$a}stage_id AND ps_std.tenant_id = {$a}tenant_id AND ps_std.deleted_at IS NULL AND (ps_std.system_slug IN ('enrolled', 'hoc_vien', 'won') OR ps_std.is_won = 1)) OR {$a}pipeline_status IN ('enrolled', 'hoc_vien', 'won') OR ({$a}student_id IS NOT NULL AND TRIM({$a}student_id) != '') OR {$a}admission_date IS NOT NULL))";
         }
         $nonStudyingStatuses = array_values(array_unique($nonStudyingStatuses));
         if (!empty($nonStudyingStatuses)) {
@@ -715,6 +715,7 @@ function applyCrmStudyStatusFilter(PDO $db, string $alias, array $input, array &
 }
 
 function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, array &$where, array &$params): void {
+    $tenantId = isset($input['tenant_id']) && (int)$input['tenant_id'] > 0 ? (int)$input['tenant_id'] : (int)($GLOBALS['current_tenant_id'] ?? 1);
     $trimmedAlias = trim($alias);
     $a = $trimmedAlias === '' ? '' : (str_ends_with($trimmedAlias, '.') ? $trimmedAlias : $trimmedAlias . '.');
     $contactCols = getCrmTableColumnsCache($db, 'contacts');
@@ -854,10 +855,9 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
         }
     }
 
-    // Team filter (`team_id` / `teams`)
-    // Exclude non-sales department teams (1=HCNS, 2=Kế toán, 3=Marketing, 5=Học vụ - học thuật, 99983=Ban Giám đốc)
-    // that do not own CRM contacts so Academic/Accountant/HR/Marketing users never get 0 results.
-    $nonSalesDeptTeamIds = [1, 2, 3, 5, 99983];
+    // Team filter (`team_id` / `teams`) - dynamically resolve non-sales department teams for current tenant
+    require_once __DIR__ . '/../config/TenantConfigService.php';
+    $nonSalesDeptTeamIds = TenantConfigService::getNonSalesTeamIds($db, (int)$tenantId);
     $teamTokens = array_values(array_unique(array_merge(
         parseCrmMultiFilterValues($input['team_id'] ?? null),
         parseCrmMultiFilterValues($input['teams'] ?? null)
@@ -1818,7 +1818,7 @@ function applyCrmAdvancedMultiTierFilters(PDO $db, string $alias, array $input, 
             } elseif ($fLow === 'no_deposit') {
                 $finOrs[] = "NOT EXISTS (SELECT 1 FROM deposits dep_f WHERE dep_f.contact_id = {$a}id AND dep_f.status NOT IN ('cancelled', 'rejected'))";
             } elseif ($fLow === 'has_so') {
-                $finOrs[] = "({$a}stage_id IN (SELECT id FROM pipeline_stages WHERE order_index >= 12) OR {$a}status = 'customer' OR {$a}pipeline_status IN ('deposit_tuition_payment', 'dong_le_phi_ho_so', 'enrolled', 'hoc_vien'))";
+                $finOrs[] = "(EXISTS (SELECT 1 FROM pipeline_stages ps_so WHERE ps_so.id = {$a}stage_id AND ps_so.tenant_id = {$a}tenant_id AND ps_so.deleted_at IS NULL AND ps_so.order_index >= 12) OR {$a}status = 'customer' OR {$a}pipeline_status IN ('deposit_tuition_payment', 'dong_le_phi_ho_so', 'enrolled', 'hoc_vien'))";
             } elseif ($fLow === 'high_value_deposit') {
                 $finOrs[] = "EXISTS (SELECT 1 FROM deposits dep_f WHERE dep_f.contact_id = {$a}id AND dep_f.price >= 10000000 AND dep_f.status NOT IN ('cancelled', 'rejected'))";
             } elseif ($fLow === 'overdue_milestone') {

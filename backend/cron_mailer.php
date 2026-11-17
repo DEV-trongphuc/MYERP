@@ -103,8 +103,8 @@ function runMailerCron($conn) {
             $mail->Timeout = 10;
             $mail->SMTPKeepAlive = true; // Giữ kết nối SMTP sống để tái sử dụng
 
-            $senderEmail = $settings['ses_sender_email'] ?: 'systemnoti@ideas.edu.vn';
-            $senderName = $settings['ses_sender_name'] ?: 'IDEAS NOTIFICATION';
+            $senderEmail = !empty($settings['ses_sender_email']) ? $settings['ses_sender_email'] : get_tenant_sender_email($conn);
+            $senderName = !empty($settings['ses_sender_name']) ? $settings['ses_sender_name'] : (get_tenant_brand_name($conn) . ' NOTIFICATION');
 
             $mail->setFrom($senderEmail, $senderName);
         } catch (Exception $e) {
@@ -112,14 +112,52 @@ function runMailerCron($conn) {
         }
     }
 
-    // BẢO VỆ TUYỆT ĐỐI: Lấy danh sách email nội bộ
+    // BẢO VỆ TUYỆT ĐỐI: Lấy danh sách email & tên miền nội bộ của tất cả Tenant từ cấu hình CSDL
     $internalEmailsMap = [];
+    $internalDomains = [];
     $uRes = $conn->query("SELECT LOWER(TRIM(email)) as em FROM users WHERE email IS NOT NULL AND email != ''");
     if ($uRes) {
         while ($uRow = $uRes->fetch_assoc()) {
             if (!empty($uRow['em'])) $internalEmailsMap[$uRow['em']] = true;
         }
     }
+    try {
+        $ssRes = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('internal_email_domain', 'support_email', 'academic_cc_emails', 'verified_from_senders', 'ses_sender_email')");
+        if ($ssRes) {
+            while ($ssRow = $ssRes->fetch_assoc()) {
+                $sk = $ssRow['setting_key'] ?? '';
+                $sv = trim((string)($ssRow['setting_value'] ?? ''));
+                if ($sv === '') continue;
+                if ($sk === 'internal_email_domain') {
+                    $dom = strtolower(ltrim($sv, '@'));
+                    if ($dom !== '') $internalDomains[$dom] = true;
+                } else {
+                    foreach (preg_split('/[,;\s]+/', $sv, -1, PREG_SPLIT_NO_EMPTY) as $emCfg) {
+                        $emClean = strtolower(trim($emCfg));
+                        if (filter_var($emClean, FILTER_VALIDATE_EMAIL)) $internalEmailsMap[$emClean] = true;
+                    }
+                }
+            }
+        }
+        $tnRes = @$conn->query("SELECT support_email, academic_cc_emails, domain FROM tenants");
+        if ($tnRes) {
+            while ($tnRow = $tnRes->fetch_assoc()) {
+                foreach (['support_email', 'academic_cc_emails'] as $ek) {
+                    foreach (preg_split('/[,;\s]+/', (string)($tnRow[$ek] ?? ''), -1, PREG_SPLIT_NO_EMPTY) as $emCfg) {
+                        $emClean = strtolower(trim($emCfg));
+                        if (filter_var($emClean, FILTER_VALIDATE_EMAIL)) $internalEmailsMap[$emClean] = true;
+                    }
+                }
+            }
+        }
+    } catch (\Throwable $eInternal) {}
+
+    $matchesInternalDomain = function (string $emailAddr) use ($internalDomains): bool {
+        $atPos = strrpos($emailAddr, '@');
+        if ($atPos === false) return false;
+        $dom = strtolower(substr($emailAddr, $atPos + 1));
+        return isset($internalDomains[$dom]);
+    };
 
     foreach ($mails as $row) {
         $mailId = $row['id'];
@@ -129,16 +167,16 @@ function runMailerCron($conn) {
         $htmlBody = $row['body_html'];
         
         $cleanTo = strtolower(trim($to));
-        $isInternal = isset($internalEmailsMap[$cleanTo]) || (substr($cleanTo, -13) === '@ideas.edu.vn');
+        $isInternal = isset($internalEmailsMap[$cleanTo]) || $matchesInternalDomain($cleanTo);
 
-        // BẢO VỆ TUYỆT ĐỐI CC: Chỉ cho phép email nội bộ vào danh sách CC
+        // BẢO VỆ TUYỆT ĐỐI CC: Chỉ cho phép email nội bộ / CC học vụ của Tenant vào danh sách CC
         $safeCcList = [];
         if (!empty($ccEmailString)) {
             $ccParts = preg_split('/[,;\s]+/', $ccEmailString, -1, PREG_SPLIT_NO_EMPTY);
             foreach ($ccParts as $cc) {
                 $cc = trim($cc);
                 $cleanCc = strtolower($cc);
-                if (!empty($cleanCc) && (isset($internalEmailsMap[$cleanCc]) || substr($cleanCc, -13) === '@ideas.edu.vn')) {
+                if (!empty($cleanCc) && (isset($internalEmailsMap[$cleanCc]) || $matchesInternalDomain($cleanCc))) {
                     $safeCcList[] = $cleanCc;
                 } else if (!empty($cleanCc)) {
                     echo "[" . date('Y-m-d H:i:s') . "] [SECURITY SHIELD] Removed customer email from CC: $cleanCc\n";

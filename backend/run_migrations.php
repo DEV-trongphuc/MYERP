@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 329;
+$targetVersion = 338;
 $currentVersion = 186;
 
 // Query current DB version
@@ -234,7 +234,7 @@ try {
     $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('golden_hours_max_leads_per_consultant', '0')");
     $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('require_lead_claim', '0')");
     $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('require_checkin_lead', '0')");
-    $conn->query("REPLACE INTO system_settings (setting_key, setting_value) VALUES ('frontend_url', 'https://myerp.ideas.edu.vn')");
+    $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('frontend_url', 'https://myerp.ideas.edu.vn')");
     $conn->query("UPDATE users SET status = IF(is_active = 0, 'inactive', 'active') WHERE status IS NULL OR status = '' OR (is_active = 0 AND status = 'active')");
 
     // 5. Ensure 2FA columns exist in users table
@@ -4695,6 +4695,148 @@ try {
         $logMsg("Nâng cấp lên phiên bản 329 hoàn tất.", "success");
     }
 
+    if ($currentVersion < 330) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 330: Meta Conversions API (CAPI) Quality Funnel, Attribution & Dual-Pixel...", "info");
+        try {
+            require_once __DIR__ . '/migrations/330_meta_capi_quality_and_attribution.php';
+            $logMsg("Nâng cấp Meta CAPI phiên bản 330 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 330: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 330 hoàn tất.", "success");
+    }
+
+    if ($currentVersion < 334) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 334: CAPI Phone Farm & Click-Fraud Blacklist (`capi_blocked_phones`)...", "info");
+        try {
+            require_once __DIR__ . '/migrations/334_capi_phone_farm_blacklist.php';
+            $logMsg("Nâng cấp CAPI Phone Farm Blacklist phiên bản 334 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 334: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 334 hoàn tất.", "success");
+    }
+
+    if ($currentVersion < 335) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 335: Marketing Automation Soft-Delete, Composite Indexes & Tracking Unique Cache (331–333)...", "info");
+        try {
+            if (!isset($db) || !($db instanceof PDO)) {
+                $db = new PDO(
+                    "mysql:host={$servername};dbname={$dbname};charset=utf8mb4",
+                    $username,
+                    $password,
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+                );
+                $db->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci, time_zone = '+07:00'");
+            }
+            $pdoMigrations = [
+                '331' => __DIR__ . '/migrations/331_marketing_automation_soft_delete_and_workspace_scoping.php',
+                '332' => __DIR__ . '/migrations/332_sync_tracking_unique_cache_and_soft_delete.php',
+                '333' => __DIR__ . '/migrations/333_mail_delivery_logs_soft_delete.php',
+            ];
+            foreach ($pdoMigrations as $migVer => $migFile) {
+                if (file_exists($migFile)) {
+                    ob_start();
+                    require_once $migFile;
+                    $migOut = trim((string)ob_get_clean());
+                    if ($migOut !== '') {
+                        foreach (explode("\n", $migOut) as $line) {
+                            $trimmed = trim($line);
+                            if ($trimmed !== '') {
+                                $logMsg("[M{$migVer}] {$trimmed}", "info");
+                            }
+                        }
+                    }
+                    $logMsg("Migration {$migVer} hoàn tất.", "success");
+                }
+            }
+        } catch (Throwable $e) {
+            if (ob_get_level() > 0) {
+                @ob_end_clean();
+            }
+            $logMsg("Lỗi khi chạy migration 335 (331–333): " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 335 hoàn tất.", "success");
+    }
+
+    if ($currentVersion < 336) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 336: Atomic Campaign Send Deduplication & Delivery Indexes...", "info");
+        try {
+            if (!isset($db) || !($db instanceof PDO)) {
+                $db = new PDO(
+                    "mysql:host={$servername};dbname={$dbname};charset=utf8mb4",
+                    $username,
+                    $password,
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+                );
+                $db->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci, time_zone = '+07:00'");
+            }
+            $mig336 = __DIR__ . '/migrations/336_campaign_send_dedup_and_indexes.php';
+            if (file_exists($mig336)) {
+                ob_start();
+                require_once $mig336;
+                $migOut = trim((string)ob_get_clean());
+                if ($migOut !== '') {
+                    foreach (explode("\n", $migOut) as $line) {
+                        $trimmed = trim($line);
+                        if ($trimmed !== '') {
+                            $logMsg("[M336] {$trimmed}", "info");
+                        }
+                    }
+                }
+                $logMsg("Migration 336 hoàn tất.", "success");
+            }
+        } catch (Throwable $e) {
+            if (ob_get_level() > 0) {
+                @ob_end_clean();
+            }
+            $logMsg("Lỗi khi chạy migration 336: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 336 hoàn tất.", "success");
+    }
+
+    if ($currentVersion < 337) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 337: Enterprise Multi-Tenant SaaS Dynamic Configuration, RBAC, Approvals, Notification Routing & Templates...", "info");
+        try {
+            if (!isset($db) || !($db instanceof PDO)) {
+                $db = new PDO(
+                    "mysql:host={$servername};dbname={$dbname};charset=utf8mb4",
+                    $username,
+                    $password,
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+                );
+                $db->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci, time_zone = '+07:00'");
+            }
+            require_once __DIR__ . '/migrations/337_enterprise_multitenant_saas_architecture.php';
+            run_migration_337_enterprise_multitenant_saas($db);
+            $logMsg("Migration 337 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 337: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 337 hoàn tất.", "success");
+    }
+
+    if ($currentVersion < 338 || $isForce) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 338: Đồng bộ toàn diện Schema Học vụ, HRM Kế toán A-Z, Marketing Soft-Delete & Custom Role VARCHAR...", "info");
+        try {
+            if (!isset($db) || !($db instanceof PDO)) {
+                $db = new PDO(
+                    "mysql:host={$servername};dbname={$dbname};charset=utf8mb4",
+                    $username,
+                    $password,
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+                );
+                $db->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci, time_zone = '+07:00'");
+            }
+            require_once __DIR__ . '/migrations/338_schema_parity_and_soft_delete_complete.php';
+            run_migration_338_schema_parity_and_soft_delete($db);
+            $logMsg("Migration 338 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 338: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 338 hoàn tất.", "success");
+    }
+
     // Reconnect $conn if it timed out during heavy PDO migration
     try {
         $alive = false;
@@ -4713,9 +4855,9 @@ try {
     } catch (Throwable $eReconn) {}
 
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '329') ON DUPLICATE KEY UPDATE setting_value = '329'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '338') ON DUPLICATE KEY UPDATE setting_value = '338'");
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 329", "success");
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 338", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

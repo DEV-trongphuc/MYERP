@@ -1,4 +1,4 @@
-# deploy-myerp.ps1
+﻿# deploy-myerp.ps1
 # High-Speed MYERP Deployment Pipeline -> https://myerp.ideas.edu.vn
 
 param(
@@ -115,7 +115,21 @@ $distArchive = "myerp_dist.tar.gz"
 Write-Host "`n[2/3] Packaging deployment archives..." -ForegroundColor Yellow
 
 if (-not $FrontendOnly) {
-    tar -czf "$backendArchive" --exclude="uploads/*" --exclude="*.log" -C backend .
+    tar -czf "$backendArchive" `
+        --exclude="uploads/*" `
+        --exclude="*.log" `
+        --exclude="*.tar.gz" `
+        --exclude=".env" `
+        --exclude=".env.*" `
+        --exclude="scratch" `
+        --exclude="scratch/*" `
+        --exclude="scratch_*" `
+        --exclude="*/scratch_*" `
+        --exclude="automation/_locks" `
+        --exclude="automation/_locks/*" `
+        --exclude="automation/*.lock" `
+        --exclude="diff.txt" `
+        -C backend .
     $beSize = [Math]::Round(((Get-Item $backendArchive).Length / 1MB), 2)
     Write-Host "  -> Backend archive: ${beSize} MB" -ForegroundColor Gray
 }

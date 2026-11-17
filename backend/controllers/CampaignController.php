@@ -187,7 +187,8 @@ class CampaignController {
     }
 
     public function update(array $auth, int $id): void {
-        $isAuthorized = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'marketing', 'academic'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isAuthorized = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'marketing', 'academic'], 'projects', 'write');
         if (!$isAuthorized) {
             $stmtLeader = $this->db->prepare("SELECT 1 FROM teams WHERE leader_id = ? LIMIT 1");
             $stmtLeader->execute([(int)$auth['user_id']]);
@@ -208,7 +209,7 @@ class CampaignController {
         if (!$camp) {
             respond(404, null, 'Chiến dịch không tồn tại', false);
         }
-        $isAdminOrDirector = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true);
+        $isAdminOrDirector = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director'], 'projects', 'write', ['all']);
         if (!$isAdminOrDirector) {
             $creatorId = $camp['created_by'];
             $mgrs = array_filter(array_map('intval', explode(',', $camp['manager_ids'] ?? '')));
@@ -450,7 +451,8 @@ class CampaignController {
             respond(404, null, 'Chiến dịch không tồn tại', false);
         }
         $name = $camp['name'];
-        $isAdminOrDirector = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'marketing'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isAdminOrDirector = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'marketing'], 'projects', 'delete');
         if (!$isAdminOrDirector) {
             $creatorId = $camp['created_by'];
             $mgrs = array_filter(array_map('intval', explode(',', $camp['manager_ids'] ?? '')));
@@ -610,7 +612,7 @@ class CampaignController {
                 ]);
 
                 if (!empty($userRow['email'])) {
-                    $emailSubject = "[IDEAS] Bạn được nhắc tên trong bình luận chiến dịch " . $campaignName;
+                    $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Bạn được nhắc tên trong bình luận chiến dịch " . $campaignName;
                     $emailTitle = "NHẮC TÊN TRÊN HỆ THỐNG";
                     $emailContent = "Chào <strong>" . htmlspecialchars($userRow['full_name']) . "</strong>,<br/><br/>" .
                                     "Bạn đã được nhắc tên bởi <strong>" . htmlspecialchars($auth['full_name']) . "</strong> trong một bình luận của chiến dịch <strong>" . htmlspecialchars($campaignName) . "</strong>.<br/>" .
@@ -827,8 +829,8 @@ class CampaignController {
             respond(404, null, 'Bình luận không tồn tại', false);
         }
 
-        $userRole = strtolower($auth['role'] ?? '');
-        $isAdmin = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isAdmin = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director'], 'projects', 'delete', ['all']);
         $isOwner = (int)$comment['user_id'] === (int)$auth['user_id'];
 
         if (!$isAdmin && !$isOwner) {

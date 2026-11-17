@@ -492,8 +492,8 @@ try {
             try {
                 if (!$path)
                     jsonResponse(false, null, 'Thiếu ID sự kiện');
-                $pdo->prepare("DELETE FROM custom_events WHERE id = ? AND workspace_id = ?")->execute([$path, $workspace_id]);
-                $pdo->prepare("DELETE FROM subscriber_activity WHERE type = 'custom_event' AND reference_id = ? AND workspace_id = ?")->execute([$path, $workspace_id]);
+                // Axiom 4: Soft-delete event entity and preserve subscriber_activity
+                $pdo->prepare("UPDATE custom_events SET status = 'inactive' WHERE id = ? AND workspace_id = ?")->execute([$path, $workspace_id]);
                 jsonResponse(true, ['id' => $path], 'Đã xóa sự kiện');
             } catch (Exception $e) {
                 jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');

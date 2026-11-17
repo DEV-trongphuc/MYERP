@@ -5,6 +5,8 @@
  * across the entire application into a single source of truth.
  */
 
+import { getCachedTenantBootstrap, resolveTeamDepartmentCode } from '../contexts/TenantConfigContext';
+
 export interface UserLike {
   id?: number | string;
   role?: string;
@@ -158,7 +160,9 @@ export const ROLE_GROUPS = {
  */
 export function isSystemAdmin(input: RoleInput): boolean {
   const role = normalizeRole(input);
-  return ROLE_GROUPS.SYSTEM_ADMIN.includes(role as any);
+  if (ROLE_GROUPS.SYSTEM_ADMIN.includes(role as any)) return true;
+  const roleDef = getCachedTenantBootstrap()?.roles?.find((r) => r.role_slug === role);
+  return roleDef?.role_group === 'system_admin';
 }
 
 /**
@@ -166,7 +170,9 @@ export function isSystemAdmin(input: RoleInput): boolean {
  */
 export function isExecutive(input: RoleInput): boolean {
   const role = normalizeRole(input);
-  return ROLE_GROUPS.EXECUTIVE.includes(role as any);
+  if (ROLE_GROUPS.EXECUTIVE.includes(role as any)) return true;
+  const roleDef = getCachedTenantBootstrap()?.roles?.find((r) => r.role_slug === role);
+  return roleDef?.role_group === 'executive' || roleDef?.role_group === 'system_admin';
 }
 
 /**
@@ -180,30 +186,31 @@ export function isManagement(input: RoleInput): boolean {
     }
   }
   const role = normalizeRole(input);
-  return ROLE_GROUPS.MANAGEMENT.includes(role as any);
+  if (ROLE_GROUPS.MANAGEMENT.includes(role as any)) return true;
+  const roleDef = getCachedTenantBootstrap()?.roles?.find((r) => r.role_slug === role);
+  return (
+    roleDef?.role_group === 'management' ||
+    roleDef?.role_group === 'executive' ||
+    roleDef?.role_group === 'system_admin'
+  );
 }
 
-/**
- * Checks if the user has HR authority.
- * @param includeExec If true, Executive tier users also qualify as HR authority.
- */
 export function isHR(input: RoleInput, includeExec = true): boolean {
   const role = normalizeRole(input);
   if (ROLE_GROUPS.HR.includes(role as any)) return true;
+  if (typeof input === 'object' && input !== null) {
+    if (resolveTeamDepartmentCode((input as any).team_id) === 'hr') return true;
+  }
+  const roleDef = getCachedTenantBootstrap()?.roles?.find((r) => r.role_slug === role);
+  if (roleDef?.role_group === 'hr') return true;
   if (includeExec && isExecutive(input)) return true;
   return false;
 }
 
-/**
- * Checks if the user has Finance / Accounting authority.
- * @param includeExec If true, Executive tier users also qualify.
- */
 export function isAccountant(input: RoleInput, includeExec = false): boolean {
   if (!input) return false;
   if (typeof input === 'object') {
-    const uid = Number(input.id);
-    if (uid === 100064) return true; // Nguyễn Thu Thảo - Kế toán
-    if (Number(input.team_id) === 2) return true; // Phòng ban Kế toán
+    if (resolveTeamDepartmentCode(input.team_id) === 'finance') return true;
     const dept = String(input.department || '').toLowerCase();
     const jt = String(input.job_title || input.title || '').toLowerCase();
     if (dept.includes('kế toán') || dept.includes('ke toan') || dept.includes('tài chính') || dept.includes('tai chinh')) return true;
@@ -211,56 +218,45 @@ export function isAccountant(input: RoleInput, includeExec = false): boolean {
   }
   const role = normalizeRole(input);
   if (ROLE_GROUPS.FINANCE.includes(role as any)) return true;
+  const roleDef = getCachedTenantBootstrap()?.roles?.find((r) => r.role_slug === role);
+  if (roleDef?.role_group === 'finance') return true;
   if (includeExec && isExecutive(input)) return true;
   return false;
 }
 
-/**
- * Checks if the user is in Sales / Admissions
- */
 export function isSales(input: RoleInput): boolean {
   const role = normalizeRole(input);
-  return ROLE_GROUPS.SALES.includes(role as any);
+  if (ROLE_GROUPS.SALES.includes(role as any)) return true;
+  const roleDef = getCachedTenantBootstrap()?.roles?.find((r) => r.role_slug === role);
+  return roleDef?.role_group === 'sales';
 }
 
-/**
- * Checks if the user is in Marketing
- */
 export function isMarketing(input: RoleInput): boolean {
   if (!input) return false;
   if (typeof input === 'object') {
     const u = input as any;
     const role = normalizeRole(u.role || u);
     if (ROLE_GROUPS.MARKETING.includes(role as any)) return true;
-    if (Number(u.team_id) === 3) return true;
-    const combined = [
-      u.job_title,
-      u.title,
-      u.team_name,
-      u.department
-    ].filter(Boolean).join(' ').toLowerCase();
+    if (resolveTeamDepartmentCode(u.team_id) === 'marketing') return true;
+    const roleDef = getCachedTenantBootstrap()?.roles?.find((r) => r.role_slug === role);
+    if (roleDef?.role_group === 'marketing') return true;
+    const combined = [u.job_title, u.title, u.team_name, u.department].filter(Boolean).join(' ').toLowerCase();
     if (combined.includes('marketing')) return true;
     return false;
   }
   const role = normalizeRole(input);
-  return ROLE_GROUPS.MARKETING.includes(role as any);
+  if (ROLE_GROUPS.MARKETING.includes(role as any)) return true;
+  const roleDef = getCachedTenantBootstrap()?.roles?.find((r) => r.role_slug === role);
+  return roleDef?.role_group === 'marketing';
 }
 
-/**
- * Checks if the user is Academic / Teacher / Tutor (Học vụ / Học thuật / Giảng viên)
- */
 export function isAcademic(input: RoleInput): boolean {
   if (typeof input === 'object' && input !== null) {
     const u = input as any;
-    if (Number(u.team_id) === 5) {
+    if (resolveTeamDepartmentCode(u.team_id) === 'academic') {
       return true;
     }
-    const combined = [
-      u.role,
-      u.job_title,
-      u.department,
-      u.team_name
-    ].filter(Boolean).join(' ').toLowerCase();
+    const combined = [u.role, u.job_title, u.department, u.team_name].filter(Boolean).join(' ').toLowerCase();
     if (
       combined.includes('học vụ') ||
       combined.includes('hoc_vu') ||
@@ -282,7 +278,9 @@ export function isAcademic(input: RoleInput): boolean {
     }
   }
   const role = normalizeRole(input);
-  return ROLE_GROUPS.ACADEMIC.includes(role as any);
+  if (ROLE_GROUPS.ACADEMIC.includes(role as any)) return true;
+  const roleDef = getCachedTenantBootstrap()?.roles?.find((r) => r.role_slug === role);
+  return roleDef?.role_group === 'academic';
 }
 
 /**
@@ -372,10 +370,83 @@ export function canApproveShifts(input: RoleInput): boolean {
  */
 export function getDefaultRouteByRole(input: RoleInput): string {
   const role = normalizeRole(input);
+  const roleDef = getCachedTenantBootstrap()?.roles?.find((r) => r.role_slug === role);
+  if (roleDef?.default_route) {
+    return roleDef.default_route;
+  }
   if (isAcademic(role) || isViewer(role)) {
     return '/workspace';
   }
   return '/';
+}
+
+export function getExplicitModulePermissionScope(
+  input: RoleInput,
+  moduleKey: string,
+  action: 'read' | 'write' | 'delete' | 'approve' = 'read'
+): string | null {
+  if (!input) return 'none';
+  if (isSystemAdmin(input)) return 'all';
+  const aliasMap: Record<string, string> = {
+    tasks: 'workspace',
+    task: 'workspace',
+    activities: 'workspace',
+    activity: 'workspace',
+    cooperation: 'cooperations',
+    cooperation_slips: 'cooperations',
+    documents: 'files',
+    cloud_files: 'files',
+    payroll: 'hrm',
+    academic: 'students',
+    quote_invoice: 'invoices',
+  };
+  const normKey = aliasMap[moduleKey] || moduleKey;
+  const cfg = getCachedTenantBootstrap();
+  if (typeof input === 'object' && input !== null && (input as any).permissions) {
+    const p = typeof (input as any).permissions === 'string'
+      ? (() => { try { return JSON.parse((input as any).permissions); } catch { return null; } })()
+      : (input as any).permissions;
+    const uVal = p?.[normKey]?.[action] ?? p?.[moduleKey]?.[action];
+    if (typeof uVal === 'string' && uVal) return uVal;
+  }
+  const role = normalizeRole(input);
+  const currentUserRole = (() => {
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('Ideas_user') : null;
+      return raw ? normalizeRole(JSON.parse(raw)?.role) : '';
+    } catch {
+      return '';
+    }
+  })();
+  if (role && role === currentUserRole) {
+    const effScope = cfg?.effective_permissions?.[normKey]?.[action] ?? cfg?.effective_permissions?.[moduleKey]?.[action];
+    if (typeof effScope === 'string' && effScope) return effScope;
+  }
+  const roleDef = cfg?.roles?.find((r) => r.role_slug === role || (role === 'sale' && r.role_slug === 'sales'));
+  const rScope = roleDef?.permissions?.[normKey]?.[action] ?? roleDef?.permissions?.[moduleKey]?.[action];
+  if (typeof rScope === 'string' && rScope) return rScope;
+  return null;
+}
+
+export function hasExplicitDynamicModuleGrant(
+  input: RoleInput,
+  moduleKey: string,
+  action: 'read' | 'write' | 'delete' | 'approve' = 'read'
+): boolean {
+  const scope = getExplicitModulePermissionScope(input, moduleKey, action);
+  return scope !== null && scope !== 'none';
+}
+
+export function hasDynamicModulePermission(
+  input: RoleInput,
+  moduleKey: string,
+  action: 'read' | 'write' | 'delete' | 'approve' = 'read'
+): boolean {
+  if (!input) return false;
+  if (isSystemAdmin(input)) return true;
+  const scope = getExplicitModulePermissionScope(input, moduleKey, action);
+  if (scope !== null) return scope !== 'none';
+  return true;
 }
 
 /**
@@ -415,7 +486,13 @@ export function canManageSystemSettings(input: RoleInput): boolean {
 export function canAccessMarketingRoute(input: RoleInput, href = '/marketing'): boolean {
   if (!input) return false;
   const role = normalizeRole(input);
+  if (role === 'sale' || role === 'sales') {
+    return false;
+  }
   if (isExecutive(input) || isMarketing(input) || ['marketing', 'admin', 'superadmin', 'super_admin', 'director'].includes(role)) {
+    return true;
+  }
+  if (hasExplicitDynamicModuleGrant(input, 'marketing', 'read')) {
     return true;
   }
   const isSalesLeadershipOrAdmin =
@@ -525,7 +602,11 @@ export function getUserDisplayRoleOrTitle(user: any, fallbackRole?: string): str
     case 'teacher':
     case 'giang_vien': return 'Học thuật / Giảng viên';
     case 'viewer': return 'Người xem';
-    default: return role ? (role.charAt(0).toUpperCase() + role.slice(1)) : 'Người dùng';
+    default: {
+      const customRoleDef = getCachedTenantBootstrap()?.roles?.find((r) => r.role_slug === role);
+      if (customRoleDef?.name) return customRoleDef.name;
+      return role ? (role.charAt(0).toUpperCase() + role.slice(1)) : 'Người dùng';
+    }
   }
 }
 

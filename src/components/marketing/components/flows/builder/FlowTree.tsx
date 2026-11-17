@@ -16,6 +16,7 @@ interface FlowTreeProps {
     flow: Flow;
     allFlows: Flow[];
     allForms?: FormDefinition[];
+    allSurveys?: any[];
     isViewMode?: boolean;
     draggedStepId: string | null;
     onEditStep: (step: FlowStep) => void;
@@ -34,7 +35,7 @@ interface FlowTreeProps {
 const FlowTreeInner = memo(({
     step, nextPathIds,
     parentId, parentType, branch,
-    flow, allFlows, allForms = [], isViewMode = false, draggedStepId,
+    flow, allFlows, allForms = [], allSurveys = [], isViewMode = false, draggedStepId,
     onEditStep, onAddStep, onQuickAddWait, onSwapSteps, setDraggedStepId,
     depth = 0, hasPendingEmail = false,
     isReportMode, realtimeDistribution, onReportClick
@@ -113,6 +114,7 @@ const FlowTreeInner = memo(({
         hasWarning,
         isViewMode,
         allForms,
+        allSurveys,
         isReportMode,
         reportStats,
         onClick: () => isReportMode ? onReportClick?.(step.id, step.type) : onEditStep(step),
@@ -157,14 +159,14 @@ const FlowTreeInner = memo(({
                 setDraggedStepId(null);
             }
         }
-    }), [step, isDragHovering, hasSpamError, hasWarning, isViewMode, allForms, isReportMode, reportStats, draggedStepId, onReportClick, onEditStep, setDraggedStepId, onSwapSteps]);
+    }), [step, isDragHovering, hasSpamError, hasWarning, isViewMode, allForms, allSurveys, isReportMode, reportStats, draggedStepId, onReportClick, onEditStep, setDraggedStepId, onSwapSteps]);
 
     const nextProps = React.useMemo(() => ({
-        flow, allFlows, allForms, isViewMode, draggedStepId,
+        flow, allFlows, allForms, allSurveys, isViewMode, draggedStepId,
         onEditStep, onAddStep, onQuickAddWait, onSwapSteps, setDraggedStepId,
         depth: depth + 1, pathIds: nextPathIds, hasPendingEmail: nextPendingEmail,
         isReportMode, realtimeDistribution, onReportClick
-    }), [flow, allFlows, allForms, isViewMode, draggedStepId, onEditStep, onAddStep, onQuickAddWait, onSwapSteps, setDraggedStepId, depth, nextPathIds, nextPendingEmail, isReportMode, realtimeDistribution, onReportClick]);
+    }), [flow, allFlows, allForms, allSurveys, isViewMode, draggedStepId, onEditStep, onAddStep, onQuickAddWait, onSwapSteps, setDraggedStepId, depth, nextPathIds, nextPendingEmail, isReportMode, realtimeDistribution, onReportClick]);
 
     const CONNECTOR_HEIGHT = 100;
 

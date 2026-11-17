@@ -290,7 +290,8 @@ class NoteController {
         $oldNote = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$oldNote) respond(404, null, 'Không tìm thấy ghi chú', false);
 
-        if (!in_array($auth['role'], ['admin', 'manager', 'superadmin', 'super_admin', 'director'], true) && (int)$oldNote['user_id'] !== (int)$auth['user_id']) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'manager', 'superadmin', 'super_admin', 'director'], 'contacts', 'write', ['all', 'team']) && (int)$oldNote['user_id'] !== (int)$auth['user_id']) {
             respond(403, null, 'Bạn không có quyền cập nhật ghi chú này', false);
         }
 

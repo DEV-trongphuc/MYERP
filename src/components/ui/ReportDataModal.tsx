@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { CustomModal } from './CustomModal';
 import { AlertTriangle, Send, Loader2, Info, CheckCircle2, ShieldAlert, Sparkles, User, Phone, Mail, Layers } from 'lucide-react';
 import api from '../../api/axios';
+import { fetchAPI } from '../../utils/api';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 export interface ReportReasonOption {
   id: string;
@@ -83,6 +85,8 @@ export const ReportDataModal: React.FC<ReportDataModalProps> = ({
 
   const selectedReason = REPORT_REASONS.find(r => r.id === selectedReasonId) || REPORT_REASONS[0];
 
+  const { user } = useAuth();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
@@ -96,33 +100,40 @@ export const ReportDataModal: React.FC<ReportDataModalProps> = ({
     try {
       const fullDescription = `${selectedReason.label}${customNote.trim() ? ` — Ghi chú: ${customNote.trim()}` : ''}`;
       
-      const payload: any = {
-        subject: 'Báo lỗi data',
-        customer_name: fullName,
-        customer_phone: phone !== '—' ? phone : undefined,
-        customer_email: email !== '—' ? email : undefined,
-        contact_id: contact.id,
-        related_contacts: [contact.id],
-        category: 'data_error',
-        priority: 'urgent',
-        description: fullDescription
+      const leadId = Number(contact.lead_id || contact.id || 0);
+      const saleId = Number(contact.assigned_to || contact.consultant_id || contact.owner_id || user?.consultant_id || user?.id || 0);
+      const roundId = Number(contact.dl_round_id || contact.round_id || 0);
+
+      const payload = {
+        lead_id: leadId,
+        consultant_id: saleId,
+        sale_id: saleId,
+        round_id: roundId,
+        reason: fullDescription
       };
 
-      const res = await api.post('/tickets', payload);
+      const res = await fetchAPI('submit_report', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
 
-      if (res && (res.data?.success !== false || res.status === 200 || res.status === 201)) {
+      if (res && res.success !== false) {
         setSubmittedSuccess(true);
-        toast.success(t('Đã gửi báo cáo data lỗi thành công! Đang chờ Quản lý duyệt bù vòng.'));
+        if (res.auto_approved) {
+          toast.success(t('Báo cáo lỗi đã được HỆ THỐNG TỰ ĐỘNG PHÊ DUYỆT & ĐỀN BÙ thành công!'));
+        } else {
+          toast.success(res.message || t('Đã gửi báo cáo data lỗi thành công! Đang chờ Quản lý duyệt bù vòng.'));
+        }
         setTimeout(() => {
           setSubmittedSuccess(false);
           onSuccess?.();
           onClose();
         }, 1500);
       } else {
-        toast.error(res?.data?.message || t('Không thể gửi báo cáo data lỗi. Vui lòng thử lại.'));
+        toast.error(res?.message || t('Không thể gửi báo cáo data lỗi. Vui lòng thử lại.'));
       }
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || err?.message || t('Lỗi kết nối khi gửi báo cáo.'));
+      toast.error(err?.message || t('Lỗi kết nối khi gửi báo cáo.'));
     } finally {
       setSubmitting(false);
     }

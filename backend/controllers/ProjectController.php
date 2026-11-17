@@ -152,7 +152,8 @@ class ProjectController {
         $stmtProj->execute([$projectId]);
         $proj = $stmtProj->fetch(PDO::FETCH_ASSOC);
         
-        $isAuthorized = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isAuthorized = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], 'projects', 'write');
         if ($proj) {
             if ($proj['created_by'] && (int)$proj['created_by'] === (int)$auth['user_id']) {
                 $isAuthorized = true;
@@ -518,7 +519,8 @@ class ProjectController {
             respond(404, null, 'Dự án không tồn tại hoặc đã bị xóa', false);
         }
 
-        $isAdminOrDirector = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'marketing'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isAdminOrDirector = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'marketing'], 'projects', 'write');
         if (!$isAdminOrDirector && (int)$proj['created_by'] !== (int)$auth['user_id']) {
             respond(403, null, 'Chỉ Admin, Director hoặc người tạo dự án mới được xóa', false);
         }
@@ -702,7 +704,8 @@ class ProjectController {
     }
 
     public function updateRoster(array $auth, int $projectId): void {
-        $isAuthorized = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'marketing'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isAuthorized = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'marketing'], 'projects', 'delete');
         if (!$isAuthorized) {
             $isManagerOrLeader = ($auth['role'] === 'manager');
             if (!$isManagerOrLeader) {
@@ -1173,21 +1176,11 @@ class ProjectController {
     public function getStats(array $auth, int $projectId): void {
         $this->requireProjectAccess($auth, $projectId);
         
-        // Retrieve dynamic settings
-        $resOpp = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'deal_opportunity_status' LIMIT 1");
-        $oppStatus = $resOpp ? $resOpp->fetchColumn() : 'booking';
-        if (!$oppStatus) {
-            $oppStatus = 'booking';
-        }
-
-        $resWon = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'deal_won_status' LIMIT 1");
-        $wonStatus = $resWon ? $resWon->fetchColumn() : 'hoc_vien';
-        if (!$wonStatus) {
-            $wonStatus = 'hoc_vien';
-        }
-
-        $resHier = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'pipeline_status_hierarchy' LIMIT 1");
-        $hierJson = $resHier ? $resHier->fetchColumn() : null;
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $tidProj = (int)($auth['tenant_id'] ?? $GLOBALS['current_tenant_id'] ?? 1);
+        $oppStatus = (string)TenantConfigService::getSetting($this->db, $tidProj, 'deal_opportunity_status', 'booking') ?: 'booking';
+        $wonStatus = (string)TenantConfigService::getSetting($this->db, $tidProj, 'deal_won_status', 'hoc_vien') ?: 'hoc_vien';
+        $hierJson = TenantConfigService::getSetting($this->db, $tidProj, 'pipeline_status_hierarchy', null);
         $hierarchy = $hierJson ? json_decode($hierJson, true) : ['new_lead', 'contact_attempted', 'connected', 'needed', 'discovery_completed', 'program_matched', 'proposal_sent', 'evaluation_objection', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'deposit_tuition_payment', 'enrolled'];
         if (!is_array($hierarchy)) {
             $hierarchy = ['new_lead', 'contact_attempted', 'connected', 'needed', 'discovery_completed', 'program_matched', 'proposal_sent', 'evaluation_objection', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'deposit_tuition_payment', 'enrolled'];
@@ -1282,7 +1275,8 @@ class ProjectController {
         }
 
         $userRole = strtolower($auth['role'] ?? '');
-        $isAdmin = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isAdmin = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director'], 'projects', 'delete', ['all']);
         $isOwner = (int)$comment['user_id'] === (int)$auth['user_id'];
 
         if (!$isAdmin && !$isOwner) {
@@ -1313,7 +1307,8 @@ class ProjectController {
         if ($isPersonal && (int)($task['user_id'] ?? 0) !== $uid && (int)($task['created_by'] ?? 0) !== $uid && !in_array($role, ['admin', 'superadmin', 'super_admin'], true)) {
             return false;
         }
-        if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'manager'], 'workspace', 'read', ['all', 'team'])) {
             return true;
         }
         if ((int)($task['user_id'] ?? 0) === $uid || (int)($task['created_by'] ?? 0) === $uid || (int)($task['approver_id'] ?? 0) === $uid) {
@@ -1337,7 +1332,8 @@ class ProjectController {
         $tid = (int)$auth['tenant_id'];
         $uid = (int)($auth['user_id'] ?? 0);
         $role = strtolower($auth['role'] ?? '');
-        $isBroadManager = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'manager'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isBroadManager = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'manager'], 'workspace', 'write', ['all', 'team']);
 
         $where = "a.tenant_id = ? AND a.type = 'task' AND a.deleted_at IS NULL AND (NOT (IFNULL(a.tags,'') LIKE '%personal_task%' OR IFNULL(a.tags,'') LIKE '%ca_nhan%') OR a.user_id = ? OR a.created_by = ?)";
         $params = [$tid, $uid, $uid];

@@ -4,10 +4,10 @@
  * Tự động dọn dẹp dữ liệu rác định kỳ
  * 
  * Crontab entry (chạy mỗi ngày lúc 2 giờ sáng):
- * 0 2 * * * /usr/local/bin/php /home/vhvxoigh/automation.ideas.edu.vn/mail_api/cron_auto_cleanup.php > /dev/null 2>&1
+ * 0 2 * * * /usr/local/bin/php /path/to/backend/automation/cron_auto_cleanup.php > /dev/null 2>&1
  * 
  * Hoặc chạy mỗi tuần (Chủ nhật 2 giờ sáng):
- * 0 2 * * 0 /usr/local/bin/php /home/vhvxoigh/automation.ideas.edu.vn/mail_api/cron_auto_cleanup.php > /dev/null 2>&1
+ * 0 2 * * 0 /usr/local/bin/php /path/to/backend/automation/cron_auto_cleanup.php > /dev/null 2>&1
  */
 
 ini_set('display_errors', 0); // [FIX H-4] Tắt display_errors trong production — lỗi vẫn được ghi vào error_log

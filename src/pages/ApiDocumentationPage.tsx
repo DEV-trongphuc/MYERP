@@ -76,7 +76,7 @@ export const ApiDocumentationPage: React.FC = () => {
   const currentEndpoint = (currentCategory && currentCategory.endpoints[selectedEndpointIndex]) || (currentCategory && currentCategory.endpoints[0]) || apiCategories[0].endpoints[0];
 
   const generateSnippet = (endpoint: ApiEndpoint, lang: 'curl' | 'ts' | 'python' | 'php') => {
-    const baseUrl = "https://myerp.ideas.edu.vn";
+    const baseUrl = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
     const fullUrl = `${baseUrl}${endpoint.path}`;
 
     if (lang === 'curl') {
@@ -446,7 +446,7 @@ echo $response;
 
             <div className="api-quick-card">
               <div className="api-card-title">Base Server URL</div>
-              <div className="api-card-url">https://myerp.ideas.edu.vn</div>
+              <div className="api-card-url">{typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '/backend'}</div>
               <p className="api-card-note">Tất cả request yêu cầu Header <code>Content-Type: application/json</code>.</p>
             </div>
           </div>

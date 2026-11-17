@@ -182,7 +182,7 @@ export const resolveChatFileUrl = (url?: string | null): string => {
     clean = clean.substring('backend/'.length);
   }
   const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  const baseUrl = isLocal ? '/backend' : (import.meta.env.VITE_API_URL || 'https://myerp.ideas.edu.vn/backend');
+  const baseUrl = isLocal ? '/backend' : (import.meta.env.VITE_API_URL || '/backend');
   return `${baseUrl}/${clean}`;
 };
 

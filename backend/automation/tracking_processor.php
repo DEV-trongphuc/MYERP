@@ -151,12 +151,12 @@ function processTrackingEvent($pdo, $type, $payload)
         logActivity($pdo, $sid, $subType, $rid, $activityLabel, "{$detailLabel}{$variationSuffix} {$pointLabel}{$appendUrl}", $fid, $cid, $extra, $wId);
 
         // 2. Buffer subscriber stats updates
-        $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment) VALUES ('subscribers', ?, ?, 1)")
-            ->execute([$sid, ($subType === 'open_email' ? 'stats_opened' : 'stats_clicked')]);
+        $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment, workspace_id) VALUES ('subscribers', ?, ?, 1, ?)")
+            ->execute([$sid, ($subType === 'open_email' ? 'stats_opened' : 'stats_clicked'), $wId ?: 1]);
 
         // [OPTIMIZED] Buffer lead_score increment
-        $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment) VALUES ('subscribers', ?, 'lead_score', ?)")
-            ->execute([$sid, $pointValue]);
+        $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment, workspace_id) VALUES ('subscribers', ?, 'lead_score', ?, ?)")
+            ->execute([$sid, $pointValue, $wId ?: 1]);
 
         // [PERFORMANCE] Timestamp Buffering
         // Instead of UPDATE subscribers SET ... (Row Lock), we insert into timestamp_buffer.
@@ -204,8 +204,8 @@ function processTrackingEvent($pdo, $type, $payload)
             } elseif ($subType === 'click_zns' || $subType === 'zalo_clicked') {
                 $flowTotalCol = 'stat_total_zalo_clicked';
             }
-            $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment) VALUES ('flows', ?, ?, 1)")
-                ->execute([$fid, $flowTotalCol]);
+            $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment, workspace_id) VALUES ('flows', ?, ?, 1, ?)")
+                ->execute([$fid, $flowTotalCol, $wId ?: 1]);
 
             // [FIX] Unique Check — must include reference_key (step ID or URL) in the cache key.
             // Without it: subscriber clicks link A → cache row created (sub+flow+click).
@@ -213,24 +213,28 @@ function processTrackingEvent($pdo, $type, $payload)
             // → Unique click for link B is NEVER counted. Same bug for multi-step flow opens.
             $evt = ($subType === 'open_email' ? 'open' : 'click');
             $refKey = $rid ?? ($extra['url'] ?? 'general');
-            // [CONFLICT-1 FIX] tracking_unique_cache may be missing 'reference_key' column
-            // if DB was created before this column was added. Use self-healing ALTER + fallback.
+            $effectiveWid = (int)($wId ?: 1);
+            $cacheKey = md5("{$effectiveWid}_flow_{$fid}_{$evt}_{$sid}_{$refKey}");
+
+            $stmtUnique = null;
             try {
-                $stmtUnique = $pdo->prepare("INSERT IGNORE INTO tracking_unique_cache (subscriber_id, target_type, target_id, event_type, reference_key) VALUES (?, 'flow', ?, ?, ?)");
-                $stmtUnique->execute([$sid, $fid, $evt, $refKey]);
-            } catch (Exception $eUniq) {
-                if (
-                    strpos($eUniq->getMessage(), 'reference_key') !== false
-                    || strpos($eUniq->getMessage(), "Unknown column") !== false
-                ) {
-                    // [HOTFIX RUNTIME_DDL] Removed ALTER TABLE tracking_unique_cache inline logic.
-                    // Causes Metadata Locks. Fallback safely until migrate_optimizations.php is executed.
-                    try {
-                        $pdo->prepare("INSERT IGNORE INTO tracking_unique_cache (subscriber_id, target_type, target_id, event_type) VALUES (?, 'flow', ?, ?)")
-                            ->execute([$sid, $fid, $evt]);
-                    } catch (Exception $eAlt) {}
-                    
-                    $stmtUnique = null; // prevent rowCount() error below
+                $stmtUnique = $pdo->prepare("
+                    INSERT IGNORE INTO tracking_unique_cache 
+                    (cache_key, workspace_id, subscriber_id, target_type, target_id, event_type, reference_key) 
+                    VALUES (?, ?, ?, 'flow', ?, ?, ?)
+                ");
+                $stmtUnique->execute([$cacheKey, $effectiveWid, $sid, $fid, $evt, $refKey]);
+            } catch (\Throwable $eUniq) {
+                // Fallback for legacy database.sql schema variants where cache_key column is absent
+                try {
+                    $stmtUnique = $pdo->prepare("
+                        INSERT IGNORE INTO tracking_unique_cache 
+                        (workspace_id, subscriber_id, target_type, target_id, event_type, reference_key) 
+                        VALUES (?, ?, 'flow', ?, ?, ?)
+                    ");
+                    $stmtUnique->execute([$effectiveWid, $sid, $fid, $evt, $refKey]);
+                } catch (\Throwable $eAlt) {
+                    $stmtUnique = null;
                 }
             }
             if (isset($stmtUnique) && $stmtUnique && $stmtUnique->rowCount() > 0) {
@@ -241,27 +245,27 @@ function processTrackingEvent($pdo, $type, $payload)
                 } elseif ($subType === 'click_zns' || $subType === 'zalo_clicked') {
                     $flowUniqueCol = 'stat_unique_zalo_clicked';
                 }
-                $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment) VALUES ('flows', ?, ?, 1)")
-                    ->execute([$fid, $flowUniqueCol]);
+                $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment, workspace_id) VALUES ('flows', ?, ?, 1, ?)")
+                    ->execute([$fid, $flowUniqueCol, $wId ?: 1]);
             }
         }
 
         // 4. Handle Campaign Stats
         if ($cid) {
             // Total
-            $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment) VALUES ('campaigns', ?, ?, 1)")
-                ->execute([$cid, ($subType === 'open_email' ? 'count_opened' : 'count_clicked')]);
+            $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment, workspace_id) VALUES ('campaigns', ?, ?, 1, ?)")
+                ->execute([$cid, ($subType === 'open_email' ? 'count_opened' : 'count_clicked'), $wId ?: 1]);
 
             if ($subType === 'open_email') {
-                $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment) VALUES ('campaigns', ?, 'stat_opens', 1)")->execute([$cid]);
+                $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment, workspace_id) VALUES ('campaigns', ?, 'stat_opens', 1, ?)")->execute([$cid, $wId ?: 1]);
             } else {
-                $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment) VALUES ('campaigns', ?, 'stat_clicks', 1)")->execute([$cid]);
+                $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment, workspace_id) VALUES ('campaigns', ?, 'stat_clicks', 1, ?)")->execute([$cid, $wId ?: 1]);
             }
 
             if (!empty($extra['device_type'])) {
                 $col = ($extra['device_type'] === 'mobile') ? 'stat_device_mobile' : 'stat_device_desktop';
-                $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment) VALUES ('campaigns', ?, ?, 1)")
-                    ->execute([$cid, $col]);
+                $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment, workspace_id) VALUES ('campaigns', ?, ?, 1, ?)")
+                    ->execute([$cid, $col, $wId ?: 1]);
             }
 
             // [FIX] Unique Check — include reference_key so each distinct link/step is tracked.
@@ -269,28 +273,34 @@ function processTrackingEvent($pdo, $type, $payload)
             // as unique if reference_key is not part of the uniqueness constraint.
             $evt = ($subType === 'open_email' ? 'open' : 'click');
             $refKey = $rid ?? ($extra['url'] ?? 'general');
+            $effectiveWid = (int)($wId ?: 1);
+            $cacheKey = md5("{$effectiveWid}_campaign_{$cid}_{$evt}_{$sid}_{$refKey}");
+
+            $stmtUnique = null;
             try {
-                $stmtUnique = $pdo->prepare("INSERT IGNORE INTO tracking_unique_cache (subscriber_id, target_type, target_id, event_type, reference_key) VALUES (?, 'campaign', ?, ?, ?)");
-                $stmtUnique->execute([$sid, $cid, $evt, $refKey]);
-            } catch (Exception $eUniq) {
-                if (
-                    strpos($eUniq->getMessage(), 'reference_key') !== false
-                    || strpos($eUniq->getMessage(), "Unknown column") !== false
-                ) {
-                    // [HOTFIX RUNTIME_DDL] Removed ALTER TABLE tracking_unique_cache inline logic.
-                    // Fallback to legacy insert structure to prevent locking DB.
-                    try {
-                        $pdo->prepare("INSERT IGNORE INTO tracking_unique_cache (subscriber_id, target_type, target_id, event_type) VALUES (?, 'campaign', ?, ?)")
-                            ->execute([$sid, $cid, $evt]);
-                    } catch (Exception $eAlt) {}
-                    
+                $stmtUnique = $pdo->prepare("
+                    INSERT IGNORE INTO tracking_unique_cache 
+                    (cache_key, workspace_id, subscriber_id, target_type, target_id, event_type, reference_key) 
+                    VALUES (?, ?, ?, 'campaign', ?, ?, ?)
+                ");
+                $stmtUnique->execute([$cacheKey, $effectiveWid, $sid, $cid, $evt, $refKey]);
+            } catch (\Throwable $eUniq) {
+                // Fallback for legacy database.sql schema variants where cache_key column is absent
+                try {
+                    $stmtUnique = $pdo->prepare("
+                        INSERT IGNORE INTO tracking_unique_cache 
+                        (workspace_id, subscriber_id, target_type, target_id, event_type, reference_key) 
+                        VALUES (?, ?, 'campaign', ?, ?, ?)
+                    ");
+                    $stmtUnique->execute([$effectiveWid, $sid, $cid, $evt, $refKey]);
+                } catch (\Throwable $eAlt) {
                     $stmtUnique = null;
                 }
             }
             if (isset($stmtUnique) && $stmtUnique && $stmtUnique->rowCount() > 0) {
                 $column = ($subType === 'open_email' ? 'count_unique_opened' : 'count_unique_clicked');
-                $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment) VALUES ('campaigns', ?, ?, 1)")
-                    ->execute([$cid, $column]);
+                $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment, workspace_id) VALUES ('campaigns', ?, ?, 1, ?)")
+                    ->execute([$cid, $column, $wId ?: 1]);
             }
         }
 
@@ -461,10 +471,10 @@ function processTrackingEvent($pdo, $type, $payload)
         // Only increment counters if they weren't already unsubscribed previously or from another click
         if ($currentStatus !== 'unsubscribed') {
             if ($fid) {
-                $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment) VALUES ('flows', ?, 'stat_total_unsubscribed', 1)")->execute([$fid]);
+                $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment, workspace_id) VALUES ('flows', ?, 'stat_total_unsubscribed', 1, ?)")->execute([$fid, $wId ?: 1]);
             }
             if ($cid) {
-                $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment) VALUES ('campaigns', ?, 'count_unsubscribed', 1)")->execute([$cid]);
+                $pdo->prepare("INSERT INTO stats_update_buffer (target_table, target_id, column_name, increment, workspace_id) VALUES ('campaigns', ?, 'count_unsubscribed', 1, ?)")->execute([$cid, $wId ?: 1]);
             }
         }
 

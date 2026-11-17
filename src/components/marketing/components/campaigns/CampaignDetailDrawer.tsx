@@ -39,10 +39,11 @@ interface CampaignDetailDrawerProps {
     allTags: any[];
     allFlows: Flow[];
     onRename?: (id: string, newName: string) => void;
+    onStatusChange?: (id: string, nextStatus: CampaignStatus, patch?: Partial<Campaign>) => void;
 }
 
 const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
-    campaign, isOpen, onClose: _onClose, allLists, allSegments, allTags, allFlows, onRename
+    campaign, isOpen, onClose: _onClose, allLists, allSegments, allTags, allFlows, onRename, onStatusChange
 }) => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('overview');
@@ -100,7 +101,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
         first_name: 'Phúc',
         lastName: 'Trần Trọng',
         last_name: 'Trần Trọng',
-        email: 'trongphuc@ideas.edu.vn',
+        email: 'customer.sample@example.com',
         phone: '0901234567',
         company: 'IDEAS Vietnam',
         companyName: 'IDEAS Vietnam',
@@ -114,24 +115,17 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
         }
     }, [localCampaign?.name]);
 
-    // Live Auto-poll while campaign is actively sending
-    useEffect(() => {
-        let pollTimer: ReturnType<typeof setInterval> | null = null;
-        if (isOpen && localCampaign?.id && localCampaign?.status === 'sending') {
-            pollTimer = setInterval(async () => {
-                const res = await api.get<any>(`campaigns?id=${localCampaign.id}`);
-                if (res.success && res.data) {
-                    setLocalCampaign(prev => ({ ...prev, ...res.data }));
-                    if (res.data.status !== 'sending') {
-                        if (pollTimer) clearInterval(pollTimer);
-                    }
-                }
-            }, 2000);
-        }
-        return () => {
-            if (pollTimer) clearInterval(pollTimer);
-        };
-    }, [isOpen, localCampaign?.id, localCampaign?.status]);
+    const associatedFlow = React.useMemo(() => {
+        if (!localCampaign?.id || !Array.isArray(allFlows)) return undefined;
+        return allFlows.find(f => {
+            const steps = Array.isArray(f.steps)
+                ? f.steps
+                : (typeof f.steps === 'string'
+                    ? (() => { try { return JSON.parse(f.steps); } catch { return []; } })()
+                    : []);
+            return Array.isArray(steps) && steps.some((s: any) => s.type === 'trigger' && s.config?.type === 'campaign' && s.config?.targetId === localCampaign.id);
+        });
+    }, [allFlows, localCampaign?.id]);
 
     const handleSaveName = async () => {
         const trimmed = nameInput.trim();
@@ -276,36 +270,92 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
         }
     }, [localCampaign?.id, isVisible, activeTab, logsPagination.page, debouncedActivitySearch]);
 
-    // Fetch fresh stats at least once when opened to trigger backend self-healing
-    // Polling logic continues only for "sending" status progress + stats update
-    useEffect(() => {
-        let pollTimer: any;
-        if (isVisible && localCampaign?.id) {
-            // Unconditional initial fetch to grab latest healed DB state
-            const fetchCampaign = async () => {
-                const res = await api.get<any>(`campaigns?id=${localCampaign.id}`);
-                if (res.success) {
-                    setLocalCampaign(res.data);
-                }
-            };
-            fetchCampaign();
+    // Initial hydration when opened (1 full fetch), plus lightweight stats_only=1 polling ONLY while sending/scheduled.
+    // Never polls while 'paused', preventing UI flicker and unnecessary DB load.
+    const onStatusChangeRef = React.useRef(onStatusChange);
+    onStatusChangeRef.current = onStatusChange;
 
-            // [FIX P8-C3] Include 'paused' in polling — admin may resume via backend,
-            // drawer should auto-refresh without requiring full page reload.
-            if (['sending', 'scheduled', 'paused'].includes(localCampaign.status?.toLowerCase() || '')) {
-                pollTimer = setInterval(async () => {
-                    const res = await api.get<any>(`campaigns?id=${localCampaign.id}`);
-                    if (res.success) {
-                        setLocalCampaign(res.data);
-                        if (!['sending', 'scheduled', 'paused'].includes(res.data.status?.toLowerCase() || '')) {
-                            clearInterval(pollTimer);
-                        }
-                    }
-                }, 5000);
-            }
+    useEffect(() => {
+        const campaignId = localCampaign?.id;
+        if (!isVisible || !campaignId) return;
+
+        const initCtrl = new AbortController();
+        api.get<any>(`campaigns?id=${campaignId}`, {}, { signal: initCtrl.signal })
+            .then(res => {
+                if (initCtrl.signal.aborted || !res?.success || !res.data) return;
+                setLocalCampaign(res.data);
+            })
+            .catch(err => {
+                if ((err as any)?.name !== 'AbortError') {
+                    console.error('Initial campaign hydration error:', err);
+                }
+            });
+
+        return () => initCtrl.abort();
+    }, [isVisible, localCampaign?.id]);
+
+    useEffect(() => {
+        const campaignId = localCampaign?.id;
+        const curStatus = (localCampaign?.status || '').toLowerCase();
+        if (!isVisible || !campaignId || !['sending', 'scheduled'].includes(curStatus)) {
+            return;
         }
+
+        let pollTimer: ReturnType<typeof setInterval> | null = null;
+        let inFlightCtrl: AbortController | null = null;
+
+        const pollStats = async () => {
+            if (document.hidden || inFlightCtrl) return;
+            const ctrl = new AbortController();
+            inFlightCtrl = ctrl;
+            try {
+                const res = await api.get<any>(`campaigns?id=${campaignId}&stats_only=1`, { _t: Date.now() }, { signal: ctrl.signal });
+                if (ctrl.signal.aborted || !res?.success || !res.data) return;
+                const incoming = res.data;
+                setLocalCampaign(prev => {
+                    if (!prev || prev.id !== campaignId) return prev;
+                    const pS = prev.stats || ({} as any);
+                    const nS = incoming.stats || ({} as any);
+                    const unchanged =
+                        prev.status === incoming.status &&
+                        prev.totalTargetAudience === incoming.totalTargetAudience &&
+                        pS.sent === nS.sent &&
+                        pS.opened === nS.opened &&
+                        pS.uniqueOpened === nS.uniqueOpened &&
+                        pS.clicked === nS.clicked &&
+                        pS.uniqueClicked === nS.uniqueClicked &&
+                        pS.bounced === nS.bounced &&
+                        pS.failed === nS.failed &&
+                        pS.unsubscribed === nS.unsubscribed;
+                    if (unchanged) return prev;
+                    return {
+                        ...prev,
+                        status: incoming.status,
+                        sentAt: incoming.sentAt ?? prev.sentAt,
+                        totalTargetAudience: incoming.totalTargetAudience ?? prev.totalTargetAudience,
+                        stats: { ...(prev.stats || {}), ...(incoming.stats || {}) },
+                        config: incoming.config ?? prev.config,
+                    };
+                });
+                if (!['sending', 'scheduled'].includes((incoming.status || '').toLowerCase())) {
+                    onStatusChangeRef.current?.(campaignId, incoming.status, {
+                        totalTargetAudience: incoming.totalTargetAudience,
+                        stats: incoming.stats,
+                        config: incoming.config,
+                    });
+                    if (pollTimer) clearInterval(pollTimer);
+                }
+            } catch (err: any) {
+                if (err?.name !== 'AbortError') { /* silent poll error */ }
+            } finally {
+                if (inFlightCtrl === ctrl) inFlightCtrl = null;
+            }
+        };
+
+        pollTimer = setInterval(pollStats, 3000);
         return () => {
             if (pollTimer) clearInterval(pollTimer);
+            inFlightCtrl?.abort();
         };
     }, [isVisible, localCampaign?.id, localCampaign?.status]);
 
@@ -369,15 +419,27 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
     };
 
     const [pauseLoading, setPauseLoading] = useState(false);
+    const [resumeLoading, setResumeLoading] = useState(false);
+    const pauseInFlightRef = React.useRef(false);
+    const resumeInFlightRef = React.useRef(false);
+    const refreshInFlightRef = React.useRef(false);
+
     const handlePauseCampaign = async () => {
-        if (!localCampaign?.id) return;
+        if (!localCampaign?.id || pauseInFlightRef.current) return;
+        pauseInFlightRef.current = true;
         setPauseLoading(true);
         try {
             const res = await api.post<any>('campaigns?route=pause', { campaign_id: localCampaign.id });
             if (res.success) {
-                setLocalCampaign(prev => prev ? { ...prev, status: CampaignStatus.PAUSED } : null);
-                toast.success('Đã tạm dừng chiến dịch thành công!');
-                fetchAudienceStats();
+                let nextCfg: any = null;
+                setLocalCampaign(prev => {
+                    if (!prev) return null;
+                    nextCfg = { ...(typeof prev.config === 'object' && prev.config ? prev.config : {}), pause_reason: 'manual' };
+                    return { ...prev, status: CampaignStatus.PAUSED, config: nextCfg };
+                });
+                onStatusChange?.(localCampaign.id, CampaignStatus.PAUSED, nextCfg ? { config: nextCfg } : undefined);
+                toast.success('Đã tạm dừng chiến dịch ngay lập tức!');
+                if (activeTab === 'audience') fetchAudienceStats();
             } else {
                 toast.error(res.message || "Không thể tạm dừng chiến dịch.");
             }
@@ -386,27 +448,63 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
             toast.error("Đã xảy ra lỗi khi tạm dừng chiến dịch.");
         } finally {
             setPauseLoading(false);
+            pauseInFlightRef.current = false;
+        }
+    };
+
+    const handleResumeCampaign = async () => {
+        if (!localCampaign?.id || resumeInFlightRef.current) return;
+        resumeInFlightRef.current = true;
+        setResumeLoading(true);
+        try {
+            const res = await api.post<any>('campaigns?route=resume', { campaign_id: localCampaign.id });
+            if (res.success) {
+                let nextCfg: any = null;
+                setLocalCampaign(prev => {
+                    if (!prev) return null;
+                    nextCfg = { ...(typeof prev.config === 'object' && prev.config ? prev.config : {}) };
+                    delete nextCfg.pause_reason;
+                    delete nextCfg.paused_at;
+                    return { ...prev, status: CampaignStatus.SENDING, config: nextCfg };
+                });
+                onStatusChange?.(localCampaign.id, CampaignStatus.SENDING, nextCfg ? { config: nextCfg } : undefined);
+                toast.success('Đã tiếp tục gửi chiến dịch!');
+            } else {
+                toast.error(res.message || "Không thể tiếp tục chiến dịch.");
+            }
+        } catch (err) {
+            console.error(err);
+            toast.error("Đã xảy ra lỗi khi tiếp tục chiến dịch.");
+        } finally {
+            setResumeLoading(false);
+            resumeInFlightRef.current = false;
         }
     };
 
     const handleTriggerRefresh = async () => {
-        if (!campaign) return;
+        if (!localCampaign?.id || refreshInFlightRef.current) return;
+        refreshInFlightRef.current = true;
         setRefreshLoading(true);
         try {
-            const res = await api.post<any>(`campaigns?route=trigger_refresh`, { id: campaign.id });
+            const res = await api.post<any>(`campaigns?route=trigger_refresh`, { id: localCampaign.id });
             if (res.success) {
                 setShowRefreshConfirm(false);
-                fetchAudienceStats();
-                setLocalCampaign(prev => prev ? { ...prev, status: CampaignStatus.SENDING, totalTargetAudience: res.data?.total_target_audience || prev.totalTargetAudience } : null);
-                toast.success(`Bắt đầu làm mới chiến dịch! Các thành viên mới sẽ sớm nhận được ${isZns ? 'tin nhắn' : 'email'}.`);
+                if (activeTab === 'audience') fetchAudienceStats();
+                setLocalCampaign(prev => prev ? {
+                    ...prev,
+                    totalTargetAudience: res.data?.total_target_audience || prev.totalTargetAudience
+                } : null);
+                toast.success(`Đã đồng bộ lại tiến trình chiến dịch (${isZns ? 'ZNS' : 'Email'})!`);
             } else {
                 toast.error(res.message || "Không thể làm mới chiến dịch.");
             }
         } catch (err) {
             console.error(err);
             toast.error("Đã xảy ra lỗi khi gửi yêu cầu.");
+        } finally {
+            setRefreshLoading(false);
+            refreshInFlightRef.current = false;
         }
-        setRefreshLoading(false);
     };
 
     const fetchUnsubscribedList = async (page: number = 1) => {
@@ -445,7 +543,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
         try {
             const res = await api.post<any>('campaigns?route=delete_unsubscribed', { id: campaign.id });
             if (res.success) {
-                toast.success(`Đã xóa vĩnh viễn ${res.data?.deleted || 0} liên hệ Hủy đăng ký khỏi hệ thống.`);
+                toast.success(`Đã lưu trữ an toàn (xóa mềm) ${res.data?.deleted || 0} liên hệ Hủy đăng ký khỏi danh sách hoạt động.`);
                 setDeleteModal(prev => ({ ...prev, isOpen: false, loading: false }));
                 fetchAudienceStats();
             } else {
@@ -487,16 +585,16 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
     const retainedRate = (sentCount > 0 && isFinite(retainedCount / sentCount)) ? ((retainedCount / sentCount) * 100).toFixed(1) : "0.0";
 
     const funnelData = [
-        { name: isZns ? 'Tin nhắn đã gửi' : 'Đã gửi (Sent)', value: sentCount, fill: '#64748b', icon: Send },
-        { name: isZns ? 'Đã nhận (Delivered)' : 'Đã nhận (Delivered)', value: deliveredCount, fill: '#334155', icon: CheckCircle2 },
-        { name: isZns ? 'Lượt xem (Seen)' : 'Đã mở (Opened)', value: stats.opened, fill: '#0f172a', icon: isZns ? BadgeCheck : MailOpen },
-        ...(isZns ? [] : [{ name: 'Đã click (Unique Click)', value: stats.clicked, fill: '#C6333D', icon: MousePointer2, subValue: (stats as any).total_clicked ? `Total: ${(stats as any).total_clicked}` : null }]),
+        { name: isZns ? 'Tin nhắn đã gửi' : 'Đã gửi (Sent)', value: sentCount, fill: '#94a3b8', icon: Send },
+        { name: isZns ? 'Đã nhận (Delivered)' : 'Đã nhận (Delivered)', value: deliveredCount, fill: '#2563eb', icon: CheckCircle2 },
+        { name: isZns ? 'Lượt xem (Seen)' : 'Đã mở (Opened)', value: stats.opened, fill: '#10b981', icon: isZns ? BadgeCheck : MailOpen },
+        ...(isZns ? [] : [{ name: 'Đã click (Unique Click)', value: stats.clicked, fill: '#ec4899', icon: MousePointer2, subValue: (stats as any).total_clicked ? `Total: ${(stats as any).total_clicked}` : null }]),
     ];
 
     const healthData = [
         { name: isZns ? 'Đã nhận' : 'Hộp thư chính', value: retainedCount, fill: '#10b981' },
         { name: isZns ? 'Lỗi gửi' : 'Tỷ lệ (Bounce)', value: stats.bounced, fill: '#f43f5e' },
-        ...(isZns ? [] : [{ name: 'Hủy đăng ký (Unsub)', value: stats.unsubscribed, fill: '#64748b' }])
+        ...(isZns ? [] : [{ name: 'Hủy đăng ký (Unsub)', value: stats.unsubscribed, fill: '#8b5cf6' }])
     ].filter(d => d.value > 0);
 
     const targetLists = localCampaign.target?.listIds.map(id => allLists.find(l => l.id === id)).filter(Boolean) || [];
@@ -508,21 +606,22 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
         ? (stats.sent || localCampaign.totalTargetAudience || 0)
         : (localCampaign.totalTargetAudience || 0);
 
-    const StatBox = ({ label, value, subValue, icon: Icon, colorClass, isPrimary }: any) => {
-        const isHighlight = Boolean(isPrimary || (colorClass && (colorClass.includes('rose') || colorClass.includes('pink') || colorClass.includes('C6333D') || colorClass.includes('a31422'))) || label?.includes('Click') || label?.includes('CTR'));
-        const iconBg = isHighlight ? '#fef2f2' : '#f8fafc';
-        const iconColor = isHighlight ? '#C6333D' : '#334155';
-        const iconBorder = isHighlight ? '#fecdd3' : '#e2e8f0';
+    const StatBox = ({ label, value, subValue, icon: Icon, index = 0 }: any) => {
+        const isRedCard = index === 0 || index === 1;
+        const iconBg = isRedCard ? 'rgba(189, 29, 45, 0.08)' : 'rgba(15, 23, 42, 0.06)';
+        const iconColor = isRedCard ? '#BD1D2D' : '#334155';
+        const iconBorder = isRedCard ? 'rgba(189, 29, 45, 0.15)' : '#e2e8f0';
+        const valueColor = index === 1 ? '#BD1D2D' : '#0f172a';
 
         return (
             <div
                 style={{
                     minHeight: '136px',
                     borderRadius: '16px',
-                    border: '1px solid #e2e8f0',
-                    background: '#ffffff',
+                    border: '1px solid #E2E8F0',
+                    background: '#FFFFFF',
                     padding: '16px 18px',
-                    boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
+                    boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                 }}
                 className="w-full min-w-0 h-full flex flex-col justify-between transition-all duration-200 hover:shadow-md cursor-pointer"
             >
@@ -531,10 +630,10 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '8px' }}>
                             <div
                                 style={{
-                                    fontSize: '0.75rem',
+                                    fontSize: '0.73rem',
                                     fontWeight: 700,
                                     textTransform: 'uppercase',
-                                    letterSpacing: '0.05em',
+                                    letterSpacing: '0.04em',
                                     color: '#64748b',
                                 }}
                                 className="truncate"
@@ -558,7 +657,18 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                 <Icon className="w-4 h-4" />
                             </div>
                         </div>
-                        <div style={{ fontSize: '1.625rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }} className="stat-value tabular-nums truncate">{value}</div>
+                        <div
+                            style={{
+                                fontSize: '1.85rem',
+                                fontWeight: 800,
+                                color: valueColor,
+                                lineHeight: 1.2,
+                                fontVariantNumeric: 'tabular-nums',
+                            }}
+                            className="stat-value tabular-nums truncate"
+                        >
+                            {value}
+                        </div>
                         {subValue && (
                             <div
                                 style={{
@@ -587,9 +697,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                 className="drawer-backdrop"
                 onClick={onClose}
                 style={{
-                    background: 'rgba(0, 0, 0, 0.6)',
-                    backdropFilter: 'blur(6px)',
-                    WebkitBackdropFilter: 'blur(6px)',
+                    background: 'rgba(15, 23, 42, 0.52)',
                     opacity: animateIn ? 1 : 0,
                     transition: 'opacity 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)',
                     pointerEvents: animateIn ? 'auto' : 'none',
@@ -847,8 +955,11 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                 </div>
                             )}
 
-                            {/* [FIX P8-C3] Dedicated PAUSED banner — shows Circuit Breaker warning + Resume button */}
-                            {localCampaign.status === 'paused' && (
+                            {/* Dedicated PAUSED banner — distinguishes manual pause vs automatic Circuit Breaker */}
+                            {localCampaign.status === 'paused' && (() => {
+                                const pauseReason = (localCampaign.config as any)?.pause_reason;
+                                const isBreaker = pauseReason === 'circuit_breaker';
+                                return (
                                 <div className="p-1 bg-orange-50 rounded-[18px] overflow-hidden border border-orange-100">
                                     <div className="bg-white p-6 rounded-[18px] border border-orange-100 shadow-sm flex flex-col gap-4">
                                         <div className="flex items-center justify-between">
@@ -857,8 +968,14 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                                     <PauseCircle className="w-5 h-5" />
                                                 </div>
                                                 <div>
-                                                    <h5 className="text-sm font-black text-orange-800 uppercase tracking-tight">Chiến dịch bị tạm dừng (Circuit Breaker)</h5>
-                                                    <p className="text-[11px] text-orange-500 font-bold uppercase tracking-widest mt-0.5">Hệ thống đã phát hiện lỗi SMTP liên tiếp và tự động tạm dừng để bảo vệ domain</p>
+                                                    <h5 className="text-sm font-black text-orange-800 uppercase tracking-tight">
+                                                        {isBreaker ? 'Chiến dịch bị tạm dừng (Circuit Breaker)' : 'Chiến dịch đang tạm dừng (Paused)'}
+                                                    </h5>
+                                                    <p className="text-[11px] text-orange-600 font-bold tracking-wide mt-0.5">
+                                                        {isBreaker
+                                                            ? 'HỆ THỐNG ĐÃ PHÁT HIỆN LỖI GỬI LIÊN TIẾP VÀ TỰ ĐỘNG TẠM DỪNG ĐỂ BẢO VỆ DOMAIN'
+                                                            : 'Đã dừng gửi an toàn. Tiến độ hiện tại được bảo toàn và có thể tiếp tục gửi bất kỳ lúc nào.'}
+                                                    </p>
                                                 </div>
                                             </div>
                                             <div className="text-right">
@@ -870,7 +987,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                         </div>
                                         <div className="w-full h-3 bg-orange-50 border border-orange-100 rounded-full overflow-hidden">
                                             <div
-                                                className="h-full bg-gradient-to-r from-orange-400 to-amber-500 transition-all duration-1000 ease-out shadow-lg shadow-orange-500/20"
+                                                className="h-full bg-gradient-to-r from-orange-400 to-amber-500 transition-all duration-300 ease-out shadow-lg shadow-orange-500/20"
                                                 style={{ width: `${Math.min(100, ((localCampaign.stats?.sent || 0) / (localCampaign.totalTargetAudience || 1)) * 100)}%` }}
                                             />
                                         </div>
@@ -880,51 +997,45 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                                 <span className="text-slate-400 uppercase tracking-widest">/ {localCampaign.totalTargetAudience?.toLocaleString() || '...'} mục tiêu</span>
                                             </div>
                                             <button
-                                                onClick={handleTriggerRefresh}
-                                                disabled={refreshLoading}
-                                                className="px-4 py-2 bg-[var(--color-primary)] text-white text-[10px] font-black uppercase rounded-xl hover:opacity-95 transition-all flex items-center gap-2 shadow-md shadow-orange-500/20"
-                                                title="Khởi động lại chiến dịch — hệ thống sẽ tiếp tục gửi từ subscriber chưa nhận được email"
+                                                onClick={handleResumeCampaign}
+                                                disabled={resumeLoading}
+                                                className="px-4 py-2 bg-[var(--color-primary)] text-white text-[10px] font-black uppercase rounded-xl hover:opacity-95 transition-all flex items-center gap-2 shadow-md shadow-orange-500/20 cursor-pointer disabled:opacity-60"
+                                                title="Tiếp tục gửi từ các người nhận chưa nhận được"
                                             >
-                                                {refreshLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />}
+                                                {resumeLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />}
                                                 Tiếp tục Chiến dịch
                                             </button>
                                         </div>
                                     </div>
                                 </div>
-                            )}
+                                );
+                            })()}
 
-                            {(() => {
-                                const associatedFlow = allFlows.find(f => {
-                                    const steps = Array.isArray(f.steps) ? f.steps : (typeof f.steps === 'string' ? (() => { try { return JSON.parse(f.steps); } catch { return []; } })() : []);
-                                    return steps.some((s: any) => s.type === 'trigger' && s.config?.type === 'campaign' && s.config?.targetId === localCampaign.id);
-                                });
-
-                                return (
-                                    <div className="flex flex-col gap-4">
-                                        {associatedFlow && (
-                                            <div className="bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-950 p-6 rounded-[18px] shadow-lg shadow-indigo-900/20 text-white flex flex-col md:flex-row items-center justify-between gap-6 animate-in fade-in zoom-in duration-500 border border-white/5">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 bg-white/10 rounded-[14px] flex items-center justify-center">
-                                                        <GitBranch className="w-6 h-6 text-orange-300" />
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="text-sm font-black uppercase tracking-wider">Kịch bản chăm sóc sau chiến dịch</h4>
-                                                        <p className="text-xs text-indigo-100 font-medium mt-0.5">Chiến dịch này đang kích hoạt Flow: <span className="font-bold underline">{associatedFlow.name}</span></p>
-                                                    </div>
-                                                </div>
-                                                <Button
-                                                    onClick={() => {
-                                                        navigate('/marketing/flows', { state: { openFlowId: associatedFlow.id, tab: 'analytics' } });
-                                                        onClose();
-                                                    }}
-                                                    variant="secondary"
-                                                    className="bg-white text-indigo-600 border-none hover:bg-slate-50 shadow-md !rounded-xl px-6"
-                                                    icon={ExternalLink}
-                                                >
-                                                    Xem Báo cáo Flow
-                                                </Button>
+                            <div className="flex flex-col gap-4">
+                                {associatedFlow && (
+                                    <div className="bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-950 p-6 rounded-[18px] shadow-lg shadow-indigo-900/20 text-white flex flex-col md:flex-row items-center justify-between gap-6 border border-white/5">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-white/10 rounded-[14px] flex items-center justify-center">
+                                                <GitBranch className="w-6 h-6 text-orange-300" />
                                             </div>
-                                        )}
+                                            <div>
+                                                <h4 className="text-sm font-black uppercase tracking-wider">Kịch bản chăm sóc sau chiến dịch</h4>
+                                                <p className="text-xs text-indigo-100 font-medium mt-0.5">Chiến dịch này đang kích hoạt Flow: <span className="font-bold underline">{associatedFlow.name}</span></p>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            onClick={() => {
+                                                navigate('/marketing/flows', { state: { openFlowId: associatedFlow.id, tab: 'analytics' } });
+                                                onClose();
+                                            }}
+                                            variant="secondary"
+                                            className="bg-white text-indigo-600 border-none hover:bg-slate-50 shadow-md !rounded-xl px-6"
+                                            icon={ExternalLink}
+                                        >
+                                            Xem Báo cáo Flow
+                                        </Button>
+                                    </div>
+                                )}
 
                                         {(localCampaign.stats?.failed || 0) > 0 && (
                                             <div className="bg-rose-50 border border-rose-100 p-5 rounded-[18px] flex flex-col md:flex-row items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-500">
@@ -948,45 +1059,44 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                             </div>
                                         )}
                                     </div>
-                                );
-                            })()}
 
                             {/* 1. KEY METRICS ROW */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                                 <StatBox
+                                    index={0}
                                     label={isZns ? "Tỷ lệ Xem (Seen Rate)" : "Tỷ lệ Mở (Open Rate)"}
                                     value={`${openRate}%`}
                                     subValue={`${(stats.opened || 0).toLocaleString()} người${(stats as any).total_opened && !isZns ? ` - ${(stats as any).total_opened.toLocaleString()} lượt` : ''}`}
                                     icon={isZns ? BadgeCheck : MailOpen}
-                                    colorClass="text-emerald-500"
                                 />
                                 {isZns ? (
                                     <StatBox
+                                        index={1}
                                         label="Đã nhận (Delivered)"
                                         value={(deliveredCount || 0).toLocaleString()}
                                         subValue="Tin nhắn đến máy khách"
                                         icon={Smartphone}
-                                        colorClass="text-blue-500"
                                     />
                                 ) : (
                                     <StatBox
+                                        index={1}
                                         label="Tỷ lệ Click (CTR)"
                                         value={`${clickRate}%`}
                                         subValue={`${(stats as any).total_clicked?.toLocaleString() || stats.clicked?.toLocaleString() || 0} lượt - ${stats.clicked?.toLocaleString() || 0} người`}
                                         icon={MousePointerClick}
-                                        colorClass="text-rose-500"
                                     />
                                 )}
                                 {!isZns && (
                                     <StatBox
+                                        index={2}
                                         label="Click / Open (CTOR)"
                                         value={`${clickToOpenRate}%`}
                                         subValue="Chất lượng nội dung"
                                         icon={Activity}
-                                        colorClass="text-blue-500"
                                     />
                                 )}
                                 <StatBox
+                                    index={isZns ? 2 : 3}
                                     label={isZns ? "Chi phí tạm tính" : "Tỷ lệ gửi thành công"}
                                     value={isZns ? (() => {
                                         const configData = typeof localCampaign.config === 'string' ? JSON.parse(localCampaign.config) : localCampaign.config;
@@ -995,7 +1105,6 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                     })() : `${deliveryRate}%`}
                                     subValue={isZns ? `Dựa trên ${(sentCount || 0).toLocaleString()} tin` : `${(deliveredCount || 0).toLocaleString()} / ${(sentCount || 0).toLocaleString()}`}
                                     icon={isZns ? PieChart : CheckCircle2}
-                                    colorClass="text-indigo-500"
                                 />
                             </div>
 
@@ -1003,23 +1112,24 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
 
                                 {/* 2. CONVERSION FUNNEL (LEFT - 2 COLS) */}
                                 <div className="lg:col-span-2 space-y-6">
-                                    <Card className="border-slate-100 shadow-sm min-h-[400px]" noPadding>
-                                        <div className="p-6 border-b border-slate-50 flex justify-between items-center">
+                                    <Card className="border-slate-200 shadow-sm min-h-[400px] rounded-2xl" noPadding>
+                                        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                                             <div>
                                                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">Phễu chuyển đổi (Funnel)</h3>
                                                 <p className="text-[10px] text-slate-400 mt-0.5">Hành trình tương tác của Khách hàng</p>
                                             </div>
-                                            <div className="flex gap-2">
+                                            <div className="flex items-center gap-3">
                                                 {/* Legend */}
-                                                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-slate-400" /><span className="text-[10px] font-bold text-slate-500">{isZns ? 'Đã gửi' : 'Sent'}</span></div>
-                                                <div className="flex items-center gap-1.5"><div className={`w-2 h-2 rounded-full bg-[#2563eb]`} /><span className="text-[10px] font-bold text-slate-500">{isZns ? 'Đã xem' : 'Open'}</span></div>
-                                                {!isZns && <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500" /><span className="text-[10px] font-bold text-slate-500">Click</span></div>}
+                                                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#94a3b8' }} /><span className="text-[10px] font-bold text-slate-500">{isZns ? 'Đã gửi' : 'Sent'}</span></div>
+                                                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#2563eb' }} /><span className="text-[10px] font-bold text-slate-500">Delivered</span></div>
+                                                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#10b981' }} /><span className="text-[10px] font-bold text-slate-500">{isZns ? 'Đã xem' : 'Opened'}</span></div>
+                                                {!isZns && <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#ec4899' }} /><span className="text-[10px] font-bold text-slate-500">Clicked</span></div>}
                                             </div>
                                         </div>
                                         <div className="p-6 min-h-[280px]">
                                             {stats.sent > 0 ? (
                                                 <ResponsiveContainer width="100%" height={280}>
-                                                    <BarChart data={funnelData} layout="vertical" margin={{ top: 5, right: 15, left: 10, bottom: 5 }}>
+                                                    <BarChart data={funnelData} layout="vertical" margin={{ top: 5, right: 25, left: 10, bottom: 5 }}>
                                                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border-light, #f1f5f9)" className="dark:stroke-slate-800/40" />
                                                         <XAxis type="number" hide />
                                                         <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fontWeight: 700, fill: 'var(--color-text-light, #64748b)' }} width={100} tickLine={false} axisLine={false} />
@@ -1034,10 +1144,16 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                                             }}
                                                             itemStyle={{ color: 'var(--color-text, #0f172a)', fontWeight: 650, fontSize: '11px' }}
                                                         />
-                                                        <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={24}>
+                                                        <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={24} isAnimationActive={false}>
                                                             {funnelData.map((entry, index) => (
                                                                 <Cell key={`cell-${index}`} fill={entry.fill} />
                                                             ))}
+                                                            <LabelList
+                                                                dataKey="value"
+                                                                position="right"
+                                                                formatter={(v: any) => (v != null ? Number(v).toLocaleString('vi-VN') : '')}
+                                                                style={{ fontSize: 11, fontWeight: 700, fill: '#475569' }}
+                                                            />
                                                         </Bar>
                                                     </BarChart>
                                                 </ResponsiveContainer>
@@ -1053,7 +1169,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                     {/* Detailed List */}
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                         {funnelData.map((item, idx) => (
-                                            <div key={idx} className="bg-white p-4 rounded-[14px] border border-slate-100 shadow-sm flex items-center gap-3">
+                                            <div key={idx} className="bg-white p-4 rounded-[14px] border border-slate-200 shadow-sm flex items-center gap-3">
                                                 <div className="p-2 rounded-xl bg-slate-50 text-slate-500"><item.icon className="w-4 h-4" /></div>
                                                 <div>
                                                     <p className="text-[10px] text-slate-400 font-bold uppercase">{item.name.split(' (')[0]}</p>
@@ -1066,8 +1182,8 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
 
                                 {/* 3. HEALTH & DELIVERY (RIGHT - 1 COL) */}
                                 <div className="space-y-6">
-                                    <Card className="border-slate-100 shadow-sm" noPadding>
-                                        <div className="p-6 border-b border-slate-50">
+                                    <Card className="border-slate-200 shadow-sm rounded-2xl" noPadding>
+                                        <div className="p-6 border-b border-slate-100">
                                             <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-2">
                                                 <ShieldCheck className="w-4 h-4 text-emerald-500" /> Sức khỏe gửi tin
                                             </h3>
@@ -1085,6 +1201,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                                                 outerRadius={62}
                                                                 paddingAngle={4}
                                                                 dataKey="value"
+                                                                isAnimationActive={false}
                                                             >
                                                                 {healthData.map((entry, index) => (
                                                                     <Cell key={`cell-${index}`} fill={entry.fill} stroke="none" />
@@ -1115,17 +1232,17 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                             <div className="space-y-4 mt-2">
                                                 <div className="flex justify-between items-center text-xs group cursor-pointer" onClick={() => handleNavigateToAudienceFilter('failed')}>
                                                     <div className="flex items-center gap-2">
-                                                        <div className={`w-2 h-2 rounded-full ${isZns ? 'bg-rose-500' : 'bg-rose-500'}`} />
-                                                        <span className="text-slate-600 font-bold group-hover:text-blue-600 transition-colors">{isZns ? 'Lỗi gửi (Failed)' : 'Email hỏng (Bounce)'}</span>
+                                                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#f43f5e' }} />
+                                                        <span className="text-slate-600 font-bold group-hover:text-slate-900 transition-colors">{isZns ? 'Lỗi gửi (Failed)' : 'Email hỏng (Bounce)'}</span>
                                                     </div>
                                                     <span className="font-mono font-bold text-rose-500">{isZns ? `${(sentCount > 0 ? ((localCampaign.stats?.failed || 0) / sentCount * 100).toFixed(2) : '0.00')}% (${localCampaign.stats?.failed || 0})` : `${bounceRate}% (${stats.bounced})`}</span>
                                                 </div>
                                                 <div className="flex justify-between items-center text-xs group cursor-pointer" onClick={() => handleNavigateToAudienceFilter('unsubscribed')}>
                                                     <div className="flex items-center gap-2">
-                                                        <div className={`w-2 h-2 rounded-full ${isZns ? 'bg-[#BD1D2D]' : 'bg-[#BD1D2D]'}`} />
-                                                        <span className="text-slate-600 font-bold group-hover:text-blue-600 transition-colors">{isZns ? 'Hủy đăng ký (Unsub)' : 'Hủy đăng ký (Unsub)'}</span>
+                                                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#8b5cf6' }} />
+                                                        <span className="text-slate-600 font-bold group-hover:text-slate-900 transition-colors">{isZns ? 'Hủy đăng ký (Unsub)' : 'Hủy đăng ký (Unsub)'}</span>
                                                     </div>
-                                                    <span className="font-mono font-bold text-[#BD1D2D]">{isZns ? '0.00% (0)' : `${unsubRate}% (${stats.unsubscribed})`}</span>
+                                                    <span className="font-mono font-bold text-violet-600">{isZns ? '0.00% (0)' : `${unsubRate}% (${stats.unsubscribed})`}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -1818,17 +1935,17 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                 </div>
                             ) : null}
 
-                            <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-start gap-3">
-                                <AlertOctagon className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+                                <AlertOctagon className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                                 <div>
-                                    <h5 className="text-sm font-bold text-rose-800">Cảnh báo: Hành động Vĩnh viễn</h5>
-                                    <p className="text-xs text-rose-700/80 mt-1">Các liên hệ này sẽ bị xóa hoàn toàn khỏi cơ sở dữ liệu và không thể khôi phục. Mọi lịch sử tương tác cũng bị mất.</p>
+                                    <h5 className="text-sm font-bold text-amber-800">Lưu trữ an toàn (Xóa mềm)</h5>
+                                    <p className="text-xs text-amber-700/90 mt-1">Các liên hệ này sẽ được đánh dấu đã hủy đăng ký và xóa mềm khỏi danh sách gửi tin hoạt động. Toàn bộ lịch sử tương tác và báo cáo phân tích trước đây vẫn được bảo toàn nguyên vẹn.</p>
                                 </div>
                             </div>
                         </div>
                     }
                     variant="danger"
-                    confirmLabel={deleteModal.loading ? "ĐANG XÓA..." : "XÓA VĨNH VIỄN"}
+                    confirmLabel={deleteModal.loading ? "ĐANG XÓA MỀM..." : "XÁC NHẬN XÓA MỀM"}
                 />
 
                 <ConfirmModal

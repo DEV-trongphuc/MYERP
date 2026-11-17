@@ -2479,7 +2479,7 @@ Sử dụng tiếng Việt, chuyên nghiệp và súc tích.";
                         $filePath = $uploadDir . $fileName;
                         if (file_put_contents($filePath, $decodedData)) {
                             $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https" : "http";
-                            $host = $_SERVER['HTTP_HOST'] ?? 'automation.ideas.edu.vn';
+                            $host = $_SERVER['HTTP_HOST'] ?? (parse_url(resolve_automation_app_base_url($pdo), PHP_URL_HOST) ?: 'localhost');
                             $attUrl = "$scheme://$host/uploadss/ai_generated/" . $fileName;
                             $attSize = strlen($decodedData);
                             $attName = $fileName;

@@ -72,27 +72,13 @@ class NotificationService {
     public static function pruneUserNotifications(PDO $db, int $userId, int $maxKeep = 200): int {
         if ($userId <= 0 || $maxKeep <= 0) return 0;
         try {
-            // Kiểm tra nhanh tổng số thông báo của user
-            $countStmt = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ?");
-            $countStmt->execute([$userId]);
-            $total = (int)$countStmt->fetchColumn();
-
-            if ($total > $maxKeep) {
-                // Xóa tất cả các thông báo nằm ngoài top $maxKeep gần nhất
-                $sql = "
-                    DELETE FROM notifications 
-                    WHERE user_id = ? 
-                      AND id NOT IN (
-                          SELECT id FROM (
-                              SELECT id FROM notifications 
-                              WHERE user_id = ? 
-                              ORDER BY created_at DESC, id DESC 
-                              LIMIT $maxKeep
-                          ) AS keep_latest
-                      )
-                ";
-                $delStmt = $db->prepare($sql);
-                $delStmt->execute([$userId, $userId]);
+            $offset = max(0, $maxKeep - 1);
+            $cutStmt = $db->prepare("SELECT id FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 1 OFFSET $offset");
+            $cutStmt->execute([$userId]);
+            $cutoffId = $cutStmt->fetchColumn();
+            if ($cutoffId !== false && (int)$cutoffId > 0) {
+                $delStmt = $db->prepare("DELETE FROM notifications WHERE user_id = ? AND id < ?");
+                $delStmt->execute([$userId, (int)$cutoffId]);
                 return $delStmt->rowCount();
             }
         } catch (\Throwable $e) {
@@ -145,6 +131,28 @@ class NotificationService {
 
             $recipients = $resolved['recipients'] ?? [];
 
+            // Merge dynamic recipients configured in tenant_notification_rules (if matching rule exists)
+            if (!$isTest) {
+                try {
+                    require_once __DIR__ . '/config/TenantConfigService.php';
+                    $ruleRecipients = TenantConfigService::resolveNotificationRecipients($db, $tenantId, $eventType, $payload);
+                    if (!empty($ruleRecipients)) {
+                        $existingIds = [];
+                        foreach ($recipients as $exR) {
+                            $existingIds[(int)($exR['id'] ?? 0)] = true;
+                        }
+                        foreach ($ruleRecipients as $rr) {
+                            $rrId = (int)($rr['id'] ?? 0);
+                            if ($rrId > 0 && empty($existingIds[$rrId])) {
+                                $recipients[] = $rr;
+                                $existingIds[$rrId] = true;
+                            }
+                        }
+                    }
+                } catch (\Throwable $eRuleRec) {
+                }
+            }
+
             // Trong môi trường test: CHỈ cho phép nhận bởi test user chỉ định, tuyệt đối không gửi tới user thật
             if ($isTest) {
                 if (!empty($payload['recipients'])) {
@@ -176,14 +184,14 @@ class NotificationService {
             $emailTitle = $resolved['email_title'] ?? '';
             $emailContent = $resolved['email_content'] ?? '';
 
-            // Fetch recipients' matrix configurations from database
-            $recipientIds = array_filter(array_map(fn($r) => (int)($r['id'] ?? 0), $recipients));
+            // Fetch recipients' matrix configurations from database (tenant-scoped)
+            $recipientIds = array_values(array_unique(array_filter(array_map(fn($r) => (int)($r['id'] ?? 0), $recipients))));
             $userConfigs = [];
             if (!empty($recipientIds)) {
                 try {
                     $inPlace = implode(',', array_fill(0, count($recipientIds), '?'));
-                    $stmtCfg = $db->prepare("SELECT user_id, matrix_config FROM user_notification_settings WHERE user_id IN ($inPlace)");
-                    $stmtCfg->execute(array_values($recipientIds));
+                    $stmtCfg = $db->prepare("SELECT user_id, matrix_config FROM user_notification_settings WHERE tenant_id = ? AND user_id IN ($inPlace)");
+                    $stmtCfg->execute(array_merge([$tenantId], $recipientIds));
                     while ($cRow = $stmtCfg->fetch(PDO::FETCH_ASSOC)) {
                         if (!empty($cRow['matrix_config'])) {
                             $userConfigs[(int)$cRow['user_id']] = json_decode($cRow['matrix_config'], true);
@@ -237,7 +245,9 @@ class NotificationService {
                             if ($rId > 0 && !in_array($rId, $insertedUserIds, true) && $isChannelEnabled($rId, 'bell')) {
                                 $insertedUserIds[] = $rId;
                                 $insertNotif->execute([$rId, $tenantId, $cleanTitle, $cleanBody, $type, $link]);
-                                self::pruneUserNotifications($db, $rId, 200);
+                                if (mt_rand(1, 20) === 1) {
+                                    self::pruneUserNotifications($db, $rId, 200);
+                                }
                             }
                         }
                     }
@@ -251,10 +261,9 @@ class NotificationService {
                 return;
             }
 
-            // Fetch system settings for Zalo and Telegram group configuration
-            $stmtGSettings = $db->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('zalo_admin_group_chat_id', 'zalo_notify_only_group', 'telegram_admin_group_chat_id', 'telegram_notify_only_group', 'zalo_bot_token', 'telegram_bot_token')");
-            $stmtGSettings->execute();
-            $gSettings = $stmtGSettings->fetchAll(PDO::FETCH_KEY_PAIR);
+            // Fetch tenant-scoped system settings for Zalo and Telegram group configuration
+            require_once __DIR__ . '/config/TenantConfigService.php';
+            $gSettings = TenantConfigService::getSettings($db, $tenantId);
 
             $zaloBotToken = trim((string)($gSettings['zalo_bot_token'] ?? ''));
             $zaloGroupChatId = trim((string)($gSettings['zalo_admin_group_chat_id'] ?? ''));
@@ -385,6 +394,9 @@ class NotificationService {
      * Resolve event templates and recipient accounts
      */
     private static function resolveEventData(PDO $db, int $tenantId, string $eventType, array $payload): ?array {
+        require_once __DIR__ . '/config/TenantConfigService.php';
+        $brandPrefix = TenantConfigService::getBrandPrefix($db, $tenantId);
+        $frontendUrl = TenantConfigService::getFrontendUrl($db, $tenantId);
         $userName = $payload['user_name'] ?? 'Nhân viên';
         $today = $payload['date'] ?? date('Y-m-d');
         $time = $payload['time'] ?? date('H:i');
@@ -411,7 +423,7 @@ class NotificationService {
                         . "  • Thời gian: <code>" . substr($time, 0, 5) . "</code>\n"
                         . "  • Lý do: <i>\"$reason\"</i>\n\n"
                         . "Vui lòng truy cập hệ thống CRM để phê duyệt.",
-                    'email_subject' => "[IDEAS] Yêu cầu phê duyệt đi trễ - NV $userName",
+                    'email_subject' => "{$brandPrefix} Yêu cầu phê duyệt đi trễ - NV $userName",
                     'email_title' => "DUYỆT YÊU CẦU ĐI TRỄ",
                     'email_content' => "Chào quản trị viên,<br/><br/>" .
                                     "Nhân viên <strong>$userName</strong> vừa check-in trễ giờ quy định lúc " . substr($time, 0, 5) . " ngày $today.<br/>" .
@@ -455,7 +467,7 @@ class NotificationService {
                         . "  • Ngày giải trình: <code>$singleDate</code>\n"
                         . "  • Lý do: <i>\"$reason\"</i>\n\n"
                         . "Vui lòng truy cập hệ thống để phê duyệt.";
-                    $emailSubject = "[IDEAS] Phiếu giải trình cập nhật công - NV $userName";
+                    $emailSubject = "{$brandPrefix} Phiếu giải trình cập nhật công - NV $userName";
                     $emailTitle = "PHIẾU GIẢI TRÌNH CẬP NHẬT CÔNG";
                     $emailContent = "Chào quản trị viên,<br/><br/>" .
                                     "Nhân viên <strong>$userName</strong> vừa gửi Phiếu giải trình cập nhật công ngày $singleDate.<br/>" .
@@ -478,7 +490,7 @@ class NotificationService {
                         . "  • Chu kỳ: <code>$mPeriod</code>\n"
                         . "  • Nội dung: <i>\"$reason\"</i>\n\n"
                         . "Vui lòng truy cập hệ thống để phê duyệt.";
-                    $emailSubject = "[IDEAS] Phiếu cập nhật công tháng $mPeriod - NV $userName";
+                    $emailSubject = "{$brandPrefix} Phiếu cập nhật công tháng $mPeriod - NV $userName";
                     $emailTitle = "PHIẾU CẬP NHẬT CÔNG THÁNG $mPeriod";
                     $emailContent = "Chào quản trị viên,<br/><br/>" .
                                     "Nhân viên <strong>$userName</strong> vừa gửi Phiếu cập nhật công tháng $mPeriod$cntStr.<br/>" .
@@ -499,7 +511,7 @@ class NotificationService {
                         . "  • Giờ đề xuất: <code>" . substr($time, 0, 5) . "</code>\n"
                         . "  • Lý do: <i>\"$reason\"</i>\n\n"
                         . "Vui lòng truy cập hệ thống CRM để phê duyệt.";
-                    $emailSubject = "[IDEAS] Yêu cầu cập nhật công - NV $userName";
+                    $emailSubject = "{$brandPrefix} Yêu cầu cập nhật công - NV $userName";
                     $emailTitle = "YÊU CẦU CẬP NHẬT CÔNG";
                     $emailContent = "Chào quản trị viên,<br/><br/>" .
                                     "Nhân viên <strong>$userName</strong> vừa gửi Yêu cầu cập nhật công bổ sung ngày $today lúc " . substr($time, 0, 5) . ".<br/>" .
@@ -547,7 +559,7 @@ class NotificationService {
                         . "  • Nhân sự nhắc: <b>$senderName</b>\n"
                         . "  • Tiêu đề đơn: <i>\"$itemTitle\"</i>\n"
                         . "  • Nội dung: <i>\"$msg\"</i>",
-                    'email_subject' => "[IDEAS] {$codePrefix}Nhắc nhở phê duyệt đơn - $itemTitle",
+                    'email_subject' => "{$brandPrefix} {$codePrefix}Nhắc nhở phê duyệt đơn - $itemTitle",
                     'email_title' => "NHẮC NHỞ PHÊ DUYỆT ĐƠN" . (!empty($procCode) ? " ($procCode)" : ""),
                     'email_content' => "Nhân sự <strong>$senderName</strong> vừa gửi lời nhắc nhở phê duyệt đơn: <strong>$itemTitle</strong>.<br/>" .
                                     (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/><br/>" : "<br/>") .
@@ -621,7 +633,7 @@ class NotificationService {
                     'link' => $link,
                     'zalo_msg' => $zaloMsg,
                     'tg_msg' => $tgMsg,
-                    'email_subject' => "[IDEAS] {$codePrefix}" . $title,
+                    'email_subject' => "{$brandPrefix} {$codePrefix}" . $title,
                     'email_title' => "KẾT QUẢ PHÊ DUYỆT CHẤM CÔNG" . (!empty($procCode) ? " ($procCode)" : ""),
                     'email_content' => "Chào <strong>" . htmlspecialchars($userName) . "</strong>,<br/><br/>" .
                                     (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "") .
@@ -648,7 +660,7 @@ class NotificationService {
                         . "Ban quản trị đã mở đăng ký ca trực cho ngày nghỉ lễ: <b>$holidayName</b> (<code>$shiftDate</code>).\n"
                         . (!empty($deadline) ? "  • Hạn chót đăng ký: <code>$deadline</code>\n" : "")
                         . "Vui lòng truy cập hệ thống để đăng ký nhận lead.",
-                    'email_subject' => "[IDEAS] Mở đăng ký trực lễ - $holidayName",
+                    'email_subject' => "{$brandPrefix} Mở đăng ký trực lễ - $holidayName",
                     'email_title' => "MỞ ĐĂNG KÝ TRỰC LỄ",
                     'email_content' => "Chào các thành viên,<br/><br/>" .
                                     "Ban quản trị chính thức mở đăng ký nhận lead ca trực cho ngày lễ: <strong>$holidayName</strong> ($shiftDate).<br/>" .
@@ -674,7 +686,7 @@ class NotificationService {
                         . "Công ty thông báo chính thức lịch nghỉ lễ: <b>$holidayName</b>.\n"
                         . (!empty($description) ? "  • Chi tiết: <i>$description</i>\n" : "")
                         . "Chúc toàn thể cán bộ nhân viên có kỳ nghỉ vui vẻ!",
-                    'email_subject' => "[IDEAS] Thông báo lịch nghỉ lễ - $holidayName",
+                    'email_subject' => "{$brandPrefix} Thông báo lịch nghỉ lễ - $holidayName",
                     'email_title' => "THÔNG BÁO LỊCH NGHĨ LỄ",
                     'email_content' => "Chào toàn thể cán bộ nhân viên,<br/><br/>" .
                                     "Công ty xin thông báo chính thức lịch nghỉ lễ: <strong>$holidayName</strong>.<br/>" .
@@ -691,8 +703,7 @@ class NotificationService {
                 $title = "⏰ Nhắc nhở: Ngày mai bắt đầu làm việc trở lại!";
                 $body = "Kỳ nghỉ lễ {$holidayName} đã kết thúc. Ngày mai ({$nextDayText}) công ty bắt đầu làm việc trở lại bình thường lúc {$workStart}.";
 
-                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
-                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                // $frontendUrl pre-resolved via TenantConfigService::getFrontendUrl($db, $tenantId)
                 $directLink = rtrim($frontendUrl, '/') . '/attendance';
 
                 return [
@@ -732,7 +743,7 @@ class NotificationService {
                     'link' => "/attendance",
                     'zalo_msg' => "📊 [ BÁO CÁO CHẤM CÔNG & TRỰC CA ]\n\n" . $summaryText,
                     'tg_msg' => "📊 <b>[ BÁO CÁO CHẤM CÔNG & TRỰC CA ]</b>\n\n" . preg_replace('/•\s*([^:]+):/', '• <b>$1</b>:', htmlspecialchars($summaryText)),
-                    'email_subject' => "[IDEAS] Báo cáo tổng kết Chấm công & Trực ca ($periodStr)",
+                    'email_subject' => "{$brandPrefix} Báo cáo tổng kết Chấm công & Trực ca ($periodStr)",
                     'email_title' => "BÁO CÁO CHẤM CÔNG CÁ NHÂN",
                     'email_content' => nl2br(htmlspecialchars($summaryText))
                 ];
@@ -766,8 +777,7 @@ class NotificationService {
                 $timeText = !empty($workStart) ? " ($workStart)" : "";
                 $name = $payload['user_name'] ?? ($recipients[0]['full_name'] ?? 'bạn');
                 
-                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
-                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                // $frontendUrl pre-resolved via TenantConfigService::getFrontendUrl($db, $tenantId)
                 $loginAttendanceLink = rtrim($frontendUrl, '/') . '/login?redirect=/attendance';
 
                 return [
@@ -819,8 +829,7 @@ class NotificationService {
                 $timeText = !empty($workStart) ? " ($workStart)" : "";
                 $name = $payload['user_name'] ?? ($recipients[0]['full_name'] ?? 'bạn');
                 
-                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
-                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                // $frontendUrl pre-resolved via TenantConfigService::getFrontendUrl($db, $tenantId)
                 $loginAttendanceLink = rtrim($frontendUrl, '/') . '/login?redirect=/attendance';
 
                 return [
@@ -873,8 +882,7 @@ class NotificationService {
                 $timeTextEnd = !empty($workEnd) ? " ($workEnd)" : "";
                 $name = $payload['user_name'] ?? ($recipients[0]['full_name'] ?? 'bạn');
                 
-                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
-                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                // $frontendUrl pre-resolved via TenantConfigService::getFrontendUrl($db, $tenantId)
                 $loginAttendanceLink = rtrim($frontendUrl, '/') . '/login?redirect=/attendance';
 
                 if ($eventType === 'CHECKOUT_REMINDER') {
@@ -955,7 +963,7 @@ class NotificationService {
                         . ($hasCost ? "  • Kinh phí: <b>$amountText</b>\n" : "")
                         . "  • Ghi chú: <i>\"" . htmlspecialchars($reason) . "\"</i>\n\n"
                         . "Vui lòng truy cập hệ thống CRM để phê duyệt.",
-                    'email_subject' => "[IDEAS] {$codePrefix}Yêu cầu phê duyệt Đề xuất - NV $userName" . $costSuffix,
+                    'email_subject' => "{$brandPrefix} {$codePrefix}Yêu cầu phê duyệt Đề xuất - NV $userName" . $costSuffix,
                     'email_title' => "PHÊ DUYỆT ĐỀ XUẤT" . (!empty($procCode) ? " ($procCode)" : ""),
                     'email_content' => "Chào quản trị viên / người duyệt,<br/><br/>" .
                                     (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "") .
@@ -1003,7 +1011,7 @@ class NotificationService {
                         . ($hasCost ? "  • Kinh phí: <b>$amountText</b>\n" : "")
                         . "  • Ghi chú: <i>\"" . htmlspecialchars($reason) . "\"</i>\n\n"
                         . "Vui lòng truy cập hệ thống để theo dõi.",
-                    'email_subject' => "[IDEAS] {$codePrefix}Bạn được thêm vào người liên quan Đề xuất - NV $userName" . $costSuffix,
+                    'email_subject' => "{$brandPrefix} {$codePrefix}Bạn được thêm vào người liên quan Đề xuất - NV $userName" . $costSuffix,
                     'email_title' => "NGƯỜI LIÊN QUAN ĐỀ XUẤT" . (!empty($procCode) ? " ($procCode)" : ""),
                     'email_content' => "Chào bạn,<br/><br/>" .
                                     (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "") .
@@ -1071,7 +1079,7 @@ class NotificationService {
                         . ($hasCost ? "  • Số tiền: <b>$amountText</b>\n" : "")
                         . (!empty($rejectReason) ? "  • Lý do: <i>" . htmlspecialchars($rejectReason) . "</i>\n" : "")
                         . "\nVui lòng truy cập hệ thống để xem chi tiết.",
-                    'email_subject' => "[IDEAS] {$codePrefix}Đề xuất của bạn đã được $statusTextLower - $titleText",
+                    'email_subject' => "{$brandPrefix} {$codePrefix}Đề xuất của bạn đã được $statusTextLower - $titleText",
                     'email_title' => "KẾT QUẢ PHÊ DUYỆT ĐỀ XUẤT" . (!empty($procCode) ? " ($procCode)" : ""),
                     'email_content' => "Chào bạn,<br/><br/>" .
                                     (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "") .
@@ -1104,7 +1112,7 @@ class NotificationService {
                         . "  • Tiêu đề: <b>" . htmlspecialchars($subjectText) . "</b>\n"
                         . "  • Độ ưu tiên: <b>" . htmlspecialchars($priorityText) . "</b>\n\n"
                         . "Vui lòng truy cập CRM để xử lý.",
-                    'email_subject' => "[IDEAS] Yêu cầu hỗ trợ mới (Ticket #$ticketId)",
+                    'email_subject' => "{$brandPrefix} Yêu cầu hỗ trợ mới (Ticket #$ticketId)",
                     'email_title' => "TICKET HỖ TRỢ MỚI",
                     'email_content' => "Chào quản trị viên,<br/><br/>" .
                                     "Có yêu cầu hỗ trợ mới từ <strong>" . htmlspecialchars($userName) . "</strong>:<br/>" .
@@ -1137,7 +1145,7 @@ class NotificationService {
                         . "Phiếu hợp tác chia sẻ hoa hồng <b>#$slipId</b> đã thu thập đầy đủ chữ ký của các thành viên.\n"
                         . "  • Trạng thái: Chờ phê duyệt\n\n"
                         . "Vui lòng truy cập hệ thống CRM để phê duyệt.",
-                    'email_subject' => "[IDEAS] Yêu cầu phê duyệt Phiếu hợp tác #$slipId",
+                    'email_subject' => "{$brandPrefix} Yêu cầu phê duyệt Phiếu hợp tác #$slipId",
                     'email_title' => "PHÊ DUYỆT PHIẾU HỢP TÁC",
                     'email_content' => "Chào quản trị viên,<br/><br/>" .
                                     "Phiếu hợp tác chia sẻ hoa hồng <strong>#$slipId</strong> đã thu thập đầy đủ chữ ký của các thành viên.<br/>" .
@@ -1173,7 +1181,7 @@ class NotificationService {
                         . "  • Khách hàng: <b>" . htmlspecialchars($customerName) . "</b>\n"
                         . "  • Số tiền: <b>$depAmount</b>\n\n"
                         . "Vui lòng truy cập CRM để xem xét.",
-                    'email_subject' => "[IDEAS] Yêu cầu duyệt Sale Order mới #$depId",
+                    'email_subject' => "{$brandPrefix} Yêu cầu duyệt Sale Order mới #$depId",
                     'email_title' => "DUYỆT SALE ORDER MỚI",
                     'email_content' => "Chào quản trị viên,<br/><br/>" .
                                     "Nhân viên <strong>$userName</strong> vừa tạo Sale Order mới cho khách hàng <strong>" . htmlspecialchars($customerName) . "</strong>.<br/>" .
@@ -1200,7 +1208,7 @@ class NotificationService {
                         . "Sale Order <b>#$depId</b> (KH <b>" . htmlspecialchars($customerName) . "</b>) đã <b>$statusText</b>.\n"
                         . (!empty($reason) ? "  • Ghi chú: <i>\"" . htmlspecialchars($reason) . "\"</i>\n" : "")
                         . "\nVui lòng xem chi tiết trên CRM.",
-                    'email_subject' => "[IDEAS] Cập nhật Sale Order #$depId - $customerName",
+                    'email_subject' => "{$brandPrefix} Cập nhật Sale Order #$depId - $customerName",
                     'email_title' => "CẬP NHẬT SALE ORDER",
                     'email_content' => "Chào bạn,<br/><br/>" .
                                     "Sale Order #$depId của khách hàng <strong>" . htmlspecialchars($customerName) . "</strong> đã <strong>$statusText</strong>.<br/>" .
@@ -1237,7 +1245,7 @@ class NotificationService {
                         . "  • Số tiền: <b>$amtStr</b>\n"
                         . "  • Người tạo: <b>" . htmlspecialchars($creatorName) . "</b>\n\n"
                         . "Vui lòng truy cập CRM để xem chi tiết.",
-                    'email_subject' => "[IDEAS] Đơn thanh toán mới cho khách hàng $custName",
+                    'email_subject' => "{$brandPrefix} Đơn thanh toán mới cho khách hàng $custName",
                     'email_title' => "ĐƠN THANH TOÁN / SO MỚI",
                     'email_content' => "Chào bạn,<br/><br/>" .
                                     "Nhân viên <strong>" . htmlspecialchars($creatorName) . "</strong> vừa tạo đơn thanh toán mới (<strong>$soCode</strong>) cho khách hàng <strong>" . htmlspecialchars($custName) . "</strong>.<br/>" .
@@ -1274,7 +1282,7 @@ class NotificationService {
                         . ($soTotal ? "  • Tổng tiền: <b>$soTotal</b>\n" : "")
                         . "  • Trạng thái: Chờ duyệt\n\n"
                         . "Vui lòng truy cập hệ thống để phê duyệt.",
-                    'email_subject' => "[IDEAS] Đơn bán hàng mới $soNumber đang chờ duyệt",
+                    'email_subject' => "{$brandPrefix} Đơn bán hàng mới $soNumber đang chờ duyệt",
                     'email_title' => "PHÊ DUYỆT ĐƠN BÁN HÀNG $soNumber",
                     'email_content' => "Chào quản trị viên,<br/><br/>" .
                                     "Nhân viên <strong>$creatorName</strong> vừa tạo Đơn bán hàng <strong>$soNumber</strong>" .
@@ -1309,7 +1317,7 @@ class NotificationService {
                         . "  • Mã SO: <b>$soNumber</b>\n"
                         . (!$isApproved && !empty($soReason) ? "  • Lý do: <i>" . htmlspecialchars($soReason) . "</i>\n" : "")
                         . "\nVui lòng xem chi tiết trên hệ thống.",
-                    'email_subject' => "[IDEAS] Đơn bán hàng $soNumber đã được $statusWord",
+                    'email_subject' => "{$brandPrefix} Đơn bán hàng $soNumber đã được $statusWord",
                     'email_title' => "KẾT QUẢ PHÊ DUYỆT ĐƠN BÁN HÀNG $soNumber",
                     'email_content' => "Chào bạn,<br/><br/>" .
                                     "Đơn bán hàng <strong>$soNumber</strong> của bạn đã được <strong>$approverName</strong> $statusWord.<br/>" .
@@ -1346,7 +1354,7 @@ class NotificationService {
                         . "  • Chuyển từ: <b>" . htmlspecialchars($oldSaleName) . "</b>\n"
                         . "  • Người thực hiện: <b>" . htmlspecialchars($actorName) . "</b>\n\n"
                         . "Vui lòng vào CRM để xem lịch sử tương tác và liên hệ chăm sóc ngay.",
-                    'email_subject' => "[IDEAS] Bàn giao khách hàng mới: $custName",
+                    'email_subject' => "{$brandPrefix} Bàn giao khách hàng mới: $custName",
                     'email_title' => "BÀN GIAO KHÁCH HÀNG MỚI",
                     'email_content' => "Chào bạn,<br/><br/>" .
                                     "Bạn vừa được bàn giao khách hàng: <strong>" . htmlspecialchars($custName) . "</strong>.<br/>" .
@@ -1374,7 +1382,7 @@ class NotificationService {
                         . "Nhân viên <b>$userName</b> vừa đăng ký trực ca đêm:\n"
                         . "  • Ngày trực: <code>$shiftDate</code>\n\n"
                         . "Vui lòng kiểm tra lịch trực trên CRM.",
-                    'email_subject' => "[IDEAS] Đăng ký trực đêm - NV $userName",
+                    'email_subject' => "{$brandPrefix} Đăng ký trực đêm - NV $userName",
                     'email_title' => "ĐĂNG KÝ TRỰC ĐÊM",
                     'email_content' => "Chào quản trị viên,<br/><br/>" .
                                     "Nhân viên <strong>$userName</strong> vừa đăng ký trực ca đêm ngày <strong>$shiftDate</strong>.<br/>" .
@@ -1409,7 +1417,7 @@ class NotificationService {
                         . "  • Ngày nghỉ: <code>$leaveDate</code>\n"
                         . "  • Lý do: <i>\"$reason\"</i>\n\n"
                         . "Vui lòng truy cập CRM để phê duyệt.",
-                    'email_subject' => "[IDEAS] Đơn xin nghỉ phép - NV $userName",
+                    'email_subject' => "{$brandPrefix} Đơn xin nghỉ phép - NV $userName",
                     'email_title' => "ĐƠN XIN NGHỈ PHÉP",
                     'email_content' => "Chào quản trị viên,<br/><br/>" .
                                     "Nhân viên <strong>$userName</strong> vừa gửi đơn xin nghỉ phép ngày $leaveDate.<br/>" .
@@ -1446,7 +1454,7 @@ class NotificationService {
                         . "  • SĐT liên hệ: <code>$maskedPhone</code>\n"
                         . (!empty($roundName) ? "  • Vòng phân bổ: <b>" . htmlspecialchars($roundName) . "</b>\n" : "")
                         . "\nVui lòng truy cập CRM ngay để xem chi tiết và chăm sóc!",
-                    'email_subject' => "[IDEAS] Thông báo phân bổ khách hàng mới: $custName",
+                    'email_subject' => "{$brandPrefix} Thông báo phân bổ khách hàng mới: $custName",
                     'email_title' => "KHÁCH HÀNG MỚI ĐƯỢC PHÂN BỔ",
                     'email_content' => "Chào bạn,<br/><br/>" .
                                     "Hệ thống vừa phân bổ 1 khách hàng mới cho bạn: <strong>" . htmlspecialchars($custName) . "</strong>.<br/>" .
@@ -1477,7 +1485,7 @@ class NotificationService {
                         'tg_msg' => "✍️ <b>[ YÊU CẦU KÝ XÁC NHẬN PHIẾU HỢP TÁC ]</b>\n\n"
                             . "Một phiếu hợp tác chia sẻ hoa hồng mới (<b>#$slipId</b>) đã được tạo cho khách hàng: <b>" . htmlspecialchars($custName) . "</b>.\n"
                             . "Vui lòng truy cập CRM để xem chi tiết và ký xác nhận.",
-                        'email_subject' => $payload['email_subject'] ?? "[IDEAS] Yêu cầu ký xác nhận Phiếu hợp tác #$slipId",
+                        'email_subject' => $payload['email_subject'] ?? "{$brandPrefix} Yêu cầu ký xác nhận Phiếu hợp tác #$slipId",
                         'email_title' => $payload['email_title'] ?? "KÝ XÁC NHẬN PHIẾU HỢP TÁC",
                         'email_content' => $payload['email_content'] ?? "Chào bạn,<br/><br/>" .
                                         "Một phiếu hợp tác chia sẻ hoa hồng mới (#$slipId) đã được tạo trên hệ thống cho khách hàng <strong>" . htmlspecialchars($custName) . "</strong>.<br/>" .
@@ -1500,7 +1508,7 @@ class NotificationService {
                             . "  • Khách hàng: <b>" . htmlspecialchars($custName) . "</b>\n"
                             . (!empty($sharePct) ? "  • Tỷ lệ chia: <b>$sharePct</b>\n" : "")
                             . "\nVui lòng truy cập CRM để xem chi tiết khách hàng.",
-                        'email_subject' => $payload['email_subject'] ?? "[IDEAS] Lời mời hợp tác chăm sóc khách hàng $custName",
+                        'email_subject' => $payload['email_subject'] ?? "{$brandPrefix} Lời mời hợp tác chăm sóc khách hàng $custName",
                         'email_title' => $payload['email_title'] ?? "LỜI MỜI HỢP TÁC CHĂM SÓC (CO-CARE)",
                         'email_content' => $payload['email_content'] ?? "Chào bạn,<br/><br/>" .
                                         "Sale <strong>" . htmlspecialchars($inviterName) . "</strong> vừa mời bạn hợp tác chăm sóc (Co-care) khách hàng: <strong>" . htmlspecialchars($custName) . "</strong>.<br/>" .
@@ -1529,7 +1537,7 @@ class NotificationService {
                         . "Khách hàng <b>" . htmlspecialchars($custName) . "</b> có cập nhật mới:\n"
                         . "  • Nội dung: <i>" . htmlspecialchars($updateContent) . "</i>\n\n"
                         . "Vui lòng truy cập CRM để xem chi tiết.",
-                    'email_subject' => "[IDEAS] Cập nhật thông tin khách hàng $custName",
+                    'email_subject' => "{$brandPrefix} Cập nhật thông tin khách hàng $custName",
                     'email_title' => "CẬP NHẬT KHÁCH HÀNG",
                     'email_content' => "Chào bạn,<br/><br/>" .
                                     "Khách hàng <strong>" . htmlspecialchars($custName) . "</strong> có cập nhật mới.<br/>" .
@@ -1555,7 +1563,7 @@ class NotificationService {
                         . "Khách hàng <b>" . htmlspecialchars($custName) . "</b> của bạn sắp hết thời hạn bảo mật:\n"
                         . "  • Thời gian còn lại: <code>$deadlineText</code>\n\n"
                         . "Hãy cập nhật tương tác để gia hạn bảo mật data.",
-                    'email_subject' => "[IDEAS] Cảnh báo hạn bảo mật Data - $custName",
+                    'email_subject' => "{$brandPrefix} Cảnh báo hạn bảo mật Data - $custName",
                     'email_title' => "CẢNH BÁO HẠN BẢO MẬT DATA",
                     'email_content' => "Chào bạn,<br/><br/>" .
                                     "Khách hàng <strong>" . htmlspecialchars($custName) . "</strong> sắp hết thời hạn bảo mật.<br/>" .
@@ -1570,8 +1578,7 @@ class NotificationService {
                 $commentTextPlain = self::cleanText($commentText);
                 
                 $targetLink = $payload['link'] ?? '/feed';
-                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
-                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                // $frontendUrl pre-resolved via TenantConfigService::getFrontendUrl($db, $tenantId)
                 $fullDirectLink = rtrim($frontendUrl, '/') . '/' . ltrim($targetLink, '/');
 
                 return [
@@ -1606,8 +1613,7 @@ class NotificationService {
                 $commentTextPlain = self::cleanText($commentText);
                 
                 $targetLink = $payload['link'] ?? '/feed';
-                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
-                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                // $frontendUrl pre-resolved via TenantConfigService::getFrontendUrl($db, $tenantId)
                 $fullDirectLink = rtrim($frontendUrl, '/') . '/' . ltrim($targetLink, '/');
 
                 return [
@@ -1644,8 +1650,7 @@ class NotificationService {
                 $contextText = ($contextType === 'post' || $contextType === 'bài viết') ? 'bài viết' : 'bình luận';
                 
                 $targetLink = $payload['link'] ?? '/';
-                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
-                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                // $frontendUrl pre-resolved via TenantConfigService::getFrontendUrl($db, $tenantId)
                 $fullDirectLink = rtrim($frontendUrl, '/') . '/' . ltrim($targetLink, '/');
 
                 return [
@@ -1681,8 +1686,7 @@ class NotificationService {
                 $commentTextPlain = strip_tags($commentText);
                 
                 $targetLink = $payload['link'] ?? '/workspace';
-                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
-                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                // $frontendUrl pre-resolved via TenantConfigService::getFrontendUrl($db, $tenantId)
                 $fullDirectLink = rtrim($frontendUrl, '/') . '/' . ltrim($targetLink, '/');
 
                 return [
@@ -1720,8 +1724,7 @@ class NotificationService {
                 $dueDate = $payload['due_date'] ?? '';
                 $bodyText = $reason ? $reason : "Bạn được giao công việc: $taskTitle" . ($dueDate ? " (Hạn: $dueDate)" : "");
 
-                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
-                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                // $frontendUrl pre-resolved via TenantConfigService::getFrontendUrl($db, $tenantId)
                 $taskLink = $payload['link'] ?? "/workspace";
                 $fullTaskLink = rtrim($frontendUrl, '/') . '/' . ltrim($taskLink, '/');
 
@@ -1766,7 +1769,7 @@ class NotificationService {
                     'tg_msg' => "🔒 <b>[ BẢO MẬT TÀI KHOẢN ]</b>\n\n"
                         . "Thông tin hồ sơ tài khoản của bạn vừa được cập nhật thành công.\n"
                         . "Nếu không phải bạn thực hiện, vui lòng liên hệ Admin ngay lập tức.",
-                    'email_subject' => "[IDEAS] Cập nhật thông tin hồ sơ tài khoản",
+                    'email_subject' => "{$brandPrefix} Cập nhật thông tin hồ sơ tài khoản",
                     'email_title' => "THÔNG BÁO BẢO MẬT TÀI KHOẢN",
                     'email_content' => "Chào bạn,<br/><br/>" .
                                     "Thông tin hồ sơ tài khoản của bạn vừa được thay đổi.<br/>" .
@@ -1791,7 +1794,7 @@ class NotificationService {
                     'tg_msg' => "🏢 <b>[ CẬP NHẬT ROSTER DỰ ÁN ]</b>\n\n"
                         . "Lịch trực ca và phân công nhân sự dự án <b>" . htmlspecialchars($projectName) . "</b> vừa được cập nhật.\n"
                         . "Vui lòng xem chi tiết trên bảng Roster CRM.",
-                    'email_subject' => "[IDEAS] Cập nhật Lịch Roster dự án $projectName",
+                    'email_subject' => "{$brandPrefix} Cập nhật Lịch Roster dự án $projectName",
                     'email_title' => "CẬP NHẬT LỊCH ROSTER DỰ ÁN",
                     'email_content' => "Chào quản trị viên,<br/><br/>" .
                                     "Danh sách phân công Roster dự án <strong>" . htmlspecialchars($projectName) . "</strong> vừa có thay đổi.<br/>" .
@@ -1818,7 +1821,7 @@ class NotificationService {
                         . "  • Dịp lễ: <b>" . htmlspecialchars($holidayName) . "</b>\n"
                         . "  • Hạn đăng ký: <code>$deadline</code>\n\n"
                         . "Vui lòng truy cập mục Lịch Roster để đăng ký ca trực.",
-                    'email_subject' => "[IDEAS] Mở đăng ký trực lễ $holidayName",
+                    'email_subject' => "{$brandPrefix} Mở đăng ký trực lễ $holidayName",
                     'email_title' => "MỞ ĐĂNG KÝ TRỰC LỄ / TẾT",
                     'email_content' => "Chào toàn thể cán bộ nhân viên,<br/><br/>" .
                                     "Hệ thống đã mở cổng đăng ký ca trực dịp <strong>" . htmlspecialchars($holidayName) . "</strong>.<br/>" .
@@ -1846,7 +1849,7 @@ class NotificationService {
                         . "  • Dịp lễ: <b>" . htmlspecialchars($holidayName) . "</b>\n"
                         . ($datesText ? "  • Thời gian: <code>$datesText</code>\n" : "")
                         . "\nChúc toàn thể nhân viên có kỳ nghỉ lễ an toàn và vui vẻ!",
-                    'email_subject' => "[IDEAS] Thông báo lịch nghỉ lễ $holidayName",
+                    'email_subject' => "{$brandPrefix} Thông báo lịch nghỉ lễ $holidayName",
                     'email_title' => "THÔNG BÁO LỊCH NGHỈ LỄ",
                     'email_content' => "Chào toàn thể cán bộ nhân viên,<br/><br/>" .
                                     "Công ty xin thông báo lịch nghỉ lễ <strong>" . htmlspecialchars($holidayName) . "</strong>.<br/>" .
@@ -1905,7 +1908,7 @@ class NotificationService {
                         . "Nhân viên: <b>$userName</b>\n"
                         . "Thời gian: <code>$leavePeriod</code> ($leaveDays ngày/giờ)\n"
                         . "Lý do: <i>\"" . htmlspecialchars($reasonDisplay) . "\"</i>\n\nVui lòng truy cập hệ thống MYERP để phê duyệt.",
-                    'email_subject' => "[IDEAS] {$codePrefix}$headerTitle mới - $userName",
+                    'email_subject' => "{$brandPrefix} {$codePrefix}$headerTitle mới - $userName",
                     'email_title' => $headerTitle . (!empty($procCode) ? " ($procCode)" : ""),
                     'email_content' => "Chào quản lý,<br/><br/>" .
                                     (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "") .
@@ -1957,7 +1960,7 @@ class NotificationService {
                         . (!empty($procCode) ? "  • Mã quy trình: <code>$procCode</code>\n" : "")
                         . "<b>$approverName</b> đã <b>$statusText</b> $actionName (<code>$leavePeriod</code>) của bạn.\n"
                         . (!empty($reason) ? "Ghi chú: <i>\"$reason\"</i>\n" : "") . $balanceStr,
-                    'email_subject' => "[IDEAS] {$codePrefix}$approverName đã $statusText $actionName của bạn",
+                    'email_subject' => "{$brandPrefix} {$codePrefix}$approverName đã $statusText $actionName của bạn",
                     'email_title' => $headerTitle . (!empty($procCode) ? " ($procCode)" : ""),
                     'email_content' => "Chào <strong>$userName</strong>,<br/><br/>" .
                                     (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "") .
@@ -1998,7 +2001,7 @@ class NotificationService {
                         . "Nhân viên: <b>$userName</b>\n"
                         . "Số tiền đề xuất: <b>$amountText</b>\n"
                         . "Lý do: <i>\"$reason\"</i>\n\nVui lòng truy cập trang Quản lý nhân sự để phê duyệt.",
-                    'email_subject' => "[IDEAS] {$codePrefix}Yêu cầu tạm ứng lương mới - $userName",
+                    'email_subject' => "{$brandPrefix} {$codePrefix}Yêu cầu tạm ứng lương mới - $userName",
                     'email_title' => "YÊU CẦU DUYỆT TẠM ỨNG LƯƠNG" . (!empty($procCode) ? " ($procCode)" : ""),
                     'email_content' => "Chào quản trị viên,<br/><br/>" .
                                     (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "") .
@@ -2033,7 +2036,7 @@ class NotificationService {
                         . (!empty($procCode) ? "  • Mã quy trình: <code>$procCode</code>\n" : "")
                         . "<b>$approverName</b> đã <b>$statusText</b> đề xuất tạm ứng <b>$amountText</b> của bạn.\n"
                         . (!empty($reason) ? "Ghi chú: <i>\"$reason\"</i>" : ""),
-                    'email_subject' => "[IDEAS] {$codePrefix}$approverName đã $statusText đề xuất tạm ứng lương của bạn",
+                    'email_subject' => "{$brandPrefix} {$codePrefix}$approverName đã $statusText đề xuất tạm ứng lương của bạn",
                     'email_title' => "KẾT QUẢ DUYỆT TẠM ỨNG LƯƠNG" . (!empty($procCode) ? " ($procCode)" : ""),
                     'email_content' => "Chào <strong>$userName</strong>,<br/><br/>" .
                                     (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "") .
@@ -2056,7 +2059,7 @@ class NotificationService {
                     'tg_msg' => "📊 <b>[ PHÁT HÀNH PHIẾU LƯƠNG THÁNG $monthYear ]</b>\n\n"
                         . "Phiếu lương tháng $monthYear của bạn đã được phát hành.\n"
                         . "Vui lòng truy cập Cổng nhân sự cá nhân (My HR) để ký xác nhận trực tuyến.",
-                    'email_subject' => "[IDEAS] Thông báo phát hành Phiếu lương tháng $monthYear",
+                    'email_subject' => "{$brandPrefix} Thông báo phát hành Phiếu lương tháng $monthYear",
                     'email_title' => "PHÁT HÀNH PHIẾU LƯƠNG",
                     'email_content' => "Chào <strong>$userName</strong>,<br/><br/>" .
                                     "Phiếu lương tháng $monthYear của bạn đã được phát hành trên hệ thống.<br/>" .
@@ -2092,7 +2095,7 @@ class NotificationService {
                         . "Nhân viên: <b>$userName</b>\n"
                         . "Nội dung: Đã ký xác nhận phiếu lương tháng <b>$monthYear</b>.\n"
                         . "Trạng thái: <b>Hoàn tất ký nhận trực tuyến</b>.",
-                    'email_subject' => "[IDEAS] Nhân viên $userName đã ký nhận phiếu lương tháng $monthYear",
+                    'email_subject' => "{$brandPrefix} Nhân viên $userName đã ký nhận phiếu lương tháng $monthYear",
                     'email_title' => "NHÂN VIÊN KÝ NHẬN PHIẾU LƯƠNG",
                     'email_content' => "Chào quản trị viên,<br/><br/>" .
                                     "Nhân viên <strong>$userName</strong> đã hoàn tất ký số trực tuyến xác nhận phiếu lương tháng $monthYear.<br/>" .
@@ -2132,7 +2135,7 @@ class NotificationService {
                         . "Kỳ lương: <b>Tháng $monthYear</b>\n"
                         . (!empty($disputeNote) ? "Nội dung phản hồi: <i>\"" . htmlspecialchars($disputeNote) . "\"</i>\n" : "")
                         . "Vui lòng truy cập trang Quản lý lương để rà soát.",
-                    'email_subject' => "[IDEAS] Nhân viên $empName phản hồi phiếu lương tháng $monthYear",
+                    'email_subject' => "{$brandPrefix} Nhân viên $empName phản hồi phiếu lương tháng $monthYear",
                     'email_title' => "PHẢN HỒI PHIẾU LƯƠNG",
                     'email_content' => "Chào bộ phận Nhân sự / Kế toán,<br/><br/>" .
                                     "Nhân viên <strong>" . htmlspecialchars($empName) . "</strong> vừa gửi phản hồi kiểm tra lại phiếu lương tháng <strong>$monthYear</strong>.<br/>" .
@@ -2148,8 +2151,7 @@ class NotificationService {
                 $deadlineFmt = !empty($deadline) ? date('H:i d/m/Y', strtotime($deadline)) : 'sớm nhất';
                 $noteText = !empty($payload['note']) ? "\n• Ghi chú HR: " . $payload['note'] : "";
                 
-                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
-                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                // $frontendUrl pre-resolved via TenantConfigService::getFrontendUrl($db, $tenantId)
 
                 return [
                     'recipients' => $recipients,
@@ -2172,7 +2174,7 @@ class NotificationService {
                         . "⚠️ <i>Sau thời hạn trên, hệ thống sẽ TỰ ĐỘNG XÁC NHẬN số liệu công để chốt lương.</i>\n"
                         . (!empty($noteText) ? "<i>{$noteText}</i>\n" : "") . "\n"
                         . "👉 <a href=\"" . rtrim($frontendUrl, '/') . "/attendance\"><b>Bấm vào đây để kiểm tra & xác nhận công ngay</b></a>",
-                    'email_subject' => "[IDEAS] Yêu cầu đối soát bảng công: {$titleText} (Hạn chót: {$deadlineFmt})",
+                    'email_subject' => "{$brandPrefix} Yêu cầu đối soát bảng công: {$titleText} (Hạn chót: {$deadlineFmt})",
                     'email_title' => "ĐỐI SOÁT BẢNG CÔNG: {$titleText}",
                     'email_content' => "Chào <strong>{$empGreetingName}</strong>,<br/><br/>"
                         . "Phòng Nhân sự đã gửi bảng tổng hợp dữ liệu chấm công kỳ <strong>{$titleText}</strong> để bạn đối soát.<br/>"
@@ -2198,8 +2200,7 @@ class NotificationService {
                 $empDept = $payload['department'] ?? '';
                 $reason = $payload['reason'] ?? 'Không có lý do chi tiết';
                 
-                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
-                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                // $frontendUrl pre-resolved via TenantConfigService::getFrontendUrl($db, $tenantId)
 
                 return [
                     'recipients' => $recipients,
@@ -2253,7 +2254,7 @@ class NotificationService {
                         . "  • Mã đơn: <code>$poNumber</code>\n"
                         . "  • Cấp phê duyệt: Cấp <b>$currentLevel</b>\n\n"
                         . "Vui lòng truy cập hệ thống CRM để xử lý.",
-                    'email_subject' => "[IDEAS] {$codePrefix}Đơn nhập hàng $poNumber chờ phê duyệt Cấp $currentLevel",
+                    'email_subject' => "{$brandPrefix} {$codePrefix}Đơn nhập hàng $poNumber chờ phê duyệt Cấp $currentLevel",
                     'email_title' => "YÊU CẦU PHÊ DUYỆT ĐƠN NHẬP HÀNG" . (!empty($procCode) ? " ($procCode)" : ""),
                     'email_content' => "Chào quản trị viên/Người phê duyệt,<br/><br/>"
                         . (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "")
@@ -2288,7 +2289,7 @@ class NotificationService {
                         . "<b>$approverName</b> đã <b>$statusText</b> đơn nhập hàng <code>$poNumber</code> của bạn.\n"
                         . (!empty($reason) ? "  • Lý do: <i>\"" . htmlspecialchars($reason) . "\"</i>\n" : "")
                         . "\nVui lòng kiểm tra trên hệ thống MYERP.",
-                    'email_subject' => "[IDEAS] {$codePrefix}$approverName đã $statusText đơn nhập hàng $poNumber",
+                    'email_subject' => "{$brandPrefix} {$codePrefix}$approverName đã $statusText đơn nhập hàng $poNumber",
                     'email_title' => ($isApproved ? "ĐƠN NHẬP HÀNG ĐÃ ĐƯỢC PHÊ DUYỆT" : "ĐƠN NHẬP HÀNG ĐÃ BỊ TỪ CHỐI") . (!empty($procCode) ? " ($procCode)" : ""),
                     'email_content' => "Chào bạn,<br/><br/>"
                         . (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "")
@@ -2317,7 +2318,7 @@ class NotificationService {
                     'link' => $slipId > 0 ? "/cooperation-slips?id=" . $slipId : "/cooperation-slips",
                     'zalo_msg' => "$icon [ PHIẾU HỢP TÁC $procCode ]\n\n  • Mã quy trình: $procCode\n$approverName đã $statusText Phiếu hợp tác $procCode.\n" . (!empty($reason) ? "Lý do: \"$reason\"\n" : ""),
                     'tg_msg' => "$icon <b>[ PHIẾU HỢP TÁC <code>$procCode</code> ]</b>\n\n  • Mã quy trình: <code>$procCode</code>\n<b>$approverName</b> đã <b>$statusText</b> Phiếu hợp tác $procCode.\n" . (!empty($reason) ? "Lý do: <i>\"" . htmlspecialchars($reason) . "\"</i>\n" : ""),
-                    'email_subject' => "[IDEAS] [$procCode] $approverName đã $statusText Phiếu hợp tác $procCode",
+                    'email_subject' => "{$brandPrefix} [$procCode] $approverName đã $statusText Phiếu hợp tác $procCode",
                     'email_title' => "KẾT QUẢ PHÊ DUYỆT PHIẾU HỢP TÁC ($procCode)",
                     'email_content' => "Chào bạn,<br/><br/>Mã quy trình: <strong>$procCode</strong>.<br/><strong>$approverName</strong> đã <strong>$statusText</strong> Phiếu hợp tác $procCode.<br/>" . (!empty($reason) ? "Lý do: <em>\"" . htmlspecialchars($reason) . "\"</em><br/>" : "")
                 ];
@@ -2327,8 +2328,10 @@ class NotificationService {
         }
     }
 
-    private static function getRecipientById(PDO $db, int $userId): array {
+    private static function getRecipientById(PDO $db, int $userId, ?int $tenantId = null): array {
         if ($userId <= 0) return [];
+        $tid = $tenantId ?? (int)($GLOBALS['current_tenant_id'] ?? 0);
+        $tenantFilter = $tid > 0 ? " AND u.tenant_id = ?" : "";
         $stmt = $db->prepare("
             SELECT u.id, u.email, u.role,
                    COALESCE(
@@ -2336,18 +2339,19 @@ class NotificationService {
                      NULLIF(NULLIF(TRIM(c.zalo_chat_id), 'chưa liên kết'), 'Chưa liên kết')
                    ) AS zalo_chat_id,
                    COALESCE(
-                     NULLIF(NULLIF(TRIM(u.telegram_chat_id), 'chưa liên kết'), 'Chưa liên kết'), 
+                     NULLIF(NULLIF(TRIM(u.telegram_chat_id), 'chưa liên kết'), 'chưa liên kết'), 
                      NULLIF(NULLIF(TRIM(c.telegram_chat_id), 'chưa liên kết'), 'Chưa liên kết')
                    ) AS telegram_chat_id,
                    u.full_name,
                    c.id AS is_consultant
             FROM users u
-            LEFT JOIN consultants c ON (u.email = c.email OR u.id = c.id)
-            WHERE u.id = ? OR c.id = ?
+            LEFT JOIN consultants c ON (u.email = c.email OR u.id = c.id) AND c.tenant_id = u.tenant_id
+            WHERE (u.id = ? OR c.id = ?) AND u.deleted_at IS NULL{$tenantFilter}
             ORDER BY (u.id = ?) DESC
             LIMIT 1
         ");
-        $stmt->execute([$userId, $userId, $userId]);
+        $params = $tid > 0 ? [$userId, $userId, $tid, $userId] : [$userId, $userId, $userId];
+        $stmt->execute($params);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ? [$row] : [];
     }
@@ -2380,10 +2384,10 @@ class NotificationService {
         if (self::isTestExecution()) {
             return [];
         }
-        // If teamId is given, target the direct team leader / co-leaders
+        // If teamId is given, target the direct team leader / co-leaders within the same tenant
         if (!empty($teamId)) {
-            $stmtTeam = $db->prepare("SELECT leader_id, co_leader_ids FROM teams WHERE id = ? LIMIT 1");
-            $stmtTeam->execute([$teamId]);
+            $stmtTeam = $db->prepare("SELECT leader_id, co_leader_ids FROM teams WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+            $stmtTeam->execute([$teamId, $tenantId]);
             $teamRow = $stmtTeam->fetch(PDO::FETCH_ASSOC);
             if ($teamRow) {
                 $leaderIds = [];
@@ -2393,7 +2397,7 @@ class NotificationService {
                         if (is_numeric(trim($cid))) $leaderIds[] = (int)trim($cid);
                     }
                 }
-                $leaderIds = array_unique(array_filter($leaderIds));
+                $leaderIds = array_values(array_unique(array_filter($leaderIds)));
                 if (!empty($leaderIds)) {
                     $inPlace = implode(',', array_fill(0, count($leaderIds), '?'));
                     $stmtL = $db->prepare("
@@ -2403,9 +2407,9 @@ class NotificationService {
                                u.full_name, c.id AS is_consultant
                         FROM users u
                         LEFT JOIN consultants c ON (u.email = c.email OR u.id = c.id)
-                        WHERE u.id IN ($inPlace) AND u.is_active = 1
+                        WHERE u.tenant_id = ? AND u.id IN ($inPlace) AND u.is_active = 1 AND u.deleted_at IS NULL
                     ");
-                    $stmtL->execute(array_values($leaderIds));
+                    $stmtL->execute(array_merge([$tenantId], $leaderIds));
                     $teamApprovers = $stmtL->fetchAll(PDO::FETCH_ASSOC) ?: [];
                     if (!empty($teamApprovers)) {
                         return $teamApprovers;
@@ -2414,20 +2418,36 @@ class NotificationService {
             }
         }
 
-        // Fallback: HR & Admin only (do NOT spam all other unrelated team managers or directors)
+        // Fallback: HR & Admin roles (including custom HR/Admin roles in tenant_roles)
+        require_once __DIR__ . '/config/TenantConfigService.php';
+        $hrAdminRoles = ['admin', 'superadmin', 'super_admin', 'hr'];
+        try {
+            foreach (TenantConfigService::getRoles($db, $tenantId) as $rDef) {
+                $gCanon = TenantConfigService::roleGroupToCanonicalRole((string)($rDef['role_group'] ?? 'staff'));
+                $hrmApprove = $rDef['permissions']['hrm']['approve'] ?? 'none';
+                $attApprove = $rDef['permissions']['attendance']['approve'] ?? 'none';
+                if (in_array($gCanon, ['admin', 'hr'], true) || $hrmApprove === 'all' || $attApprove === 'all') {
+                    $hrAdminRoles[] = strtolower((string)$rDef['role_slug']);
+                }
+            }
+        } catch (\Throwable $eR) {}
+        $hrAdminRoles = array_values(array_unique(array_filter($hrAdminRoles)));
+        $phHr = implode(',', array_fill(0, count($hrAdminRoles), '?'));
+
         $sql = "
             SELECT u.id, u.email, u.role,
                    COALESCE(NULLIF(NULLIF(TRIM(u.zalo_chat_id), 'chưa liên kết'), 'Chưa liên kết'), NULLIF(NULLIF(TRIM(c.zalo_chat_id), 'chưa liên kết'), 'Chưa liên kết')) AS zalo_chat_id,
                    COALESCE(NULLIF(NULLIF(TRIM(u.telegram_chat_id), 'chưa liên kết'), 'Chưa liên kết'), NULLIF(NULLIF(TRIM(c.telegram_chat_id), 'chưa liên kết'), 'Chưa liên kết')) AS telegram_chat_id,
                    u.full_name, c.id AS is_consultant
             FROM users u
-            LEFT JOIN consultants c ON (u.email = c.email OR u.id = c.id)
+            LEFT JOIN consultants c ON (u.email = c.email OR u.id = c.id) AND c.tenant_id = u.tenant_id
             WHERE u.tenant_id = ? 
               AND u.is_active = 1
-              AND u.role IN ('admin', 'superadmin', 'super_admin', 'hr')
+              AND u.deleted_at IS NULL
+              AND LOWER(u.role) IN ($phHr)
         ";
         $stmt = $db->prepare($sql);
-        $stmt->execute([$tenantId]);
+        $stmt->execute(array_merge([$tenantId], $hrAdminRoles));
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
@@ -2442,26 +2462,53 @@ class NotificationService {
             return [];
         }
         try {
-            $stmt = $db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'approval_matrix_config' LIMIT 1");
-            $stmt->execute();
-            $rawJson = $stmt->fetchColumn();
-            $matrixConfig = $rawJson ? (json_decode($rawJson, true) ?: []) : [];
+            require_once __DIR__ . '/config/TenantConfigService.php';
+            $rawJson = TenantConfigService::getSetting($db, $tenantId, 'approval_matrix_config', '');
+            $matrixConfig = $rawJson ? (json_decode((string)$rawJson, true) ?: []) : [];
 
             $modCfg = $matrixConfig[$moduleKey] ?? [];
+            if (empty($modCfg)) {
+                foreach (TenantConfigService::getApprovalWorkflows($db, $tenantId) as $wf) {
+                    if ($wf['module_key'] === $moduleKey) {
+                        $lvlCfg = $wf['levels_config'] ?? [];
+                        $modCfg = [
+                            'enable_team_leader' => !empty($lvlCfg['enable_team_leader']),
+                            'designated_roles' => $lvlCfg['level_1']['roles'] ?? ($lvlCfg['level_1']['fallback_roles'] ?? []),
+                            'designated_user_ids' => $lvlCfg['level_1']['user_ids'] ?? [],
+                            'money_tiers' => $lvlCfg['money_tiers'] ?? [],
+                        ];
+                        break;
+                    }
+                }
+            }
 
-            // Level 1: Check Team Leader
-            if (!empty($modCfg['enable_team_leader']) && $submitterUserId > 0) {
-                $stmtUser = $db->prepare("SELECT team_id FROM users WHERE id = ? LIMIT 1");
-                $stmtUser->execute([$submitterUserId]);
+            $allowSelfApprove = false;
+            foreach (TenantConfigService::getApprovalWorkflows($db, $tenantId) as $wfChk) {
+                if ($wfChk['module_key'] === $moduleKey && !empty($wfChk['allow_creator_self_approve'])) {
+                    $allowSelfApprove = true;
+                    break;
+                }
+            }
+            if (isset($modCfg['allow_creator_self_approve'])) {
+                $allowSelfApprove = !empty($modCfg['allow_creator_self_approve']);
+            }
+
+            $hasMoneyTiers = ($moduleKey === 'expense' && !empty($modCfg['money_tiers']) && is_array($modCfg['money_tiers']));
+
+            // Level 1: Check Team Leader (skipped when money_tiers governs routing by amount threshold)
+            if (!$hasMoneyTiers && !empty($modCfg['enable_team_leader']) && $submitterUserId > 0) {
+                $stmtUser = $db->prepare("SELECT team_id FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+                $stmtUser->execute([$submitterUserId, $tenantId]);
                 $teamId = $stmtUser->fetchColumn();
 
                 if ($teamId) {
-                    $stmtTeam = $db->prepare("SELECT leader_id, co_leader_ids FROM teams WHERE id = ? LIMIT 1");
-                    $stmtTeam->execute([$teamId]);
+                    $stmtTeam = $db->prepare("SELECT leader_id, co_leader_ids, default_approver_id FROM teams WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+                    $stmtTeam->execute([$teamId, $tenantId]);
                     $teamRow = $stmtTeam->fetch(PDO::FETCH_ASSOC);
 
                     if ($teamRow) {
                         $leaderIds = [];
+                        if (!empty($teamRow['default_approver_id'])) $leaderIds[] = (int)$teamRow['default_approver_id'];
                         if (!empty($teamRow['leader_id'])) $leaderIds[] = (int)$teamRow['leader_id'];
                         if (!empty($teamRow['co_leader_ids'])) {
                             $coList = explode(',', $teamRow['co_leader_ids']);
@@ -2469,12 +2516,12 @@ class NotificationService {
                                 if (is_numeric(trim($cid))) $leaderIds[] = (int)trim($cid);
                             }
                         }
-                        $leaderIds = array_values(array_unique(array_filter($leaderIds)));
+                        $leaderIds = array_values(array_unique(array_filter($leaderIds, fn($id) => $id > 0 && ($allowSelfApprove || $id !== $submitterUserId))));
                         
                         if (!empty($leaderIds)) {
                             $inPlace = implode(',', array_fill(0, count($leaderIds), '?'));
-                            $stmtL = $db->prepare("SELECT id, email, zalo_chat_id, telegram_chat_id, full_name FROM users WHERE id IN ($inPlace) AND is_active = 1");
-                            $stmtL->execute($leaderIds);
+                            $stmtL = $db->prepare("SELECT id, email, zalo_chat_id, telegram_chat_id, full_name FROM users WHERE tenant_id = ? AND id IN ($inPlace) AND is_active = 1 AND deleted_at IS NULL");
+                            $stmtL->execute(array_merge([$tenantId], $leaderIds));
                             $teamApprovers = $stmtL->fetchAll(PDO::FETCH_ASSOC) ?: [];
                             if (!empty($teamApprovers)) {
                                 return $teamApprovers;
@@ -2489,31 +2536,33 @@ class NotificationService {
             $userIds = $modCfg['designated_user_ids'] ?? [];
 
             // Money Tiers for Expenses (Dynamic Non-hardcoded Thresholds)
-            if ($moduleKey === 'expense' && !empty($modCfg['money_tiers']) && is_array($modCfg['money_tiers'])) {
+            if ($hasMoneyTiers) {
                 foreach ($modCfg['money_tiers'] as $tier) {
                     $maxAmt = $tier['max_amount'] ?? null;
                     if ($maxAmt === null || (float)$maxAmt <= 0 || $amount <= (float)$maxAmt) {
                         $appType = $tier['approver_type'] ?? '';
                         if ($appType === 'team_leader' && $submitterUserId > 0) {
-                            $stmtUser = $db->prepare("SELECT team_id FROM users WHERE id = ? LIMIT 1");
-                            $stmtUser->execute([$submitterUserId]);
+                            $stmtUser = $db->prepare("SELECT team_id FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+                            $stmtUser->execute([$submitterUserId, $tenantId]);
                             $tId = $stmtUser->fetchColumn();
                             if ($tId) {
-                                $stmtTeam = $db->prepare("SELECT leader_id, co_leader_ids FROM teams WHERE id = ? LIMIT 1");
-                                $stmtTeam->execute([$tId]);
+                                $stmtTeam = $db->prepare("SELECT leader_id, co_leader_ids, default_approver_id FROM teams WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+                                $stmtTeam->execute([$tId, $tenantId]);
                                 $tRow = $stmtTeam->fetch(PDO::FETCH_ASSOC);
                                 if ($tRow) {
                                     $lIds = [];
+                                    if (!empty($tRow['default_approver_id'])) $lIds[] = (int)$tRow['default_approver_id'];
                                     if (!empty($tRow['leader_id'])) $lIds[] = (int)$tRow['leader_id'];
                                     if (!empty($tRow['co_leader_ids'])) {
                                         foreach (explode(',', $tRow['co_leader_ids']) as $cid) {
                                             if (is_numeric(trim($cid))) $lIds[] = (int)trim($cid);
                                         }
                                     }
+                                    $lIds = array_values(array_unique(array_filter($lIds, fn($id) => $id > 0 && ($allowSelfApprove || $id !== $submitterUserId))));
                                     if (!empty($lIds)) {
                                         $inP = implode(',', array_fill(0, count($lIds), '?'));
-                                        $stmtL = $db->prepare("SELECT id, email, zalo_chat_id, telegram_chat_id, full_name FROM users WHERE id IN ($inP) AND is_active = 1");
-                                        $stmtL->execute(array_values($lIds));
+                                        $stmtL = $db->prepare("SELECT id, email, zalo_chat_id, telegram_chat_id, full_name FROM users WHERE tenant_id = ? AND id IN ($inP) AND is_active = 1 AND deleted_at IS NULL");
+                                        $stmtL->execute(array_merge([$tenantId], $lIds));
                                         $tApprovers = $stmtL->fetchAll(PDO::FETCH_ASSOC) ?: [];
                                         if (!empty($tApprovers)) return $tApprovers;
                                     }
@@ -2527,36 +2576,66 @@ class NotificationService {
                 }
             }
 
+            if (!empty($roles)) {
+                $expandedRoles = array_map('strtolower', $roles);
+                foreach (TenantConfigService::getRoles($db, $tenantId) as $rDef) {
+                    $gCanon = TenantConfigService::roleGroupToCanonicalRole((string)($rDef['role_group'] ?? 'staff'));
+                    if (in_array($gCanon, $expandedRoles, true)) {
+                        $expandedRoles[] = strtolower((string)$rDef['role_slug']);
+                    }
+                }
+                $roles = array_values(array_unique(array_filter($expandedRoles)));
+            }
+
             if (!empty($roles) || !empty($userIds)) {
                 $whereClauses = [];
                 $params = [$tenantId];
 
-                if (!empty($roles)) {
-                    $inRoles = implode(',', array_fill(0, count($roles), '?'));
-                    $whereClauses[] = "role IN ($inRoles)";
-                    foreach ($roles as $r) $params[] = $r;
-                }
-                if (!empty($userIds)) {
-                    $inIds = implode(',', array_fill(0, count($userIds), '?'));
-                    $whereClauses[] = "id IN ($inIds)";
-                    foreach ($userIds as $uid) $params[] = (int)$uid;
+                if ($submitterUserId > 0 && !$allowSelfApprove) {
+                    $selfGuardSql = " AND id != ?";
+                    $params[] = (int)$submitterUserId;
+                } else {
+                    $selfGuardSql = "";
                 }
 
-                $whereStr = implode(' OR ', $whereClauses);
-                $sql = "SELECT id, email, zalo_chat_id, telegram_chat_id, full_name FROM users WHERE tenant_id = ? AND is_active = 1 AND ($whereStr)";
-                $stmtD = $db->prepare($sql);
-                $stmtD->execute($params);
-                $desigApprovers = $stmtD->fetchAll(PDO::FETCH_ASSOC) ?: [];
-                if (!empty($desigApprovers)) {
-                    return $desigApprovers;
+                if (!empty($roles)) {
+                    $inRoles = implode(',', array_fill(0, count($roles), '?'));
+                    $whereClauses[] = "LOWER(role) IN ($inRoles)";
+                    foreach ($roles as $r) $params[] = strtolower((string)$r);
+                }
+                if (!empty($userIds)) {
+                    $cleanUids = array_values(array_unique(array_filter(array_map('intval', $userIds), fn($id) => $id > 0)));
+                    if (!empty($cleanUids)) {
+                        $inIds = implode(',', array_fill(0, count($cleanUids), '?'));
+                        $whereClauses[] = "id IN ($inIds)";
+                        foreach ($cleanUids as $uid) $params[] = $uid;
+                    }
+                }
+
+                if (!empty($whereClauses)) {
+                    $whereStr = implode(' OR ', $whereClauses);
+                    $sql = "SELECT id, email, zalo_chat_id, telegram_chat_id, full_name FROM users WHERE tenant_id = ? AND is_active = 1 AND deleted_at IS NULL{$selfGuardSql} AND ($whereStr)";
+                    $stmtD = $db->prepare($sql);
+                    $stmtD->execute($params);
+                    $desigApprovers = $stmtD->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                    if (!empty($desigApprovers)) {
+                        return $desigApprovers;
+                    }
                 }
             }
         } catch (\Throwable $e) {
             error_log("Error resolving approvers: " . $e->getMessage());
         }
 
-        // Level 3: Fallback System Admins
-        return self::getAdminsAndManagers($db, $tenantId);
+        // Level 3: Fallback System Admins (excluding submitter if self-approval forbidden)
+        $fallbackAdmins = self::getAdminsAndManagers($db, $tenantId);
+        if ($submitterUserId > 0 && empty($allowSelfApprove)) {
+            $filteredFb = array_values(array_filter($fallbackAdmins, fn($a) => (int)($a['id'] ?? 0) !== (int)$submitterUserId));
+            if (!empty($filteredFb)) {
+                return $filteredFb;
+            }
+        }
+        return $fallbackAdmins;
     }
 
     /**
@@ -2564,16 +2643,51 @@ class NotificationService {
      */
     public static function canUserApproveModule(PDO $db, int $tenantId, string $moduleKey, int $currentUserId, ?int $submitterUserId = null, float $amount = 0.0): bool {
         try {
-            // Admin and Super Admin always have approval authority
-            $stmtRole = $db->prepare("SELECT role FROM users WHERE id = ? LIMIT 1");
-            $stmtRole->execute([$currentUserId]);
-            $userRole = strtolower($stmtRole->fetchColumn() ?: '');
-            if (in_array($userRole, ['admin', 'superadmin', 'super_admin'])) {
+            $stmtRole = $db->prepare("SELECT role, permissions_json FROM users WHERE id = ? AND tenant_id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1");
+            $stmtRole->execute([$currentUserId, $tenantId]);
+            $uAuthRow = $stmtRole->fetch(PDO::FETCH_ASSOC);
+            $userRole = strtolower(trim((string)($uAuthRow['role'] ?? '')));
+            if ($userRole === '') {
+                return false;
+            }
+            require_once __DIR__ . '/config/TenantConfigService.php';
+            if (in_array($userRole, ['admin', 'superadmin', 'super_admin'], true) || TenantConfigService::doesUserSatisfyRoles($db, ['role' => $userRole, 'tenant_id' => $tenantId], ['admin'])) {
                 return true;
             }
 
-            // Exclude non-manager / standard sale staff
-            if (in_array($userRole, ['sale', 'employee', 'staff'])) {
+            $isExecRole = ($userRole === 'director') || TenantConfigService::doesUserSatisfyRoles($db, ['role' => $userRole, 'tenant_id' => $tenantId], ['director']);
+
+            // Anti-Self-Approval guard unless allowed by role or workflow
+            if ($submitterUserId > 0 && $submitterUserId === $currentUserId) {
+                if (!TenantConfigService::canUserSelfApprove($db, ['user_id' => $currentUserId, 'role' => $userRole, 'tenant_id' => $tenantId], $moduleKey)) {
+                    return false;
+                }
+            }
+
+            $modulePermMap = [
+                'expense' => 'expenses',
+                'deposit' => 'deposits',
+                'purchase_order' => 'purchase_orders',
+                'sales_order' => 'sales_orders',
+                'cooperation' => 'cooperations',
+                'leave' => 'hrm',
+                'advance' => 'hrm',
+                'overtime' => 'hrm',
+                'commission' => 'finance',
+            ];
+            $permModule = $modulePermMap[$moduleKey] ?? $moduleKey;
+            $approveScope = TenantConfigService::resolvePermissionScope(
+                $db,
+                ['user_id' => $currentUserId, 'role' => $userRole, 'tenant_id' => $tenantId, 'permissions_json' => $uAuthRow['permissions_json'] ?? null],
+                $permModule,
+                'approve'
+            );
+
+            if ($isExecRole && $approveScope === 'all') {
+                return true;
+            }
+
+            if (in_array($userRole, ['sale', 'sales', 'employee', 'staff', 'viewer'], true) && !in_array($approveScope, ['all', 'team'], true)) {
                 return false;
             }
 
@@ -2585,29 +2699,31 @@ class NotificationService {
                 }
             }
 
-            // Additional check: If current user is Team Leader of submitter, grant permission when enable_team_leader is active
+            if ($approveScope === 'all' && ($submitterUserId === null || $submitterUserId <= 0 || $submitterUserId !== $currentUserId)) {
+                return true;
+            }
+
             if ($submitterUserId > 0 && $submitterUserId !== $currentUserId) {
-                $stmtJson = $db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'approval_matrix_config' LIMIT 1");
-                $stmtJson->execute();
-                $rawJson = $stmtJson->fetchColumn();
-                $matrixConfig = $rawJson ? (json_decode($rawJson, true) ?: []) : [];
+                require_once __DIR__ . '/config/TenantConfigService.php';
+                $rawJson = TenantConfigService::getSetting($db, $tenantId, 'approval_matrix_config', '');
+                $matrixConfig = $rawJson ? (json_decode((string)$rawJson, true) ?: []) : [];
                 $modCfg = $matrixConfig[$moduleKey] ?? [];
 
                 if (!empty($modCfg['enable_team_leader'])) {
-                    $stmtUser = $db->prepare("SELECT team_id FROM users WHERE id = ? LIMIT 1");
-                    $stmtUser->execute([$submitterUserId]);
+                    $stmtUser = $db->prepare("SELECT team_id FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+                    $stmtUser->execute([$submitterUserId, $tenantId]);
                     $subTeamId = $stmtUser->fetchColumn();
 
                     if ($subTeamId) {
-                        $stmtTeam = $db->prepare("SELECT leader_id, co_leader_ids FROM teams WHERE id = ? LIMIT 1");
-                        $stmtTeam->execute([$subTeamId]);
+                        $stmtTeam = $db->prepare("SELECT leader_id, co_leader_ids FROM teams WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+                        $stmtTeam->execute([$subTeamId, $tenantId]);
                         $tRow = $stmtTeam->fetch(PDO::FETCH_ASSOC);
 
                         if ($tRow) {
                             if ((int)($tRow['leader_id'] ?? 0) === $currentUserId) return true;
                             if (!empty($tRow['co_leader_ids'])) {
                                 $coList = array_map('trim', explode(',', $tRow['co_leader_ids']));
-                                if (in_array((string)$currentUserId, $coList)) return true;
+                                if (in_array((string)$currentUserId, $coList, true)) return true;
                             }
                         }
                     }

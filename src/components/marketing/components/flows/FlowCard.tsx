@@ -9,6 +9,7 @@ interface FlowCardProps {
     flow: Flow;
     linkedCampaign?: Campaign;
     linkedForm?: FormDefinition;
+    linkedSurvey?: any;
     linkedPurchaseEvent?: PurchaseEvent;
     linkedCustomEvent?: CustomEvent;
     onClick: () => void;
@@ -17,6 +18,7 @@ interface FlowCardProps {
     onRestore?: () => void;
     onOpenCampaign?: (campaign: Campaign) => void;
     onOpenForm?: (form: FormDefinition) => void;
+    onOpenSurvey?: (survey: any) => void;
     onOpenPurchase?: (event: PurchaseEvent) => void;
 
     onOpenCustomEvent?: (event: CustomEvent) => void;
@@ -33,10 +35,10 @@ interface FlowCardProps {
 
 
 const FlowCard = React.memo<FlowCardProps>((
-    { flow, linkedCampaign, linkedForm, linkedPurchaseEvent, linkedCustomEvent, linkedSegment, linkedList, linkedTag, isList,
+    { flow, linkedCampaign, linkedForm, linkedSurvey, linkedPurchaseEvent, linkedCustomEvent, linkedSegment, linkedList, linkedTag, isList,
     selected, onToggleSelect,
     onClick, onDelete, onDuplicate, onRestore,
-    onOpenCampaign, onOpenForm, onOpenList, onOpenSegment, onOpenTag, onOpenPurchase, onOpenCustomEvent }
+    onOpenCampaign, onOpenForm, onOpenSurvey, onOpenList, onOpenSegment, onOpenTag, onOpenPurchase, onOpenCustomEvent }
 ) => {
     const navigate = useNavigate();
     const isArchived = flow.status === 'archived';
@@ -180,14 +182,27 @@ const FlowCard = React.memo<FlowCardProps>((
             flowNameLower.includes('survey') ||
             flowNameLower.includes('feedback')
         ) {
+            const isDeleted = !linkedSurvey && !!triggerConfig.targetId;
+            const surveyName = linkedSurvey ? (linkedSurvey.name || linkedSurvey.title) : undefined;
+            const targetIdShort = (triggerConfig.targetId || '').substring(0, 6);
+            const label = surveyName
+                ? `Khảo sát: ${surveyName}`
+                : (isDeleted ? `Khảo sát đã xóa [${targetIdShort}]` : (triggerConfig.targetId ? `Khảo sát: ${triggerConfig.targetId}` : 'Phản hồi Khảo sát'));
+
             return {
-                icon: ClipboardList,
+                icon: isDeleted ? AlertCircle : ClipboardList,
                 appIconKey: 'flow_survey',
-                accent: 'amber' as any,
-                gradientMain: 'from-amber-400 to-yellow-500',
-                iconBg: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/40',
-                chipBg: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/40',
-                label: triggerConfig.targetId ? `Khảo sát: ${triggerConfig.targetId}` : 'Phản hồi Khảo sát'
+                accent: (isDeleted ? 'rose' : 'amber') as any,
+                gradientMain: isDeleted ? 'from-rose-500 to-red-600' : 'from-amber-400 to-yellow-500',
+                iconBg: isDeleted
+                    ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/40'
+                    : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/40',
+                chipBg: isDeleted
+                    ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800/40'
+                    : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/40',
+                label,
+                isLink: !!linkedSurvey && !!onOpenSurvey,
+                onLinkClick: () => linkedSurvey && onOpenSurvey?.(linkedSurvey)
             };
         }
 
@@ -385,7 +400,7 @@ const FlowCard = React.memo<FlowCardProps>((
             chipBg: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800/40',
             label: 'Phân khúc động (Smart)'
         };
-    }, [isArchived, rawTriggerType, triggerConfig, flow.name, flowNameLower, linkedCampaign, linkedForm, linkedPurchaseEvent, linkedCustomEvent, linkedSegment, linkedList, linkedTag, onOpenCampaign, onOpenForm, onOpenList, onOpenSegment, onOpenTag, onOpenPurchase, onOpenCustomEvent, navigate]);
+    }, [isArchived, rawTriggerType, triggerConfig, flow.name, flowNameLower, linkedCampaign, linkedForm, linkedSurvey, linkedPurchaseEvent, linkedCustomEvent, linkedSegment, linkedList, linkedTag, onOpenCampaign, onOpenForm, onOpenSurvey, onOpenList, onOpenSegment, onOpenTag, onOpenPurchase, onOpenCustomEvent, navigate]);
 
     const Icon = theme.icon;
     const creatorName = (flow.config as any)?.creator?.name || 'Hệ thống';

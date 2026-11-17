@@ -21,6 +21,7 @@ import { MentionInput } from '../components/ui/MentionInput';
 import { PeriodFilter, getDateRange } from '../components/ui/PeriodFilter';
 import type { Period, DateRange } from '../components/ui/PeriodFilter';
 import { Pagination } from '../components/ui/Pagination';
+import { getTenantBrandPrefix } from '../contexts/TenantConfigContext';
 import {
   XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer, ComposedChart,
@@ -1978,16 +1979,17 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                    <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{k.label}</span>
+                    <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.73rem', color: '#64748b' }}>{k.label}</span>
                     <div className="stat-icon" style={{
-                      background: k.bg,
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '50%',
+                      background: i < 2 ? 'rgba(189, 29, 45, 0.08)' : 'rgba(15, 23, 42, 0.06)',
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: k.color,
+                      color: i < 2 ? '#BD1D2D' : '#334155',
+                      flexShrink: 0
                     }}>
                       <Icon size={16} />
                     </div>
@@ -1997,7 +1999,13 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                     {loading ? (
                       <div className="skeleton" style={{ height: 26, width: '75%', borderRadius: 6, margin: '4px 0' }} />
                     ) : (
-                      <div className="stat-value" style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-text)', margin: '4px 0' }}>
+                      <div className="stat-value" style={{
+                        fontSize: '1.85rem',
+                        fontWeight: 800,
+                        fontVariantNumeric: 'tabular-nums',
+                        color: i === 1 ? '#BD1D2D' : '#0f172a',
+                        margin: '4px 0'
+                      }}>
                         {k.value}
                       </div>
                     )}
@@ -3103,14 +3111,11 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: 'rgba(59, 130, 246, 0.02)', 
-              borderLeft: '4px solid #3b82f6', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
+              background: '#ffffff', 
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px'
             }}>
-              <CreditCard size={20} color="#3b82f6" style={{ flexShrink: 0, marginTop: 2 }} />
+              <CreditCard size={20} color="#334155" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
                 <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                   {t("1. Đợt thanh toán & Phê duyệt UNC")}
@@ -3126,14 +3131,11 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: 'rgba(239, 68, 68, 0.02)', 
-              borderLeft: '4px solid #ef4444', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
+              background: '#ffffff', 
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px'
             }}>
-              <Ban size={20} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
+              <Ban size={20} color="#BD1D2D" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
                 <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                   {t("2. Quy tắc Bể cọc (Deposit Cancellation)")}
@@ -3151,14 +3153,11 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: 'rgba(245, 158, 11, 0.02)', 
-              borderLeft: '4px solid #f59e0b', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
+              background: '#ffffff', 
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px'
             }}>
-              <Calendar size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 2 }} />
+              <Calendar size={20} color="#334155" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
                 <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                   {t("3. Cơ chế Đổi Sản phẩm / Chiến dịch (Product Switching)")}
@@ -3197,8 +3196,8 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
           const recipientName = sendToCaretaker ? (selectedDepForManage.creator_name || 'Sale chăm sóc') : custName;
           const recipientEmail = sendToCaretaker ? 'Email của Sale chăm sóc' : customerEmail;
           const subject = sendToCaretaker 
-            ? (isTargetSale ? `[IDEAS] Nhắc lịch thanh toán của học viên: ${custName}` : `[IDEAS] [Fallback] Nhắc nhở chăm sóc khách hàng thanh toán: ${custName}`) 
-            : `[IDEAS] Nhắc nhở thanh toán đợt cọc: ${previewReminderMilestone.milestone_name}`;
+            ? (isTargetSale ? `${getTenantBrandPrefix()} Nhắc lịch thanh toán của học viên: ${custName}` : `${getTenantBrandPrefix()} [Fallback] Nhắc nhở chăm sóc khách hàng thanh toán: ${custName}`) 
+            : `${getTenantBrandPrefix()} Nhắc nhở thanh toán đợt cọc: ${previewReminderMilestone.milestone_name}`;
           
           const payDateStr = previewReminderMilestone.expected_pay_date 
             ? new Date(previewReminderMilestone.expected_pay_date).toLocaleDateString('vi-VN') 

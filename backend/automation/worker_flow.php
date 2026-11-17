@@ -72,6 +72,18 @@ if (!function_exists('runWorkerFlow')) {
         $logs[] = "--- FLOW WORKER START: $now ---";
 
         // --- QUEUE FETCHING ---
+        // Target workspace isolation for test suites and multi-tenant crons
+        $targetWorkspaceId = null;
+        if (isset($_GET['workspace_id'])) {
+            $targetWorkspaceId = (int)$_GET['workspace_id'];
+        } elseif (php_sapi_name() === 'cli' && isset($GLOBALS['argv'])) {
+            foreach ($GLOBALS['argv'] as $arg) {
+                if (preg_match('/^--workspace_id=(.+)$/', $arg, $m)) {
+                    $targetWorkspaceId = (int)$m[1];
+                }
+            }
+        }
+
         $BATCH_SIZE = 500;
         $items = [];
 
@@ -92,6 +104,7 @@ if (!function_exists('runWorkerFlow')) {
                                  JOIN subscribers s ON q.subscriber_id = s.id 
                                  WHERE (q.id = ? OR (q.id > 0 AND ? = '0' AND q.subscriber_id = ? AND q.flow_id = ?))
                                  AND q.status IN ('waiting', 'processing') AND f.status = 'active'
+                                 AND (q.scheduled_at <= NOW() OR q.step_type = 'condition' OR q.status = 'processing')
                                  AND f.workspace_id = s.workspace_id
                                  AND q.workspace_id = s.workspace_id
                                  LIMIT 1 FOR UPDATE");
@@ -114,6 +127,7 @@ if (!function_exists('runWorkerFlow')) {
                          JOIN subscribers s ON q.subscriber_id = s.id 
                          WHERE (q.id = ? OR (q.id > 0 AND ? = '0' AND q.subscriber_id = ? AND q.flow_id = ?))
                          AND q.status IN ('waiting', 'processing') AND f.status = 'active'
+                         AND (q.scheduled_at <= NOW() OR q.step_type = 'condition' OR q.status = 'processing')
                          AND f.workspace_id = s.workspace_id
                          AND q.workspace_id = s.workspace_id
                          LIMIT 1 FOR UPDATE")
@@ -142,7 +156,7 @@ if (!function_exists('runWorkerFlow')) {
         if (!$isPriorityRun) {
             try {
                 $pdo->beginTransaction();
-                $sqlRegular = "SELECT q.id as queue_id, q.subscriber_id, q.flow_id, q.step_id, q.status, q.scheduled_at, q.created_at as queue_created_at, q.last_step_at, 
+                $sqlRegular = "SELECT q.id as queue_id, q.subscriber_id, q.flow_id, q.step_id, q.status, q.scheduled_at, q.updated_at, q.created_at as queue_created_at, q.last_step_at, 
                         f.steps as flow_steps, f.config as flow_config, f.name as flow_name, 
                         s.email as sub_email, s.first_name, s.last_name, s.company_name, s.phone_number, s.job_title,
                         s.status as sub_status, s.tags as sub_tags, s.id as sub_id, s.date_of_birth, s.anniversary_date, s.joined_at,
@@ -157,7 +171,13 @@ if (!function_exists('runWorkerFlow')) {
                         AND f.status = 'active'
                         AND f.workspace_id = s.workspace_id
                         AND q.workspace_id = s.workspace_id
-                        ORDER BY q.scheduled_at ASC, q.updated_at ASC, q.id ASC LIMIT {$BATCH_SIZE}";
+                        ";
+                $regularParams = [$now];
+                if ($targetWorkspaceId !== null && $targetWorkspaceId > 0) {
+                    $sqlRegular .= " AND q.workspace_id = ? ";
+                    $regularParams[] = $targetWorkspaceId;
+                }
+                $sqlRegular .= " ORDER BY q.scheduled_at ASC, q.updated_at ASC, q.id ASC LIMIT {$BATCH_SIZE}";
 
                 if (isDatabaseSkipLockedSupported($pdo)) {
                     $sqlRegular .= " FOR UPDATE SKIP LOCKED";
@@ -166,7 +186,7 @@ if (!function_exists('runWorkerFlow')) {
                 }
 
                 $stmtRegular = $pdo->prepare($sqlRegular);
-                $stmtRegular->execute([$now]);
+                $stmtRegular->execute($regularParams);
                 $regularItems = $stmtRegular->fetchAll();
 
                 if (!empty($regularItems)) {
@@ -202,7 +222,7 @@ if (!function_exists('runWorkerFlow')) {
 
         // [OPTIMIZATION] Batch Fetch Frequency Counts for the entire batch per channel
         if (!empty($items)) {
-            $subIds = array_unique(array_column($items, 'subscriber_id'));
+            $subIds = array_values(array_unique(array_filter(array_column($items, 'subscriber_id'))));
             if (!empty($subIds)) {
                 $todayStart = date('Y-m-d 00:00:00');
                 $placeholders = implode(',', array_fill(0, count($subIds), '?'));

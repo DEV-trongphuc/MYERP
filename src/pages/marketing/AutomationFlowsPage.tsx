@@ -194,6 +194,7 @@ const Flows: React.FC = () => {
     const [flows, setFlows] = useState<Flow[]>([]);
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
     const [forms, setForms] = useState<FormDefinition[]>([]);
+    const [surveys, setSurveys] = useState<any[]>([]);
     const [purchaseEvents, setPurchaseEvents] = useState<PurchaseEvent[]>([]);
     const [customEvents, setCustomEvents] = useState<CustomEvent[]>([]);
 
@@ -395,14 +396,15 @@ const Flows: React.FC = () => {
             setLoading(false);
 
             // 2) Secondary lookups (trigger labels on cards, modal pickers) — non-blocking
-            const [campaignsRes, formsRes, purchRes, customRes, listsRes, segRes, tagsRes] = await Promise.all([
+            const [campaignsRes, formsRes, purchRes, customRes, listsRes, segRes, tagsRes, surveysRes] = await Promise.all([
                 api.get<Campaign[]>('campaigns', {}, { signal }),
                 api.get<FormDefinition[]>('forms', {}, { signal }),
                 api.get<PurchaseEvent[]>('purchase_events', {}, { signal }),
                 api.get<CustomEvent[]>('custom_events', {}, { signal }),
                 api.get<any[]>('lists', {}, { signal }),
                 api.get<Segment[]>('segments', {}, { signal }),
-                api.get<any[]>('tags', {}, { signal })
+                api.get<any[]>('tags', {}, { signal }),
+                api.get<any[]>('surveys', {}, { signal })
             ]);
             if (signal.aborted) return;
 
@@ -413,6 +415,10 @@ const Flows: React.FC = () => {
             if (formsRes.success) {
                 const data = formsRes.data;
                 setForms(Array.isArray(data) ? data : (data as any)?.data || []);
+            }
+            if (surveysRes.success) {
+                const data = surveysRes.data;
+                setSurveys(Array.isArray(data) ? data : (data as any)?.data || []);
             }
             if (purchRes.success) {
                 const data = purchRes.data;
@@ -918,7 +924,7 @@ const Flows: React.FC = () => {
         }
 
         // Bước 1: Chạy sync check ngay lập tức để hiện kết quả cơ bản
-        const syncErrors = validateFlow(selectedFlow, flows, false, hasUnsavedChanges);
+        const syncErrors = validateFlow(selectedFlow, flows, false, hasUnsavedChanges, { forms, surveys });
         setValidationErrors(syncErrors);
 
         // Bước 2: Chạy async check để kiểm tra template email đã xóa và ZNS template không active
@@ -935,7 +941,7 @@ const Flows: React.FC = () => {
         });
 
         return () => { cancelled = true; };
-    }, [selectedFlow, flows]);
+    }, [selectedFlow, flows, forms, surveys, hasUnsavedChanges]);
 
     // Fetch Group Members when viewingGroup changes or its filters change
     useEffect(() => {
@@ -1172,6 +1178,7 @@ const Flows: React.FC = () => {
     // Lookup Maps for Performance
     const campaignsMap = useMemo(() => new Map((Array.isArray(campaigns) ? campaigns : []).map(c => [c.id, c])), [campaigns]);
     const formsMap = useMemo(() => new Map((Array.isArray(forms) ? forms : []).map(f => [f.id, f])), [forms]);
+    const surveysMap = useMemo(() => new Map((Array.isArray(surveys) ? surveys : []).map(s => [s.id, s])), [surveys]);
     const purchaseEventsMap = useMemo(() => new Map((Array.isArray(purchaseEvents) ? purchaseEvents : []).map(p => [p.id, p])), [purchaseEvents]);
     const customEventsMap = useMemo(() => new Map((Array.isArray(customEvents) ? customEvents : []).map(c => [c.id, c])), [customEvents]);
     const segmentsMap = useMemo(() => new Map((Array.isArray(allSegments) ? allSegments : []).map(s => [s.id, s])), [allSegments]);
@@ -1712,7 +1719,7 @@ const Flows: React.FC = () => {
     const handleManualSave = () => {
         if (!selectedFlow) return;
         const isActive = selectedFlow.status === 'active';
-        const errors = validateFlow(selectedFlow, flows, isActive);
+        const errors = validateFlow(selectedFlow, flows, isActive, undefined, { forms, surveys });
 
         const criticalErrors = errors.filter(e => e.type === 'critical');
         if (criticalErrors.length > 0) {
@@ -1926,6 +1933,7 @@ const Flows: React.FC = () => {
                 onToggleSelect={() => handleToggleSelectFlow(flow.id)}
                 linkedCampaign={type === 'campaign' ? campaignsMap.get(targetId!) : undefined}
                 linkedForm={type === 'form' ? formsMap.get(targetId!) : undefined}
+                linkedSurvey={type === 'survey' ? surveysMap.get(targetId!) : undefined}
                 linkedPurchaseEvent={type === 'purchase' ? purchaseEventsMap.get(targetId!) : undefined}
                 linkedCustomEvent={type === 'custom_event' ? customEventsMap.get(targetId!) : undefined}
                 linkedSegment={(type === 'segment' && !isListTarget) ? segmentsMap.get(targetId!) : undefined}
@@ -1937,6 +1945,7 @@ const Flows: React.FC = () => {
                 onDuplicate={handleDuplicateFlow}
                 onOpenCampaign={handleOpenCampaign}
                 onOpenForm={handleOpenForm}
+                onOpenSurvey={(s) => navigate(`/marketing/surveys/${s.id}/edit`)}
                 onOpenPurchase={handleOpenPurchase}
                 onOpenCustomEvent={handleOpenCustomEvent}
                 onOpenList={handleOpenList}
@@ -2260,7 +2269,7 @@ const Flows: React.FC = () => {
                                 const isNowActive = selectedFlow.status === 'active';
                                 const newStatus = isNowActive ? 'paused' : 'active';
                                 if (newStatus === 'active') {
-                                    const errors = validateFlow(selectedFlow, flows, true);
+                                    const errors = validateFlow(selectedFlow, flows, true, undefined, { forms, surveys });
                                     if ((errors || []).some(e => e.type === 'critical')) {
                                         setValidationErrors(errors);
                                         setConfirmModal({
@@ -2351,6 +2360,19 @@ const Flows: React.FC = () => {
                                 await handleUpdateFlow({ ...selectedFlow, status: newStatus }, false, isNowActive ? "Tạm dừng Flow" : "Kích hoạt Flow");
                             }}
                             onActivate={() => {
+                                const errors = validateFlow(selectedFlow, flows, true, undefined, { forms, surveys });
+                                if ((errors || []).some(e => e.type === 'critical')) {
+                                    setValidationErrors(errors);
+                                    setConfirmModal({
+                                        isOpen: true,
+                                        title: 'Không thể kích hoạt',
+                                        message: 'Flow đang có lỗi nghiêm trọng. Vui lòng sửa hết lỗi trước khi kích hoạt.',
+                                        variant: 'danger',
+                                        confirmLabel: 'Đã hiểu',
+                                        onConfirm: () => setConfirmModal(prev => ({ ...prev, isOpen: false }))
+                                    });
+                                    return;
+                                }
                                 setActivateContext({ flow: selectedFlow });
                                 setIsActivateModalOpen(true);
                             }}
@@ -2492,6 +2514,7 @@ const Flows: React.FC = () => {
                                             flow={selectedFlow}
                                             allFlows={flows}
                                             allForms={forms}
+                                            allSurveys={surveys}
                                             isViewMode={isViewMode}
                                             onEditStep={setEditingStep}
                                             onAddStep={onAddStepViaBuilder}

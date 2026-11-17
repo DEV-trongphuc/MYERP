@@ -30,7 +30,7 @@ if (!function_exists('ensureIdeasAiConversationForCron')) {
             try {
                 $pdo->exec("
                     INSERT INTO users (id, tenant_id, username, email, full_name, role, job_title, avatar_url, is_active, status)
-                    VALUES (9000001, 1, 'si_ideas', 'ai@ideas.edu.vn', 'SI IDEAS', 'bot', 'Smart Multi Agent', '/stickers/ideas/ideas_3.webp', 1, 'active')
+                    VALUES (9000001, 1, 'si_ideas', 'ai@system.local', 'SI IDEAS', 'bot', 'Smart Multi Agent', '/stickers/ideas/ideas_3.webp', 1, 'active')
                     ON DUPLICATE KEY UPDATE
                         full_name = 'SI IDEAS',
                         job_title = 'Smart Multi Agent',
@@ -92,16 +92,27 @@ if (!function_exists('classifyUserProactivePersona')) {
     /**
      * Phân loại Persona công việc theo Role, Cấp bậc (Level) và Chức danh (Job Title / Department)
      */
-    function classifyUserProactivePersona(array $user, array $ledTeamIds = []): array
+    function classifyUserProactivePersona(array $user, array $ledTeamIds = [], ?PDO $pdo = null): array
     {
         $role = mb_strtolower(trim((string)($user['role'] ?? '')), 'UTF-8');
         $jobTitle = mb_strtolower(trim((string)($user['job_title'] ?? '')), 'UTF-8');
         $dept = mb_strtolower(trim((string)($user['department'] ?? '')), 'UTF-8');
         $combined = $role . ' ' . $jobTitle . ' ' . $dept;
+        $tid = (int)($user['tenant_id'] ?? 1);
+        $pdoRef = $pdo ?? ($GLOBALS['pdo'] ?? $GLOBALS['db'] ?? null);
+        $canonRole = class_exists('TenantConfigService') ? TenantConfigService::normalizeRoleSlug($role) : $role;
+        if ($pdoRef instanceof PDO && class_exists('TenantConfigService')) {
+            foreach (TenantConfigService::getRoles($pdoRef, $tid) as $rDef) {
+                if ($rDef['role_slug'] === $role || $rDef['role_slug'] === $canonRole) {
+                    $canonRole = TenantConfigService::roleGroupToCanonicalRole((string)($rDef['role_group'] ?? 'staff'));
+                    break;
+                }
+            }
+        }
 
         // 1. C-Level / Ban Giám Đốc / Quản trị cấp cao
         if (
-            in_array($role, ['director', 'admin', 'super_admin', 'superadmin'], true) ||
+            in_array($canonRole, ['director', 'admin', 'superadmin'], true) ||
             preg_match('/(giám đốc|tổng giám đốc|ceo|founder|chủ tịch|ban giám đốc)/u', $jobTitle)
         ) {
             return [
@@ -114,7 +125,7 @@ if (!function_exists('classifyUserProactivePersona')) {
 
         // 2. Kế toán / Tài chính
         if (
-            in_array($role, ['accountant', 'finance'], true) ||
+            in_array($canonRole, ['accountant', 'finance'], true) ||
             preg_match('/(kế toán|tài chính|thu ngân|kiểm toán|công nợ)/u', $combined)
         ) {
             $isChief = preg_match('/(trưởng|kế toán trưởng|manager|head|leader)/u', $jobTitle);
@@ -128,7 +139,7 @@ if (!function_exists('classifyUserProactivePersona')) {
 
         // 3. Hành chính - Nhân sự (HR)
         if (
-            in_array($role, ['hr', 'hrm'], true) ||
+            in_array($canonRole, ['hr', 'hrm'], true) ||
             preg_match('/(nhân sự|hành chính|tuyển dụng|hr\b|c&b)/u', $combined)
         ) {
             $isManager = preg_match('/(trưởng|manager|head|leader)/u', $jobTitle);
@@ -142,7 +153,7 @@ if (!function_exists('classifyUserProactivePersona')) {
 
         // 4. Marketing & Truyền thông
         if (
-            in_array($role, ['marketing'], true) ||
+            $canonRole === 'marketing' ||
             preg_match('/(marketing|digital|content|ads|truyền thông|thương hiệu|pr\b|seo)/u', $combined)
         ) {
             $isManager = preg_match('/(trưởng|manager|head|leader|cmo)/u', $jobTitle);
@@ -156,7 +167,7 @@ if (!function_exists('classifyUserProactivePersona')) {
 
         // 5. Quản lý Kinh doanh / Team Leader
         if (
-            in_array($role, ['manager', 'team_lead', 'sale_leader', 'leader', 'truongphong', 'head_of_department'], true) ||
+            in_array($canonRole, ['manager', 'team_lead', 'sale_leader', 'leader', 'truongphong', 'head_of_department'], true) ||
             !empty($ledTeamIds) ||
             preg_match('/(trưởng phòng kinh doanh|trưởng nhóm|team lead|sales manager|quản lý tuyển sinh)/u', $jobTitle)
         ) {
@@ -170,7 +181,7 @@ if (!function_exists('classifyUserProactivePersona')) {
 
         // 6. Học vụ / Đào tạo / CSKH
         if (
-            in_array($role, ['academic', 'support', 'teacher'], true) ||
+            in_array($canonRole, ['academic', 'support', 'teacher'], true) ||
             preg_match('/(học vụ|đào tạo|giảng viên|chăm sóc học viên|cskh|student service)/u', $combined)
         ) {
             return [
@@ -671,7 +682,7 @@ if (!function_exists('buildProactiveAiBriefingForUser')) {
         // =====================================================================
         else {
             $openTickets = (int)$safeScalar("
-                SELECT COUNT(*) FROM support_tickets
+                SELECT COUNT(*) FROM tickets
                 WHERE tenant_id = ? AND deleted_at IS NULL AND status IN ('open', 'in_progress', 'pending')
             ", [$tid]);
 
@@ -743,8 +754,11 @@ if (!function_exists('buildSituationalNudgeForUser')) {
             }
         };
 
+        $authCtx = ['user_id' => $uid, 'tenant_id' => $tid, 'role' => $role];
+        $isSaleRole = (class_exists('TenantConfigService') && TenantConfigService::doesUserSatisfyRoles($pdo, $authCtx, ['sales', 'manager']))
+            || in_array($role, ['sale', 'sales', 'consultant', 'manager', 'team_lead', 'sale_leader'], true);
         // 1. Tình huống Sale có Lead mới nhận HÔM NAY đã quá 60 phút chưa liên hệ
-        if (in_array($role, ['sale', 'sales', 'consultant', 'manager', 'team_lead', 'sale_leader'], true) || preg_match('/(tư vấn|tuyển sinh|kinh doanh|sale)/u', $jobTitle)) {
+        if ($isSaleRole || preg_match('/(tư vấn|tuyển sinh|kinh doanh|sale)/u', $jobTitle)) {
             $hourBucket = 'ai_rt_sla60_' . (floor((int)date('G') / 3)); // Tối đa nhắc 1 lần mỗi khung 3 tiếng nếu phát sinh lead mới trễ
             if (!$hasSentToday($hourBucket)) {
                 try {
@@ -795,12 +809,20 @@ if (!function_exists('buildSituationalNudgeForUser')) {
         }
 
         // 2. Tình huống Người duyệt / Kế toán / Quản lý có phiếu mới tạo hôm nay chờ quá 45 phút chưa duyệt
-        if (in_array($role, ['director', 'admin', 'super_admin', 'superadmin', 'manager', 'accountant', 'finance', 'hr'], true)) {
+        $isApproverRole = (class_exists('TenantConfigService') && (
+            TenantConfigService::doesUserSatisfyRoles($pdo, $authCtx, ['director', 'admin', 'manager', 'accountant', 'hr']) ||
+            TenantConfigService::hasPermission($pdo, $authCtx, 'approvals', 'approve', ['all', 'team']) ||
+            TenantConfigService::hasPermission($pdo, $authCtx, 'expenses', 'approve', ['all', 'team']) ||
+            TenantConfigService::hasPermission($pdo, $authCtx, 'deposits', 'approve', ['all', 'team'])
+        )) || in_array($role, ['director', 'admin', 'super_admin', 'superadmin', 'manager', 'accountant', 'finance', 'hr'], true);
+        if ($isApproverRole) {
             $approvalBucket = 'ai_rt_appr_' . (floor((int)date('G') / 4));
             if (!$hasSentToday($approvalBucket)) {
                 try {
                     $pendingItems = [];
-                    if (in_array($role, ['accountant', 'finance', 'director', 'admin', 'super_admin', 'superadmin'], true)) {
+                    $canApproveDep = (class_exists('TenantConfigService') && TenantConfigService::doesUserSatisfyRoles($pdo, $authCtx, ['accountant', 'director', 'admin'], 'deposits', 'approve'))
+                        || in_array($role, ['accountant', 'finance', 'director', 'admin', 'super_admin', 'superadmin'], true);
+                    if ($canApproveDep) {
                         $stDep = $pdo->prepare("
                             SELECT COUNT(*) FROM deposits d
                             LEFT JOIN users u ON d.created_by = u.id

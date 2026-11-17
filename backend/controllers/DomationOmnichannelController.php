@@ -1036,7 +1036,8 @@ class DomationOmnichannelController
     public function triggerSilentMatchSync(array $auth): void
     {
         $role = strtolower($auth['role'] ?? '');
-        if (!in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'marketing'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'marketing'], 'marketing', 'write')) {
             respond(403, null, 'Chỉ Admin, Quản lý hoặc Marketing mới có quyền chạy đồng bộ đối sánh dữ liệu', false);
         }
 

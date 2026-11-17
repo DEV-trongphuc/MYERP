@@ -6463,10 +6463,10 @@ export default function ProjectsPage() {
         <div style={{
           display: 'inline-flex',
           padding: '3px',
-          background: 'var(--color-bg-light)',
-          borderRadius: '12px',
-          border: '1px solid var(--color-border-light)',
-          gap: '3px',
+          background: '#f1f5f9',
+          borderRadius: '10px',
+          border: '1px solid #e2e8f0',
+          gap: '2px',
           alignItems: 'center'
         }}>
           {[
@@ -6483,20 +6483,20 @@ export default function ProjectsPage() {
                   setCampaignPage(1);
                 }}
                 style={{
-                  height: '34px',
+                  height: '32px',
                   border: 'none',
-                  borderRadius: '9px',
+                  borderRadius: '7px',
                   fontSize: '0.825rem',
-                  fontWeight: isSelected ? 800 : 600,
+                  fontWeight: isSelected ? 700 : 600,
                   cursor: 'pointer',
-                  background: isSelected ? 'var(--color-surface)' : 'transparent',
-                  color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                  boxShadow: isSelected ? '0 2px 6px -1px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04)' : 'none',
+                  background: isSelected ? '#ffffff' : 'transparent',
+                  color: isSelected ? '#BD1D2D' : '#64748b',
+                  boxShadow: isSelected ? '0 1px 3px rgba(0, 0, 0, 0.08)' : 'none',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '7px',
-                  padding: '0 12px',
+                  padding: '0 14px',
                   transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)'
                 }}
               >
@@ -6506,8 +6506,8 @@ export default function ProjectsPage() {
                   fontSize: '0.7rem',
                   padding: '1px 6px',
                   borderRadius: '6px',
-                  background: isSelected ? 'rgba(225, 29, 72, 0.09)' : 'rgba(100, 116, 139, 0.08)',
-                  color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                  background: isSelected ? 'rgba(189, 29, 45, 0.08)' : 'rgba(100, 116, 139, 0.08)',
+                  color: isSelected ? '#BD1D2D' : '#64748b',
                   fontWeight: 800
                 }}>
                   {tab.count}
@@ -9840,12 +9840,9 @@ export default function ProjectsPage() {
                 display: 'flex',
                 gap: 12,
                 padding: '1rem',
-                background: theme === 'dark' ? 'rgba(59, 130, 246, 0.04)' : 'rgba(59, 130, 246, 0.02)',
-                borderLeft: '4px solid #3b82f6',
-                borderTop: '1px solid var(--color-border-light)',
-                borderRight: '1px solid var(--color-border-light)',
-                borderBottom: '1px solid var(--color-border-light)',
-                borderRadius: '0 8px 8px 0'
+                background: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                borderRadius: '12px'
               }}>
                 <Building2 size={20} color="#3b82f6" style={{ flexShrink: 0, marginTop: 2 }} />
                 <div>
@@ -9864,12 +9861,9 @@ export default function ProjectsPage() {
                 display: 'flex',
                 gap: 12,
                 padding: '1rem',
-                background: theme === 'dark' ? 'rgba(16, 185, 129, 0.04)' : 'rgba(16, 185, 129, 0.02)',
-                borderLeft: '4px solid #10b981',
-                borderTop: '1px solid var(--color-border-light)',
-                borderRight: '1px solid var(--color-border-light)',
-                borderBottom: '1px solid var(--color-border-light)',
-                borderRadius: '0 8px 8px 0'
+                background: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                borderRadius: '12px'
               }}>
                 <Layers size={20} color="#10b981" style={{ flexShrink: 0, marginTop: 2 }} />
                 <div>
@@ -9887,12 +9881,9 @@ export default function ProjectsPage() {
                 display: 'flex',
                 gap: 12,
                 padding: '1rem',
-                background: theme === 'dark' ? 'rgba(245, 158, 11, 0.04)' : 'rgba(245, 158, 11, 0.02)',
-                borderLeft: '4px solid #f59e0b',
-                borderTop: '1px solid var(--color-border-light)',
-                borderRight: '1px solid var(--color-border-light)',
-                borderBottom: '1px solid var(--color-border-light)',
-                borderRadius: '0 8px 8px 0'
+                background: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                borderRadius: '12px'
               }}>
                 <Users size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 2 }} />
                 <div>
@@ -10471,7 +10462,7 @@ export default function ProjectsPage() {
                     <label style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>Link AI Agent hỗ trợ môn học</label>
                     <input
                       type="text"
-                      placeholder="https://ai.ideas.edu.vn/..."
+                      placeholder="https://ai.your-domain.com/..."
                       disabled={!canEdit}
                       value={sub.ai_agent_link || ''}
                       onChange={e => handleUpdateSubjectInModal({ ai_agent_link: e.target.value })}

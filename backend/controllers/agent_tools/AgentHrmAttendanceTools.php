@@ -424,15 +424,15 @@ class AgentHrmAttendanceTools
         $graceMale = 30;
         $graceFemale = 60;
         try {
-            $stmtG = $db->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('hrm_late_grace_male', 'hrm_late_grace_female')");
-            if ($stmtG) {
-                foreach ($stmtG->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                    if ($r['setting_key'] === 'hrm_late_grace_male' && is_numeric($r['setting_value'])) {
-                        $graceMale = (int)$r['setting_value'];
-                    } elseif ($r['setting_key'] === 'hrm_late_grace_female' && is_numeric($r['setting_value'])) {
-                        $graceFemale = (int)$r['setting_value'];
-                    }
-                }
+            require_once __DIR__ . '/../../config/TenantConfigService.php';
+            $tidQuota = (int)($GLOBALS['current_tenant_id'] ?? 1);
+            $gMaleVal = TenantConfigService::getSetting($db, $tidQuota, 'hrm_late_grace_male', '');
+            $gFemVal = TenantConfigService::getSetting($db, $tidQuota, 'hrm_late_grace_female', '');
+            if (is_numeric($gMaleVal)) {
+                $graceMale = (int)$gMaleVal;
+            }
+            if (is_numeric($gFemVal)) {
+                $graceFemale = (int)$gFemVal;
             }
         } catch (\Throwable $e) {
         }
@@ -1329,11 +1329,10 @@ class AgentHrmAttendanceTools
                     $approverId = self::resolveDefaultApproverId($db, $tid, $uid);
                 }
 
-                // Include HR in related_user_ids
+                require_once __DIR__ . '/../../config/TenantConfigService.php';
                 $relIds = [];
-                $stmtHr = $db->prepare("SELECT id FROM users WHERE tenant_id = ? AND (role = 'hr' OR username = 'phuongntd') AND id != ? LIMIT 1");
-                $stmtHr->execute([$tid, $uid]);
-                $hrId = (int)$stmtHr->fetchColumn();
+                $hrRep = TenantConfigService::resolveHrRepresentative($db, (int)$tid, (int)$uid);
+                $hrId = (int)($hrRep['id'] ?? 0);
                 if ($hrId > 0 && $hrId !== $approverId) {
                     $relIds[] = $hrId;
                 }
@@ -1418,8 +1417,13 @@ class AgentHrmAttendanceTools
                     if (!in_array($row['status'], ['pending', 'draft', 'rejected'], true)) {
                         return ['success' => false, 'message' => "Không thể hủy đơn #{$reqId} vì đơn đã ở trạng thái '{$row['status']}'."];
                     }
-                    $db->prepare("DELETE FROM hrm_leave_requests WHERE id = ? AND user_id = ?")->execute([$reqId, $uid]);
-                    return ['success' => true, 'message' => "Đã hủy và xóa đơn #{$reqId} của bạn thành công."];
+                    $chkCol = $db->query("SHOW COLUMNS FROM hrm_leave_requests LIKE 'deleted_at'");
+                    if ($chkCol && $chkCol->fetch()) {
+                        $db->prepare("UPDATE hrm_leave_requests SET status = 'cancelled', deleted_at = NOW() WHERE id = ? AND user_id = ?")->execute([$reqId, $uid]);
+                    } else {
+                        $db->prepare("UPDATE hrm_leave_requests SET status = 'cancelled' WHERE id = ? AND user_id = ?")->execute([$reqId, $uid]);
+                    }
+                    return ['success' => true, 'message' => "Đã hủy đơn nghỉ phép #{$reqId} của bạn thành công."];
                 }
 
                 if ($reqType === 'supplement_attendance' || $reqType === 'bulk_attendance') {
@@ -1434,8 +1438,16 @@ class AgentHrmAttendanceTools
                     }
                     $db->beginTransaction();
                     try {
-                        $db->prepare("DELETE FROM attendance_bulk_request_details WHERE request_id = ?")->execute([$reqId]);
-                        $db->prepare("DELETE FROM attendance_bulk_requests WHERE id = ? AND user_id = ?")->execute([$reqId, $uid]);
+                        $chkColDet = $db->query("SHOW COLUMNS FROM attendance_bulk_request_details LIKE 'deleted_at'");
+                        if ($chkColDet && $chkColDet->fetch()) {
+                            $db->prepare("UPDATE attendance_bulk_request_details SET deleted_at = NOW() WHERE request_id = ?")->execute([$reqId]);
+                        }
+                        $chkCol = $db->query("SHOW COLUMNS FROM attendance_bulk_requests LIKE 'deleted_at'");
+                        if ($chkCol && $chkCol->fetch()) {
+                            $db->prepare("UPDATE attendance_bulk_requests SET status = 'cancelled', deleted_at = NOW() WHERE id = ? AND user_id = ?")->execute([$reqId, $uid]);
+                        } else {
+                            $db->prepare("UPDATE attendance_bulk_requests SET status = 'cancelled' WHERE id = ? AND user_id = ?")->execute([$reqId, $uid]);
+                        }
                         $db->commit();
                     } catch (\Throwable $e) {
                         if ($db->inTransaction()) {
@@ -1456,7 +1468,12 @@ class AgentHrmAttendanceTools
                     if (in_array($row['status'], ['approved', 'paid', 'completed'], true)) {
                         return ['success' => false, 'message' => "Không thể hủy đơn ứng lương #{$reqId} đã được duyệt."];
                     }
-                    $db->prepare("DELETE FROM hrm_salary_advances WHERE id = ? AND user_id = ?")->execute([$reqId, $uid]);
+                    $chkCol = $db->query("SHOW COLUMNS FROM hrm_salary_advances LIKE 'deleted_at'");
+                    if ($chkCol && $chkCol->fetch()) {
+                        $db->prepare("UPDATE hrm_salary_advances SET status = 'cancelled', deleted_at = NOW() WHERE id = ? AND user_id = ?")->execute([$reqId, $uid]);
+                    } else {
+                        $db->prepare("UPDATE hrm_salary_advances SET status = 'cancelled' WHERE id = ? AND user_id = ?")->execute([$reqId, $uid]);
+                    }
                     return ['success' => true, 'message' => "Đã hủy đơn tạm ứng lương #{$reqId} thành công."];
                 }
 
@@ -1486,7 +1503,8 @@ class AgentHrmAttendanceTools
                 $monthPeriod = substr($ciDate, 0, 7);
 
                 $approverId = !empty($args['approver_id']) ? (int)$args['approver_id'] : self::resolveDefaultApproverId($db, $tid, $uid);
-                $isLeaderOrManager = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'leader'], true);
+                require_once __DIR__ . '/../../config/TenantConfigService.php';
+                $isLeaderOrManager = TenantConfigService::doesUserSatisfyRoles($db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'leader'], 'attendance', 'approve');
                 $status = $isLeaderOrManager ? 'approved' : 'pending_manager';
                 $approvedBy = $isLeaderOrManager ? $uid : null;
                 $approvedAt = $isLeaderOrManager ? date('Y-m-d H:i:s') : null;
@@ -1802,10 +1820,12 @@ class AgentHrmAttendanceTools
         $tid = (int)($auth['tenant_id'] ?? 1);
         $role = strtolower(trim((string)($auth['role'] ?? '')));
 
-        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'general_director'], true) || !empty($auth['is_admin']);
-        $isHR = in_array($role, ['hr', 'nhan_su', 'hrm', 'hr_manager'], true) || !empty($auth['is_hr']);
-        $isAccountant = in_array($role, ['accountant', 'ke_toan', 'finance', 'chief_accountant'], true);
-        $isManager = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead', 'head_of_department'], true);
+        require_once __DIR__ . '/../../config/TenantConfigService.php';
+        $hrmToolScope = TenantConfigService::resolvePermissionScope($db, $auth, 'hrm', 'read');
+        $isGlobalAdmin = ($hrmToolScope === 'all' && TenantConfigService::doesUserSatisfyRoles($db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'general_director'])) || !empty($auth['is_admin']);
+        $isHR = ($hrmToolScope === 'all' && !$isGlobalAdmin) || TenantConfigService::doesUserSatisfyRoles($db, $auth, ['hr', 'nhan_su', 'hrm', 'hr_manager'], 'hrm', 'read') || !empty($auth['is_hr']);
+        $isAccountant = TenantConfigService::doesUserSatisfyRoles($db, $auth, ['accountant', 'ke_toan', 'finance', 'chief_accountant'], 'hrm', 'read');
+        $isManager = ($hrmToolScope === 'team') || in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead', 'head_of_department'], true);
 
         $canManageHrm = ($isGlobalAdmin || $isHR);
         $canViewSalary = ($isGlobalAdmin || $isHR || $isAccountant);
@@ -1838,8 +1858,8 @@ class AgentHrmAttendanceTools
                     $params = [$monthYear, $tid];
 
                     if (!$canViewSalary && $isManager) {
-                        $where[] = "(u.id = ? OR u.team_id IN (SELECT id FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))))";
-                        array_push($params, $uid, $uid, $uid);
+                        $where[] = "(u.id = ? OR u.team_id IN (SELECT id FROM teams WHERE tenant_id = ? AND deleted_at IS NULL AND (leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, '')))))";
+                        array_push($params, $uid, $tid, $uid, $uid);
                     }
 
                     if (!empty($args['department'])) {

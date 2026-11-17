@@ -35,9 +35,11 @@ try {
     if (isset($_GET['confirm']) && $_GET['confirm'] === 'yes' && !empty($sourcesToDelete)) {
         $placeholders = implode(',', array_fill(0, count($sourcesToDelete), '?'));
         $stmt = $pdo->prepare("
-            DELETE FROM subscribers 
+            UPDATE subscribers 
+            SET deleted_at = NOW(), status = 'archived', updated_at = NOW()
             WHERE NOT EXISTS (SELECT 1 FROM subscriber_lists sl WHERE sl.subscriber_id = subscribers.id)
             AND source IN ($placeholders)
+            AND deleted_at IS NULL
         ");
         $stmt->execute(array_values($sourcesToDelete));
         $deleted = $stmt->rowCount();

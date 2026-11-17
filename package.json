@@ -12,7 +12,8 @@
     "deploy:backend": "powershell -ExecutionPolicy Bypass -File ./deploy-myerp.ps1 -BackendOnly",
     "deploy:frontend": "powershell -ExecutionPolicy Bypass -File ./deploy-myerp.ps1 -FrontendOnly",
     "backup:db": "node scripts/backup-database.js",
-    "restore:db": "node scripts/restore-database.js"
+    "restore:db": "node scripts/restore-database.js",
+    "test:marketing-e2e": "node tests/e2e/marketing_e2e_runner.cjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -50,6 +51,7 @@
     "framer-motion": "^12.38.0",
     "globals": "^17.6.0",
     "lucide-react": "^1.16.0",
+    "mysql2": "^3.24.6",
     "postcss": "^8.5.14",
     "react-router-dom": "^7.15.1",
     "tailwind-merge": "^3.6.0",

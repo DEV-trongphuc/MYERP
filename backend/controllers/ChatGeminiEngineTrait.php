@@ -3,37 +3,13 @@ trait ChatGeminiEngineTrait {
     private function callGeminiFlashLite(array $conversationHistory, string $systemPrompt, ?array $attachedFile = null, ?callable $onChunk = null, ?array $authContext = null, ?callable $onStep = null, array &$executedAgentSteps = []): ?string {
         try {
             $this->db = Database::ensureConnected($this->db);
-            $stmtKey = $this->db->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('groq_api_key', 'groq_model', 'gemini_api_key', 'gemini_model')");
-            $stmtKey->execute();
-            $settings = $stmtKey->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $tidAi = (int)($authContext['tenant_id'] ?? $GLOBALS['current_tenant_id'] ?? 1);
+            $settings = TenantConfigService::getSettings($this->db, $tidAi);
 
-            $groqKey = '';
-            $groqModel = 'qwen/qwen3.8-27b';
-            /* [COMMENTED OUT FREE MODEL - USE GEMINI 3.5 FLASH LITE AS PRIMARY]
-            $envGroqKey = trim((string)($_ENV['GROQ_API_KEY'] ?? getenv('GROQ_API_KEY') ?: ''));
-            $dbGroqKey = trim((string)($settings['groq_api_key'] ?? ''));
-            $groqKey = $dbGroqKey !== '' ? $dbGroqKey : $envGroqKey;
-            if ($dbGroqKey === '' && $envGroqKey !== '') {
-                try {
-                    $stmtSeedGr = $this->db->prepare("
-                        INSERT INTO system_settings (setting_key, setting_value)
-                        VALUES ('groq_api_key', ?)
-                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
-                    ");
-                    $stmtSeedGr->execute([$envGroqKey]);
-                } catch (\Throwable $eSeed) {
-                    // Ignore DB write error
-                }
-            }
-            $groqModel = trim((string)($settings['groq_model'] ?? ($_ENV['GROQ_MODEL'] ?? getenv('GROQ_MODEL') ?: 'qwen/qwen3.8-27b')));
-            if ($groqModel === '' || !in_array($groqModel, ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'], true)) {
-                $groqModel = 'qwen/qwen3.8-27b';
-            }
-            */
-
-            $apiKey = trim($settings['gemini_api_key'] ?? '') ?: ($_ENV['GEMINI_API_KEY'] ?? getenv('GEMINI_API_KEY') ?: '');
+            $apiKey = trim((string)($settings['gemini_api_key'] ?? '')) ?: ($_ENV['GEMINI_API_KEY'] ?? getenv('GEMINI_API_KEY') ?: '');
             $envGeminiModel = trim((string)($_ENV['GEMINI_MODEL'] ?? getenv('GEMINI_MODEL') ?: 'gemini-3.5-flash-lite'));
-            $model = trim($settings['gemini_model'] ?? '') ?: $envGeminiModel;
+            $model = trim((string)($settings['gemini_model'] ?? '')) ?: $envGeminiModel;
             if (empty($apiKey)) {
                 error_log("callGeminiFlashLite: gemini_api_key chưa được cấu hình.");
                 $errorMsg = "Hệ thống chưa được cấu hình Gemini API Key. Vui lòng liên hệ Quản trị viên để thiết lập API Key trong Cài đặt hệ thống.";

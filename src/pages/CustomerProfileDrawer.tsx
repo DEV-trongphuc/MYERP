@@ -37,6 +37,13 @@ import {
 import { SubjectAnnouncementModal } from '../components/academic/SubjectAnnouncementModal';
 import { CrmSendTemplateEmailModal, CrmBulkMarketingModal } from '../components/crm/CrmMarketingModals';
 import { canViewOmnichannelJourney } from '../utils/roleUtils';
+import {
+  useTenantConfig,
+  getCachedTenantBootstrap,
+  resolveDynamicNotificationUserIds,
+  resolveDynamicStageNotifyUserIds,
+  renderTenantOnboardingTemplate,
+} from '../contexts/TenantConfigContext';
 import { ReportDataModal } from '../components/ui/ReportDataModal';
 import { Skeleton, StatRowSkeleton } from '../components/ui/Skeleton';
 import { EmptyCard } from '../components/ui/EmptyCard';
@@ -377,18 +384,18 @@ const resolveAttachmentUrl = (url: string | null | undefined): string => {
     cleanPath = 'uploads/' + cleanPath;
   }
   
-  const apiBase = import.meta.env.VITE_API_URL || 'https://myerp.ideas.edu.vn/backend/api.php';
+  const apiBase = import.meta.env.VITE_API_URL || '/backend/api.php';
   let baseUrl = apiBase;
   if (baseUrl.includes('api.php')) {
     baseUrl = baseUrl.split('api.php')[0];
   }
   baseUrl = baseUrl.replace(/\/+$/, '');
   
-  if (!baseUrl.startsWith('http')) {
-    baseUrl = 'https://myerp.ideas.edu.vn/backend';
+  if (!baseUrl.startsWith('http') && !baseUrl.startsWith('/')) {
+    baseUrl = '/backend';
   }
   
-  return `${baseUrl}/${cleanPath}`;
+  return `${baseUrl || '/backend'}/${cleanPath}`;
 };
 
 const TABS = [
@@ -2208,6 +2215,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     try {
       const res = await api.put(`/contacts/${effectiveContactId}`, payload);
       const updated = res.data?.data || { ...formData, tags };
+      if (updated?.id && String(updated.id) !== String(effectiveContactId)) {
+        setActiveContactId(updated.id);
+      }
       setFormData(updated);
       setBaseData(updated);
       setBaseTags(updated.tags || []);
@@ -3062,16 +3072,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       String(s.name || '').toLowerCase() === status
     );
     const stageOrder = Number(currentStage?.order_index || 0);
+    const currentStageSlug = String(currentStage?.system_slug || '').toLowerCase();
     const isPipeline13Or14 =
       stageOrder === 13 ||
       stageOrder === 14 ||
       Boolean(currentStage?.is_won) ||
-      ['deposit_tuition_payment', 'dong_le_phi', 'enrolled', 'hoc_vien', '43', '44'].includes(status) ||
-      ['deposit_tuition_payment', 'dong_le_phi', 'enrolled', 'hoc_vien', '43', '44'].includes(stageId) ||
-      String(currentStage?.system_slug || '').toLowerCase() === 'deposit_tuition_payment' ||
-      String(currentStage?.system_slug || '').toLowerCase() === 'dong_le_phi' ||
-      String(currentStage?.system_slug || '').toLowerCase() === 'enrolled' ||
-      String(currentStage?.system_slug || '').toLowerCase() === 'hoc_vien' ||
+      ['deposit_tuition_payment', 'dong_le_phi', 'dong_le_phi_ho_so', 'enrolled', 'hoc_vien', 'won'].includes(status) ||
+      ['deposit_tuition_payment', 'dong_le_phi', 'dong_le_phi_ho_so', 'enrolled', 'hoc_vien', 'won'].includes(stageId) ||
+      ['deposit_tuition_payment', 'dong_le_phi', 'dong_le_phi_ho_so', 'enrolled', 'hoc_vien', 'won'].includes(currentStageSlug) ||
       status.startsWith('13') ||
       status.startsWith('14');
     const isCustomerStatus = String(formData.status || contact?.status || '').toLowerCase() === 'customer';
@@ -4256,58 +4264,38 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [showQuoteEditor, setShowQuoteEditor] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<any>(null);
 
-  // Academic Program Templates configuration
-  const ACADEMIC_PROGRAM_OPTIONS = [
-    {
-      id: 'istec',
-      label: 'Trường Kinh doanh ISTEC - Pháp (BBA / MBA / DBA ISTEC)',
-      school: 'istec',
-      docLink: 'https://drive.google.com/drive/folders/1ZNcaYWUSd79CbLRDpV0LjbRAPeTCnumO?usp=drive_link'
-    },
-    {
-      id: 'estiam',
-      label: 'Tiến sĩ Quản trị Kinh doanh - Paris Education / ESTIAM (DBA ESTIAM)',
-      school: 'estiam',
-      docLink: 'https://drive.google.com/drive/folders/1tBzBTLL9WPT-OOjKWRNz5qFx8YGSptKG?usp=drive_link'
-    },
-    {
-      id: 'msc_ai',
-      label: 'Thạc sĩ Khoa học Trí tuệ nhân tạo (MSc AI)',
-      school: 'umef',
-      docLink: 'https://drive.google.com/drive/folders/1Byi7lmVQsm9sSD-OGKSHli1FfsnsvkXr'
-    },
-    {
-      id: 'mba_standard',
-      label: 'Thạc sĩ Quản trị Kinh doanh - Tiêu chuẩn (MBA / EMBA Standard)',
-      school: 'umef',
-      docLink: 'https://drive.google.com/drive/folders/1dvILnySA3MWKR-LutdrdXyrJPqL6ppcy'
-    },
-    {
-      id: 'bba',
-      label: 'Cử nhân Quản trị Kinh doanh (TOP UP)',
-      school: 'umef',
-      docLink: 'https://drive.google.com/drive/folders/1E1TZMRz5w05xv4wsNvP5vht3ojHeviAw'
-    },
-    {
-      id: 'mba_high',
-      label: 'Thạc sĩ Quản trị Kinh doanh - Nâng cao (MBA / EMBA High)',
-      school: 'umef',
-      docLink: 'https://drive.google.com/drive/folders/1FAJL1opSbPEOx9CL1L1QMiug3mfRdRWX'
+  const { config: tenantConfig } = useTenantConfig();
+
+  const ACADEMIC_PROGRAM_OPTIONS = useMemo(() => {
+    const dbProgs = tenantConfig?.academic_programs;
+    if (Array.isArray(dbProgs) && dbProgs.length > 0) {
+      return dbProgs.map((p) => ({
+        id: p.program_code,
+        label: p.school_name ? `${p.name} - ${p.school_name}` : p.name,
+        school: p.school_name || '',
+        docLink: p.doc_folder_url || '',
+        keywords: Array.isArray(p.match_keywords) ? p.match_keywords : [],
+      }));
     }
-  ];
+    return [
+      { id: 'mba_standard', label: 'Chương trình Đào tạo Tiêu chuẩn', school: '', docLink: '', keywords: [] }
+    ];
+  }, [tenantConfig?.academic_programs]);
 
-  const detectAcademicProgram = (programStr: string) => {
+  const detectAcademicProgram = useCallback((programStr: string) => {
     const p = (programStr || '').trim().toLowerCase();
-    if (p.includes('istec')) return 'istec';
-    if (p.includes('estiam') || p.includes('paris education') || p.includes('dual dba') || p === 'de') return 'estiam';
-    if (p.includes('ai') || p.includes('msc') || p.includes('trí tuệ') || p.includes('tri tue')) return 'msc_ai';
-    if (p.includes('top up') || p.includes('topup') || p.includes('bba') || p.includes('cử nhân') || p.includes('cu nhan') || p.includes('bachelor')) return 'bba';
-    if (p.includes('high') || p.includes('nâng cao') || p.includes('nang cao') || p.includes('hq')) return 'mba_high';
-    return 'mba_standard';
-  };
+    if (p) {
+      for (const opt of ACADEMIC_PROGRAM_OPTIONS) {
+        if (p === opt.id.toLowerCase()) return opt.id;
+        if (opt.keywords.some((kw) => kw && p.includes(String(kw).toLowerCase()))) {
+          return opt.id;
+        }
+      }
+    }
+    return ACADEMIC_PROGRAM_OPTIONS[0]?.id || 'mba_standard';
+  }, [ACADEMIC_PROGRAM_OPTIONS]);
 
-  // Academic Study Status & Email Notification States
-  const DEFAULT_ACADEMIC_CC_EMAILS = 'it.dept@ideas.edu.vn, student.notice@ideas.edu.vn, support@ideas.edu.vn';
+  const defaultAcademicCcEmails = tenantConfig?.organization?.academic_cc_emails || '';
   const [savingStudyStatus, setSavingStudyStatus] = useState(false);
   const [showAcademicEmailModal, setShowAcademicEmailModal] = useState(false);
   const [drawerTbcdState, setDrawerTbcdState] = useState<{
@@ -4322,148 +4310,33 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [isSendingAcademicEmail, setIsSendingAcademicEmail] = useState(false);
   const [academicEmailForm, setAcademicEmailForm] = useState({
     to_email: '',
-    cc_email: DEFAULT_ACADEMIC_CC_EMAILS,
-    subject: '[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Swiss UMEF',
+    cc_email: '',
+    subject: '',
     content: '',
     zalo_text: ''
   });
 
-  const getAcademicZaloOnboardingText = useCallback((studentName: string) => {
-    const nameStr = studentName ? `Anh/Chị ${studentName}` : 'Anh/Chị';
-    const ctsvName = (currentUser?.full_name || currentUser?.name || 'Chuyên viên CTSV').trim();
-    return `Chào ${nameStr}, Em là ${ctsvName} từ Bộ phận Công tác Sinh viên (CTSV) của Viện Quốc tế IDEAS.
-Chào mừng Anh/Chị chính thức trở thành Tân Học viên chương trình tại IDEAS. Em xin phép kết nối Zalo để đồng hành và hỗ trợ mình sát sao nhất trong suốt khóa học ạ!
-Để bắt đầu hành trình học tập thuận lợi, Anh/Chị lưu ý giúp em các thông tin quan trọng sau nhé:
-1. Đọc kỹ các thông tin, tài liệu và hướng dẫn sử dụng các nền tảng học tập đã được gửi qua email cá nhân.
-2. Khi cần giải đáp thắc mắc về lịch học, tài liệu hay kỹ thuật, Anh/Chị cứ nhắn trực tiếp qua Zalo CTSV 098 736 3935 để được phản hồi nhanh nhất.
-3. Thường xuyên theo dõi thông tin khóa học trên nhóm Zalo Thông báo khóa học.
-Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều giá trị! Nếu cần hỗ trợ thêm thông tin gì, Anh/Chị cứ nhắn cho CTSV bất cứ lúc nào nhé ạ.`;
-  }, [currentUser?.full_name, currentUser?.name]);
-
-  const getAcademicEmailDefaultSubject = useCallback((programKey: string = 'mba_standard') => {
-    if (programKey === 'istec') {
-      return '[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Istec Business School';
-    }
-    if (programKey === 'estiam') {
-      return '[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Paris Education/ESTIAM';
-    }
-    return '[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Swiss UMEF';
-  }, []);
-
-  const getAcademicEmailDefaultContent = useCallback((studentName: string, programKey: string = 'mba_standard') => {
-    const greeting = studentName ? `Kính gửi Quý Anh/Chị học viên <strong>${studentName}</strong>,` : 'Kính gửi Quý Anh/Chị học viên,';
-    const selectedProg = ACADEMIC_PROGRAM_OPTIONS.find(opt => opt.id === programKey) || ACADEMIC_PROGRAM_OPTIONS[3];
-    const docFolderLink = selectedProg.docLink;
-
-    if (programKey === 'istec') {
-      return `<p>${greeting}</p>
-<p>Lời đầu tiên, Ban Công tác Sinh viên IDEAS xin gửi lời chúc mừng và trân trọng cảm ơn Anh/Chị đã tin chọn IDEAS làm người bạn đồng hành trên chặng đường chinh phục tấm bằng từ <strong>Istec Business School</strong>. Chúng tôi cam kết đồng hành và hỗ trợ Anh/Chị xuyên suốt quá trình học tập.</p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">A. KÊNH LIÊN LẠC CHÍNH THỨC</strong></p>
-<p>1. <strong>Kênh Hỗ trợ Nhanh (Zalo/Hotline):</strong> 098 736 3935<br/>
-2. <strong>Kênh Hỗ trợ Học vụ (Email):</strong><br/>
-&nbsp;&nbsp;&bull; Tiếp nhận yêu cầu: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a><br/>
-&nbsp;&nbsp;&bull; CC (Đồng gửi): <a href="mailto:it.dept@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">it.dept@ideas.edu.vn</a>, <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a>, <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a> <em>(Vui lòng luôn CC các địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">B. TÀI KHOẢN HỌC TẬP</strong></p>
-<p>Anh/Chị sẽ được cấp 3 tài khoản học tập, sử dụng xuyên suốt chương trình:</p>
-<ul style="padding-left: 20px; line-height: 1.8;">
-  <li><strong>1. Tài khoản LMS IDEAS</strong> (xem tài liệu, video buổi học, hỗ trợ học thuật): <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://lms.ideas.edu.vn/</a> | Video hướng dẫn: <a href="https://drive.google.com/file/d/1wXQtghJSd7CHoek_hPXOfXuVuGuT8bMv/view?usp=sharing" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></li>
-  <li><strong>2. Tài khoản LMS ISTEC</strong> (làm bài, nộp bài, tính điểm chính thức): <a href="https://istec.education" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://istec.education</a></li>
-  <li><strong>3. Platform IDEAS AI</strong> (công cụ bổ trợ học tập): <a href="https://ai.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://ai.ideas.edu.vn/</a></li>
-</ul>
-<p><em>(thông tin tài khoản sẽ được gửi trực tiếp đến email cá nhân của học viên đã đăng ký học tập)</em></p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">C. TÀI LIỆU ĐÍNH KÈM</strong></p>
-<ul style="padding-left: 20px; line-height: 1.8;">
-  <li>File giải thích Format APA</li>
-  <li>File hướng dẫn sử dụng các hệ thống học tập</li>
-  <li>Hướng dẫn sử dụng Zoom Meeting &amp; Format bài làm mẫu</li>
-</ul>
-<p>Link tổng hợp tài liệu hướng dẫn: <a href="${docFolderLink}" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></p>
-
-<p>Nếu có bất kỳ vướng mắc nào, Anh/Chị vui lòng liên hệ CTSV để được hỗ trợ kịp thời. Chúc Anh/Chị có hành trình học tập thật thuận lợi và thành công!</p>
-
-<p style="margin-top: 20px;">Trân trọng,<br/><strong>Ban Công tác Sinh viên IDEAS</strong></p>`;
-    }
-
-    if (programKey === 'estiam') {
-      return `<p>${greeting}</p>
-<p>Lời đầu tiên, Ban Công tác Sinh viên IDEAS xin gửi lời chúc mừng và trân trọng cảm ơn Anh/Chị đã tin chọn IDEAS làm người bạn đồng hành trên chặng đường chinh phục tấm bằng từ <strong>Paris Education/ESTIAM</strong>. Chúng tôi cam kết đồng hành và hỗ trợ Anh/Chị xuyên suốt quá trình học tập và nghiên cứu.</p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">A. KÊNH LIÊN LẠC CHÍNH THỨC</strong></p>
-<p>1. <strong>Kênh Hỗ trợ Nhanh (Zalo/Hotline):</strong> 098 736 3935<br/>
-2. <strong>Kênh Hỗ trợ Học vụ (Email):</strong><br/>
-&nbsp;&nbsp;- Tiếp nhận yêu cầu: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a><br/>
-&nbsp;&nbsp;- CC (Đồng gửi): <a href="mailto:it.dept@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">it.dept@ideas.edu.vn</a>, <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a>, <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a> <em>(Vui lòng luôn CC các địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">B. TÀI KHOẢN HỌC TẬP</strong></p>
-<p>Anh/Chị sẽ được cấp 3 tài khoản học tập, sử dụng xuyên suốt chương trình:</p>
-<ul style="padding-left: 20px; line-height: 1.8;">
-  <li><strong>1. Tài khoản LMS IDEAS</strong> (xem tài liệu, video record buổi học, hỗ trợ học thuật): <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://lms.ideas.edu.vn/</a> | Video hướng dẫn: <a href="https://drive.google.com/file/d/1wXQtghJSd7CHoek_hPXOfXuVuGuT8bMv/view?usp=sharing" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></li>
-  <li><strong>2. Tài khoản học tập Paris Education</strong> (làm bài, nộp bài chính thức): <a href="https://pariseducation-global.org/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://pariseducation-global.org/</a></li>
-  <li><strong>3. Platform IDEAS AI</strong> (công cụ bổ trợ học tập): <a href="https://ai.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://ai.ideas.edu.vn/</a></li>
-</ul>
-<p><em>(thông tin tài khoản sẽ được gửi trực tiếp đến email cá nhân của học viên đã đăng ký học tập)</em></p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">C. TÀI LIỆU ĐÍNH KÈM</strong></p>
-<ul style="padding-left: 20px; line-height: 1.8;">
-  <li>File Template format APA</li>
-  <li>File hướng dẫn sử dụng các hệ thống học tập</li>
-</ul>
-<p>Link tổng hợp tài liệu hướng dẫn: <a href="${docFolderLink}" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></p>
-
-<p>Nếu có bất kỳ vướng mắc nào, Anh/Chị vui lòng liên hệ CTSV để được hỗ trợ kịp thời. Chúc Anh/Chị có hành trình học tập, nghiên cứu thật thuận lợi và thành công!</p>
-
-<p style="margin-top: 20px;">Trân trọng,<br/><strong>Ban Công tác Sinh viên IDEAS</strong></p>`;
-    }
-
-    return `<p>${greeting}</p>
-<p>Lời đầu tiên, Ban Công tác Sinh viên IDEAS xin gửi lời chúc mừng và trân trọng cảm ơn Anh/Chị đã tin chọn IDEAS làm người bạn đồng hành trên chặng đường chinh phục tấm bằng từ <strong>Đại học Swiss UMEF</strong>. Chúng tôi cam kết đồng hành và hỗ trợ Anh/Chị xuyên suốt quá trình học tập.</p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">A. KÊNH LIÊN LẠC CHÍNH THỨC</strong></p>
-<p>1. <strong>Kênh Hỗ trợ Nhanh (Zalo/Hotline):</strong> 098 736 3935<br/>
-2. <strong>Kênh Hỗ trợ Học vụ (Email):</strong><br/>
-&nbsp;&nbsp;&bull; Tiếp nhận yêu cầu: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a><br/>
-&nbsp;&nbsp;&bull; CC (Đồng gửi): <a href="mailto:it.dept@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">it.dept@ideas.edu.vn</a>, <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a>, <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a> <em>(Vui lòng luôn CC các địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">B. TÀI KHOẢN HỌC TẬP</strong></p>
-<p>Anh/Chị sẽ được cấp 3 tài khoản học tập, sử dụng xuyên suốt chương trình:</p>
-<ul style="padding-left: 20px; line-height: 1.8;">
-  <li><strong>1. Tài khoản LMS IDEAS</strong> (xem tài liệu, video buổi học, hỗ trợ học thuật): <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://lms.ideas.edu.vn/</a> | Video hướng dẫn: <a href="https://drive.google.com/file/d/1wXQtghJSd7CHoek_hPXOfXuVuGuT8bMv/view?usp=sharing" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></li>
-  <li><strong>2. Tài khoản LMS UMEF</strong> (làm bài, nộp bài, tính điểm chính thức): <a href="https://portal.swiss-umef.ch/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://portal.swiss-umef.ch/</a></li>
-  <li><strong>3. Platform IDEAS AI</strong> (công cụ bổ trợ học tập): <a href="https://ai.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://ai.ideas.edu.vn/</a></li>
-</ul>
-<p><em>(thông tin tài khoản sẽ được gửi trực tiếp đến email cá nhân của học viên đã đăng ký học tập)</em></p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">C. TÀI LIỆU ĐÍNH KÈM</strong></p>
-<ul style="padding-left: 20px; line-height: 1.8;">
-  <li>File giải thích Format APA</li>
-  <li>File hướng dẫn sử dụng các hệ thống học tập</li>
-  <li>Hướng dẫn sử dụng Zoom Meeting &amp; Format bài làm mẫu</li>
-</ul>
-<p>Link tổng hợp tài liệu hướng dẫn: <a href="${docFolderLink}" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></p>
-
-<p>Nếu có bất kỳ vướng mắc nào, Anh/Chị vui lòng liên hệ CTSV để được hỗ trợ kịp thời. Chúc Anh/Chị có hành trình học tập thật thuận lợi và thành công!</p>
-
-<p style="margin-top: 20px;">Trân trọng,<br/><strong>Ban Công tác Sinh viên IDEAS</strong></p>`;
-  }, []);
-
   const handleOpenAcademicEmailModal = () => {
     const studentName = (formData.full_name || contact?.full_name || '').trim();
     const recipientEmail = (formData.email || contact?.email || '').trim();
+    const staffName = (currentUser?.full_name || currentUser?.name || 'Chuyên viên CTSV').trim();
     const resolvedProj = (formData.project_id || contact?.project_id)
       ? projectsList.find(p => Number(p.id) === Number(formData.project_id || contact?.project_id))
       : null;
     const rawProg = formData.program || resolvedProj?.name || contact?.program || contact?.product_name || contact?.course || '';
     const detectedProg = detectAcademicProgram(rawProg);
+    const rendered = renderTenantOnboardingTemplate({
+      programCode: detectedProg,
+      studentName,
+      staffName,
+    });
     setAcademicEmailProgram(detectedProg);
     setAcademicEmailForm({
       to_email: recipientEmail,
-      cc_email: DEFAULT_ACADEMIC_CC_EMAILS,
-      subject: getAcademicEmailDefaultSubject(detectedProg),
-      content: getAcademicEmailDefaultContent(studentName, detectedProg),
-      zalo_text: getAcademicZaloOnboardingText(studentName)
+      cc_email: rendered.ccEmails || defaultAcademicCcEmails,
+      subject: rendered.subject,
+      content: rendered.html,
+      zalo_text: rendered.zaloText,
     });
     setAcademicEmailTab('preview');
     setShowAcademicEmailModal(true);
@@ -4472,11 +4345,18 @@ Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều g
   const handleAcademicProgramChange = (progKey: string) => {
     setAcademicEmailProgram(progKey);
     const studentName = (formData.full_name || contact?.full_name || '').trim();
+    const staffName = (currentUser?.full_name || currentUser?.name || 'Chuyên viên CTSV').trim();
+    const rendered = renderTenantOnboardingTemplate({
+      programCode: progKey,
+      studentName,
+      staffName,
+    });
     setAcademicEmailForm(prev => ({
       ...prev,
-      subject: getAcademicEmailDefaultSubject(progKey),
-      content: getAcademicEmailDefaultContent(studentName, progKey),
-      zalo_text: getAcademicZaloOnboardingText(studentName)
+      cc_email: rendered.ccEmails || prev.cc_email || defaultAcademicCcEmails,
+      subject: rendered.subject,
+      content: rendered.html,
+      zalo_text: rendered.zaloText,
     }));
   };
 
@@ -4553,20 +4433,12 @@ Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều g
       graduated: 'Graduated (Tốt nghiệp)'
     };
 
-    // Default recipients: include contact assigned sale (owner) and Mai Thị Nữ
-    const defaultNotifyIds: number[] = [];
     const ownerId = Number(formData.owner_id || contact?.owner_id || 0);
-    if (ownerId > 0 && ownerId !== Number(currentUser?.id)) {
-      defaultNotifyIds.push(ownerId);
-    }
-
-    const maiThiNuUser = users.find((u: any) =>
-      u.email === 'numt@ideas.edu.vn' || u.username === 'numt' || String(u.full_name || '').toLowerCase().includes('thị nữ') || Number(u.id) === 100062
+    const defaultNotifyIds = resolveDynamicNotificationUserIds(
+      'STUDENT_STUDY_STATUS_CHANGED',
+      users,
+      { excludeUserId: Number(currentUser?.id || 0), ownerId }
     );
-    const maiThiNuId = maiThiNuUser ? Number(maiThiNuUser.id) : 100062;
-    if (maiThiNuId > 0 && maiThiNuId !== Number(currentUser?.id) && !defaultNotifyIds.includes(maiThiNuId)) {
-      defaultNotifyIds.push(maiThiNuId);
-    }
 
     setStudyStatusModal({
       isOpen: true,
@@ -6174,7 +6046,8 @@ Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều g
           const role = String(u.role || '').toLowerCase().trim();
           if (role === 'bot' || role === 'system' || Number(u.id) === 9000001) return false;
           const email = String(u.email || '').toLowerCase().trim();
-          if (['turniodev@gmail.com', 'turnlodev@gmail.com', 'ideas.ai@ideas.vn', 'ai@ideas.edu.vn'].includes(email)) return false;
+          const excludedSysEmails = getCachedTenantBootstrap()?.organization?.excluded_system_emails || [];
+          if (excludedSysEmails.includes(email)) return false;
           return true;
         });
 
@@ -7709,11 +7582,6 @@ Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều g
 
   const handleCreateTicket = async () => {
     if (!ticketForm.subject.trim() || isSubmitting) return;
-    const isSelfEnteredOrDb = ['ca_nhan', 'cold_call', 'gioi_thieu'].includes(formData.source || contact?.source) || (formData.dl_status || contact?.dl_status) === 'databank_claim';
-    if (isSelfEnteredOrDb && ticketForm.category === 'lead_error_compensation') {
-      addToast('Khách hàng tự khai thác / Databank không hỗ trợ tạo ticket Báo lỗi bù data.', 'error');
-      return;
-    }
     setIsSubmitting(true);
     try {
       await api.post('/tickets', {
@@ -7824,77 +7692,11 @@ Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều g
       return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
     };
 
-    const isStage09 = (s: any) => {
-      if (!s) return false;
-      const slug = String(s.system_slug || '').toLowerCase();
-      const name = String(s.name || '').toLowerCase();
-      const order = Number(s.order_index) || 0;
-      const id = String(s.id || '');
-      return slug === 'application_started' || order === 9 || id === '39' || id === '9' || name.includes('09') || name.includes('application started') || targetId === '39' || targetId === 'application_started';
-    };
-
-    const isStage10 = (s: any) => {
-      if (!s) return false;
-      const slug = String(s.system_slug || '').toLowerCase();
-      const name = String(s.name || '').toLowerCase();
-      const order = Number(s.order_index) || 0;
-      const id = String(s.id || '');
-      return slug === 'application_completed' || order === 10 || id === '40' || id === '10' || name.includes('10') || name.includes('application completed') || targetId === '40' || targetId === 'application_completed';
-    };
-
-    const isStage13 = (s: any) => {
-      if (!s) return false;
-      const slug = String(s.system_slug || '').toLowerCase();
-      const name = String(s.name || '').toLowerCase();
-      const order = Number(s.order_index) || 0;
-      const id = String(s.id || '');
-      return slug === 'deposit_tuition_payment' || slug === 'dat_coc' || slug === 'deposit' || order === 13 || id === '43' || id === '13' || name.includes('13') || name.includes('deposit') || name.includes('tuition') || targetId === 'deposit_tuition_payment' || targetId === '43';
-    };
-
-    const isStage14 = (s: any) => {
-      if (!s) return false;
-      const slug = String(s.system_slug || '').toLowerCase();
-      const name = String(s.name || '').toLowerCase();
-      const order = Number(s.order_index) || 0;
-      const id = String(s.id || '');
-      return slug === 'enrolled' || slug === 'hoc_vien' || order === 14 || id === '44' || id === '14' || name.includes('14') || name.includes('enrolled') || targetId === 'enrolled' || targetId === 'hoc_vien' || targetId === '44';
-    };
-
-    // Find notification target user IDs
-    const saleAdminUser = users.find((u: any) => 
-      u.role === 'sale_admin' || u.role === 'saleadmin' || u.username === 'linhdk' || u.email === 'linhdk@ideas.edu.vn' || Number(u.id) === 100066
+    const defaultNotifyIds = resolveDynamicStageNotifyUserIds(
+      targetStageObj || { system_slug: targetId },
+      users,
+      Number(currentUser?.id || 0)
     );
-    const saleAdminId = saleAdminUser ? Number(saleAdminUser.id) : 100066;
-
-    const maiThiNuUser = users.find((u: any) =>
-      u.email === 'numt@ideas.edu.vn' || u.username === 'numt' || String(u.full_name || '').toLowerCase().includes('mai thị nữ') || Number(u.id) === 100062
-    );
-    const maiThiNuId = maiThiNuUser ? Number(maiThiNuUser.id) : 100062;
-
-    const huyenTramUser = users.find((u: any) =>
-      u.email === 'tramlth@ideas.edu.vn' || u.username === 'tramlth' || String(u.full_name || '').toLowerCase().includes('huyền trâm') || Number(u.id) === 100073
-    );
-    const huyenTramId = huyenTramUser ? Number(huyenTramUser.id) : 100073;
-
-    const hieuNganUser = users.find((u: any) =>
-      u.email === 'nganph@ideas.edu.vn' || u.username === 'nganph' || String(u.full_name || '').toLowerCase().includes('hiếu ngân') || Number(u.id) === 100076
-    );
-    const hieuNganId = hieuNganUser ? Number(hieuNganUser.id) : 100076;
-
-    let defaultNotifyIds: number[] = [];
-    if (isStage14(targetStageObj)) {
-      // Bất kì đâu lên 14: mặc định thông báo Mai Thị Nữ, Lê Thị Huyền Trâm và Phan Hiếu Ngân
-      defaultNotifyIds = [maiThiNuId, huyenTramId, hieuNganId].filter(Boolean);
-    } else if (isStage13(targetStageObj)) {
-      // Bất kì đâu lên 13: mặc định thông báo cả Mai Thị Nữ và Đặng Khánh Linh
-      defaultNotifyIds = [maiThiNuId, saleAdminId].filter(Boolean);
-    } else if (isStage09(currentStageObj) && isStage10(targetStageObj)) {
-      // Từ 09 lên 10: mặc định fill Mai Thị Nữ
-      defaultNotifyIds = [maiThiNuId].filter(Boolean);
-    } else if (isStage09(targetStageObj)) {
-      // Bất kì bước nào lên 09: mặc định fill Sale Admin
-      defaultNotifyIds = [saleAdminId].filter(Boolean);
-    }
 
     setPipelineModal({
       isOpen: true,
@@ -14166,7 +13968,7 @@ Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều g
                                           {sh.signature_img && (
                                             <div style={{ background: '#f8fafc', padding: '3px 8px', borderRadius: '6px', border: '1px dashed var(--color-border-light)', display: 'inline-flex', justifyContent: 'center', alignItems: 'center' }}>
                                               <img 
-                                                src={sh.signature_img.startsWith('http') || sh.signature_img.startsWith('data:') ? sh.signature_img : `https://myerp.ideas.edu.vn/backend/${sh.signature_img.replace(/^\/+/, '')}`} 
+                                                src={sh.signature_img.startsWith('http') || sh.signature_img.startsWith('data:') ? sh.signature_img : `/backend/${sh.signature_img.replace(/^\/+/, '')}`} 
                                                 style={{ height: '36px', maxWidth: '120px', objectFit: 'contain' }} 
                                                 alt="Chữ ký" 
                                               />
@@ -18935,16 +18737,11 @@ Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều g
                   <CustomSelect
                     options={[
                       { value: 'technical_support', label: 'Hỗ trợ học tập / Hướng dẫn học vụ' },
-                      { value: 'lead_error_compensation', label: 'Yêu cầu chuyên đề / Khóa luận & Hỗ trợ khác' }
+                      { value: 'general_support', label: 'Yêu cầu chuyên đề / Khóa luận & Hỗ trợ khác' }
                     ]}
                     value={ticketForm.category || 'technical_support'}
                     onChange={val => setTicketForm({ ...ticketForm, category: val.toString() })}
                   />
-                  {(['ca_nhan', 'cold_call', 'gioi_thieu'].includes(formData.source || contact?.source) || (formData.dl_status || contact?.dl_status) === 'databank_claim') && (
-                    <span style={{ fontSize: '0.725rem', color: '#dc2626', fontWeight: 600, display: 'block', marginTop: '4px' }}>
-                      * Học viên tự khai thác / Databank chỉ hỗ trợ gửi yêu cầu Hỗ trợ học tập.
-                    </span>
-                  )}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div className="form-group">
@@ -19131,7 +18928,7 @@ Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều g
                               {item.name}
                             </p>
                             <a 
-                              href={item.path.startsWith('http') ? item.path : `https://myerp.ideas.edu.vn/backend/${item.path}`} 
+                              href={item.path.startsWith('http') ? item.path : `/backend/${item.path}`} 
                               target="_blank" 
                               rel="noreferrer" 
                               style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 600, textDecoration: 'underline', marginTop: '2px', display: 'inline-block' }}
@@ -19201,7 +18998,7 @@ Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều g
                     flexShrink: 0
                   }}>
                     <img 
-                      src={currentUser.signature_url.startsWith('http') || currentUser.signature_url.startsWith('data:') ? currentUser.signature_url : `https://myerp.ideas.edu.vn/backend/${currentUser.signature_url.replace(/^\/+/, '')}`} 
+                      src={currentUser.signature_url.startsWith('http') || currentUser.signature_url.startsWith('data:') ? currentUser.signature_url : `/backend/${currentUser.signature_url.replace(/^\/+/, '')}`} 
                       alt="Chữ ký mẫu" 
                       style={{ maxHeight: '35px', objectFit: 'contain' }} 
                     />
@@ -20829,7 +20626,7 @@ Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều g
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="it.dept@ideas.edu.vn, student.notice@ideas.edu.vn, support@ideas.edu.vn"
+                  placeholder={tenantConfig?.organization?.academic_cc_emails || 'cc1@domain.com, cc2@domain.com'}
                   value={academicEmailForm.cc_email}
                   onChange={e => setAcademicEmailForm(prev => ({ ...prev, cc_email: e.target.value }))}
                 />
@@ -20965,17 +20762,17 @@ Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều g
                             overflow: 'hidden'
                           }}>
                             <img
-                              src="/LOGO.webp"
-                              alt="IDEAS"
+                              src={tenantConfig?.organization?.logo_url || '/LOGO.webp'}
+                              alt={tenantConfig?.organization?.name || 'Organization'}
                               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                               onError={(e: any) => {
                                 e.currentTarget.onerror = null;
-                                e.currentTarget.src = 'https://myerp.ideas.edu.vn/LOGO.webp';
+                                e.currentTarget.src = '/LOGO.webp';
                               }}
                             />
                           </div>
                           <div>
-                            <div style={{ fontWeight: 900, fontSize: '1.15rem', letterSpacing: '0.05em', lineHeight: 1.1, color: '#ffffff' }}>IDEAS</div>
+                            <div style={{ fontWeight: 900, fontSize: '1.15rem', letterSpacing: '0.05em', lineHeight: 1.1, color: '#ffffff' }}>{tenantConfig?.organization?.name || 'MYERP'}</div>
                           </div>
                         </div>
                         <div style={{ fontSize: '0.72rem', background: 'rgba(0,0,0,0.2)', padding: '3px 8px', borderRadius: '4px', opacity: 0.9 }}>
@@ -20983,7 +20780,7 @@ Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều g
                         </div>
                       </div>
                       <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#ffffff', lineHeight: 1.35 }}>
-                        {academicEmailForm.subject || 'Thông báo từ Ban Học vụ IDEAS'}
+                        {academicEmailForm.subject || `Thông báo từ Ban Học vụ ${tenantConfig?.organization?.name || ''}`.trim()}
                       </div>
                     </div>
 
@@ -21007,13 +20804,21 @@ Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều g
                       lineHeight: '1.5'
                     }}>
                       <div style={{ fontWeight: 700, color: '#334155', marginBottom: '2px' }}>
-                        Ban Công tác Sinh viên &amp; Học vụ - Viện IDEAS
+                        Ban Công tác Sinh viên &amp; Học vụ - {tenantConfig?.organization?.name || 'MYERP'}
                       </div>
-                      <div>
-                        Hotline / Zalo: <strong style={{ color: '#BD1D2D' }}>098 736 3935</strong> | Email: <span style={{ color: '#BD1D2D' }}>support@ideas.edu.vn</span>
-                      </div>
+                      {(tenantConfig?.organization?.support_hotline || tenantConfig?.organization?.support_email) && (
+                        <div>
+                          {tenantConfig?.organization?.support_hotline && (
+                            <>Hotline / Zalo: <strong style={{ color: '#BD1D2D' }}>{tenantConfig.organization.support_hotline}</strong></>
+                          )}
+                          {tenantConfig?.organization?.support_hotline && tenantConfig?.organization?.support_email ? ' | ' : ''}
+                          {tenantConfig?.organization?.support_email && (
+                            <>Email: <span style={{ color: '#BD1D2D' }}>{tenantConfig.organization.support_email}</span></>
+                          )}
+                        </div>
+                      )}
                       <div style={{ marginTop: '6px', fontSize: '0.7rem', color: '#94a3b8' }}>
-                        &copy; {new Date().getFullYear()} IDEAS Institute. All rights reserved.
+                        &copy; {new Date().getFullYear()} {tenantConfig?.organization?.name || 'MYERP'}. All rights reserved.
                       </div>
                     </div>
                   </div>
@@ -21057,7 +20862,7 @@ Chúc Anh/Chị có một kỳ học tập hiệu quả và gặt hái nhiều g
                 type="button"
                 className="btn outline"
                 onClick={() => {
-                  const textToCopy = academicEmailForm.zalo_text || getAcademicZaloOnboardingText((formData.full_name || contact?.full_name || '').trim());
+                  const textToCopy = academicEmailForm.zalo_text || renderTenantOnboardingTemplate({ programCode: academicEmailProgram, studentName: (formData.full_name || contact?.full_name || '').trim(), staffName: (currentUser?.full_name || currentUser?.name || '').trim() }).zaloText;
                   navigator.clipboard.writeText(textToCopy).then(() => {
                     addToast('Đã sao chép mẫu Tin nhắn Zalo Tiếp nhận vào Clipboard!', 'success');
                   });

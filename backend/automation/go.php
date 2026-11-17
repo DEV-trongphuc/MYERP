@@ -3,6 +3,60 @@ require_once 'config.php';
 apiHeaders();
 header("Content-Type: text/html; charset=UTF-8");
 
+/**
+ * Strict Redirect URL Sanitizer & Protocol Whitelist Guard
+ */
+if (!function_exists('sanitize_redirect_url')) {
+    function sanitize_redirect_url(?string $rawUrl, ?string $fallbackUrl = null): string {
+        $fallback = $fallbackUrl ?: (rtrim(function_exists('resolve_automation_app_base_url') ? resolve_automation_app_base_url() : (getenv('APP_BASE_URL') ?: 'http://localhost'), '/') . '/');
+        if ($rawUrl === null || trim($rawUrl) === '') {
+            return $fallback;
+        }
+
+        // 1. HTML entity decode and strip control characters / CRLF
+        $url = html_entity_decode(trim($rawUrl), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $url = preg_replace('/[\x00-\x1F\x7F]+/', '', $url);
+        if (trim($url) === '') {
+            return $fallback;
+        }
+
+        // 2. Reject dangerous schemes
+        if (preg_match('/^(?:javascript|data|vbscript|file|about|blob):/i', $url)) {
+            return $fallback;
+        }
+
+        // 3. Protocol-relative normalization
+        if (strpos($url, '//') === 0) {
+            $url = 'https:' . $url;
+        } elseif (!preg_match('/^[a-z][a-z0-9+\-.]*:\/\//i', $url)) {
+            $url = 'https://' . ltrim($url, '/');
+        }
+
+        // 4. Encode non-ASCII for validation
+        $encodedUrl = preg_replace_callback('/[^\x21-\x7E]/', function ($m) {
+            return rawurlencode($m[0]);
+        }, $url);
+
+        $parsed = @parse_url($encodedUrl);
+        if (!$parsed || !is_array($parsed)) {
+            return $fallback;
+        }
+
+        $scheme = strtolower($parsed['scheme'] ?? '');
+        $host   = $parsed['host'] ?? '';
+
+        if (!in_array($scheme, ['http', 'https'], true) || empty($host)) {
+            return $fallback;
+        }
+
+        if (!filter_var($encodedUrl, FILTER_VALIDATE_URL)) {
+            return $fallback;
+        }
+
+        return str_replace(["\r", "\n"], '', $encodedUrl);
+    }
+}
+
 $slug = $_GET['s'] ?? '';
 
 if (!$slug) {
@@ -37,10 +91,10 @@ if (!$link) {
     exit;
 }
 
-// --- STATUS ENFORCEMENT ---
-// [FIX H-02] Handles all non-active statuses (paused, expired, deleted, etc.)
-if (($link['status'] ?? 'active') !== 'active') {
-    $linkStatus  = $link['status'] ?? 'inactive';
+// --- STATUS ENFORCEMENT & 100% SOFT-DELETE GUARD ---
+$isDeleted = !empty($link['deleted_at']) || !empty($link['is_deleted']) || ($link['status'] ?? '') === 'deleted';
+if ($isDeleted || ($link['status'] ?? 'active') !== 'active') {
+    $linkStatus  = $isDeleted ? 'deleted' : ($link['status'] ?? 'inactive');
     $displayName = htmlspecialchars((string)(!empty($link['name']) ? $link['name'] : $link['slug']), ENT_QUOTES, 'UTF-8');
     $statusMessages = [
         'paused'   => 'Liên kết này hiện đang được quản trị viên tạm khóa. Vui lòng quay lại sau.',
@@ -58,11 +112,9 @@ if (($link['status'] ?? 'active') !== 'active') {
     exit;
 }
 
-
 // --- PIN PROTECTION ---
 $accessPin = $link['access_pin'] ?? null;
 if (!empty($accessPin)) {
-    // [FIX H-07] Guard against double session_start() — config.php -> db_connect.php already started it.
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }
@@ -73,6 +125,7 @@ if (!empty($accessPin)) {
         if (trim($_POST['pin']) === $accessPin) {
             $_SESSION[$pinSessionKey] = true;
             $safeReqUri = filter_var($_SERVER['REQUEST_URI'] ?? '/', FILTER_SANITIZE_URL) ?: '/';
+            $safeReqUri = str_replace(["\r", "\n"], '', $safeReqUri);
             header("Location: " . $safeReqUri); // Refresh to clear POST data
             exit;
         } else {
@@ -157,31 +210,34 @@ try {
     logClick($pdo, $link['id']);
 } catch (Exception $e) { /* ignore tracking error so redirect still works */ }
 
-// 2. Decide Redirect Destination [SEC-07] Strictly restrict to http:// or https://
-$targetUrl = trim((string)($link['target_url'] ?? ''));
-$parsedTarget = @parse_url($targetUrl);
-$scheme = strtolower((string)($parsedTarget['scheme'] ?? ''));
-if (!in_array($scheme, ['http', 'https'], true)) {
-    $cleanTarget = preg_replace('/^[a-zA-Z0-9+\-.]+:(?:\/\/)?/', '', $targetUrl);
-    $targetUrl = 'https://' . ltrim((string)$cleanTarget, '/');
-}
+// 2. Decide Redirect Destination with strict sanitization
+$cleanTargetUrl = sanitize_redirect_url($link['target_url'] ?? '');
 
 if ($link['is_survey_checkin'] && $link['survey_id']) {
     // Redirect to Survey Check-in
     $frontendBase = defined('EXTERNAL_ASSET_BASE') ? EXTERNAL_ASSET_BASE : '/';
     $surveyId = urlencode((string)$link['survey_id']);
-    $next = urlencode($targetUrl);
+    $next = urlencode($cleanTargetUrl);
     $safeSlug = urlencode((string)$slug);
     $redirectUrl = rtrim($frontendBase, '/') . "/s/$surveyId?next=$next&src=qr_code&ref=$safeSlug&slid=" . urlencode((string)$link['id']) . "&t=" . time();
-    header("Location: $redirectUrl");
+    $redirectUrl = str_replace(["\r", "\n"], '', $redirectUrl);
+    header("Location: " . $redirectUrl, true, 302);
+    header("Connection: close");
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+    }
     exit;
 }
 
 // Ensure normal link tracking passes slid if target URL already has params
-$separator = (strpos($targetUrl, '?') === false) ? '?' : '&';
-$targetUrlWithSlid = $targetUrl . $separator . "slid=" . urlencode((string)$link['id']) . "&t=" . time();
+$separator = (strpos($cleanTargetUrl, '?') === false) ? '?' : '&';
+$targetUrlWithSlid = $cleanTargetUrl . $separator . "slid=" . urlencode((string)$link['id']) . "&t=" . time();
+$targetUrlWithSlid = str_replace(["\r", "\n"], '', $targetUrlWithSlid);
 
 // Default Direct Redirect
-header("Location: $targetUrlWithSlid");
+header("Location: " . $targetUrlWithSlid, true, 302);
+header("Connection: close");
+if (function_exists('fastcgi_finish_request')) {
+    fastcgi_finish_request();
+}
 exit;
-

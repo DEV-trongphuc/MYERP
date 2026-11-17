@@ -156,16 +156,16 @@ const checkBurstLimit = (
   const isWait = step.type === 'wait';
 
   if (isWait) {
-    // Check Wait Duration >= 10 Minutes
+    // Check Wait Duration >= 5 Minutes
     let minutes = 0;
     if (step.config.unit === 'minutes') minutes = step.config.duration;
     if (step.config.unit === 'hours') minutes = step.config.duration * 60;
     if (step.config.unit === 'days') minutes = step.config.duration * 1440;
 
-    if (minutes >= 10) {
+    if (minutes >= 5) {
       newCount = 0; // Reset
     } else {
-      // Wait < 10 mins does NOT reset count
+      // Wait < 5 mins does NOT reset count
     }
   } else if (isFastAction) {
     newCount++;
@@ -179,7 +179,7 @@ const checkBurstLimit = (
     const alreadyreported = errors.some(e => e.stepId === step.id && e.msg.includes('liên tiếp quá nhanh'));
     if (!alreadyreported) {
       errors.push({
-        msg: `QUÁ TẢI: Chuỗi hành động liên tiếp quá nhanh (Bước "${step.label}"). Cần thêm bước Chờ (tối thiểu 10 phút) sau mỗi 3 hành động nhanh.`,
+        msg: `QUÁ TẢI: Chuỗi hành động liên tiếp quá nhanh (Bước "${step.label}"). Cần thêm bước Chờ (tối thiểu 5 phút) sau mỗi 3 hành động nhanh.`,
         type: 'critical',
         stepId: step.id
       });
@@ -402,6 +402,7 @@ export const findDuplicateTriggerFlow = (currentFlow: Flow, allFlows: Flow[]): {
     switch (currentType) {
       case 'campaign':
       case 'form':
+      case 'survey':
       case 'purchase':
       case 'custom_event':
       case 'segment':
@@ -513,7 +514,7 @@ const checkFrequencyCapRisk = (
       const channel = newEmailCount > cap ? 'Email' : 'Zalo';
       const count = newEmailCount > cap ? newEmailCount : newZaloCount;
       errors.push({
-        msg: `CẢNH BÁO FREQUENCY CAP: Flow này có thể gửi ${count} ${channel} trong vòng 1 ngày, vượt quá giới hạn ${cap} tin/ngày/kênh. Hệ thống sẽ hoãn gửi các tin thừa sang ngày hôm sau.`,
+        msg: `CẢNH BÁO FREQUENCY CAP: Flow này có thể gửi ${count} ${channel} trong vòng 1 ngày, vượt quá mức "Max Tin / Ngày" (${cap} tin/ngày/kênh) trong tab Cài đặt. Hệ thống sẽ hoãn gửi các tin thừa sang ngày hôm sau.`,
         type: 'warning',
         stepId: step.id
       });
@@ -535,7 +536,13 @@ const checkFrequencyCapRisk = (
   }
 };
 
-export const validateFlow = (flowToCheck: Flow, allFlows: Flow[] = [], isStrict: boolean = false, isDirty: boolean = false): ValidationError[] => {
+export const validateFlow = (
+  flowToCheck: Flow,
+  allFlows: Flow[] = [],
+  isStrict: boolean = false,
+  isDirty: boolean = false,
+  entities?: { forms?: Array<{ id: string; deleted_at?: any }>; surveys?: Array<{ id: string; deleted_at?: any }> }
+): ValidationError[] => {
   let errors: ValidationError[] = [];
   const rawSteps = flowToCheck.steps || [];
 
@@ -577,9 +584,11 @@ export const validateFlow = (flowToCheck: Flow, allFlows: Flow[] = [], isStrict:
     checkBurstLimit(trigger.nextStepId, flowToCheck, errors, 0, new Set());
     checkTimeConsistency(trigger.nextStepId, flowToCheck, errors, 0, null, new Set(), isDirty);
 
-    // NEW: Check Frequency Cap Risk
-    const cap = (flowToCheck.config as any)?.frequencyCap ?? 3;
-    if (cap > 0) { // Only check if cap is active
+    // Check Frequency Cap Risk (synced with Backend FlowExecutor maxMessagesPerDay; Priority triggers = ∞)
+    const isPriorityTrigger = ['form', 'purchase', 'custom_event'].includes(trigger.config?.type || '');
+    const rawMaxPerDay = Number((flowToCheck.config as any)?.maxMessagesPerDay ?? 0);
+    const cap = isPriorityTrigger ? 0 : (Number.isFinite(rawMaxPerDay) ? rawMaxPerDay : 0);
+    if (cap > 0) { // Only check if daily cap is explicitly enabled (> 0)
       checkFrequencyCapRisk(trigger.nextStepId, flowToCheck, errors, 0, 0, new Set(), cap, Date.now());
     }
   }
@@ -650,13 +659,28 @@ export const validateFlow = (flowToCheck: Flow, allFlows: Flow[] = [], isStrict:
     errors.push({ msg: 'Thiếu điểm bắt đầu (Trigger)', type: 'critical' });
   } else {
     // ... (existing trigger checks) ...
-    if ((['segment', 'form', 'purchase', 'custom_event', 'tag', 'campaign'].includes(trigger.config.type || '')) && !trigger.config.targetId) {
+    if ((['segment', 'form', 'survey', 'purchase', 'custom_event', 'tag', 'campaign'].includes(trigger.config.type || '')) && !trigger.config.targetId) {
       // Note: Tag might allow array only, but we check targetId usually
       // Let's relax for Tag if tags array exists
       if (trigger.config.type === 'tag' && (!trigger.config.tags || trigger.config.tags.length === 0) && !trigger.config.targetId) {
         errors.push({ msg: `Chưa chọn thẻ (Tag) cho Trigger`, type: isStrict ? 'critical' : 'warning', stepId: trigger.id });
       } else if (trigger.config.type !== 'tag' && !trigger.config.targetId) {
         errors.push({ msg: `Chưa chọn nguồn kích hoạt cho Trigger (${trigger.config.type})`, type: isStrict ? 'critical' : 'warning', stepId: trigger.id });
+      }
+    }
+
+    if (entities && trigger.config.targetId) {
+      if (trigger.config.type === 'form' && entities.forms) {
+        const found = entities.forms.find(f => f.id === trigger.config.targetId);
+        if (!found || found.deleted_at) {
+          errors.push({ msg: `Biểu mẫu liên kết đã bị xóa hoặc không tồn tại`, type: isStrict ? 'critical' : 'warning', stepId: trigger.id });
+        }
+      }
+      if (trigger.config.type === 'survey' && entities.surveys) {
+        const found = entities.surveys.find(s => s.id === trigger.config.targetId);
+        if (!found || found.deleted_at) {
+          errors.push({ msg: `Khảo sát liên kết đã bị xóa hoặc không tồn tại`, type: isStrict ? 'critical' : 'warning', stepId: trigger.id });
+        }
       }
     }
     // ...
@@ -1009,3 +1033,40 @@ export const validateFlowAsync = async (
 
 // Dual value declarations for verbatimModuleSyntax compatibility
 export const ValidationError: any = undefined;
+
+export const validateFlowEntities = (
+  f: Flow | { steps?: any[] },
+  surveys?: Array<{ id: string; deleted_at?: any }>,
+  forms?: Array<{ id: string; deleted_at?: any }>
+) => {
+  const errors: Array<{ stepId?: string; type: string; message: string; msg?: string }> = [];
+  const trigger = f.steps?.find((s: any) => s.type === 'trigger');
+  if (trigger) {
+    const triggerType = trigger.config?.type || (trigger as any).trigger_type;
+    const targetId = trigger.config?.targetId || (trigger as any).target_id;
+    if ((triggerType === 'survey' || triggerType === 'survey_submit') && targetId && surveys) {
+      const exists = surveys.some(s => s.id === targetId && !s.deleted_at);
+      if (!exists) {
+        errors.push({
+          stepId: trigger.id,
+          type: 'warning',
+          message: 'Khảo sát liên kết đã bị xóa hoặc không tồn tại',
+          msg: 'Khảo sát liên kết đã bị xóa hoặc không tồn tại'
+        });
+      }
+    }
+    if ((triggerType === 'form' || triggerType === 'form_submit') && targetId && forms) {
+      const exists = forms.some(fItem => fItem.id === targetId && !fItem.deleted_at);
+      if (!exists) {
+        errors.push({
+          stepId: trigger.id,
+          type: 'warning',
+          message: 'Biểu mẫu liên kết đã bị xóa hoặc không tồn tại',
+          msg: 'Biểu mẫu liên kết đã bị xóa hoặc không tồn tại'
+        });
+      }
+    }
+  }
+  return { isValid: errors.length === 0, errors };
+};
+

@@ -6,6 +6,7 @@ import {
 import toast from 'react-hot-toast';
 import type { ErpCardTagData } from './chatTagParsers';
 import { copyTextSafely } from '../../utils/clipboard';
+import { getTenantFrontendUrl } from '../../contexts/TenantConfigContext';
 
 interface Props {
   card: ErpCardTagData;
@@ -130,7 +131,8 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
 
   const handleCopyLink = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const url = card.direct_url || (card.relative_url ? `https://myerp.ideas.edu.vn${card.relative_url}` : window.location.href);
+    const baseUrl = getTenantFrontendUrl() || window.location.origin;
+    const url = card.direct_url || (card.relative_url ? `${baseUrl}${card.relative_url}` : window.location.href);
     const ok = await copyTextSafely(url);
     if (ok) {
       setCopied(true);

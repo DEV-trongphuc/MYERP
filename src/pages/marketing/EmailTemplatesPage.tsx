@@ -1278,12 +1278,22 @@ const Templates: React.FC = () => {
         return { name: 'Chọn thư mục', count: allMergedTemplates.length };
     }, [filterGroupId, allMergedTemplates, personalTemplatesCount, sharedTemplatesCount, groups]);
 
-    const pillClass = (active: boolean) =>
-        `h-9 px-3 rounded-[var(--radius-md)] text-[13px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors border outline-none focus:outline-none cursor-pointer ${
-            active
-                ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)] shadow-[var(--shadow-xs)]'
-                : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:bg-[var(--color-bg)] hover:text-[var(--color-text)]'
-        }`;
+    const subTabBtnStyle = (active: boolean): React.CSSProperties => ({
+        height: '32px',
+        padding: '0 14px',
+        borderRadius: '7px',
+        border: 'none',
+        background: active ? '#ffffff' : 'transparent',
+        color: active ? '#BD1D2D' : '#64748b',
+        fontWeight: active ? 700 : 600,
+        boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+        cursor: 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        fontSize: '13px',
+        transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)'
+    });
 
     return (
         <div className="w-full flex flex-col gap-5">
@@ -1328,64 +1338,106 @@ const Templates: React.FC = () => {
                     <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-[var(--shadow-xs)] relative">
                         {/* Single-row Toolbar: Core scope pills on left, Folder Modal + Sort + SearchBox on right */}
                         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-[var(--color-border)]">
-                            <div className="flex items-center gap-1.5 max-w-full overflow-x-auto no-scrollbar">
-                                <button
-                                    type="button"
-                                    onClick={() => handleFilterGroupChange('all')}
-                                    className={pillClass(filterGroupId === 'all')}
-                                >
-                                    <Globe className="w-3.5 h-3.5 shrink-0" />
-                                    <span>Tất cả</span>
-                                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${filterGroupId === 'all' ? 'bg-white/20 text-white' : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'}`}>
-                                        {allMergedTemplates.length}
-                                    </span>
-                                </button>
+                            <div className="flex items-center gap-2 max-w-full overflow-x-auto no-scrollbar">
+                                <div style={{ display: 'inline-flex', padding: '3px', borderRadius: '10px', background: '#f1f5f9', border: '1px solid #e2e8f0', gap: '2px', alignItems: 'center' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleFilterGroupChange('all')}
+                                        style={subTabBtnStyle(filterGroupId === 'all')}
+                                    >
+                                        <Globe className="w-3.5 h-3.5 shrink-0" />
+                                        <span>Tất cả</span>
+                                        <span style={{
+                                            fontSize: '11px',
+                                            padding: '1px 6px',
+                                            borderRadius: '6px',
+                                            background: filterGroupId === 'all' ? 'rgba(189, 29, 45, 0.08)' : 'rgba(100, 116, 139, 0.08)',
+                                            color: filterGroupId === 'all' ? '#BD1D2D' : '#64748b',
+                                            fontWeight: 700
+                                        }}>
+                                            {allMergedTemplates.length}
+                                        </span>
+                                    </button>
 
-                                <button
-                                    type="button"
-                                    onClick={() => handleFilterGroupChange('personal')}
-                                    className={pillClass(filterGroupId === 'personal')}
-                                >
-                                    <User className="w-3.5 h-3.5 shrink-0" />
-                                    <span>Của tôi</span>
-                                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${filterGroupId === 'personal' ? 'bg-white/20 text-white' : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'}`}>
-                                        {personalTemplatesCount}
-                                    </span>
-                                </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleFilterGroupChange('personal')}
+                                        style={subTabBtnStyle(filterGroupId === 'personal')}
+                                    >
+                                        <User className="w-3.5 h-3.5 shrink-0" />
+                                        <span>Của tôi</span>
+                                        <span style={{
+                                            fontSize: '11px',
+                                            padding: '1px 6px',
+                                            borderRadius: '6px',
+                                            background: filterGroupId === 'personal' ? 'rgba(189, 29, 45, 0.08)' : 'rgba(100, 116, 139, 0.08)',
+                                            color: filterGroupId === 'personal' ? '#BD1D2D' : '#64748b',
+                                            fontWeight: 700
+                                        }}>
+                                            {personalTemplatesCount}
+                                        </span>
+                                    </button>
 
-                                <button
-                                    type="button"
-                                    onClick={() => handleFilterGroupChange('shared')}
-                                    className={pillClass(filterGroupId === 'shared')}
-                                >
-                                    <Users className="w-3.5 h-3.5 shrink-0" />
-                                    <span>Dùng chung</span>
-                                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${filterGroupId === 'shared' ? 'bg-white/20 text-white' : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'}`}>
-                                        {sharedTemplatesCount}
-                                    </span>
-                                </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleFilterGroupChange('shared')}
+                                        style={subTabBtnStyle(filterGroupId === 'shared')}
+                                    >
+                                        <Users className="w-3.5 h-3.5 shrink-0" />
+                                        <span>Dùng chung</span>
+                                        <span style={{
+                                            fontSize: '11px',
+                                            padding: '1px 6px',
+                                            borderRadius: '6px',
+                                            background: filterGroupId === 'shared' ? 'rgba(189, 29, 45, 0.08)' : 'rgba(100, 116, 139, 0.08)',
+                                            color: filterGroupId === 'shared' ? '#BD1D2D' : '#64748b',
+                                            fontWeight: 700
+                                        }}>
+                                            {sharedTemplatesCount}
+                                        </span>
+                                    </button>
 
-                                <button
-                                    type="button"
-                                    onClick={() => handleFilterGroupChange('system')}
-                                    className={pillClass(filterGroupId === 'system')}
-                                >
-                                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                                    <span>Hệ thống</span>
-                                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${filterGroupId === 'system' ? 'bg-white/20 text-white' : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'}`}>
-                                        {SYSTEM_TEMPLATES.length}
-                                    </span>
-                                </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleFilterGroupChange('system')}
+                                        style={subTabBtnStyle(filterGroupId === 'system')}
+                                    >
+                                        <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                                        <span>Hệ thống</span>
+                                        <span style={{
+                                            fontSize: '11px',
+                                            padding: '1px 6px',
+                                            borderRadius: '6px',
+                                            background: filterGroupId === 'system' ? 'rgba(189, 29, 45, 0.08)' : 'rgba(100, 116, 139, 0.08)',
+                                            color: filterGroupId === 'system' ? '#BD1D2D' : '#64748b',
+                                            fontWeight: 700
+                                        }}>
+                                            {SYSTEM_TEMPLATES.length}
+                                        </span>
+                                    </button>
+                                </div>
 
                                 {/* Show active folder chip only when a folder was selected from the Folder Modal */}
                                 {activeCustomFolder && (
-                                    <div className="inline-flex items-center gap-1 h-9 pl-3 pr-2 rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 border border-[var(--color-primary)] text-[var(--color-primary)] text-[13px] font-semibold">
+                                    <div style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        height: '32px',
+                                        padding: '0 10px',
+                                        borderRadius: '7px',
+                                        background: 'rgba(189, 29, 45, 0.08)',
+                                        border: '1px solid rgba(189, 29, 45, 0.2)',
+                                        color: '#BD1D2D',
+                                        fontSize: '13px',
+                                        fontWeight: 600
+                                    }}>
                                         <FolderOpen className="w-3.5 h-3.5 shrink-0" />
                                         <span className="truncate max-w-[140px]">{activeCustomFolder.name}</span>
                                         <button
                                             type="button"
                                             onClick={() => handleFilterGroupChange('all')}
-                                            className="ml-0.5 p-0.5 rounded hover:bg-[var(--color-primary)]/15 outline-none focus:outline-none cursor-pointer"
+                                            style={{ marginLeft: '2px', padding: '2px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', color: '#BD1D2D', display: 'flex', alignItems: 'center' }}
                                             title="Bỏ lọc thư mục"
                                         >
                                             <X className="w-3.5 h-3.5" />

@@ -17,6 +17,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import axios from 'axios';
+import { getTenantLogoUrl, getTenantOrganizationName } from '../contexts/TenantConfigContext';
 
 export const PublicSchedulePage: React.FC = () => {
   const { customerId, campaignId, lecturerId } = useParams<{ customerId?: string; campaignId?: string; lecturerId?: string }>();
@@ -377,8 +378,8 @@ export const PublicSchedulePage: React.FC = () => {
         borderBottom: '1px solid var(--color-border-light)'
       }}>
         <img 
-          src="https://ideas.edu.vn/wp-content/uploads/2026/06/Logo_IDEAS_Slg-optimized.webp" 
-          alt="Logo IDEAS" 
+          src={getTenantLogoUrl('/LOGO.webp')} 
+          alt={getTenantOrganizationName()} 
           style={{ height: '48px', objectFit: 'contain' }}
         />
         <div style={{ textAlign: 'right' }}>

@@ -1,6 +1,9 @@
 <?php
 // api/Mailer.php - VERSION V30.1 (SAFETY GUARD & KEEPALIVE OPTIMIZED)
 require_once __DIR__ . '/flow_helpers.php';
+if (!class_exists('TenantConfigService') && file_exists(__DIR__ . '/../config/TenantConfigService.php')) {
+    require_once __DIR__ . '/../config/TenantConfigService.php';
+}
 class Mailer {
     private $pdo;
     private $baseUrl;
@@ -16,13 +19,17 @@ class Mailer {
     private static $breovCh = null; // [PERF] Persistent Brevo API cURL handle (connection reuse)
     private $logBuffer = []; // Optimization: Batch logging
 
-    public function __construct($pdo, $baseUrl = API_BASE_URL, $defaultSender = 'marketing@ideas.edu.vn', $workspaceId = 0)
+    public function __construct($pdo, $baseUrl = API_BASE_URL, $defaultSender = '', $workspaceId = 0)
     {
         $this->pdo = $pdo;
         // Đảm bảo baseUrl không có dấu / ở cuối để nối chuỗi cho chuẩn
         $this->baseUrl = rtrim($baseUrl, '/');
-        $this->defaultSender = ($defaultSender && $defaultSender !== 'marketing@ka-en.com.vn') ? $defaultSender : 'marketing@ideas.edu.vn';
         $this->workspaceId = (int) $workspaceId;
+        $effTid = $this->workspaceId > 0 ? $this->workspaceId : 1;
+        $tenantSender = ($pdo instanceof PDO && class_exists('TenantConfigService'))
+            ? TenantConfigService::getDefaultSenderEmail($pdo, $effTid)
+            : 'noreply@myerp.local';
+        $this->defaultSender = ($defaultSender && $defaultSender !== 'marketing@ka-en.com.vn') ? $defaultSender : $tenantSender;
         $this->loadSettings();
     }
 
@@ -39,14 +46,16 @@ class Mailer {
 
         // 1. Load MYERP core system_settings first (so /settings SES & AppScript config works seamlessly)
         try {
-            $sysStmt = $this->pdo->query(
+            $effTid = $this->workspaceId > 0 ? (int)$this->workspaceId : 1;
+            $sysStmt = $this->pdo->prepare(
                 "SELECT setting_key, setting_value FROM system_settings 
-                 WHERE setting_key IN (
+                 WHERE tenant_id = ? AND setting_key IN (
                      'email_provider','appscript_webhook_url',
                      'ses_host','ses_username','ses_password','ses_sender_email','ses_sender_name',
                      'smtp_port','verified_from_senders','qa_test_emails','automation_sandbox_mode'
                  )"
             );
+            $sysStmt->execute([$effTid]);
             if ($sysStmt) {
                 $sysMap = [];
                 foreach ($sysStmt->fetchAll(PDO::FETCH_ASSOC) as $sRow) {
@@ -177,9 +186,18 @@ class Mailer {
             $senders[$uEm] = $uEm;
         }
 
-        if (empty($senders)) {
-            foreach (['tuyensinh@ideas.edu.vn', 'cskh@ideas.edu.vn', 'marketing@ideas.edu.vn', 'systemnoti@ideas.edu.vn'] as $defEm) {
-                $senders[$defEm] = $defEm;
+        if (empty($senders) && ($this->pdo instanceof PDO) && class_exists('TenantConfigService')) {
+            $effTid = $this->workspaceId > 0 ? $this->workspaceId : 1;
+            $org = TenantConfigService::getOrganizationProfile($this->pdo, $effTid);
+            foreach (($org['verified_senders'] ?? []) as $defEm) {
+                $defEm = strtolower(trim((string)$defEm));
+                if ($defEm !== '' && filter_var($defEm, FILTER_VALIDATE_EMAIL)) {
+                    $senders[$defEm] = $defEm;
+                }
+            }
+            if (empty($senders) && !empty($org['sender_email']) && filter_var($org['sender_email'], FILTER_VALIDATE_EMAIL)) {
+                $sEm = strtolower(trim((string)$org['sender_email']));
+                $senders[$sEm] = $sEm;
             }
         }
 
@@ -197,15 +215,15 @@ class Mailer {
 
     public function getDefaultSenderName(): string
     {
+        $effTid = $this->workspaceId > 0 ? $this->workspaceId : 1;
+        $orgBrand = ($this->pdo instanceof PDO && class_exists('TenantConfigService'))
+            ? TenantConfigService::getBrandName($this->pdo, $effTid)
+            : 'MYERP';
         if (!empty($this->dynamicSenderName)) {
-            $dyn = trim((string)$this->dynamicSenderName);
-            return preg_match('/^viện\s+quốc\s+tế\s+ideas$/iu', $dyn) ? 'IDEAS' : $dyn;
+            return trim((string)$this->dynamicSenderName);
         }
         $configured = !empty($this->smtpSettings['smtp_from_name']) ? trim((string)$this->smtpSettings['smtp_from_name']) : '';
-        if ($configured === '' || preg_match('/^viện\s+quốc\s+tế\s+ideas$/iu', $configured)) {
-            return 'IDEAS';
-        }
-        return $configured;
+        return $configured !== '' ? $configured : $orgBrand;
     }
 
     public function setDynamicSender($email)
@@ -352,7 +370,7 @@ class Mailer {
             }
         }
 
-        $utmCampaign = $flowName ? urlencode($flowName) : ($campaignId ? "camp_$campaignId" : "direct");
+        $utmCampaign = $flowName ? $flowName : ($campaignId ? "camp_$campaignId" : "direct");
 
         $cleanHtmlContent = $htmlContent;
 
@@ -384,9 +402,9 @@ class Mailer {
                     $trackingHtml
                 );
 
-                // Auto-fix any link that visually contains "unsubscribe" or "hủy đăng ký", replacing its href
+                // Auto-fix any link that visually contains "unsubscribe" or "hủy đăng ký", replacing ONLY its own href (never cross </a>/<a boundaries)
                 $trackingHtml = preg_replace_callback(
-                    '/<a[^>]*href=["\']([^"\']*)["\'][^>]*>(?P<text>.*?(?:unsubscribe|hủy đăng ký|huy dang ky|ngừng nhận tin).*?)<\/a>/si',
+                    '/<a\b[^>]*href=["\']([^"\']*)["\'][^>]*>(?P<text>(?:(?!<\/a>|<a\b).)*?(?:unsubscribe|hủy đăng ký|huy dang ky|ngừng nhận tin)(?:(?!<\/a>|<a\b).)*?)<\/a>/si',
                     function($m) use ($unsubPlaceholder) {
                         return preg_replace('/href=(["\'])' . preg_quote($m[1], '/') . '\1/i', 'href="' . $unsubPlaceholder . '"', $m[0], 1);
                     },
@@ -401,12 +419,18 @@ class Mailer {
                 );
 
                 if (!$hasUnsubTag && !$skipAutoFooter) {
+                    $effTidFooter = $this->workspaceId > 0 ? $this->workspaceId : 1;
+                    $homeUrl = ($this->pdo instanceof PDO && class_exists('TenantConfigService'))
+                        ? TenantConfigService::getFrontendUrl($this->pdo, $effTidFooter)
+                        : '';
+                    $homeLinkHtml = $homeUrl !== ''
+                        ? " | <a href='" . htmlspecialchars($homeUrl, ENT_QUOTES, 'UTF-8') . "' style='color: #666; text-decoration: none;'>Về trang chủ</a>"
+                        : '';
                     $footerHtml = "
                         <div style='margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-family: sans-serif; font-size: 12px; color: #999; text-align: center; line-height: 1.5;'>
                             <p>Bạn nhận được email này vì đã đăng ký nhận tin từ hệ thống của chúng tôi.</p>
                             <p>
-                                <a href='{$unsubPlaceholder}' style='color: #666; text-decoration: underline;'>Hủy đăng ký (Unsubscribe)</a> 
-                                | <a href='https://ideas.edu.vn' style='color: #666; text-decoration: none;'>Về trang chủ</a>
+                                <a href='{$unsubPlaceholder}' style='color: #666; text-decoration: underline;'>Hủy đăng ký (Unsubscribe)</a>{$homeLinkHtml}
                             </p>
                         </div>";
                     $trackingHtml = (strpos($trackingHtml, '</body>') !== false)

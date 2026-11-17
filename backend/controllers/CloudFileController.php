@@ -489,7 +489,8 @@ class CloudFileController {
 
         $role = strtolower($auth['role'] ?? '');
         $uid = (int)$auth['user_id'];
-        $isPrivileged = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'hr'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isPrivileged = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'hr'], 'files', 'delete', ['all']);
 
         if (!$isPrivileged) {
             $isOwner = ((int)($contact['owner_id'] ?? 0) === $uid) || ((int)($contact['created_by'] ?? 0) === $uid);
@@ -675,11 +676,15 @@ class CloudFileController {
     }
 
     /**
-     * Call Partner AI Service (https://api-ai-staging.ideas.edu.vn/api/partner/invoke)
+     * Call Partner AI Gateway Service
      */
     private function callPartnerAiInvoke(array $content, string $instructions, string $model = 'google/gemini-3.6-flash', float $temperature = 0.1, int $maxTokens = 3500): ?array {
-        $partnerUrl = 'https://api-ai-staging.ideas.edu.vn/api/partner/invoke';
-        $partnerKey = 'sk_f4f35f7b9db0c07311e94ce2c725f54a5d6c73ffdc4bd1d6f14a6a300b7000b2';
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $tidGw = (int)($GLOBALS['current_tenant_id'] ?? 1);
+        $partnerUrl = trim((string)TenantConfigService::getSetting($this->db, $tidGw, 'ai_partner_gateway_url', getenv('AI_PARTNER_GATEWAY_URL') ?: ''));
+        if ($partnerUrl === '') { return null; }
+        $partnerKey = trim((string)TenantConfigService::getSetting($this->db, $tidGw, 'ai_partner_gateway_key', getenv('AI_PARTNER_GATEWAY_KEY') ?: ''));
+        if ($partnerKey === '') { return null; }
 
         $payload = [
             'content' => $content,
@@ -846,7 +851,9 @@ CHÚ Ý QUAN TRỌNG:
 EOT;
 
         // Xây dựng Public URL cho Partner AI
-        $host = $_SERVER['HTTP_HOST'] ?? 'myerp.ideas.edu.vn';
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $feHost = parse_url(TenantConfigService::getFrontendUrl($this->db, (int)($auth['tenant_id'] ?? 1)), PHP_URL_HOST) ?: 'localhost';
+        $host = $_SERVER['HTTP_HOST'] ?? $feHost;
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'https';
         $publicUrl = '';
         if (!empty($fileUrl) && (strpos($fileUrl, 'http://') === 0 || strpos($fileUrl, 'https://') === 0)) {
@@ -1081,7 +1088,9 @@ EOT;
         }
 
         // Xây dựng Public URL
-        $host = $_SERVER['HTTP_HOST'] ?? 'myerp.ideas.edu.vn';
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $feHost = parse_url(TenantConfigService::getFrontendUrl($this->db, (int)($auth['tenant_id'] ?? 1)), PHP_URL_HOST) ?: 'localhost';
+        $host = $_SERVER['HTTP_HOST'] ?? $feHost;
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'https';
         $publicUrl = '';
         if (!empty($fileUrl) && (strpos($fileUrl, 'http://') === 0 || strpos($fileUrl, 'https://') === 0)) {

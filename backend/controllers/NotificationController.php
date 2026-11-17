@@ -283,22 +283,10 @@ class NotificationController {
         ];
         $settings = array_merge($defaultPrefs, $row ?: []);
 
-        $zaloBotLink = '';
-        $tgBotUsername = '';
-        try {
-            $stmtSys = $this->db->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('zalo_bot_link', 'telegram_bot_username')");
-            if ($stmtSys) {
-                $rows = $stmtSys->fetchAll(PDO::FETCH_ASSOC);
-                foreach ($rows as $r) {
-                    if ($r['setting_key'] === 'zalo_bot_link') {
-                        $zaloBotLink = trim((string)$r['setting_value']);
-                    }
-                    if ($r['setting_key'] === 'telegram_bot_username') {
-                        $tgBotUsername = trim((string)$r['setting_value']);
-                    }
-                }
-            }
-        } catch (\Throwable $sysEx) {}
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $zaloBotLink = trim((string)TenantConfigService::getSetting($this->db, $tid, 'zalo_bot_link', ''));
+        $tgBotUsername = trim((string)TenantConfigService::getSetting($this->db, $tid, 'telegram_bot_username', ''));
 
         $matrixConfig = null;
         if (!empty($row['matrix_config'])) {
@@ -421,14 +409,17 @@ class NotificationController {
     public function sendTestAttendanceEmail(array $auth): void {
         requireRole($auth, ['admin', 'superadmin', 'super_admin', 'director', 'hr', 'manager']);
         $b = getBody();
-        $email = trim((string)($b['email'] ?? 'phucht@ideas.edu.vn'));
-        $name = trim((string)($b['user_name'] ?? $b['name'] ?? 'Huỳnh Trọng Phúc'));
-        $role = trim((string)($b['role'] ?? 'Marketing'));
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $org = TenantConfigService::getOrganizationProfile($this->db, $tid);
+        $email = trim((string)($b['email'] ?? ($auth['email'] ?? $org['support_email'] ?? '')));
+        $name = trim((string)($b['user_name'] ?? $b['name'] ?? ($auth['full_name'] ?? 'Nhân viên')));
+        $role = trim((string)($b['role'] ?? ($auth['department'] ?? $auth['role'] ?? 'Staff')));
         $workStart = trim((string)($b['work_start'] ?? '08:00'));
         $type = trim((string)($b['type'] ?? 'all'));
 
         require_once __DIR__ . '/../mailer.php';
-        $frontendUrl = get_system_setting($this->db, 'frontend_url') ?: 'https://myerp.ideas.edu.vn';
+        $frontendUrl = $org['frontend_url'] ?: (get_system_setting($this->db, 'frontend_url', $tid) ?: '');
         $loginAttendanceLink = rtrim($frontendUrl, '/') . '/login?redirect=/attendance';
 
         $sentResults = [];

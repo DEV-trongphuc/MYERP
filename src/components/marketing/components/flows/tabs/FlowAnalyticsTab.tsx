@@ -89,7 +89,7 @@ const FlowAnalyticsTab: React.FC<{
         { id: 'open', label: 'Mở email', icon: MailOpen, color: 'text-emerald-500' },
         { id: 'click', label: 'Click link', icon: MousePointerClick, color: 'text-amber-500' },
         { id: 'sent', label: 'Đã gửi', icon: Send, color: 'text-blue-500' },
-        { id: 'failed', label: 'Lỗi gửi', icon: AlertOctagon, color: 'text-rose-500' },
+        { id: 'failed', label: 'Lỗi / Bỏ qua', icon: AlertOctagon, color: 'text-rose-500' },
         { id: 'unsubscribe', label: 'Hủy đăng ký', icon: UserMinus, color: 'text-orange-500' },
         { id: 'enter_flow', label: 'Tham gia', icon: Plus, color: 'text-indigo-500' },
         { id: 'complete_flow', label: 'Hoàn thành', icon: Check, color: 'text-emerald-500' },
@@ -100,7 +100,7 @@ const FlowAnalyticsTab: React.FC<{
     // Participants Modal State
     const [isParticipantsModalOpen, setIsParticipantsModalOpen] = useState(false);
     const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
-    const [modalTab, setModalTab] = useState<'waiting' | 'opened' | 'failed' | 'unsubscribed' | 'all' | 'clicks' | 'all_touched' | 'report' | 'zns_sent' | 'zns_clicked' | 'zns_replied' | 'zns_failed'>('all_touched');
+    const [modalTab, setModalTab] = useState<'waiting' | 'opened' | 'failed' | 'unsubscribed' | 'all' | 'clicks' | 'all_touched' | 'report' | 'zns_sent' | 'zns_clicked' | 'zns_replied' | 'zns_failed' | 'zns_skipped'>('all_touched');
 
     const triggerStep = useMemo(() => currentFlow.steps.find(s => s.type === 'trigger'), [currentFlow.steps]);
 
@@ -596,6 +596,7 @@ const FlowAnalyticsTab: React.FC<{
             else if (modalTab === 'zns_clicked') typeParam = 'click_zns';
             else if (modalTab === 'zns_replied') typeParam = 'reply_zns';
             else if (modalTab === 'zns_failed') typeParam = 'zns_failed';
+            else if (modalTab === 'zns_skipped') typeParam = 'zns_skipped';
         }
 
         fetchParticipants(1, selectedStepId, statusParam, debouncedSearchTerm, typeParam, selectedBranchFilter);
@@ -1846,6 +1847,7 @@ const FlowAnalyticsTab: React.FC<{
                             else if (modalTab === 'zns_clicked') typeParam = 'click_zns';
                             else if (modalTab === 'zns_replied') typeParam = 'reply_zns';
                             else if (modalTab === 'zns_failed') typeParam = 'zns_failed';
+                            else if (modalTab === 'zns_skipped') typeParam = 'zns_skipped';
                         }
                         fetchParticipants(page, selectedStepId, statusParam, searchTerm, typeParam, selectedBranchFilter);
                     }}
@@ -1863,6 +1865,7 @@ const FlowAnalyticsTab: React.FC<{
                             else if (modalTab === 'zns_clicked') typeParam = 'click_zns';
                             else if (modalTab === 'zns_replied') typeParam = 'reply_zns';
                             else if (modalTab === 'zns_failed') typeParam = 'zns_failed';
+                            else if (modalTab === 'zns_skipped') typeParam = 'zns_skipped';
                         }
                         fetchParticipants(pagination.page, selectedStepId, statusParam, searchTerm, typeParam, selectedBranchFilter);
                         refreshFlow();
@@ -1946,6 +1949,10 @@ const LogItem: React.FC<{
     if (type.includes('fail') || type.includes('error')) {
         icon = <AlertOctagon className="w-3.5 h-3.5" />;
         colorClass = 'text-rose-600 bg-rose-50 border-rose-100';
+    }
+    if (type === 'zns_skipped') {
+        icon = <AlertOctagon className="w-3.5 h-3.5" />;
+        colorClass = 'text-amber-600 bg-amber-50 border-amber-100';
     }
     if (type === 'enter_flow') {
         icon = <Play className="w-3.5 h-3.5 ml-0.5" />;

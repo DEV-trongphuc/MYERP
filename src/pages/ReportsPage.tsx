@@ -4,6 +4,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { PeriodFilter, getDateRange } from '../components/ui/PeriodFilter';
 import { useUIStore } from '../store/uiStore';
 import { useAuth } from '../contexts/AuthContext';
+import { isAcademic } from '../utils/roleUtils';
+import { getDynamicNonSalesTeamIds } from '../contexts/TenantConfigContext';
 import type { Period, DateRange } from '../components/ui/PeriodFilter';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api/axios';
@@ -11,7 +13,8 @@ import { Skeleton, TableSkeleton } from '../components/ui/Skeleton';
 import { Avatar } from '../components/ui/Avatar';
 import { Pagination } from '../components/ui/Pagination';
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#0d9488', '#ec4899', '#f43f5e', '#a31422'];
+const PALETTE = ['#C6333D', '#334155', '#E11D48', '#64748B', '#991B1B', '#475569', '#FB7185', '#94A3B8', '#1E293B', '#CBD5E1'];
+const COLORS = PALETTE;
 const T_LABEL: Record<string, string> = {
   'call': 'Cuộc gọi',
   'email': 'Email',
@@ -81,8 +84,7 @@ export const ReportsPage: React.FC = () => {
       Number((user as any)?.team_id) === 3 || 
       String((user as any)?.job_title || '').toLowerCase().includes('marketing') ||
       String((user as any)?.team_name || '').toLowerCase().includes('marketing');
-    const comb = `${(user as any)?.role || ''} ${(user as any)?.job_title || ''} ${(user as any)?.department || ''} ${(user as any)?.team_name || ''}`.toLowerCase();
-    const isAcademicUser = Number((user as any)?.team_id) === 5 || comb.includes('học vụ') || comb.includes('hoc_vu') || comb.includes('học thuật') || comb.includes('hoc_thuat') || comb.includes('đào tạo') || comb.includes('academic');
+    const isAcademicUser = isAcademic(user);
     if (
       isMarketing ||
       isAcademicUser ||
@@ -90,7 +92,7 @@ export const ReportsPage: React.FC = () => {
     ) {
       return null;
     }
-    const nonSalesTeamIds = [1, 2, 3, 5, 99983];
+    const nonSalesTeamIds = getDynamicNonSalesTeamIds();
     const me = users.find(u => Number(u.id) === Number(user?.id));
     if (me?.team_id && !nonSalesTeamIds.includes(Number(me.team_id))) return me.team_id;
     if ((user as any)?.team_id && !nonSalesTeamIds.includes(Number((user as any).team_id))) return (user as any).team_id;
@@ -778,8 +780,8 @@ export const ReportsPage: React.FC = () => {
                   <ComposedChart data={customerData?.trend || []} margin={{ left: -10, right: 5, top: 20 }}>
                     <defs>
                       <linearGradient id="colorCustomerGrowth" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={1}/>
-                        <stop offset="100%" stopColor="#6366f1" stopOpacity={1}/>
+                        <stop offset="0%" stopColor="#BD1D2D" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#8C111E" stopOpacity={1}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border-light)" />

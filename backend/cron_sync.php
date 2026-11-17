@@ -2441,7 +2441,8 @@ function releaseExpiredLeadsToKho($conn) {
 
             if ($ownerRow && !empty($ownerRow['email'])) {
                 require_once __DIR__ . '/mailer.php';
-                $emailSubject = "[IDEAS] Thông báo thu hồi khách hàng: " . $clientName;
+                $GLOBALS['current_tenant_id'] = (int)$tenantId;
+                $emailSubject = get_tenant_brand_prefix($conn, (int)$tenantId) . " Thông báo thu hồi khách hàng: " . $clientName;
                 $emailTitle = "THU HỒI KHÁCH HÀNG HẾT HẠN BẢO MẬT";
                 $emailContent = "Chào <strong>" . htmlspecialchars($ownerRow['full_name']) . "</strong>,<br/><br/>" .
                                 "Khách hàng <strong>" . htmlspecialchars($clientName) . "</strong> đã bị thu hồi khỏi danh sách chăm sóc của bạn do hết hạn bảo mật tương tác mà không phát sinh cập nhật mới.<br/>" .
@@ -3207,7 +3208,8 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
         'telegram_bot_token',
         'night_shift_start_time',
         'night_shift_end_time',
-        'global_work_start_time'
+        'global_work_start_time',
+        'global_work_end_time'
     )");
     if ($res) {
         while ($row = $res->fetch_assoc()) {
@@ -3288,6 +3290,7 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
         }
         
         $globalWorkStart = !empty($settings['global_work_start_time']) ? substr($settings['global_work_start_time'], 0, 5) : '08:00';
+        $globalWorkEnd = !empty($settings['global_work_end_time']) ? substr($settings['global_work_end_time'], 0, 5) : '17:00';
 
         // Query all active users (exemption rule: only Director is excluded)
         $userQuery = "
@@ -3402,7 +3405,9 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                                     if ($getSaleMatrixSetting($conn, $userId, 'ATTENDANCE_REMINDER', 'zalo')) {
                                         try {
                                             if (!empty($zaloBotToken) && !empty($user['zalo_chat_id']) && function_exists('sendZaloMessage')) {
-                                                $zaloText = "⏰ [ NHẮC NHỞ CHẤM CÔNG ]\n\nXin chào {$user['full_name']},\nĐã sắp đến giờ vào ca làm việc ({$workStart}). Vui lòng đăng nhập MYERP để chấm công đúng giờ nhé!\n👉 https://myerp.ideas.edu.vn/attendance";
+                                                $feAttendUrl = rtrim(get_tenant_frontend_url($conn, (int)($user['tenant_id'] ?? 1)), '/');
+                                                $attendLinkLine = $feAttendUrl !== '' ? "\n👉 {$feAttendUrl}/attendance" : '';
+                                                $zaloText = "⏰ [ NHẮC NHỞ CHẤM CÔNG ]\n\nXin chào {$user['full_name']},\nĐã sắp đến giờ vào ca làm việc ({$workStart}). Vui lòng đăng nhập MYERP để chấm công đúng giờ nhé!{$attendLinkLine}";
                                                 sendZaloMessage($zaloBotToken, $user['zalo_chat_id'], $zaloText, false);
                                             }
                                         } catch (Throwable $eZalo) {
@@ -3517,7 +3522,9 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                                     if ($getSaleMatrixSetting($conn, $userId, 'ATTENDANCE_REMINDER', 'zalo')) {
                                         try {
                                             if (!empty($zaloBotToken) && !empty($user['zalo_chat_id']) && function_exists('sendZaloMessage')) {
-                                                $zaloText = "⏰ [ NHẮC NHỞ CHẤM CÔNG RA CA ]\n\nXin chào {$user['full_name']},\nĐã đến giờ kết thúc ca làm việc ({$workEnd}). Bạn chưa chấm công ra ca, vui lòng đăng nhập MYERP để chấm công ra nhé!\n👉 https://myerp.ideas.edu.vn/attendance";
+                                                $feAttendOutUrl = rtrim(get_tenant_frontend_url($conn, (int)($user['tenant_id'] ?? 1)), '/');
+                                                $attendOutLine = $feAttendOutUrl !== '' ? "\n👉 {$feAttendOutUrl}/attendance" : '';
+                                                $zaloText = "⏰ [ NHẮC NHỞ CHẤM CÔNG RA CA ]\n\nXin chào {$user['full_name']},\nĐã đến giờ kết thúc ca làm việc ({$workEnd}). Bạn chưa chấm công ra ca, vui lòng đăng nhập MYERP để chấm công ra nhé!{$attendOutLine}";
                                                 sendZaloMessage($zaloBotToken, $user['zalo_chat_id'], $zaloText, false);
                                             }
                                         } catch (Throwable $eZalo) {}
@@ -3632,7 +3639,9 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                             if ($getSaleMatrixSetting($conn, $userId, 'NIGHT_SHIFT_BOOKING', 'email')) {
                                 try {
                                     if (!empty($reg['email']) && function_exists('sendEmailNotification')) {
-                                        $emailSubject = "[IDEAS] Nhắc nhở lịch trực đêm hôm nay";
+                                        $regTid = (int)($reg['tenant_id'] ?? 1);
+                                        $GLOBALS['current_tenant_id'] = $regTid;
+                                        $emailSubject = get_tenant_brand_prefix($conn, $regTid) . " Nhắc nhở lịch trực đêm hôm nay";
                                         $emailTitle = "NHẮC NHỞ LỊCH TRỰC ĐÊM";
                                         $emailContent = "Chào <strong>" . htmlspecialchars($reg['full_name']) . "</strong>,<br/><br/>" .
                                                         "Hệ thống ghi nhận bạn có lịch trực ca đêm hôm nay (từ " . htmlspecialchars($nightShiftStart) . " đến " . htmlspecialchars($nightShiftEnd) . ").<br/>" .

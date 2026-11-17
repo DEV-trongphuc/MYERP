@@ -392,7 +392,7 @@ trait ChatStreamAndAiEntryTrait {
             try {
                 $this->db->exec("
                     INSERT INTO users (id, tenant_id, username, email, password_hash, full_name, role, job_title, avatar_url, is_active, status)
-                    VALUES (9000001, 1, 'si_ideas', 'ai@ideas.edu.vn', '\$2y\$10\$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'SI IDEAS', 'admin', 'Smart Multi Agent', '/stickers/ideas/ideas_3.webp', 1, 'active')
+                    VALUES (9000001, 1, 'si_ideas', 'ai@system.local', '\$2y\$10\$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'SI IDEAS', 'admin', 'Smart Multi Agent', '/stickers/ideas/ideas_3.webp', 1, 'active')
                     ON DUPLICATE KEY UPDATE 
                         full_name = 'SI IDEAS',
                         job_title = 'Smart Multi Agent',
@@ -404,7 +404,7 @@ trait ChatStreamAndAiEntryTrait {
                 try {
                     $this->db->exec("
                         INSERT INTO users (id, tenant_id, email, password_hash, full_name, role, is_active)
-                        VALUES (9000001, 1, 'ai@ideas.edu.vn', '\$2y\$10\$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'SI IDEAS', 'admin', 1)
+                        VALUES (9000001, 1, 'ai@system.local', '\$2y\$10\$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'SI IDEAS', 'admin', 1)
                         ON DUPLICATE KEY UPDATE full_name = 'SI IDEAS', is_active = 1;
                     ");
                 } catch (\Throwable $eUserFallback) {}
@@ -979,7 +979,7 @@ trait ChatStreamAndAiEntryTrait {
                 . "5. MỞ TAB / MỞ HỒ SƠ ĐỐI TƯỢNG ĐƠN LẺ (KHI USER HỎI ĐÍCH DANH 1 HỒ SƠ CỤ THỂ):\n"
                 . "   - BẮT BUỘC gọi tool phù hợp (`get_system_navigation`, `search_contacts`, `get_my_tasks`,...) để lấy ID và đường dẫn trực tiếp.\n"
                 . "   - Trong câu trả lời, đính kèm đường link Markdown chuẩn xác: `[Bấm để mở {Tên đối tượng}]({direct_url})` (CẤM có khoảng trắng giữa `]` và `(`, viết liền `](`!).\n"
-                . "   - Nếu kết quả chỉ có ĐÚNG 1 đối tượng duy nhất, đính kèm Smart Tag `<<<ERP_CARD: {\"entity_type\": \"contact|po|so|workflow|task\", \"entity_id\": 123, \"title\": \"Tên hiển thị\", \"subtitle\": \"SĐT hoặc ghi chú ngắn\", \"direct_url\": \"https://myerp.ideas.edu.vn/...\", \"action_label\": \"Mở hồ sơ ngay\"}>>>`.\n\n"
+                . "   - Nếu kết quả chỉ có ĐÚNG 1 đối tượng duy nhất, đính kèm Smart Tag `<<<ERP_CARD: {\"entity_type\": \"contact|po|so|workflow|task\", \"entity_id\": 123, \"title\": \"Tên hiển thị\", \"subtitle\": \"SĐT hoặc ghi chú ngắn\", \"direct_url\": \"/contacts?id=123\", \"action_label\": \"Mở hồ sơ ngay\"}>>>`.\n\n"
                 . "6. TRÍCH XUẤT LỊCH SỬ TƯƠNG TÁC / GHI CHÚ CHĂM SÓC KHÁCH HÀNG:\n"
                 . "   - Khi người dùng hỏi xem lịch sử tư vấn/tương tác/chăm sóc học viên/khách hàng: MẶC ĐỊNH trích xuất ĐẦY ĐỦ TOP 3 tương tác gần nhất (không được chỉ nêu duy nhất 1 mục!).\n"
                 . "   - Nếu người dùng yêu cầu xem thêm (ví dụ 'lấy 5 cái', 'lấy 10 cái', 'lấy hết / tất cả'): BẮT BUỘC truyền tham số `notes_limit` tương ứng (5, 10, tối đa 50) vào công cụ `get_contact_360_profile` để lấy đầy đủ dữ liệu.\n"

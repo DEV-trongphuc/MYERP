@@ -85,7 +85,8 @@ const CampaignDeliveryDetailsTab: React.FC<Props> = ({ campaign, allLists, allTa
 
     useEffect(() => {
         fetchRecipients(1);
-    }, [campaign, filter, typeFilter, debouncedSearch, minOpens, minClicks, limit]);
+        // Intentionally keyed by campaign.id (not campaign object reference) so live stats polling never resets user pagination or causes flicker
+    }, [campaign.id, filter, typeFilter, debouncedSearch, minOpens, minClicks, limit]);
 
 
     const fetchRecipients = async (page = 1, customLimit?: number) => {
@@ -558,7 +559,7 @@ const CampaignDeliveryDetailsTab: React.FC<Props> = ({ campaign, allLists, allTa
                                     const displayName = `${r.first_name || ''} ${r.last_name || ''}`.trim() || r.full_name || r.name || '';
                                     return (
                                         <tr
-                                            key={i}
+                                            key={(r as any).id ?? `${r.subscriber_id || r.email}-${r.sent_at}-${i}`}
                                             className={`group/row transition-colors ${(r.contact_id || r.subscriber_id) ? 'cursor-pointer' : ''} ${selectedIds.includes(r.subscriber_id) ? 'bg-[var(--color-primary)]/5' : 'hover:bg-[var(--color-bg)]'}`}
                                             onClick={() => {
                                                 if (r.contact_id) {

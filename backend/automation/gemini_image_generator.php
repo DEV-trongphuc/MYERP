@@ -196,7 +196,7 @@ function saveAIImage($base64Data, $mimeType, $propertyId = null, $conversationId
 
     if (file_put_contents($filePath, $decodedData)) {
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https" : "http";
-        $host = $_SERVER['HTTP_HOST'] ?? 'automation.ideas.edu.vn';
+        $host = $_SERVER['HTTP_HOST'] ?? (parse_url(resolve_automation_app_base_url($pdo), PHP_URL_HOST) ?: 'localhost');
         $publicUrl = "$scheme://$host/uploadss/ai_generated/" . $fileName;
         $size = strlen($decodedData);
 

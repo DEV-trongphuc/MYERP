@@ -1,4 +1,6 @@
 
+import { getTenantOrganizationName, getTenantFrontendUrl } from '../../../../../../contexts/TenantConfigContext';
+
 const createId = () => crypto.randomUUID();
 
 export const TEMPLATE_PRESETS = [
@@ -21,7 +23,7 @@ export const TEMPLATE_PRESETS = [
                         style: { width: '100%' },
                         children: [
                             { id: createId(), type: 'image', content: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?q=80&w=600&auto=format&fit=crop', style: { width: '120px', textAlign: 'center', marginBottom: '20px' } },
-                            { id: createId(), type: 'text', content: '<h1 style="text-align: center; font-size: 28px; color: #1e293b; margin-bottom: 10px;">Chào mừng {{fullName}} đến với Viện Quốc Tế IDEAS!</h1><p style="text-align: center; color: #64748b; font-size: 16px;">Hãy cùng bắt đầu hành trình nâng tầm năng lực quản trị với chương trình {{program}}.</p>', style: { textAlign: 'center' } }
+                            { id: createId(), type: 'text', content: `<h1 style="text-align: center; font-size: 28px; color: #1e293b; margin-bottom: 10px;">Chào mừng {{fullName}} đến với ${getTenantOrganizationName()}!</h1><p style="text-align: center; color: #64748b; font-size: 16px;">Hãy cùng bắt đầu hành trình nâng tầm năng lực quản trị với chương trình {{program}}.</p>`, style: { textAlign: 'center' } }
                         ]
                     }]
                 }]
@@ -70,7 +72,7 @@ export const TEMPLATE_PRESETS = [
                             {
                                 id: createId(),
                                 type: 'check_list',
-                                checkListTitle: 'Đặc quyền học viên tại Viện Quốc Tế IDEAS',
+                                checkListTitle: `Đặc quyền học viên tại ${getTenantOrganizationName()}`,
                                 items: [
                                     { id: createId(), title: 'Bằng cấp quốc tế kiểm định', description: 'Được công nhận toàn cầu từ các trường đại học đối tác.' },
                                     { id: createId(), title: 'Lịch học linh hoạt 100% Online', description: 'Thiết kế tối ưu cho nhà quản lý và nhân sự cấp cao.' },
@@ -360,8 +362,8 @@ export const TEMPLATE_PRESETS = [
                         type: 'column',
                         style: { width: '100%' },
                         children: [
-                            { id: createId(), type: 'social', style: { textAlign: 'center', iconMode: 'light', iconSize: '24' }, socialLinks: [{ id: createId(), network: 'facebook', url: 'https://ideas.edu.vn' }, { id: createId(), network: 'twitter', url: 'https://ideas.edu.vn' }, { id: createId(), network: 'instagram', url: 'https://ideas.edu.vn' }] },
-                            { id: createId(), type: 'text', content: '<p style="color: #94a3b8; font-size: 11px; margin-top: 20px;">Bạn nhận được email này vì đã đăng ký bản tin của Viện Quốc Tế IDEAS.<br>© {{current_year}} Viện Quốc Tế IDEAS. <a href="{{unsubscribe_url}}" style="color: #BD1D2D;">Hủy đăng ký</a></p>', style: { textAlign: 'center' } }
+                            { id: createId(), type: 'social', style: { textAlign: 'center', iconMode: 'light', iconSize: '24' }, socialLinks: [{ id: createId(), network: 'facebook', url: getTenantFrontendUrl() || '#' }, { id: createId(), network: 'twitter', url: getTenantFrontendUrl() || '#' }, { id: createId(), network: 'instagram', url: getTenantFrontendUrl() || '#' }] },
+                            { id: createId(), type: 'text', content: `<p style="color: #94a3b8; font-size: 11px; margin-top: 20px;">Bạn nhận được email này vì đã đăng ký bản tin của ${getTenantOrganizationName()}.<br>© {{current_year}} ${getTenantOrganizationName()}. <a href="{{unsubscribe_url}}" style="color: #BD1D2D;">Hủy đăng ký</a></p>`, style: { textAlign: 'center' } }
                         ]
                     }]
                 }]

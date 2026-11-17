@@ -319,7 +319,7 @@ export const ClassGradebookModal: React.FC<ClassGradebookModalProps> = ({
         '0',
         'SV-DEMO',
         'Học viên Mẫu (Ví dụ - Thang điểm 6.0)',
-        'demo.student@ideas.edu.vn',
+        'demo.student@example.com',
         '0901234567',
         '5.50',
         '5.50',
@@ -367,7 +367,7 @@ export const ClassGradebookModal: React.FC<ClassGradebookModalProps> = ({
 
     const csvRows = [headers.map(h => `"${String(h).replace(/"/g, '""')}"`).join(',')];
     // Add demo sample row on the 6.0 ECTS scale
-    const demoRow = ['0', 'SV-DEMO', 'Học viên Mẫu (Ví dụ - Thang 6.0)', 'demo.student@ideas.edu.vn', '0901234567'];
+    const demoRow = ['0', 'SV-DEMO', 'Học viên Mẫu (Ví dụ - Thang 6.0)', 'demo.student@example.com', '0901234567'];
     subjects.forEach((_, sIdx) => {
       const demoScores6 = ['5.50', '5.00', '5.75', '4.75', '4.50', '5.25', '5.50', '6.00', '4.25', '5.00', '5.50'];
       demoRow.push(demoScores6[sIdx % demoScores6.length]);
@@ -495,7 +495,7 @@ export const ClassGradebookModal: React.FC<ClassGradebookModalProps> = ({
       const col4 = cols[4] || '';
 
       // Skip sample demo row
-      if (col1.toUpperCase() === 'SV-DEMO' || col3.toLowerCase() === 'demo.student@ideas.edu.vn') {
+      if (col1.toUpperCase() === 'SV-DEMO' || col3.toLowerCase().startsWith('demo.student@')) {
         continue;
       }
 

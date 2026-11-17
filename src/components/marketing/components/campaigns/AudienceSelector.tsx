@@ -8,6 +8,7 @@ import Badge from '../common/Badge';
 import { isManualList, isSyncList } from '../../utils/listHelpers';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { attachCustomAttributesForImport, parseSubscriberImportData } from '../../utils/importMapping';
 
 interface Option {
     value: string;
@@ -317,153 +318,85 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
 
     // Removed local calculateTotal function
 
-    const formatNameFromEmail = (email: string) => {
-        if (!email) return 'User';
-        const localPart = email.split('@')[0];
-        // Loại bỏ số và ký tự đặc biệt, chỉ giữ lại chữ cái
-        const cleaned = localPart.replace(/[^a-zA-Z]/g, '');
-        if (!cleaned) return 'User';
-        // Viết hoa chữ đầu, còn lại viết thường
-        return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
-    };
+    // Fix: Removed local calculateTotal function
+
+    const [importColumnMeta, setImportColumnMeta] = useState<{
+        columnMapping: Record<number, string>;
+        originalHeaders: Record<number, string>;
+    }>({ columnMapping: {}, originalHeaders: {} });
 
     const parseData = () => {
         if (!rawData.trim()) return;
 
-        const delimiter = detectDelimiter(rawData);
-        const lines = rawData.trim().split('\n');
-        const headerRow = lines[0].split(delimiter).map(h => h.trim().replace(/['"]+/g, ''));
-        // Fix: Use setHeaders for state update
-        setHeaders(headerRow);
-
-        let hasEmail = false;
-        let hasPhone = false;
-        let hasName = false;
-
-        headerRow.forEach(header => {
-            const key = header.toLowerCase().trim();
-            if (key.includes('phone') || key.includes('sđt') || key.includes('số điện thoại') || key.includes('dien thoai')) hasPhone = true;
-            else if (key.includes('mail')) hasEmail = true;
-            else if (key.includes('full') || key.includes('tên') || key === 'name' || key.includes('first') || key.includes('last') || key.includes('họ')) hasName = true;
-        });
-
-        // Check if first row contains data instead of headers
-        const isHeaderRowData = headerRow.some(header => {
-            if (header.includes('@') && header.includes('.')) return true;
-            const cleanPhone = header.replace(/[^0-9]/g, '');
-            if ((cleanPhone.startsWith('0') || cleanPhone.startsWith('84')) && cleanPhone.length >= 9 && cleanPhone.length <= 12) return true;
-            return false;
-        });
-
-        if (!hasEmail && !hasPhone) {
+        const parsed = parseSubscriberImportData(rawData);
+        if (parsed.missingRequiredIdentifiers) {
             toast.error('Thiếu cả hai cột tiêu đề quan trọng: Email và Số điện thoại. Vui lòng bổ sung ít nhất một trong hai cột này.');
             return;
         }
 
-        const currentWarnings: string[] = [];
-        if (isHeaderRowData) {
-            currentWarnings.push('Phát hiện dòng tiêu đề đầu tiên có thể chứa dữ liệu khách hàng (Email/SĐT). Có vẻ như tệp của bạn đang thiếu hàng tiêu đề cột.');
-        }
-        if (!hasEmail) {
-            currentWarnings.push('Thiếu cột tiêu đề Email.');
-        }
-        if (!hasPhone) {
-            currentWarnings.push('Thiếu cột tiêu đề Số điện thoại.');
-        }
-        if (!hasName) {
-            currentWarnings.push('Thiếu cột tiêu đề Họ & Tên.');
-        }
-        setImportWarnings(currentWarnings);
+        setHeaders(parsed.headers);
+        setImportWarnings(parsed.warnings);
+        setImportColumnMeta({
+            columnMapping: parsed.columnMapping,
+            originalHeaders: parsed.originalHeaders,
+        });
 
-        const dataRows = lines.slice(1).map(line => {
-            if (!line.trim()) return null;
-            // Handle quotes and commas properly for basic CSV
-            // A more robust CSV parser would be better, but we aim for lightweight here
-            const values = line.split(delimiter).map(v => v.trim().replace(/^["']|["']$/g, ''));
-            const rowObj: any = {};
-            headerRow.forEach((header, index) => {
-                const rawKey = header.trim();
-                let key = rawKey.toLowerCase();
-                // Smart auto-matching
-                if (key.includes('phone') || key.includes('sđt') || key.includes('số điện thoại') || key.includes('dien thoai')) key = 'phone';
-                else if (key.includes('mail')) key = 'email';
-                else if (key.includes('full') || key.includes('tên') || key === 'name') key = 'fullName';
-                else if (key.includes('first')) key = 'firstName';
-                else if (key.includes('last') || key.includes('họ')) key = 'lastName';
-                else if (key.includes('tag') || key.includes('nhãn')) key = 'tags';
-                else if (key.includes('date') || key.includes('ngày')) key = 'joinedAt';
-                else {
-                    key = rawKey;
-                }
-
-                rowObj[key] = values[index] || '';
-                if (key !== rawKey) {
-                    rowObj[rawKey] = values[index] || '';
-                }
-            });
-
-            if (rowObj.phone) {
-                const rawDigits = String(rowObj.phone).replace(/[^0-9]/g, '');
+        const dataRows = parsed.rows.map(rowObj => {
+            const copy = { ...rowObj };
+            if (copy.phoneNumber) {
+                const rawDigits = String(copy.phoneNumber).replace(/[^0-9]/g, '');
                 if (rawDigits.length < 7 || /^0+$/.test(rawDigits)) {
-                    rowObj.phone = '';
+                    copy.phoneNumber = '';
+                } else {
+                    copy.phone = rawDigits;
                 }
             }
-            // Tự động đặt tên nếu trống
-            if (rowObj.email && !rowObj.fullName && !rowObj.firstName) {
-                rowObj.fullName = formatNameFromEmail(rowObj.email);
+            if ((copy.phoneNumber || copy.phone) && !copy.email) {
+                copy.email = `${copy.phoneNumber || copy.phone}@placeholder.com`;
             }
-            if (rowObj.phone && !rowObj.email) {
-                // If we ONLY have phone (typical for ZNS), we still need to store it 
-                // In this system, subscribers are identified by email usually, but for ZNS we must support phone-first.
-                // We'll use a placeholder email or ensure the system handles phone-only.
-                rowObj.email = rowObj.email || `${rowObj.phone}@placeholder.com`;
-            }
-
-            return rowObj;
-        }).filter(r => r && (r.email || r.phone));
+            return copy;
+        }).filter(r => r && (r.email || r.phoneNumber));
 
         let dupCount = 0;
         const validRows: any[] = [];
         const seenEmailsInCsv = new Set<string>();
+        const seenPhonesInCsv = new Set<string>();
 
         dataRows.forEach((row: any) => {
             const email = (row.email || '').toLowerCase().trim();
-            if (email && seenEmailsInCsv.has(email)) {
+            const phone = (row.phoneNumber || '').trim();
+            const isDup = (email && seenEmailsInCsv.has(email)) || (!email && phone && seenPhonesInCsv.has(phone));
+            if (isDup) {
                 dupCount++;
             } else {
                 if (email) seenEmailsInCsv.add(email);
+                if (phone) seenPhonesInCsv.add(phone);
                 validRows.push(row);
             }
         });
 
         setParsedRows(validRows);
-        // Fix: Use setStats for state update
         setStats({ total: dataRows.length, valid: validRows.length, duplicates: dupCount });
-        // Fix: Use setStep for state update
         setStep(2);
     };
 
-    const detectDelimiter = (str: string) => {
-        const firstLine = str.split('\n')[0];
-        if (firstLine.includes('\t')) return '\t';
-        if (firstLine.includes(';')) return ';';
-        return ',';
-    };
-
     const handleFinishImport = async () => {
-        // Fix: Use onImport prop
+        const subscribersPayload = attachCustomAttributesForImport(
+            parsedRows,
+            importColumnMeta.columnMapping,
+            importColumnMeta.originalHeaders
+        );
         await onImport({
-            subscribers: parsedRows,
-            // Fix: Use importMode and targetListId from state
+            subscribers: subscribersPayload,
             targetListId: importMode === 'existing' ? targetListId : null,
             newListName: importMode === 'new' ? newListName : null,
-            // Fix: Use stats from state
             duplicates: stats.duplicates
         });
         setIsImporting(false);
         setStep(1);
         setRawData('');
         setNewListName('');
+        setImportColumnMeta({ columnMapping: {}, originalHeaders: {} });
     };
 
     return (

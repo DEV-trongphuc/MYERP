@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Mail,
   Send,
@@ -11,9 +12,13 @@ import {
   Pencil,
   MessageSquare,
   Loader2,
-  Users
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import {
+  useTenantConfig,
+  getCachedTenantBootstrap,
+  renderTenantOnboardingTemplate,
+} from '../../contexts/TenantConfigContext';
 import api from '../../api/axios';
 
 export interface StudentOnboardingEmailModalProps {
@@ -32,165 +37,55 @@ export interface StudentOnboardingEmailModalProps {
   onSuccess?: () => void;
 }
 
-export const ACADEMIC_PROGRAM_OPTIONS = [
-  {
-    id: 'istec',
-    label: 'Trường Kinh doanh ISTEC - Pháp (BBA / MBA / DBA ISTEC)',
-    school: 'istec',
-    docLink: 'https://drive.google.com/drive/folders/1ZNcaYWUSd79CbLRDpV0LjbRAPeTCnumO?usp=drive_link'
-  },
-  {
-    id: 'estiam',
-    label: 'Tiến sĩ Quản trị Kinh doanh - Paris Education / ESTIAM (DBA ESTIAM)',
-    school: 'estiam',
-    docLink: 'https://drive.google.com/drive/folders/1tBzBTLL9WPT-OOjKWRNz5qFx8YGSptKG?usp=drive_link'
-  },
-  {
-    id: 'msc_ai',
-    label: 'Thạc sĩ Khoa học Trí tuệ nhân tạo (MSc AI)',
-    school: 'umef',
-    docLink: 'https://drive.google.com/drive/folders/1Byi7lmVQsm9sSD-OGKSHli1FfsnsvkXr'
-  },
-  {
-    id: 'mba_standard',
-    label: 'Thạc sĩ Quản trị Kinh doanh - Tiêu chuẩn (MBA / EMBA Standard)',
-    school: 'umef',
-    docLink: 'https://drive.google.com/drive/folders/1dvILnySA3MWKR-LutdrdXyrJPqL6ppcy'
-  },
-  {
-    id: 'bba',
-    label: 'Cử nhân Quản trị Kinh doanh (TOP UP)',
-    school: 'umef',
-    docLink: 'https://drive.google.com/drive/folders/1E1TZMRz5w05xv4wsNvP5vht3ojHeviAw'
-  },
-  {
-    id: 'mba_high',
-    label: 'Thạc sĩ Quản trị Kinh doanh - Nâng cao (MBA / EMBA High)',
-    school: 'umef',
-    docLink: 'https://drive.google.com/drive/folders/1FAJL1opSbPEOx9CL1L1QMiug3mfRdRWX'
+export function getTenantProgramOptions(): Array<{
+  id: string;
+  label: string;
+  school: string;
+  docLink: string;
+  keywords: string[];
+}> {
+  const dbProgs = getCachedTenantBootstrap()?.academic_programs;
+  if (Array.isArray(dbProgs) && dbProgs.length > 0) {
+    return dbProgs.map((p) => ({
+      id: p.program_code,
+      label: p.school_name ? `${p.name} - ${p.school_name}` : p.name,
+      school: p.school_name || '',
+      docLink: p.doc_folder_url || '',
+      keywords: Array.isArray(p.match_keywords) ? p.match_keywords : [],
+    }));
   }
-];
+  return [
+    {
+      id: 'mba_standard',
+      label: 'Chương trình Đào tạo Tiêu chuẩn',
+      school: '',
+      docLink: '',
+      keywords: [],
+    },
+  ];
+}
 
 export const detectAcademicProgram = (programStr: string): string => {
+  const opts = getTenantProgramOptions();
   const p = (programStr || '').trim().toLowerCase();
-  if (p.includes('istec')) return 'istec';
-  if (p.includes('estiam') || p.includes('paris education') || p.includes('dual dba') || p === 'de') return 'estiam';
-  if (p.includes('ai') || p.includes('msc') || p.includes('trí tuệ') || p.includes('tri tue')) return 'msc_ai';
-  if (p.includes('top up') || p.includes('topup') || p.includes('bba') || p.includes('cử nhân') || p.includes('cu nhan') || p.includes('bachelor')) return 'bba';
-  if (p.includes('high') || p.includes('nâng cao') || p.includes('nang cao') || p.includes('hq')) return 'mba_high';
-  return 'mba_standard';
+  if (p) {
+    for (const opt of opts) {
+      if (p === opt.id.toLowerCase()) return opt.id;
+      if (opt.keywords.some((kw) => kw && p.includes(String(kw).toLowerCase()))) {
+        return opt.id;
+      }
+    }
+  }
+  return opts[0]?.id || 'mba_standard';
 };
 
-export const getAcademicEmailDefaultSubject = (programKey: string = 'mba_standard'): string => {
-  if (programKey === 'istec') {
-    return '[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Istec Business School';
-  }
-  if (programKey === 'estiam') {
-    return '[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Paris Education/ESTIAM';
-  }
-  return '[IDEAS] Thông báo Tiếp nhận học viên & Hướng dẫn học tập - Swiss UMEF';
+export const getAcademicEmailDefaultSubject = (programKey = 'mba_standard'): string => {
+  return renderTenantOnboardingTemplate({ programCode: programKey }).subject;
 };
 
-export const getAcademicEmailDefaultContent = (studentName: string, programKey: string = 'mba_standard'): string => {
-  const greeting = studentName ? `Kính gửi Quý Anh/Chị học viên <strong>${studentName}</strong>,` : 'Kính gửi Quý Anh/Chị học viên,';
-  const selectedProg = ACADEMIC_PROGRAM_OPTIONS.find(opt => opt.id === programKey) || ACADEMIC_PROGRAM_OPTIONS[3];
-  const docFolderLink = selectedProg.docLink;
-
-  if (programKey === 'istec') {
-    return `<p>${greeting}</p>
-<p>Lời đầu tiên, Ban Công tác Sinh viên IDEAS xin gửi lời chúc mừng và trân trọng cảm ơn Anh/Chị đã tin chọn IDEAS làm người bạn đồng hành trên chặng đường chinh phục tấm bằng từ <strong>Istec Business School</strong>. Chúng tôi cam kết đồng hành và hỗ trợ Anh/Chị xuyên suốt quá trình học tập.</p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">A. KÊNH LIÊN LẠC CHÍNH THỨC</strong></p>
-<p>1. <strong>Kênh Hỗ trợ Nhanh (Zalo/Hotline):</strong> 098 736 3935<br/>
-2. <strong>Kênh Hỗ trợ Học vụ (Email):</strong><br/>
-&nbsp;&nbsp;&bull; Tiếp nhận yêu cầu: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a><br/>
-&nbsp;&nbsp;&bull; CC (Đồng gửi): <a href="mailto:it.dept@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">it.dept@ideas.edu.vn</a>, <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a>, <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a> <em>(Vui lòng luôn CC các địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">B. TÀI KHOẢN HỌC TẬP</strong></p>
-<p>Anh/Chị sẽ được cấp 3 tài khoản học tập, sử dụng xuyên suốt chương trình:</p>
-<ul style="padding-left: 20px; line-height: 1.8;">
-  <li><strong>1. Tài khoản LMS IDEAS</strong> (xem tài liệu, video buổi học, hỗ trợ học thuật): <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://lms.ideas.edu.vn/</a> | Video hướng dẫn: <a href="https://drive.google.com/file/d/1wXQtghJSd7CHoek_hPXOfXuVuGuT8bMv/view?usp=sharing" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></li>
-  <li><strong>2. Tài khoản LMS ISTEC</strong> (làm bài, nộp bài, tính điểm chính thức): <a href="https://istec.education" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://istec.education</a></li>
-  <li><strong>3. Platform IDEAS AI</strong> (công cụ bổ trợ học tập): <a href="https://ai.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://ai.ideas.edu.vn/</a></li>
-</ul>
-<p><em>(thông tin tài khoản sẽ được gửi trực tiếp đến email cá nhân của học viên đã đăng ký học tập)</em></p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">C. TÀI LIỆU ĐÍNH KÈM</strong></p>
-<ul style="padding-left: 20px; line-height: 1.8;">
-  <li>File giải thích Format APA</li>
-  <li>File hướng dẫn sử dụng các hệ thống học tập</li>
-  <li>Hướng dẫn sử dụng Zoom Meeting &amp; Format bài làm mẫu</li>
-</ul>
-<p>Link tổng hợp tài liệu hướng dẫn: <a href="${docFolderLink}" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></p>
-
-<p>Nếu có bất kỳ vướng mắc nào, Anh/Chị vui lòng liên hệ CTSV để được hỗ trợ kịp thời. Chúc Anh/Chị có hành trình học tập thật thuận lợi và thành công!</p>
-
-<p style="margin-top: 20px;">Trân trọng,<br/><strong>Ban Công tác Sinh viên IDEAS</strong></p>`;
-  }
-
-  if (programKey === 'estiam') {
-    return `<p>${greeting}</p>
-<p>Lời đầu tiên, Ban Công tác Sinh viên IDEAS xin gửi lời chúc mừng và trân trọng cảm ơn Anh/Chị đã tin chọn IDEAS làm người bạn đồng hành trên chặng đường chinh phục tấm bằng từ <strong>Paris Education/ESTIAM</strong>. Chúng tôi cam kết đồng hành và hỗ trợ Anh/Chị xuyên suốt quá trình học tập và nghiên cứu.</p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">A. KÊNH LIÊN LẠC CHÍNH THỨC</strong></p>
-<p>1. <strong>Kênh Hỗ trợ Nhanh (Zalo/Hotline):</strong> 098 736 3935<br/>
-2. <strong>Kênh Hỗ trợ Học vụ (Email):</strong><br/>
-&nbsp;&nbsp;&bull; Tiếp nhận yêu cầu: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a><br/>
-&nbsp;&nbsp;&bull; CC (Đồng gửi): <a href="mailto:it.dept@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">it.dept@ideas.edu.vn</a>, <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a>, <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a> <em>(Vui lòng luôn CC các địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">B. TÀI KHOẢN HỌC TẬP</strong></p>
-<p>Anh/Chị sẽ được cấp 3 tài khoản học tập, sử dụng xuyên suốt chương trình:</p>
-<ul style="padding-left: 20px; line-height: 1.8;">
-  <li><strong>1. Tài khoản LMS IDEAS</strong> (xem tài liệu, video record buổi học, hỗ trợ học thuật): <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://lms.ideas.edu.vn/</a> | Video hướng dẫn: <a href="https://drive.google.com/file/d/1wXQtghJSd7CHoek_hPXOfXuVuGuT8bMv/view?usp=sharing" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></li>
-  <li><strong>2. Tài khoản học tập Paris Education</strong> (làm bài, nộp bài chính thức): <a href="https://pariseducation-global.org/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://pariseducation-global.org/</a></li>
-  <li><strong>3. Platform IDEAS AI</strong> (công cụ bổ trợ học tập): <a href="https://ai.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://ai.ideas.edu.vn/</a></li>
-</ul>
-<p><em>(thông tin tài khoản sẽ được gửi trực tiếp đến email cá nhân của học viên đã đăng ký học tập)</em></p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">C. TÀI LIỆU ĐÍNH KÈM</strong></p>
-<ul style="padding-left: 20px; line-height: 1.8;">
-  <li>File Template format APA</li>
-  <li>File hướng dẫn sử dụng các hệ thống học tập</li>
-</ul>
-<p>Link tổng hợp tài liệu hướng dẫn: <a href="${docFolderLink}" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></p>
-
-<p>Nếu có bất kỳ vướng mắc nào, Anh/Chị vui lòng liên hệ CTSV để được hỗ trợ kịp thời. Chúc Anh/Chị có hành trình học tập, nghiên cứu thật thuận lợi và thành công!</p>
-
-<p style="margin-top: 20px;">Trân trọng,<br/><strong>Ban Công tác Sinh viên IDEAS</strong></p>`;
-  }
-
-  return `<p>${greeting}</p>
-<p>Lời đầu tiên, Ban Công tác Sinh viên IDEAS xin gửi lời chúc mừng và trân trọng cảm ơn Anh/Chị đã tin chọn IDEAS làm người bạn đồng hành trên chặng đường chinh phục tấm bằng từ <strong>Đại học Swiss UMEF</strong>. Chúng tôi cam kết đồng hành và hỗ trợ Anh/Chị xuyên suốt quá trình học tập.</p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">A. KÊNH LIÊN LẠC CHÍNH THỨC</strong></p>
-<p>1. <strong>Kênh Hỗ trợ Nhanh (Zalo/Hotline):</strong> 098 736 3935<br/>
-2. <strong>Kênh Hỗ trợ Học vụ (Email):</strong><br/>
-&nbsp;&nbsp;&bull; Tiếp nhận yêu cầu: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a><br/>
-&nbsp;&nbsp;&bull; CC (Đồng gửi): <a href="mailto:it.dept@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">it.dept@ideas.edu.vn</a>, <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a>, <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a> <em>(Vui lòng luôn CC các địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">B. TÀI KHOẢN HỌC TẬP</strong></p>
-<p>Anh/Chị sẽ được cấp 3 tài khoản học tập, sử dụng xuyên suốt chương trình:</p>
-<ul style="padding-left: 20px; line-height: 1.8;">
-  <li><strong>1. Tài khoản LMS IDEAS</strong> (xem tài liệu, video buổi học, hỗ trợ học thuật): <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://lms.ideas.edu.vn/</a> | Video hướng dẫn: <a href="https://drive.google.com/file/d/1wXQtghJSd7CHoek_hPXOfXuVuGuT8bMv/view?usp=sharing" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></li>
-  <li><strong>2. Tài khoản LMS UMEF</strong> (làm bài, nộp bài, tính điểm chính thức): <a href="https://portal.swiss-umef.ch/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://portal.swiss-umef.ch/</a></li>
-  <li><strong>3. Platform IDEAS AI</strong> (công cụ bổ trợ học tập): <a href="https://ai.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://ai.ideas.edu.vn/</a></li>
-</ul>
-<p><em>(thông tin tài khoản sẽ được gửi trực tiếp đến email cá nhân của học viên đã đăng ký học tập)</em></p>
-
-<p><strong style="color: #BD1D2D; font-size: 15px;">C. TÀI LIỆU ĐÍNH KÈM</strong></p>
-<ul style="padding-left: 20px; line-height: 1.8;">
-  <li>File giải thích Format APA</li>
-  <li>File hướng dẫn sử dụng các hệ thống học tập</li>
-  <li>Hướng dẫn sử dụng Zoom Meeting &amp; Format bài làm mẫu</li>
-</ul>
-<p>Link tổng hợp tài liệu hướng dẫn: <a href="${docFolderLink}" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></p>
-
-<p>Nếu có bất kỳ vướng mắc nào, Anh/Chị vui lòng liên hệ CTSV để được hỗ trợ kịp thời. Chúc Anh/Chị có hành trình học tập thật thuận lợi và thành công!</p>
-
-<p style="margin-top: 20px;">Trân trọng,<br/><strong>Ban Công tác Sinh viên IDEAS</strong></p>`;
+export const getAcademicEmailDefaultContent = (studentName: string, programKey = 'mba_standard'): string => {
+  return renderTenantOnboardingTemplate({ programCode: programKey, studentName }).html;
 };
-
-export const DEFAULT_ACADEMIC_CC_EMAILS = 'it.dept@ideas.edu.vn, student.notice@ideas.edu.vn, support@ideas.edu.vn';
 
 export const StudentOnboardingEmailModal: React.FC<StudentOnboardingEmailModalProps> = ({
   isOpen,
@@ -198,9 +93,25 @@ export const StudentOnboardingEmailModal: React.FC<StudentOnboardingEmailModalPr
   preselectedStudent = null,
   studentsList = [],
   addToast,
-  onSuccess
+  onSuccess,
 }) => {
   const { user: currentUser } = useAuth();
+  const { config: tenantConfig } = useTenantConfig();
+
+  const programOptions = useMemo(() => {
+    const dbProgs = tenantConfig?.academic_programs;
+    if (Array.isArray(dbProgs) && dbProgs.length > 0) {
+      return dbProgs.map((p) => ({
+        id: p.program_code,
+        label: p.school_name ? `${p.name} - ${p.school_name}` : p.name,
+        school: p.school_name || '',
+        docLink: p.doc_folder_url || '',
+        keywords: Array.isArray(p.match_keywords) ? p.match_keywords : [],
+      }));
+    }
+    return getTenantProgramOptions();
+  }, [tenantConfig?.academic_programs]);
+
   const [selectedStudentId, setSelectedStudentId] = useState<number | string>(preselectedStudent?.id || '');
   const [studentSearch, setStudentSearch] = useState('');
   const [showStudentDropdown, setShowStudentDropdown] = useState(false);
@@ -210,36 +121,24 @@ export const StudentOnboardingEmailModal: React.FC<StudentOnboardingEmailModalPr
   const [isSending, setIsSending] = useState(false);
   const [copiedZalo, setCopiedZalo] = useState(false);
 
+  const staffName = (currentUser?.full_name || (currentUser as any)?.name || 'Chuyên viên CTSV').trim();
+  const defaultCc = tenantConfig?.organization?.academic_cc_emails || '';
+
   const [emailForm, setEmailForm] = useState({
     recipient_name: '',
     to_email: '',
-    cc_email: DEFAULT_ACADEMIC_CC_EMAILS,
-    subject: getAcademicEmailDefaultSubject('mba_standard'),
+    cc_email: defaultCc,
+    subject: '',
     content: '',
-    zalo_text: ''
+    zalo_text: '',
   });
 
-  const getAcademicZaloOnboardingText = useCallback(
-    (studentName: string) => {
-      const nameStr = studentName ? `Anh/Chị ${studentName}` : 'Anh/Chị';
-      const ctsvName = (currentUser?.full_name || currentUser?.name || 'Chuyên viên CTSV').trim();
-      return `Chào ${nameStr}, Em là ${ctsvName} từ Bộ phận Công tác Sinh viên (CTSV) của IDEAS.
-Chào mừng Anh/Chị chính thức trở thành Tân Học viên chương trình tại IDEAS. Em xin phép kết nối Zalo để đồng hành và hỗ trợ mình sát sao nhất trong suốt khóa học ạ!
-Để bắt đầu hành trình học tập thuận lợi, Anh/Chị lưu ý giúp em các thông tin quan trọng sau nhé:
-1. Kênh tiếp nhận hỗ trợ học vụ: support@ideas.edu.vn (CC: it.dept@ideas.edu.vn, student.notice@ideas.edu.vn).
-2. Tài khoản học tập và link tài liệu chi tiết đã được gửi tới email cá nhân của Anh/Chị. Anh/Chị kiểm tra hộp thư giúp em nhé!
-Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này hoặc hotline 098 736 3935 để được giải đáp ngay ạ. Em chúc Anh/Chị một khóa học thật nhiều niềm vui và thành công!`;
-    },
-    [currentUser?.full_name, currentUser?.name]
-  );
-
-  // Filter students for picker if opened without preselected student
   const filteredStudents = useMemo(() => {
-    if (!studentsList || studentsList.length === 0) return [];
+    if (!Array.isArray(studentsList) || studentsList.length === 0) return [];
     const q = studentSearch.trim().toLowerCase();
     if (!q) return studentsList.slice(0, 10);
     return studentsList
-      .filter(s => {
+      .filter((s) => {
         const name = (s.full_name || s.name || '').toLowerCase();
         const email = (s.email || '').toLowerCase();
         const phone = (s.phone || '').toLowerCase();
@@ -248,15 +147,23 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
       .slice(0, 15);
   }, [studentsList, studentSearch]);
 
-  // Sync state when modal opens or preselectedStudent changes
   useEffect(() => {
     if (!isOpen) return;
 
-    const student = preselectedStudent || (selectedStudentId ? studentsList.find(s => String(s.id) === String(selectedStudentId)) : null);
+    const student =
+      preselectedStudent ||
+      (selectedStudentId && Array.isArray(studentsList)
+        ? studentsList.find((s) => String(s.id) === String(selectedStudentId))
+        : null);
     const sName = (student?.full_name || student?.name || '').trim();
     const sEmail = (student?.email || '').trim();
     const rawProg = student?.program || student?.product_name || student?.course || '';
     const progKey = detectAcademicProgram(rawProg);
+    const rendered = renderTenantOnboardingTemplate({
+      programCode: progKey,
+      studentName: sName,
+      staffName,
+    });
 
     setSelectedStudentId(student?.id || '');
     setAcademicProgram(progKey);
@@ -264,39 +171,54 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
     setEmailForm({
       recipient_name: sName,
       to_email: sEmail,
-      cc_email: DEFAULT_ACADEMIC_CC_EMAILS,
-      subject: getAcademicEmailDefaultSubject(progKey),
-      content: getAcademicEmailDefaultContent(sName, progKey),
-      zalo_text: getAcademicZaloOnboardingText(sName)
+      cc_email: rendered.ccEmails || defaultCc,
+      subject: rendered.subject,
+      content: rendered.html,
+      zalo_text: rendered.zaloText,
     });
-  }, [isOpen, preselectedStudent, studentsList, getAcademicZaloOnboardingText]);
+  }, [isOpen, preselectedStudent, studentsList, staffName, defaultCc]);
 
-  const handleProgramChange = (progKey: string) => {
-    setAcademicProgram(progKey);
-    const sName = emailForm.recipient_name.trim();
-    setEmailForm(prev => ({
-      ...prev,
-      subject: getAcademicEmailDefaultSubject(progKey),
-      content: getAcademicEmailDefaultContent(sName, progKey),
-      zalo_text: getAcademicZaloOnboardingText(sName)
-    }));
-  };
+  const handleProgramChange = useCallback(
+    (progKey: string) => {
+      setAcademicProgram(progKey);
+      const sName = emailForm.recipient_name.trim();
+      const rendered = renderTenantOnboardingTemplate({
+        programCode: progKey,
+        studentName: sName,
+        staffName,
+      });
+      setEmailForm((prev) => ({
+        ...prev,
+        cc_email: rendered.ccEmails || prev.cc_email || defaultCc,
+        subject: rendered.subject,
+        content: rendered.html,
+        zalo_text: rendered.zaloText,
+      }));
+    },
+    [emailForm.recipient_name, staffName, defaultCc]
+  );
 
   const handleSelectStudent = (s: any) => {
     const sName = (s.full_name || s.name || '').trim();
     const sEmail = (s.email || '').trim();
     const progKey = detectAcademicProgram(s.program || s.product_name || '');
+    const rendered = renderTenantOnboardingTemplate({
+      programCode: progKey,
+      studentName: sName,
+      staffName,
+    });
     setSelectedStudentId(s.id);
     setAcademicProgram(progKey);
     setStudentSearch(`${sName} - ${sEmail}`);
     setShowStudentDropdown(false);
-    setEmailForm(prev => ({
+    setEmailForm((prev) => ({
       ...prev,
       recipient_name: sName,
       to_email: sEmail,
-      subject: getAcademicEmailDefaultSubject(progKey),
-      content: getAcademicEmailDefaultContent(sName, progKey),
-      zalo_text: getAcademicZaloOnboardingText(sName)
+      cc_email: rendered.ccEmails || prev.cc_email || defaultCc,
+      subject: rendered.subject,
+      content: rendered.html,
+      zalo_text: rendered.zaloText,
     }));
   };
 
@@ -319,21 +241,19 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
     try {
       const studentId = selectedStudentId || preselectedStudent?.id;
       if (studentId) {
-        // Send via official student academic email endpoint
         await api.post(`/contacts/${studentId}/send-academic-email`, {
           to_email: emailForm.to_email.trim(),
           cc_email: emailForm.cc_email.trim(),
           subject: emailForm.subject.trim(),
           content: emailForm.content.trim(),
-          program: academicProgram
+          program: academicProgram,
         });
       } else {
-        // Send via broadcast/mailer helper
         await api.post('/marketing-campaigns/send-quick-email', {
           to_email: emailForm.to_email.trim(),
           cc_email: emailForm.cc_email.trim(),
           subject: emailForm.subject.trim(),
-          content_html: emailForm.content.trim()
+          content_html: emailForm.content.trim(),
         });
       }
 
@@ -349,7 +269,12 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
   };
 
   const handleCopyZalo = () => {
-    const textToCopy = emailForm.zalo_text || getAcademicZaloOnboardingText(emailForm.recipient_name);
+    const fallbackZalo = renderTenantOnboardingTemplate({
+      programCode: academicProgram,
+      studentName: emailForm.recipient_name,
+      staffName,
+    }).zaloText;
+    const textToCopy = emailForm.zalo_text || fallbackZalo;
     navigator.clipboard.writeText(textToCopy).then(() => {
       setCopiedZalo(true);
       setTimeout(() => setCopiedZalo(false), 2500);
@@ -359,7 +284,12 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
 
   if (!isOpen) return null;
 
-  return (
+  const orgName = tenantConfig?.organization?.name || 'MYERP';
+  const orgLogo = tenantConfig?.organization?.logo_url || '/LOGO.webp';
+  const orgHotline = tenantConfig?.organization?.support_hotline || '';
+  const orgEmail = tenantConfig?.organization?.support_email || '';
+
+  return createPortal(
     <div
       style={{
         position: 'fixed',
@@ -370,9 +300,9 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '16px'
+        padding: '16px',
       }}
-      onClick={e => {
+      onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
@@ -387,10 +317,9 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
           flexDirection: 'column',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
           border: '1px solid #e2e8f0',
-          overflow: 'hidden'
+          overflow: 'hidden',
         }}
       >
-        {/* Header */}
         <div
           style={{
             padding: '14px 20px',
@@ -398,7 +327,7 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: '#ffffff'
+            background: '#ffffff',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -411,7 +340,7 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#BD1D2D'
+                color: '#BD1D2D',
               }}
             >
               <Mail size={18} />
@@ -438,16 +367,14 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
               alignItems: 'center',
               justifyContent: 'center',
               color: '#64748b',
-              cursor: 'pointer'
+              cursor: 'pointer',
             }}
           >
             <X size={18} />
           </button>
         </div>
 
-        {/* Body Container */}
         <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {/* Information banner */}
           <div
             style={{
               padding: '10px 14px',
@@ -458,17 +385,14 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
               color: '#475569',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px'
+              gap: '8px',
             }}
           >
             <Sparkles size={16} style={{ color: '#BD1D2D', flexShrink: 0 }} />
-            <div>
-              Hệ thống sẽ gửi email chính thức tới học viên và tự động ghi nhật ký tương tác với tên của bạn.
-            </div>
+            <div>Hệ thống sẽ gửi email chính thức tới học viên và tự động ghi nhật ký tương tác với tên của bạn.</div>
           </div>
 
-          {/* Student Picker if not preselected */}
-          {!preselectedStudent && studentsList.length > 0 && (
+          {!preselectedStudent && Array.isArray(studentsList) && studentsList.length > 0 && (
             <div style={{ position: 'relative' }}>
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
                 Chọn Học viên từ danh sách
@@ -478,7 +402,7 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                   type="text"
                   placeholder="Gõ tên hoặc email học viên để tìm nhanh..."
                   value={studentSearch}
-                  onChange={e => {
+                  onChange={(e) => {
                     setStudentSearch(e.target.value);
                     setShowStudentDropdown(true);
                   }}
@@ -488,7 +412,7 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                     padding: '8px 12px',
                     borderRadius: '8px',
                     border: '1px solid #cbd5e1',
-                    fontSize: '0.82rem'
+                    fontSize: '0.82rem',
                   }}
                 />
               </div>
@@ -507,10 +431,10 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                     borderRadius: '8px',
                     maxHeight: '180px',
                     overflowY: 'auto',
-                    boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
                   }}
                 >
-                  {filteredStudents.map(s => (
+                  {filteredStudents.map((s) => (
                     <div
                       key={s.id}
                       onClick={() => handleSelectStudent(s)}
@@ -518,7 +442,7 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                         padding: '8px 12px',
                         cursor: 'pointer',
                         borderBottom: '1px solid #f1f5f9',
-                        fontSize: '0.8rem'
+                        fontSize: '0.8rem',
                       }}
                       className="hover-bg-alt"
                     >
@@ -532,7 +456,6 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
             </div>
           )}
 
-          {/* Program Select */}
           <div>
             <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
               <GraduationCap size={14} color="#BD1D2D" />
@@ -540,7 +463,7 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
             </label>
             <select
               value={academicProgram}
-              onChange={e => handleProgramChange(e.target.value)}
+              onChange={(e) => handleProgramChange(e.target.value)}
               style={{
                 width: '100%',
                 padding: '9px 12px',
@@ -550,18 +473,18 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                 color: '#BD1D2D',
                 fontSize: '0.82rem',
                 fontWeight: 700,
-                cursor: 'pointer'
+                cursor: 'pointer',
               }}
             >
-              {ACADEMIC_PROGRAM_OPTIONS.map(opt => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
+              {Array.isArray(programOptions) &&
+                programOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
             </select>
           </div>
 
-          {/* Name & Email Recipients */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '10px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
@@ -571,13 +494,18 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                 type="text"
                 placeholder="VD: Nguyễn Văn A"
                 value={emailForm.recipient_name}
-                onChange={e => {
+                onChange={(e) => {
                   const val = e.target.value;
-                  setEmailForm(prev => ({
+                  const rendered = renderTenantOnboardingTemplate({
+                    programCode: academicProgram,
+                    studentName: val,
+                    staffName,
+                  });
+                  setEmailForm((prev) => ({
                     ...prev,
                     recipient_name: val,
-                    content: getAcademicEmailDefaultContent(val, academicProgram),
-                    zalo_text: getAcademicZaloOnboardingText(val)
+                    content: rendered.html,
+                    zalo_text: rendered.zaloText,
                   }));
                 }}
                 style={{
@@ -585,7 +513,7 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                   padding: '8px 12px',
                   borderRadius: '8px',
                   border: '1px solid #cbd5e1',
-                  fontSize: '0.82rem'
+                  fontSize: '0.82rem',
                 }}
               />
             </div>
@@ -596,15 +524,15 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
               </label>
               <input
                 type="email"
-                placeholder="hocvien@gmail.com"
+                placeholder="hocvien@domain.com"
                 value={emailForm.to_email}
-                onChange={e => setEmailForm(prev => ({ ...prev, to_email: e.target.value }))}
+                onChange={(e) => setEmailForm((prev) => ({ ...prev, to_email: e.target.value }))}
                 style={{
                   width: '100%',
                   padding: '8px 12px',
                   borderRadius: '8px',
                   border: '1px solid #cbd5e1',
-                  fontSize: '0.82rem'
+                  fontSize: '0.82rem',
                 }}
               />
             </div>
@@ -616,14 +544,15 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
             </label>
             <input
               type="text"
+              placeholder={defaultCc || 'cc1@domain.com, cc2@domain.com'}
               value={emailForm.cc_email}
-              onChange={e => setEmailForm(prev => ({ ...prev, cc_email: e.target.value }))}
+              onChange={(e) => setEmailForm((prev) => ({ ...prev, cc_email: e.target.value }))}
               style={{
                 width: '100%',
                 padding: '8px 12px',
                 borderRadius: '8px',
                 border: '1px solid #cbd5e1',
-                fontSize: '0.82rem'
+                fontSize: '0.82rem',
               }}
             />
           </div>
@@ -635,19 +564,18 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
             <input
               type="text"
               value={emailForm.subject}
-              onChange={e => setEmailForm(prev => ({ ...prev, subject: e.target.value }))}
+              onChange={(e) => setEmailForm((prev) => ({ ...prev, subject: e.target.value }))}
               style={{
                 width: '100%',
                 padding: '8px 12px',
                 borderRadius: '8px',
                 border: '1px solid #cbd5e1',
                 fontSize: '0.82rem',
-                fontWeight: 600
+                fontWeight: 600,
               }}
             />
           </div>
 
-          {/* Subtab Segmented Switcher */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
             <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>
               {activeTab === 'zalo' ? 'Nội dung tin nhắn Zalo tiếp nhận' : 'Nội dung email'}
@@ -658,18 +586,18 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                 display: 'inline-flex',
                 background: '#f1f5f9',
                 padding: '3px',
-                borderRadius: '8px',
+                borderRadius: '10px',
                 border: '1px solid #e2e8f0',
-                gap: '2px'
+                gap: '2px',
               }}
             >
               <button
                 type="button"
                 onClick={() => setActiveTab('preview')}
                 style={{
-                  height: '28px',
-                  padding: '0 10px',
-                  borderRadius: '6px',
+                  height: '32px',
+                  padding: '0 14px',
+                  borderRadius: '7px',
                   border: 'none',
                   background: activeTab === 'preview' ? '#ffffff' : 'transparent',
                   color: activeTab === 'preview' ? '#BD1D2D' : '#64748b',
@@ -679,7 +607,7 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '4px',
-                  boxShadow: activeTab === 'preview' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none'
+                  boxShadow: activeTab === 'preview' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                 }}
               >
                 <Eye size={12} />
@@ -689,9 +617,9 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                 type="button"
                 onClick={() => setActiveTab('edit')}
                 style={{
-                  height: '28px',
-                  padding: '0 10px',
-                  borderRadius: '6px',
+                  height: '32px',
+                  padding: '0 14px',
+                  borderRadius: '7px',
                   border: 'none',
                   background: activeTab === 'edit' ? '#ffffff' : 'transparent',
                   color: activeTab === 'edit' ? '#BD1D2D' : '#64748b',
@@ -701,7 +629,7 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '4px',
-                  boxShadow: activeTab === 'edit' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none'
+                  boxShadow: activeTab === 'edit' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                 }}
               >
                 <Pencil size={12} />
@@ -711,19 +639,19 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                 type="button"
                 onClick={() => setActiveTab('zalo')}
                 style={{
-                  height: '28px',
-                  padding: '0 10px',
-                  borderRadius: '6px',
+                  height: '32px',
+                  padding: '0 14px',
+                  borderRadius: '7px',
                   border: 'none',
                   background: activeTab === 'zalo' ? '#ffffff' : 'transparent',
-                  color: activeTab === 'zalo' ? '#0284c7' : '#64748b',
+                  color: activeTab === 'zalo' ? '#BD1D2D' : '#64748b',
                   fontWeight: activeTab === 'zalo' ? 700 : 600,
                   fontSize: '0.75rem',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '4px',
-                  boxShadow: activeTab === 'zalo' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none'
+                  boxShadow: activeTab === 'zalo' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                 }}
               >
                 <MessageSquare size={12} />
@@ -732,7 +660,6 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
             </div>
           </div>
 
-          {/* Tab Content Display */}
           {activeTab === 'preview' ? (
             <div
               style={{
@@ -741,7 +668,7 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                 background: '#f8fafc',
                 border: '1px solid #cbd5e1',
                 borderRadius: '12px',
-                padding: '16px'
+                padding: '16px',
               }}
             >
               <div
@@ -752,70 +679,82 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                   borderRadius: '10px',
                   overflow: 'hidden',
                   border: '1px solid #e2e8f0',
-                  boxShadow: '0 4px 14px rgba(0,0,0,0.06)'
+                  boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
                 }}
               >
-                {/* Header Banner */}
                 <div
                   style={{
                     background: 'linear-gradient(135deg, #BD1D2D 0%, #8C111E 100%)',
                     padding: '20px 24px',
-                    color: '#ffffff'
+                    color: '#ffffff',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: '10px', marginBottom: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      borderBottom: '1px solid rgba(255,255,255,0.2)',
+                      paddingBottom: '10px',
+                      marginBottom: '10px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <img
-                        src="/Logo_IDEAS_white.png"
-                        alt="IDEAS"
+                        src={orgLogo}
+                        alt={orgName}
                         style={{
-                          height: '34px',
+                          height: '32px',
                           width: 'auto',
-                          maxWidth: '150px',
+                          maxWidth: '140px',
                           objectFit: 'contain',
-                          filter: 'brightness(0) invert(1)',
-                          display: 'block'
+                          display: 'block',
                         }}
                         onError={(e: any) => {
-                          e.currentTarget.onerror = null;
-                          e.currentTarget.src = 'https://ideas.edu.vn/wp-content/uploads/2026/06/Logo_IDEAS_Slg-optimized.webp';
-                          e.currentTarget.style.filter = 'brightness(0) invert(1)';
+                          e.currentTarget.style.display = 'none';
                         }}
                       />
+                      <span style={{ fontWeight: 900, fontSize: '1.05rem', color: '#ffffff' }}>{orgName}</span>
                     </div>
                     <span style={{ fontSize: '0.72rem', background: 'rgba(0,0,0,0.2)', padding: '3px 8px', borderRadius: '4px', color: '#ffffff' }}>
                       Academic Department
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#ffffff' }}>
-                    {emailForm.subject}
-                  </div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#ffffff' }}>{emailForm.subject}</div>
                 </div>
 
-                {/* Content */}
                 <div style={{ padding: '24px', fontSize: '0.875rem', lineHeight: '1.65', color: '#334155' }}>
                   <div dangerouslySetInnerHTML={{ __html: emailForm.content }} />
                 </div>
 
-                {/* Footer */}
                 <div
                   style={{
                     background: '#f8fafc',
                     borderTop: '1px solid #e2e8f0',
                     padding: '16px 24px',
                     fontSize: '0.75rem',
-                    color: '#64748b'
+                    color: '#64748b',
                   }}
                 >
-                  <div style={{ fontWeight: 700, color: '#334155' }}>Ban Học vụ — IDEAS</div>
-                  <div>Hotline / Zalo: <strong style={{ color: '#BD1D2D' }}>098 736 3935</strong> | Email: support@ideas.edu.vn</div>
+                  <div style={{ fontWeight: 700, color: '#334155' }}>Ban Học vụ — {orgName}</div>
+                  {(orgHotline || orgEmail) && (
+                    <div>
+                      {orgHotline && (
+                        <>
+                          Hotline / Zalo: <strong style={{ color: '#BD1D2D' }}>{orgHotline}</strong>
+                        </>
+                      )}
+                      {orgHotline && orgEmail ? ' | ' : ''}
+                      {orgEmail && <>Email: {orgEmail}</>}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           ) : activeTab === 'edit' ? (
             <textarea
               value={emailForm.content}
-              onChange={e => setEmailForm(prev => ({ ...prev, content: e.target.value }))}
+              onChange={(e) => setEmailForm((prev) => ({ ...prev, content: e.target.value }))}
               style={{
                 width: '100%',
                 minHeight: '260px',
@@ -824,17 +763,17 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                 lineHeight: '1.5',
                 padding: '12px',
                 borderRadius: '8px',
-                border: '1px solid #cbd5e1'
+                border: '1px solid #cbd5e1',
               }}
             />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ fontSize: '0.78rem', color: '#0369a1', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '8px', padding: '8px 12px' }}>
-                Mẫu tin nhắn Zalo tiếp nhận học viên đã được tự động điền tên học viên &amp; CTSV. Bấm nút <strong>Copy Tin nhắn Zalo</strong> để dán trực tiếp gửi qua Zalo!
+              <div style={{ fontSize: '0.78rem', color: '#334155', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px' }}>
+                Mẫu tin nhắn Zalo tiếp nhận học viên đã được tự động điền tên học viên &amp; CTSV. Bấm nút <strong>Copy Tin nhắn Zalo</strong> để gửi qua Zalo.
               </div>
               <textarea
                 value={emailForm.zalo_text}
-                onChange={e => setEmailForm(prev => ({ ...prev, zalo_text: e.target.value }))}
+                onChange={(e) => setEmailForm((prev) => ({ ...prev, zalo_text: e.target.value }))}
                 style={{
                   width: '100%',
                   minHeight: '200px',
@@ -842,14 +781,13 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                   lineHeight: '1.6',
                   padding: '12px',
                   borderRadius: '8px',
-                  border: '1px solid #cbd5e1'
+                  border: '1px solid #cbd5e1',
                 }}
               />
             </div>
           )}
         </div>
 
-        {/* Modal Footer Actions */}
         <div
           style={{
             padding: '12px 20px',
@@ -859,7 +797,7 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
             justifyContent: 'space-between',
             background: '#ffffff',
             flexWrap: 'wrap',
-            gap: '10px'
+            gap: '10px',
           }}
         >
           <button
@@ -871,12 +809,12 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
               gap: '6px',
               padding: '8px 14px',
               borderRadius: '8px',
-              border: '1px solid #bae6fd',
-              background: '#f0f9ff',
-              color: '#0284c7',
+              border: '1px solid #e2e8f0',
+              background: '#f8fafc',
+              color: '#0f172a',
               fontSize: '0.8rem',
               fontWeight: 700,
-              cursor: 'pointer'
+              cursor: 'pointer',
             }}
           >
             {copiedZalo ? <Check size={14} color="#059669" /> : <Copy size={14} />}
@@ -896,7 +834,7 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                 color: '#64748b',
                 fontSize: '0.8rem',
                 fontWeight: 600,
-                cursor: 'pointer'
+                cursor: 'pointer',
               }}
             >
               Hủy
@@ -917,7 +855,7 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
                 fontSize: '0.82rem',
                 fontWeight: 700,
                 cursor: isSending ? 'not-allowed' : 'pointer',
-                boxShadow: '0 2px 4px rgba(189, 29, 45, 0.2)'
+                boxShadow: '0 2px 4px rgba(189, 29, 45, 0.2)',
               }}
             >
               {isSending ? (
@@ -935,6 +873,7 @@ Nếu có bất kỳ thắc mắc nào, Anh/Chị cứ nhắn em qua Zalo này h
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

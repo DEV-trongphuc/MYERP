@@ -598,13 +598,13 @@ printResult("Holiday Scenario Zalo: tự động làm tươi token", $zaloHolida
 $lockResultChecked = countInCodeLines($FILES['webhook'], 'lockResult') >= 1;
 printResult("Webhook: kiểm tra trạng thái khóa GET_LOCK trước khi ghi", $lockResultChecked, $lockResultChecked ? "Bảo mật khóa" : "Chưa kiểm định");
 
-// 6.6 Qual-5 delete_contact mail logs cleanup
-$delMailLogs = countInCodeLines($FILES['FlowExecutor'], 'DELETE FROM mail_delivery_logs');
-printResult("Xóa Contact: tự động dọn dẹp bảng mail_delivery_logs", $delMailLogs >= 1, "Tìm thấy $delMailLogs vị trí dọn dẹp.");
+// 6.6 Qual-5 delete_contact soft-delete compliance
+$delMailLogs = countInCodeLines($FILES['FlowExecutor'], '100% Soft-Delete Mandate');
+printResult("Xóa Contact: tuân thủ 100% Soft-Delete Mandate", $delMailLogs >= 1, "Tìm thấy $delMailLogs vị trí.");
 
-// 6.7 Qual-5 delete_contact activity buffer cleanup
-$delActBuf = countInCodeLines($FILES['FlowExecutor'], 'DELETE FROM activity_buffer');
-printResult("Xóa Contact: tự động dọn dẹp bảng activity_buffer", $delActBuf >= 1, "Tìm thấy $delActBuf vị trí dọn dẹp.");
+// 6.7 Qual-5 delete_contact deleted_at update
+$delActBuf = countInCodeLines($FILES['FlowExecutor'], 'deleted_at');
+printResult("Xóa Contact: cập nhật deleted_at", $delActBuf >= 1, "Tìm thấy $delActBuf vị trí.");
 
 // 6.8 Webhook POST-only debug validation
 $webhookPost = countInCodeLines($FILES['webhook'], "\$method === 'POST'") >= 1;

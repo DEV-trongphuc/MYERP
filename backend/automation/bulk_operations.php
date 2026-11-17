@@ -1,6 +1,7 @@
 <?php
 // api/bulk_operations.php - HIGH PERFORMANCE BULK ENGINE V30.0
 require_once 'db_connect.php';
+require_once 'flow_helpers.php';
 require_once 'trigger_helper.php';
 require_once 'auth_middleware.php';  // [FIX P2-1] Needed for workspace_id on import
 apiHeaders();
@@ -187,19 +188,15 @@ try {
                         ->execute([$row['cnt'], $workspace_id, $row['list_id']]);
                 }
 
-                // 2. Clear relations & ghost data
-                $pdo->prepare("DELETE FROM subscriber_activity WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
-                $pdo->prepare("DELETE FROM subscriber_flow_states WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
+                // 2. Clear relations & cancel active queue states (preserve historical activities & delivery logs)
+                $pdo->prepare("UPDATE subscriber_flow_states SET status = 'cancelled', updated_at = NOW() WHERE workspace_id = ? AND subscriber_id IN ($ph) AND status IN ('waiting', 'processing', 'queued')")->execute(array_merge([$workspace_id], $chunk));
                 $pdo->prepare("DELETE FROM subscriber_lists WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
                 $pdo->prepare("DELETE FROM subscriber_tags WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
-                $pdo->prepare("DELETE FROM mail_delivery_logs WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
-                $pdo->prepare("DELETE FROM activity_buffer WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
-                $pdo->prepare("DELETE FROM zalo_delivery_logs WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
                 $pdo->prepare("UPDATE zalo_subscribers SET subscriber_id = NULL WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
                 $pdo->prepare("UPDATE voucher_codes SET subscriber_id = NULL, status = 'unused', sent_at = NULL WHERE workspace_id = ? AND subscriber_id IN ($ph) AND status = 'available'")->execute(array_merge([$workspace_id], $chunk));
 
-                // 3. Delete subs
-                $stmtDel = $pdo->prepare("DELETE FROM subscribers WHERE workspace_id = ? AND id IN ($ph)");
+                // 3. Soft-delete subscribers (preserve contact_id so CRM sync does not resurrect as zombie)
+                $stmtDel = $pdo->prepare("UPDATE subscribers SET deleted_at = NOW(), status = 'archived', updated_at = NOW() WHERE workspace_id = ? AND id IN ($ph) AND deleted_at IS NULL");
                 $stmtDel->execute(array_merge([$workspace_id], $chunk));
                 $affectedCount += $stmtDel->rowCount();
 
@@ -353,40 +350,18 @@ try {
             $initialSchedule = $nowStr;
 
             // [SMART SCHEDULE] Check if first step is WAIT — pre-calculate delay
+            $startStepType = 'unknown';
             if ($steps) {
-                foreach ($steps as $fs) {
-                    if ($fs['id'] === $startStepId && strtolower($fs['type'] ?? '') === 'wait') {
-                        $fsWaitConfig = $fs['config'] ?? [];
-                        $fsWaitMode   = $fsWaitConfig['mode'] ?? 'duration';
-                        if ($fsWaitMode === 'duration') {
-                            $dur  = (int) ($fsWaitConfig['duration'] ?? 0);
-                            $unit = $fsWaitConfig['unit'] ?? 'minutes';
-                            $unitSeconds = match ($unit) {
-                                'weeks'   => 604800,
-                                'days'    => 86400,
-                                'hours'   => 3600,
-                                default   => 60,
-                            };
-                            if (($unitSeconds * $dur) > 0)
-                                $initialSchedule = date('Y-m-d H:i:s', time() + $unitSeconds * $dur);
-                        } elseif ($fsWaitMode === 'until_date') {
-                            $specDate   = $fsWaitConfig['specificDate'] ?? '';
-                            $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                            if ($specDate) {
-                                $targetTs = strtotime("$specDate $targetTime:00");
-                                if ($targetTs > time())
-                                    $initialSchedule = date('Y-m-d H:i:s', $targetTs);
-                            }
-                        } elseif ($fsWaitMode === 'until') {
-                            $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                            $dt = new DateTime();
-                            [$h, $m] = explode(':', $targetTime) + [0, 0];
-                            $dt->setTime((int)$h, (int)$m, 0);
-                            if ($dt->getTimestamp() <= time()) $dt->modify('+1 day');
-                            $initialSchedule = $dt->format('Y-m-d H:i:s');
-                        }
-                        break;
-                    }
+                $startMeta = extractFlowStepMeta($steps, $startStepId);
+                $startStepType = $startMeta['type'] ?? 'unknown';
+                if ($startMeta['step'] && strtolower((string) $startStepType) === 'wait') {
+                    $waitCalc = calculateWaitStepScheduledAt($startMeta['step'], null, [
+                        'for_enrollment' => true,
+                        'past_fallback' => $initialSchedule,
+                        'duration_default' => 0,
+                        'unit_default' => 'minutes',
+                    ]);
+                    $initialSchedule = $waitCalc['scheduled_at'];
                 }
             }
 
@@ -395,8 +370,8 @@ try {
             foreach (array_chunk($subscriberIds, $ENROLL_CHUNK) as $chunk) {
                 $ph = implode(',', array_fill(0, count($chunk), '?'));
                 $sql = "INSERT INTO subscriber_flow_states 
-                        (workspace_id, flow_id, subscriber_id, step_id, status, created_at, updated_at, scheduled_at, last_step_at)
-                        SELECT ?, ?, s.id, ?, 'waiting', NOW(), NOW(), ?, NOW()
+                        (workspace_id, flow_id, subscriber_id, step_id, step_type, status, created_at, updated_at, scheduled_at, last_step_at)
+                        SELECT ?, ?, s.id, ?, ?, 'waiting', NOW(), NOW(), ?, NOW()
                         FROM subscribers s
                         WHERE s.id IN ($ph)
                         AND s.workspace_id = ?
@@ -406,7 +381,7 @@ try {
                             WHERE sfs.workspace_id = ? AND sfs.flow_id = ? AND sfs.subscriber_id = s.id 
                             AND sfs.status IN ('waiting', 'processing')
                         )";
-                $finalParams = array_merge([$workspace_id, $flowId, $startStepId, $initialSchedule], $chunk, [$workspace_id, $workspace_id, $flowId]);
+                $finalParams = array_merge([$workspace_id, $flowId, $startStepId, $startStepType, $initialSchedule], $chunk, [$workspace_id, $workspace_id, $flowId]);
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute($finalParams);
                 $affectedCount += $stmt->rowCount();
@@ -757,14 +732,15 @@ try {
                         ? (string)$matchedContact['program']
                         : (!empty($d['program']) ? (string)$d['program'] : null);
 
-                    $job = $d['jobTitle'] ?? $d['job_title'] ?? '';
+                    $normalizedCustom = DomationContactMatcher::normalizeSubscriberCustomImportFields($d);
+                    $job = $normalizedCustom['job_title'];
                     $company = $d['companyName'] ?? $d['company_name'] ?? '';
                     $country = $d['country'] ?? '';
                     $city = $d['city'] ?? '';
                     $gender = $d['gender'] ?? '';
                     $dob = !empty($d['dateOfBirth']) ? standardize_dob($d['dateOfBirth']) : null;
                     $anniv = !empty($d['anniversaryDate']) ? standardize_dob($d['anniversaryDate']) : null;
-                    $customAt = !empty($d['customAttributes']) ? json_encode($d['customAttributes']) : '{}';
+                    $customAt = $normalizedCustom['custom_attributes_json'];
 
                     $subValues[] = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                     array_push(
@@ -854,14 +830,19 @@ try {
                                phone_norm9 = COALESCE(VALUES(phone_norm9), phone_norm9),
                                status = VALUES(status),
                                phone_number = IF(VALUES(phone_number) != '', VALUES(phone_number), phone_number),
-                               job_title = IF(VALUES(job_title) != '', VALUES(job_title), job_title),
+                               job_title = IF(VALUES(job_title) != '' AND LOWER(TRIM(VALUES(job_title))) != 'chưa cập nhật', VALUES(job_title), job_title),
                                company_name = IF(VALUES(company_name) != '', VALUES(company_name), company_name),
                                country = IF(VALUES(country) != '', VALUES(country), country),
                                city = IF(VALUES(city) != '', VALUES(city), city),
                                gender = IF(VALUES(gender) != '', VALUES(gender), gender),
                                date_of_birth = IF(VALUES(date_of_birth) IS NOT NULL, VALUES(date_of_birth), date_of_birth),
                                anniversary_date = IF(VALUES(anniversary_date) IS NOT NULL, VALUES(anniversary_date), anniversary_date),
-                               custom_attributes = JSON_MERGE_PATCH(COALESCE(custom_attributes, '{}'), VALUES(custom_attributes))";
+                               custom_attributes = CASE
+                                   WHEN VALUES(custom_attributes) IS NULL OR VALUES(custom_attributes) = '' OR VALUES(custom_attributes) = '{}' THEN custom_attributes
+                                   WHEN custom_attributes IS NOT NULL AND JSON_VALID(custom_attributes) AND LEFT(TRIM(custom_attributes), 1) = '{'
+                                       THEN JSON_MERGE_PATCH(custom_attributes, VALUES(custom_attributes))
+                                   ELSE VALUES(custom_attributes)
+                               END";
                     $pdo->prepare($sqlSub)->execute($subParams);
                 }
 

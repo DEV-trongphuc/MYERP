@@ -23,17 +23,23 @@ function require_permission($pdo, $permission_slug, $workspace_id = null) {
     }
 
     $role = strtolower((string)($auth['role'] ?? ''));
-    $allowedRoles = ['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'mkt', 'digital_marketing', 'content', 'ads', 'manager', 'leader', 'team_leader', 'sale_admin', 'saleadmin', 'sale', 'sales'];
-    if (!in_array($role, $allowedRoles, true)) {
+    $allowedRoles = ['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'mkt', 'digital_marketing', 'content', 'ads', 'manager', 'leader', 'team_leader', 'sale_admin', 'saleadmin'];
+    $isRoleAllowed = in_array($role, $allowedRoles, true);
+    if (!$isRoleAllowed && ($pdo instanceof PDO)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isRoleAllowed = TenantConfigService::doesUserSatisfyRoles($pdo, $auth, $allowedRoles, 'marketing', 'read');
+    }
+    if (!$isRoleAllowed) {
         jsonResponse(false, null, 'Forbidden: Vai trò của bạn không được phép truy cập.', [], 403);
     }
 
-    // Admin, Superadmin, Director, Marketing, Manager have full access to Marketing Automation
-    if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'mkt', 'digital_marketing', 'content', 'ads', 'manager'], true)) {
+    // Admin, Superadmin, Director, Marketing, Manager (or custom roles in those groups) have full access to Marketing Automation
+    $fullMarketingRoles = ['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'mkt', 'digital_marketing', 'content', 'ads', 'manager'];
+    if (in_array($role, $fullMarketingRoles, true) || (($pdo instanceof PDO) && TenantConfigService::doesUserSatisfyRoles($pdo, $auth, $fullMarketingRoles, 'marketing', 'write'))) {
         return true;
     }
 
-    // Leader, Team Leader, Sale Admin, Sale: block workspace/role administrative mutations
+    // Leader, Team Leader, Sale Admin: block workspace/role administrative mutations
     $restrictedPrefixes = ['workspaces.delete', 'workspaces.create', 'roles.manage', 'roles.delete', 'settings.Write'];
     foreach ($restrictedPrefixes as $prefix) {
         if (strcasecmp($permission_slug, $prefix) === 0) {
@@ -48,7 +54,7 @@ function require_permission($pdo, $permission_slug, $workspace_id = null) {
         }
     }
 
-    // Allow operational marketing/omnichannel permissions for manager, leader, team_leader, sale_admin, sale
+    // Allow operational marketing/omnichannel permissions for manager, leader, team_leader, sale_admin
     return true;
 }
 

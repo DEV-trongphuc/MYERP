@@ -281,7 +281,7 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
   const renderCommentCard = (item: ProcessFeedComment, isReply = false) => {
     const authorName = item.user_name || item.author || t('Người dùng');
     const isIdeasSystem = authorName.includes('Hệ thống') || authorName.includes('IDEAS') || authorName.includes('System');
-    const avatarSrc = item.avatar_url || item.avatar || (isIdeasSystem ? 'https://ideas.edu.vn/wp-content/uploads/2023/04/cropped-logofavicon-1.webp' : undefined);
+    const avatarSrc = item.avatar_url || item.avatar || (isIdeasSystem ? '/cropped-logofavicon-1.webp' : undefined);
     const displayTime = item.created_at 
       ? new Date(item.created_at).toLocaleString('vi-VN') 
       : item.time || '';
@@ -560,7 +560,7 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
                 : item.time || '';
 
               const isIdeasSystem = authorName.includes('Hệ thống') || authorName.includes('IDEAS') || authorName.includes('System');
-              const logAvatar = item.avatar_url || item.avatar || (isIdeasSystem ? 'https://ideas.edu.vn/wp-content/uploads/2023/04/cropped-logofavicon-1.webp' : undefined);
+              const logAvatar = item.avatar_url || item.avatar || (isIdeasSystem ? '/cropped-logofavicon-1.webp' : undefined);
 
               return (
                 <div key={item.id} style={{

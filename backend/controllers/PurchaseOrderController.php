@@ -36,20 +36,24 @@ class PurchaseOrderController {
             $params[] = $paymentStatus;
         }
 
-        $role = $auth['role'] ?? '';
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $poListScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'purchase_orders', 'read');
+        if ($poListScope === 'none') {
+            respond(403, null, 'Bạn không có quyền xem danh sách đơn mua hàng', false);
+        }
         $uid = (int)($auth['user_id'] ?? 0);
-        $isManager = $role === 'manager';
+        $isManager = ($poListScope === 'team');
 
-        // Load team members if manager
+        // Load team members if team-scoped
         $userIds = [$uid];
         if ($isManager) {
-            $stmtTeam = $this->db->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
-            $stmtTeam->execute([$uid]);
+            $stmtTeam = $this->db->prepare("SELECT id FROM users WHERE tenant_id = ? AND team_id IN (SELECT id FROM teams WHERE tenant_id = ? AND (leader_id = ? OR default_approver_id = ?))");
+            $stmtTeam->execute([(int)$auth['tenant_id'], (int)$auth['tenant_id'], $uid, $uid]);
             $teamMemberIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [];
-            $userIds = array_merge($userIds, array_map('intval', $teamMemberIds));
+            $userIds = array_values(array_unique(array_merge($userIds, array_map('intval', $teamMemberIds))));
         }
 
-        $isAdminOrDirectorOrAccountant = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
+        $isAdminOrDirectorOrAccountant = ($poListScope === 'all');
         $specificId = (int)($_GET['id'] ?? ($_GET['open_id'] ?? 0));
         $where[] = "(po.status != 'draft' OR po.created_by = ?)";
         $params[] = $uid;
@@ -149,8 +153,9 @@ class PurchaseOrderController {
     }
 
     public function store(array $auth): void {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
         $allowedRoles = ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant', 'hr', 'human_resources', 'staff'];
-        if (!in_array($auth['role'], $allowedRoles, true)) {
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, $allowedRoles, 'purchase_orders', 'write', ['all', 'team', 'own'])) {
             respond(403, null, 'Bạn không có quyền tạo đơn mua hàng / PO cho đối tác', false);
         }
 
@@ -196,14 +201,9 @@ class PurchaseOrderController {
         if (!$checkSup->fetch()) respond(404, null, 'Nhà cung cấp hoặc đơn vị thụ hưởng không hợp lệ', false);
 
         // Fetch threshold for 3-level approval
-        $threshold = 5000000;
-        $thQuery = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'po_three_level_threshold' LIMIT 1");
-        if ($thQuery) {
-            $thRow = $thQuery->fetch();
-            if ($thRow && is_numeric($thRow['setting_value'])) {
-                $threshold = (float)$thRow['setting_value'];
-            }
-        }
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $thRaw = TenantConfigService::getSetting($this->db, (int)($auth['tenant_id'] ?? $GLOBALS['current_tenant_id'] ?? 1), 'po_three_level_threshold', '');
+        $threshold = is_numeric($thRaw) ? (float)$thRaw : 5000000.0;
 
         // Server-Side Recalculation of Items Subtotal and Total to prevent Parameter Tampering (SEC-FIN-03)
         $validatedItems = [];
@@ -245,6 +245,9 @@ class PurchaseOrderController {
         $related_user_ids = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? implode(',', $b['related_user_ids']) : (string)$b['related_user_ids']) : null;
 
         if (!$isDraft) {
+            if (empty($approver_id)) {
+                $approver_id = TenantConfigService::resolveUserApprover($this->db, (int)$auth['tenant_id'], (int)$auth['user_id'], 'purchase_order');
+            }
             if (empty($approver_id)) {
                 respond(422, null, 'Đơn hàng yêu cầu duyệt bắt buộc phải chọn người duyệt Cấp 1.', false);
             }
@@ -352,7 +355,7 @@ class PurchaseOrderController {
 
             $this->show($auth, $poId);
         } catch (\Throwable $e) {
-            if (get_class($e) === 'ResponseException') {
+            if (in_array(get_class($e), ['RespondException', 'ResponseException'], true)) {
                 if ($this->db->inTransaction()) $this->db->rollBack();
                 throw $e;
             }
@@ -385,16 +388,17 @@ class PurchaseOrderController {
         $po = $stmt->fetch();
         if (!$po) respond(404, null, 'Không tìm thấy đơn hàng', false);
 
-        $role = $auth['role'] ?? '';
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $poReadScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'purchase_orders', 'read');
         $uid = (int)($auth['user_id'] ?? 0);
-        $isAdminOrDirectorOrAccountant = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
+        $isAdminOrDirectorOrAccountant = ($poReadScope === 'all');
         if (!$isAdminOrDirectorOrAccountant) {
             $userIds = [$uid];
-            if ($role === 'manager') {
-                $stmtTeam = $this->db->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
-                $stmtTeam->execute([$uid]);
+            if ($poReadScope === 'team') {
+                $stmtTeam = $this->db->prepare("SELECT id FROM users WHERE tenant_id = ? AND team_id IN (SELECT id FROM teams WHERE tenant_id = ? AND (leader_id = ? OR default_approver_id = ?))");
+                $stmtTeam->execute([(int)$auth['tenant_id'], (int)$auth['tenant_id'], $uid, $uid]);
                 $teamMemberIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [];
-                $userIds = array_merge($userIds, array_map('intval', $teamMemberIds));
+                $userIds = array_values(array_unique(array_merge($userIds, array_map('intval', $teamMemberIds))));
             }
             $relIds = !empty($po['related_user_ids']) ? array_map('intval', explode(',', (string)$po['related_user_ids'])) : [];
             $canView = in_array((int)($po['created_by'] ?? 0), $userIds, true)
@@ -416,7 +420,8 @@ class PurchaseOrderController {
     }
 
     public function receive(array $auth, int $id): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) respond(403, null, 'Bạn không có quyền nhập kho', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'inventory', 'write')) respond(403, null, 'Bạn không có quyền nhập kho', false);
         $this->db->beginTransaction();
         try {
             // 1. Get PO and items
@@ -492,7 +497,7 @@ class PurchaseOrderController {
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'Nhập kho từ PO', 'purchase_order', $id, $poInfo['po_number']);
             respond(200, null, 'Đã nhập kho thành công, đã tạo lô hàng và cập nhật số lượng tồn kho');
         } catch (\Throwable $e) {
-            if (get_class($e) === 'ResponseException') {
+            if (in_array(get_class($e), ['RespondException', 'ResponseException'], true)) {
                 if ($this->db->inTransaction()) $this->db->rollBack();
                 throw $e;
             }
@@ -512,27 +517,23 @@ class PurchaseOrderController {
             respond(400, null, 'Trạng thái phê duyệt không hợp lệ', false);
         }
 
-        $userId = $auth['user_id'];
-        $tid = $auth['tenant_id'];
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $userId = (int)$auth['user_id'];
+        $tid = (int)$auth['tenant_id'];
+        $forUpdate = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite') ? '' : ' FOR UPDATE';
 
         $this->db->beginTransaction();
         try {
             // Fetch PO details
             $stmt = $this->db->prepare("
                 SELECT * FROM purchase_orders 
-                WHERE id = ? AND tenant_id = ? AND status = 'pending_approval'
-                FOR UPDATE
+                WHERE id = ? AND tenant_id = ? AND status = 'pending_approval'{$forUpdate}
             ");
             $stmt->execute([$id, $tid]);
             $po = $stmt->fetch();
             if (!$po) {
                 $this->db->rollBack();
                 respond(404, null, 'Không tìm thấy đơn hàng đang chờ duyệt hoặc đơn hàng đã xử lý', false);
-            }
-
-            if ((int)($po['created_by'] ?? 0) === (int)$userId) {
-                $this->db->rollBack();
-                respond(403, null, 'Người tạo đơn mua sắm không được tự phê duyệt đơn của chính mình', false);
             }
 
             // Determine which level needs to be approved next
@@ -551,8 +552,25 @@ class PurchaseOrderController {
             }
 
             // Check if current user is the authorized approver for this level
-            $expectedApproverId = (int)$po["approver_id" . ($currentLevel > 1 ? "_" . $currentLevel : "")];
-            if ($expectedApproverId !== (int)$userId && !in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin'], true)) {
+            $expectedApproverId = (int)($po["approver_id" . ($currentLevel > 1 ? "_" . $currentLevel : "")] ?? 0);
+            $authDecision = TenantConfigService::canUserApproveWorkflowLevel(
+                $this->db,
+                $auth,
+                'purchase_order',
+                'purchase_orders',
+                (int)($po['created_by'] ?? 0),
+                $expectedApproverId > 0 ? $expectedApproverId : null,
+                $currentLevel,
+                (float)($po['total'] ?? 0)
+            );
+            if (empty($authDecision['allowed'])) {
+                $this->db->rollBack();
+                if (($authDecision['reason'] ?? '') === 'self_approval_forbidden') {
+                    respond(403, null, 'Người tạo đơn mua sắm không được tự phê duyệt đơn của chính mình', false);
+                }
+                respond(403, null, 'Bạn không có quyền phê duyệt cấp này hoặc chưa đến lượt phê duyệt của bạn', false);
+            }
+            if ($expectedApproverId > 0 && $expectedApproverId !== $userId && !TenantConfigService::hasGlobalScope($this->db, $auth, 'purchase_orders', 'approve')) {
                 $this->db->rollBack();
                 respond(403, null, 'Bạn không có quyền phê duyệt cấp này hoặc chưa đến lượt phê duyệt của bạn', false);
             }
@@ -665,7 +683,7 @@ class PurchaseOrderController {
 
             respond(200, null, 'Phản hồi phê duyệt đơn hàng thành công');
         } catch (\Throwable $e) {
-            if (get_class($e) === 'ResponseException') {
+            if (in_array(get_class($e), ['RespondException', 'ResponseException'], true)) {
                 if ($this->db->inTransaction()) $this->db->rollBack();
                 throw $e;
             }
@@ -684,9 +702,9 @@ class PurchaseOrderController {
             return;
         }
 
-        $role = $auth['role'] ?? '';
+        require_once __DIR__ . '/../config/TenantConfigService.php';
         $uid = (int)($auth['user_id'] ?? 0);
-        $isPrivileged = in_array($role, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant'], true);
+        $isPrivileged = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant'], 'purchase_orders', 'approve');
         $isCreator = ((int)$po['created_by'] === $uid);
 
         if (!$isPrivileged && !$isCreator) {
@@ -752,14 +770,8 @@ class PurchaseOrderController {
                 }
             }
 
-            $threshold = 5000000;
-            $thQuery = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'po_three_level_threshold' LIMIT 1");
-            if ($thQuery) {
-                $thRow = $thQuery->fetch();
-                if ($thRow && is_numeric($thRow['setting_value'])) {
-                    $threshold = (float)$thRow['setting_value'];
-                }
-            }
+            $thRawUpd = TenantConfigService::getSetting($this->db, (int)$auth['tenant_id'], 'po_three_level_threshold', '');
+            $threshold = is_numeric($thRawUpd) ? (float)$thRawUpd : 5000000.0;
 
             $calculatedSubtotal = (float)($po['subtotal'] ?? 0);
             $validatedItems = null;
@@ -929,10 +941,10 @@ class PurchaseOrderController {
     }
 
     public function destroy(array $auth, int $id): void {
-        $role = $auth['role'] ?? '';
+        require_once __DIR__ . '/../config/TenantConfigService.php';
         $uid = (int)($auth['user_id'] ?? 0);
         $tid = (int)($auth['tenant_id'] ?? 0);
-        $isManagementOrAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true);
+        $isManagementOrAdmin = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'purchase_orders', 'delete');
 
         $stmt = $this->db->prepare("SELECT id, status, payment_status, created_by FROM purchase_orders WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $stmt->execute([$id, $tid]);

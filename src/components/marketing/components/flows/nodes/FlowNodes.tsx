@@ -4,7 +4,7 @@ import {
     Zap, Mail, Clock, GitMerge, Tag, Link as LinkIcon, MoreHorizontal, AlertOctagon,
     AlertTriangle, Beaker, Hourglass, MousePointer2, MailOpen, MessageSquare, UserMinus,
     ShoppingCart, Layers, Cake, Snowflake, Trash2, List, ListPlus, FileInput, ArrowRight,
-    Briefcase, PhoneCall, UserCheck, BellRing
+    Briefcase, PhoneCall, UserCheck, BellRing, ClipboardList
 } from 'lucide-react';
 import { FlowStep, Flow, FormDefinition } from '../../../types';
 import { STANDARD_PIPELINE_STAGES } from '../../../constants/flowConstants';
@@ -19,6 +19,7 @@ interface NodeProps {
     hasWarning?: boolean;
     allFlows?: Flow[];
     allForms?: FormDefinition[];
+    allSurveys?: any[];
     onClick?: () => void;
     onDragStart?: (e: React.DragEvent) => void;
     onDragEnter?: (e: React.DragEvent) => void;
@@ -110,24 +111,37 @@ const ReportOverlay = ({
 );
 
 export const TriggerNode: React.FC<NodeProps> = memo(
-    ({ step, onClick, isViewMode, allForms = [], isReportMode, reportStats }) => {
-        const triggerType = step.config.type || 'segment';
+    ({ step, onClick, isViewMode, allForms = [], allSurveys = [], isReportMode, reportStats }) => {
+        const triggerType = step.config?.type || 'segment';
+        const targetId = step.config?.targetId;
+
         const isFormDeleted =
             triggerType === 'form' &&
-            step.config.targetId &&
-            !allForms.find(f => f.id === step.config.targetId);
+            Boolean(targetId) &&
+            (allForms && allForms.length > 0
+                ? !allForms.find(f => f.id === targetId && !(f as any).deleted_at)
+                : false);
+
+        const isSurveyDeleted =
+            triggerType === 'survey' &&
+            Boolean(targetId) &&
+            (allSurveys && allSurveys.length > 0
+                ? !allSurveys.find(s => s.id === targetId && !s.deleted_at)
+                : false);
 
         const getTriggerStyle = () => {
-            if (isFormDeleted) return { icon: AlertOctagon, color: 'from-rose-500 to-red-700', label: 'LỖI LIÊN KẾT' };
+            if (isFormDeleted || isSurveyDeleted) return { icon: AlertOctagon, color: 'from-rose-500 to-red-700', label: 'LỖI LIÊN KẾT' };
             switch (triggerType) {
                 case 'erp_event':
                     return { icon: Briefcase, color: 'from-indigo-600 to-blue-700', label: 'MYERP Event' };
                 case 'segment':
-                    return step.config.targetSubtype === 'list' || step.config.targetSubtype === 'sync'
+                    return step.config?.targetSubtype === 'list' || step.config?.targetSubtype === 'sync'
                         ? { icon: ListPlus, color: 'from-emerald-500 to-teal-600', label: 'List Entry' }
                         : { icon: Layers, color: 'from-[#BD1D2D] to-rose-700', label: 'Segment Entry' };
                 case 'form':
                     return { icon: FileInput, color: 'from-[#BD1D2D] to-rose-700', label: 'Form Submit' };
+                case 'survey':
+                    return { icon: ClipboardList, color: 'from-amber-400 to-yellow-600', label: 'Khảo sát' };
                 case 'purchase':
                     return { icon: ShoppingCart, color: 'from-pink-500 to-rose-600', label: 'Purchase Event' };
                 case 'tag':
@@ -142,6 +156,46 @@ export const TriggerNode: React.FC<NodeProps> = memo(
         };
 
         const { icon: Icon, color, label } = getTriggerStyle();
+
+        // Metadata Resolution for Survey and Form
+        const formMeta = allForms?.find(f => f.id === targetId);
+        const formDisplayName = formMeta?.name || (formMeta as any)?.title;
+
+        const surveyMeta = allSurveys?.find(s => s.id === targetId);
+        const surveyDisplayName = surveyMeta?.name || surveyMeta?.title;
+
+        // Helper to check if step.label is a raw hash ID or generic placeholder
+        const isRawHash = (text?: string, id?: string) => {
+            if (!text) return true;
+            if (id && text.includes(id)) return true;
+            if (id && id.length >= 6 && text.includes(id.substring(0, 6))) return true;
+            if (/^[a-f0-9-]{8,}$/i.test(text.trim())) return true;
+            if (/^(khảo sát|biểu mẫu|form):\s*[a-f0-9-]{6,}/i.test(text.trim())) return true;
+            return false;
+        };
+
+        let displayLabel = step.label;
+        if (triggerType === 'survey') {
+            if (surveyDisplayName) {
+                displayLabel = surveyDisplayName;
+            } else if (isSurveyDeleted) {
+                displayLabel = `Khảo sát đã xóa [${(targetId || '').substring(0, 8)}]`;
+            } else if (isRawHash(step.label, targetId)) {
+                displayLabel = 'Khảo sát (Không xác định)';
+            }
+        } else if (triggerType === 'form') {
+            if (formDisplayName) {
+                displayLabel = formDisplayName;
+            } else if (isFormDeleted) {
+                displayLabel = `Biểu mẫu đã xóa [${(targetId || '').substring(0, 8)}]`;
+            } else if (isRawHash(step.label, targetId)) {
+                displayLabel = 'Biểu mẫu (Không xác định)';
+            }
+        }
+
+        if (!displayLabel) {
+            displayLabel = 'Trigger';
+        }
         const erpFilters = step.config?.erpFilters || {};
         const filterBadges: string[] = [];
         if (triggerType === 'erp_event' && erpFilters && typeof erpFilters === 'object') {
@@ -195,8 +249,21 @@ export const TriggerNode: React.FC<NodeProps> = memo(
                         <p className="text-[9px] font-bold uppercase tracking-widest opacity-80 leading-none mb-1">
                             {label}
                         </p>
-                        <p className="text-sm font-black leading-tight">{step.label}</p>
-                        {isFormDeleted && <p className="text-[9px] opacity-90 font-bold mt-0.5">Form đã bị xóa</p>}
+                        <p className="text-sm font-black leading-tight">{displayLabel}</p>
+                        {isFormDeleted && (
+                            <div className="flex items-center gap-1 mt-1">
+                                <span className="text-[10px] font-bold bg-white/25 px-2 py-0.5 rounded backdrop-blur-sm">
+                                    ⚠️ Biểu mẫu đã bị xóa
+                                </span>
+                            </div>
+                        )}
+                        {isSurveyDeleted && (
+                            <div className="flex items-center gap-1 mt-1">
+                                <span className="text-[10px] font-bold bg-white/25 px-2 py-0.5 rounded backdrop-blur-sm">
+                                    ⚠️ Khảo sát đã bị xóa
+                                </span>
+                            </div>
+                        )}
                         {filterBadges.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1.5">
                                 {filterBadges.slice(0, 3).map((bText, idx) => (
@@ -373,7 +440,15 @@ export const WaitNode: React.FC<NodeProps> = memo(
         onDragLeave,
         onDrop
     }) => {
-        const incomplete = !step.config.duration || !step.config.unit;
+        const mode = step.config.mode || 'duration';
+        const incomplete =
+            mode === 'until_date'
+                ? !step.config.specificDate || !step.config.untilTime
+                : mode === 'until'
+                ? !step.config.untilTime
+                : mode === 'until_attribute'
+                ? !step.config.attributeKey
+                : !step.config.duration || !step.config.unit;
         return (
             <div
                 draggable={isDraggable && !isViewMode}
@@ -389,17 +464,17 @@ export const WaitNode: React.FC<NodeProps> = memo(
                 className={`flow-interactive relative z-20 group ${isViewMode ? 'cursor-default' : 'cursor-pointer'}`}
             >
                 <div
-                    className={`flex items-center gap-4 bg-white border rounded-full pl-2 pr-8 py-2 shadow-lg transition-all w-fit min-w-[200px] ${
+                    className={`flex items-center gap-4 bg-white border rounded-full pl-2 pr-8 py-2 shadow-sm transition-all w-fit min-w-[200px] ${
                         incomplete
                             ? 'border-rose-200 ring-4 ring-rose-50'
-                            : 'border-amber-200/80 hover:border-amber-400 shadow-amber-500/10'
+                            : 'border-slate-200/90 hover:border-slate-300 hover:shadow-md'
                     }`}
                 >
                     <div
-                        className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 shadow-lg ${
+                        className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
                             incomplete
                                 ? 'bg-rose-100 text-rose-600'
-                                : 'text-white bg-gradient-to-br from-amber-400 to-amber-500 shadow-amber-500/30'
+                                : 'text-white bg-gradient-to-br from-amber-400 to-amber-500'
                         }`}
                     >
                         <Clock className="w-6 h-6" />

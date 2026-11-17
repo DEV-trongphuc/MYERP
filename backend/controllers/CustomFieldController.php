@@ -52,7 +52,8 @@ class CustomFieldController {
     }
 
     public function store(array $auth): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'settings', 'write')) {
             respond(403, null, 'Bạn không có quyền quản lý trường tùy chỉnh', false);
         }
         
@@ -107,7 +108,8 @@ class CustomFieldController {
     }
 
     public function update(array $auth, int $id): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'settings', 'write')) {
             respond(403, null, 'Bạn không có quyền quản lý trường tùy chỉnh', false);
         }
         
@@ -151,7 +153,8 @@ class CustomFieldController {
     }
 
     public function destroy(array $auth, int $id): void {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'settings', 'write')) {
             respond(403, null, 'Bạn không có quyền quản lý trường tùy chỉnh', false);
         }
         

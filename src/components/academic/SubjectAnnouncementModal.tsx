@@ -25,9 +25,18 @@ import {
   RotateCcw,
   Globe,
   BookOpen,
-  Award
+  Award,
+  ChevronRight,
+  ChevronLeft,
+  AlertCircle,
+  Check,
+  Upload,
+  FileSpreadsheet,
+  Trash2
 } from 'lucide-react';
+import { pushOverlay } from '../../utils/overlayStack';
 import { API_BASE } from '../../config/env';
+import { getCachedTenantBootstrap, getTenantAiPlatformUrl, getTenantLogoUrl } from '../../contexts/TenantConfigContext';
 
 const API_URL = API_BASE;
 
@@ -208,7 +217,7 @@ export const DBA_SEMINAR_OPTIONS: DbaSeminarOption[] = [
   }
 ];
 
-const DEFAULT_ACADEMIC_CC = 'it.dept@ideas.edu.vn, student.notice@ideas.edu.vn, support@ideas.edu.vn';
+const getDefaultAcademicCc = () => getCachedTenantBootstrap()?.organization?.academic_cc_emails || '';
 
 export function cleanSubjectNameWithoutCode(raw: string): string {
   if (!raw) return '';
@@ -383,6 +392,7 @@ export const SubjectAnnouncementModal: React.FC<SubjectAnnouncementModalProps> =
         code: subject.code || subject.subject_code || '',
         name: subject.name || subject.subject_name || '',
       });
+      setSelectedEmails([]);
     }
   }, [subject]);
 
@@ -445,12 +455,46 @@ export const SubjectAnnouncementModal: React.FC<SubjectAnnouncementModalProps> =
   const [emailSubject, setEmailSubject] = useState('');
   const [bodyHtml, setBodyHtml] = useState('');
   const [zaloText, setZaloText] = useState('');
-  const [ccEmails, setCcEmails] = useState(DEFAULT_ACADEMIC_CC);
+  const [ccEmails, setCcEmails] = useState(getDefaultAcademicCc());
   const [customEmailsInput, setCustomEmailsInput] = useState('');
 
   // Track if user manually typed in preview
   const [isUserEdited, setIsUserEdited] = useState(false);
   const previewContentRef = useRef<HTMLDivElement>(null);
+
+  // Stepper & Confirmation State
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  const handleSafeClose = useCallback(() => {
+    if (isUserEdited) {
+      setShowDiscardConfirm(true);
+    } else {
+      onClose();
+    }
+  }, [isUserEdited, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setStep(1);
+    setShowDiscardConfirm(false);
+    document.body.style.overflow = 'hidden';
+
+    const unregister = pushOverlay(
+      'subject-announcement-modal',
+      () => {
+        handleSafeClose();
+        return true;
+      },
+      2147483646
+    );
+
+    return () => {
+      document.body.style.overflow = '';
+      if (typeof unregister === 'function') unregister();
+    };
+  }, [isOpen, handleSafeClose]);
 
   // Enrolled Students Recipients State
   const [students, setStudents] = useState<any[]>([]);
@@ -459,6 +503,10 @@ export const SubjectAnnouncementModal: React.FC<SubjectAnnouncementModalProps> =
   const [studentSearch, setStudentSearch] = useState('');
   const [recipientScope, setRecipientScope] = useState<'campaign' | 'all'>('campaign');
   const [completionFilter, setCompletionFilter] = useState<'pending' | 'completed' | 'all'>('pending');
+  const [uploadedRecipients, setUploadedRecipients] = useState<Array<{ email: string; name?: string }>>([]);
+  const [uploadedFileName, setUploadedFileName] = useState('');
+  const [isParsingUpload, setIsParsingUpload] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isSending, setIsSending] = useState(false);
   const inFlightRef = useRef(false);
@@ -481,6 +529,8 @@ export const SubjectAnnouncementModal: React.FC<SubjectAnnouncementModalProps> =
     setTemplateKey(detected);
     setActiveTab('preview');
     setIsUserEdited(false);
+    setUploadedRecipients([]);
+    setUploadedFileName('');
 
     // Initial class code detection
     const extractedCode = extractClassOrCohortCode(campaign?.name, programName, activeSubject?.code);
@@ -523,7 +573,7 @@ export const SubjectAnnouncementModal: React.FC<SubjectAnnouncementModalProps> =
       activeSubject.school_zoom_pass ||
       (detected === 'estiam' ? 'ideas@812' : 'umef@812');
 
-    const initialAiLink = activeSubject.ai_agent_link || 'https://ai.ideas.edu.vn/';
+    const initialAiLink = activeSubject.ai_agent_link || getTenantAiPlatformUrl();
 
     setSchoolLecturer(initialSchoolLect);
     setSeminarLecturer(initialSeminarLect);
@@ -531,7 +581,7 @@ export const SubjectAnnouncementModal: React.FC<SubjectAnnouncementModalProps> =
     setZoomId(zId);
     setZoomPass(zPass);
     setAiAgentLink(initialAiLink);
-    setCcEmails(DEFAULT_ACADEMIC_CC);
+    setCcEmails(getDefaultAcademicCc());
 
     if (preselectedStudent?.email) {
       setCustomEmailsInput(preselectedStudent.email);
@@ -604,7 +654,22 @@ export const SubjectAnnouncementModal: React.FC<SubjectAnnouncementModalProps> =
     } finally {
       setLoadingRecipients(false);
     }
-  }, [isOpen, campaign?.id, campaign?.project_id, campaign?.project_name, campaign?.name, programName, preselectedStudent?.email, preselectedStudent?.program]);
+  }, [
+    isOpen,
+    campaign?.id,
+    campaign?.project_id,
+    campaign?.project_name,
+    campaign?.name,
+    programName,
+    preselectedStudent?.email,
+    preselectedStudent?.program,
+    activeSubject?.id,
+    activeSubject?.subject_id,
+    activeSubject?.code,
+    activeSubject?.subject_code,
+    activeSubject?.name,
+    activeSubject?.subject_name
+  ]);
 
   useEffect(() => {
     if (isOpen) {
@@ -644,7 +709,7 @@ export const SubjectAnnouncementModal: React.FC<SubjectAnnouncementModalProps> =
       const zLink = overrides.zLink.trim() || 'https://zoom.us/';
       const zId = overrides.zId.trim() || '968 256 9703';
       const zPass = overrides.zPass.trim() || 'umef@812';
-      const aiLink = overrides.aiLink.trim() || 'https://ai.ideas.edu.vn/';
+      const aiLink = overrides.aiLink.trim() || getTenantAiPlatformUrl();
 
       const tableStyle = 'width:100%;border-collapse:collapse;margin:14px 0 18px 0;font-size:13.5px;';
       const thStyle = 'background:#f8fafc;color:#0f172a;font-weight:700;padding:10px 12px;border:1px solid #cbd5e1;text-align:left;';
@@ -1512,6 +1577,10 @@ IDEAS`;
       const clean = em.trim().toLowerCase();
       if (clean && clean.includes('@')) set.add(clean);
     });
+    uploadedRecipients.forEach(item => {
+      const clean = item.email.trim().toLowerCase();
+      if (clean && clean.includes('@')) set.add(clean);
+    });
     if (customEmailsInput.trim()) {
       customEmailsInput
         .split(/[,;\s]+/)
@@ -1520,7 +1589,90 @@ IDEAS`;
         .forEach(em => set.add(em));
     }
     return Array.from(set);
-  }, [selectedEmails, customEmailsInput]);
+  }, [selectedEmails, uploadedRecipients, customEmailsInput]);
+
+  const handleUploadRecipientsFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setIsParsingUpload(true);
+    try {
+      const XLSX = await import('xlsx');
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const firstSheetName = workbook.SheetNames?.[0];
+      if (!firstSheetName) {
+        notify('File không có dữ liệu sheet hợp lệ!', 'warning');
+        return;
+      }
+      const ws = workbook.Sheets[firstSheetName];
+      const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' });
+      if (!Array.isArray(rows) || rows.length === 0) {
+        notify('File rỗng, không có dữ liệu để đọc!', 'warning');
+        return;
+      }
+
+      const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+      const parsedMap = new Map<string, { email: string; name?: string }>();
+
+      // Detect likely name column index from header row if present
+      const headerRow = Array.isArray(rows[0]) ? rows[0].map(c => String(c || '').trim().toLowerCase()) : [];
+      const nameColIdx = headerRow.findIndex(h =>
+        h.includes('tên') || h.includes('name') || h.includes('họ và tên') || h.includes('student')
+      );
+
+      rows.forEach((row, rIdx) => {
+        if (!Array.isArray(row)) return;
+        const rowEmails: string[] = [];
+        row.forEach(cell => {
+          const text = String(cell ?? '').trim();
+          if (!text) return;
+          const matches = text.match(emailRegex);
+          if (matches) {
+            matches.forEach(m => rowEmails.push(m.toLowerCase()));
+          }
+        });
+        if (rowEmails.length === 0) return;
+
+        let candidateName = '';
+        if (rIdx > 0 && nameColIdx >= 0 && row[nameColIdx]) {
+          const rawName = String(row[nameColIdx]).trim();
+          if (rawName && !rawName.includes('@')) candidateName = rawName;
+        } else {
+          // Fallback: first non-numeric, non-email text cell in row
+          for (const cell of row) {
+            const txt = String(cell ?? '').trim();
+            if (txt && !txt.includes('@') && !/^\d+$/.test(txt) && txt.length >= 2) {
+              candidateName = txt;
+              break;
+            }
+          }
+        }
+
+        rowEmails.forEach(em => {
+          if (!parsedMap.has(em)) {
+            parsedMap.set(em, { email: em, name: candidateName || undefined });
+          }
+        });
+      });
+
+      const list = Array.from(parsedMap.values());
+      if (list.length === 0) {
+        notify('Không tìm thấy địa chỉ email hợp lệ nào trong file!', 'warning');
+        return;
+      }
+
+      setUploadedRecipients(list);
+      setUploadedFileName(file.name);
+      notify(`Đã tải lên ${list.length} email hợp lệ từ file "${file.name}"`, 'success');
+    } catch (err) {
+      console.error('Upload recipients parse error:', err);
+      notify('Không thể đọc file danh sách. Vui lòng kiểm tra định dạng .xlsx, .xls hoặc .csv!', 'error');
+    } finally {
+      setIsParsingUpload(false);
+    }
+  };
 
   const handleToggleStudentEmail = (email: string) => {
     const clean = String(email || '').trim().toLowerCase();
@@ -1540,6 +1692,14 @@ IDEAS`;
     } else {
       setSelectedEmails(prev => Array.from(new Set([...prev, ...visibleValid])));
     }
+  };
+
+  const handleProceedToStep3 = () => {
+    if (finalRecipientEmails.length === 0) {
+      notify('Cần chọn ít nhất 1 người nhận trước khi chuyển sang bước phát hành', 'warning');
+      return;
+    }
+    setStep(3);
   };
 
   const handleSendAnnouncement = async () => {
@@ -1630,7 +1790,7 @@ IDEAS`;
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 2147483647,
+        zIndex: 2147483646,
         background: 'rgba(15, 23, 42, 0.65)',
         backdropFilter: 'blur(3px)',
         display: 'flex',
@@ -1638,7 +1798,9 @@ IDEAS`;
         justifyContent: 'center',
         padding: '16px'
       }}
-      onClick={onClose}
+      onClick={e => {
+        if (e.target === e.currentTarget) handleSafeClose();
+      }}
     >
       <div
         onClick={e => e.stopPropagation()}
@@ -1680,7 +1842,7 @@ IDEAS`;
                 display: 'block'
               }}
               onError={e => {
-                (e.target as HTMLImageElement).src = 'https://ideas.edu.vn/wp-content/uploads/2026/06/Logo_IDEAS_Slg-optimized.webp';
+                (e.target as HTMLImageElement).src = getTenantLogoUrl('/LOGO.webp');
                 (e.target as HTMLImageElement).style.filter = 'brightness(0) invert(1)';
               }}
             />
@@ -1709,7 +1871,7 @@ IDEAS`;
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleSafeClose}
             style={{
               width: '32px',
               height: '32px',
@@ -1727,20 +1889,167 @@ IDEAS`;
           </button>
         </div>
 
-        {/* MODAL BODY (2 COLUMNS) */}
+        {/* 3-STEP GUIDED STEPPER NAVIGATION */}
         <div
           style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: '16px 20px',
-            display: 'grid',
-            gridTemplateColumns: 'minmax(330px, 400px) minmax(0, 1fr)',
-            gap: '18px',
-            background: '#f8fafc'
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '12px 24px',
+            background: '#ffffff',
+            borderBottom: '1px solid #e2e8f0',
+            gap: '16px',
+            flexWrap: 'wrap'
           }}
         >
-          {/* LEFT PANEL */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* Step 1 button */}
+          <button
+            type="button"
+            onClick={() => setStep(1)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '4px 8px'
+            }}
+          >
+            <div
+              style={{
+                width: '26px',
+                height: '26px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.75rem',
+                fontWeight: 800,
+                background: step === 1 ? '#BD1D2D' : step > 1 ? '#10b981' : '#f1f5f9',
+                color: step === 1 || step > 1 ? '#ffffff' : '#64748b'
+              }}
+            >
+              {step > 1 ? <Check size={14} /> : '1'}
+            </div>
+            <span
+              style={{
+                fontSize: '0.82rem',
+                fontWeight: step === 1 ? 800 : 600,
+                color: step === 1 ? '#BD1D2D' : '#64748b'
+              }}
+            >
+              1. Cấu hình môn &amp; phòng học
+            </span>
+          </button>
+
+          <div style={{ width: '40px', height: '2px', background: step > 1 ? '#10b981' : '#e2e8f0' }} />
+
+          {/* Step 2 button */}
+          <button
+            type="button"
+            onClick={() => setStep(2)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '4px 8px'
+            }}
+          >
+            <div
+              style={{
+                width: '26px',
+                height: '26px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.75rem',
+                fontWeight: 800,
+                background: step === 2 ? '#BD1D2D' : step > 2 ? '#10b981' : '#f1f5f9',
+                color: step === 2 || step > 2 ? '#ffffff' : '#64748b'
+              }}
+            >
+              {step > 2 ? <Check size={14} /> : '2'}
+            </div>
+            <span
+              style={{
+                fontSize: '0.82rem',
+                fontWeight: step === 2 ? 800 : 600,
+                color: step === 2 ? '#BD1D2D' : '#64748b'
+              }}
+            >
+              2. Đối tượng nhận thông báo
+            </span>
+          </button>
+
+          <div style={{ width: '40px', height: '2px', background: step > 2 ? '#10b981' : '#e2e8f0' }} />
+
+          {/* Step 3 button */}
+          <button
+            type="button"
+            onClick={() => {
+              if (finalRecipientEmails.length > 0) {
+                setStep(3);
+              } else {
+                notify('Cần chọn ít nhất 1 người nhận trước khi chuyển sang bước phát hành', 'warning');
+              }
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'transparent',
+              border: 'none',
+              cursor: finalRecipientEmails.length > 0 ? 'pointer' : 'not-allowed',
+              padding: '4px 8px',
+              opacity: finalRecipientEmails.length > 0 ? 1 : 0.6
+            }}
+          >
+            <div
+              style={{
+                width: '26px',
+                height: '26px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.75rem',
+                fontWeight: 800,
+                background: step === 3 ? '#BD1D2D' : '#f1f5f9',
+                color: step === 3 ? '#ffffff' : '#64748b'
+              }}
+            >
+              3
+            </div>
+            <span
+              style={{
+                fontSize: '0.82rem',
+                fontWeight: step === 3 ? 800 : 600,
+                color: step === 3 ? '#BD1D2D' : '#64748b'
+              }}
+            >
+              3. Soạn thảo &amp; Xem trước đa kênh
+            </span>
+          </button>
+        </div>
+
+        {/* STEP 1: CẤU HÌNH MÔN & PHÒNG HỌC */}
+        {step === 1 && (
+          <div
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '18px 22px',
+              display: 'grid',
+              gridTemplateColumns: 'minmax(330px, 1fr) minmax(330px, 1fr)',
+              gap: '18px',
+              background: '#f8fafc'
+            }}
+          >
             {/* 1. MẪU TBCĐ & CHƯƠNG TRÌNH */}
             <div
               style={{
@@ -1817,6 +2126,7 @@ IDEAS`;
                     onChange={e => {
                       const semId = e.target.value;
                       setSelectedDbaSeminarId(semId);
+                      setSelectedEmails([]);
                       const found = DBA_SEMINAR_OPTIONS.find(s => s.id === semId);
                       if (found) {
                         setCustomSubjectTitle(language === 'vi' ? found.titleVI : found.titleEN);
@@ -1869,6 +2179,7 @@ IDEAS`;
                       );
                       if (found) {
                         setActiveSubject(found);
+                        setSelectedEmails([]);
                         setCustomSubjectTitle(found.name || '');
                         setIsUserEdited(false);
                       }
@@ -2046,12 +2357,27 @@ IDEAS`;
                     setAiAgentLink(e.target.value);
                     setIsUserEdited(false);
                   }}
-                  placeholder="https://ai.ideas.edu.vn/..."
+                  placeholder={getTenantAiPlatformUrl() || 'https://...'}
                   style={{ fontSize: '0.78rem', padding: '5px 8px' }}
                 />
               </div>
             </div>
+          </div>
+        )}
 
+        {/* STEP 2: ĐỐI TƯỢNG NHẬN THÔNG BÁO */}
+        {step === 2 && (
+          <div
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '18px 22px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              background: '#f8fafc'
+            }}
+          >
             {/* 3. DANH SÁCH NGƯỜI NHẬN */}
             <div
               style={{
@@ -2247,34 +2573,58 @@ IDEAS`;
                 </div>
               )}
 
+              {/* Warning Banner when subject has 0 enrolled students */}
+              {students.length === 0 && !loadingRecipients && (
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    background: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    color: '#b45309',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    fontSize: '0.82rem',
+                    fontWeight: 600
+                  }}
+                >
+                  <AlertCircle size={18} />
+                  <span>Chưa có học viên nào được ghi danh vào môn học này. Bạn có thể nhập thêm email nhận trực tiếp bên dưới.</span>
+                </div>
+              )}
+
               <div style={{ position: 'relative' }}>
-                <Search size={12} style={{ position: 'absolute', left: '8px', top: '8px', color: '#94a3b8' }} />
+                <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: '#94a3b8' }} />
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="Tìm tên, mã HV, email..."
+                  placeholder="Tìm theo tên học viên, mã HV, email..."
                   value={studentSearch}
                   onChange={e => setStudentSearch(e.target.value)}
-                  style={{ fontSize: '0.74rem', padding: '4px 6px 4px 26px' }}
+                  style={{ fontSize: '0.8rem', padding: '6px 8px 6px 32px' }}
                 />
               </div>
 
+              {/* Full-height student list */}
               <div
                 style={{
-                  maxHeight: '130px',
+                  minHeight: '380px',
+                  maxHeight: '480px',
                   overflowY: 'auto',
                   border: '1px solid #e2e8f0',
-                  borderRadius: '7px',
-                  padding: '3px'
+                  borderRadius: '10px',
+                  padding: '8px',
+                  background: '#ffffff'
                 }}
               >
                 {loadingRecipients ? (
-                  <div style={{ padding: '12px', textAlign: 'center', fontSize: '0.74rem', color: '#64748b' }}>
-                    <Loader2 size={13} className="animate-spin" style={{ display: 'inline', marginRight: '5px' }} />
+                  <div style={{ padding: '24px', textAlign: 'center', fontSize: '0.82rem', color: '#64748b' }}>
+                    <Loader2 size={16} className="animate-spin" style={{ display: 'inline', marginRight: '6px' }} />
                     Đang tải danh sách học viên...
                   </div>
                 ) : filteredStudents.length === 0 ? (
-                  <div style={{ padding: '8px', textAlign: 'center', fontSize: '0.72rem', color: '#64748b' }}>
+                  <div style={{ padding: '24px', textAlign: 'center', fontSize: '0.82rem', color: '#64748b' }}>
                     Chưa có học viên trong danh sách. Có thể nhập email trực tiếp bên dưới.
                   </div>
                 ) : (
@@ -2288,13 +2638,16 @@ IDEAS`;
                         style={{
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '6px',
-                          padding: '4px 6px',
-                          borderRadius: '5px',
+                          gap: '10px',
+                          padding: '8px 12px',
+                          borderRadius: '8px',
                           cursor: hasEmail ? 'pointer' : 'not-allowed',
                           opacity: hasEmail ? 1 : 0.5,
-                          background: checked ? '#fef2f2' : 'transparent',
-                          fontSize: '0.74rem'
+                          background: checked ? '#fef2f2' : '#ffffff',
+                          border: checked ? '1px solid #fecaca' : '1px solid #f1f5f9',
+                          marginBottom: '6px',
+                          fontSize: '0.8rem',
+                          transition: 'all 0.15s ease'
                         }}
                       >
                         <input
@@ -2302,24 +2655,40 @@ IDEAS`;
                           checked={checked}
                           disabled={!hasEmail}
                           onChange={() => handleToggleStudentEmail(em)}
+                          style={{ width: '16px', height: '16px', accentColor: '#BD1D2D' }}
                         />
-                        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                           <div style={{ minWidth: 0 }}>
-                            <span style={{ fontWeight: 700, color: '#0f172a' }}>{st.full_name}</span>{' '}
-                            <span style={{ fontSize: '0.68rem', color: '#64748b' }}>({st.email || 'Chưa có email'})</span>
+                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{st.full_name}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                              {st.student_id ? `[${st.student_id}] ` : ''}{st.email || 'Chưa có email'}
+                              {st.intake_cohort ? ` • Khóa: ${st.intake_cohort}` : ''}
+                            </div>
                           </div>
-                          {st.is_subject_completed && (
+                          {st.is_subject_completed ? (
                             <span style={{
-                              fontSize: '0.64rem',
+                              fontSize: '0.68rem',
                               fontWeight: 700,
                               color: '#15803d',
                               background: '#dcfce7',
                               border: '1px solid #bbf7d0',
-                              borderRadius: '4px',
-                              padding: '1px 5px',
+                              borderRadius: '6px',
+                              padding: '2px 8px',
                               whiteSpace: 'nowrap'
                             }}>
                               ✅ Đã học ({st.subject_grade_info?.grade_letter || 'Đạt'})
+                            </span>
+                          ) : (
+                            <span style={{
+                              fontSize: '0.68rem',
+                              fontWeight: 600,
+                              color: '#475569',
+                              background: '#f1f5f9',
+                              borderRadius: '6px',
+                              padding: '2px 8px',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              Chưa học
                             </span>
                           )}
                         </div>
@@ -2329,28 +2698,188 @@ IDEAS`;
                 )}
               </div>
 
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Nhập thêm email nhận: a@gmail.com, b@gmail.com..."
-                value={customEmailsInput}
-                onChange={e => setCustomEmailsInput(e.target.value)}
-                style={{ fontSize: '0.75rem', padding: '5px 8px' }}
-              />
+              {/* Upload file danh sách người nhận (.xlsx, .xls, .csv) */}
+              <div
+                style={{
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '10px 12px',
+                  background: '#f8fafc',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{
+                      width: '30px',
+                      height: '30px',
+                      borderRadius: '8px',
+                      background: 'rgba(189, 29, 45, 0.08)',
+                      color: '#BD1D2D',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <FileSpreadsheet size={16} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>
+                        Up file danh sách người nhận (.xlsx, .xls, .csv)
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                        Tự động lọc email hợp lệ từ file để gửi thông báo (không cần có sẵn trên hệ thống).
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv,.txt"
+                      onChange={handleUploadRecipientsFile}
+                      style={{ display: 'none' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isParsingUpload}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #BD1D2D',
+                        background: '#ffffff',
+                        color: '#BD1D2D',
+                        fontSize: '0.76rem',
+                        fontWeight: 700,
+                        cursor: isParsingUpload ? 'wait' : 'pointer'
+                      }}
+                    >
+                      {isParsingUpload ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                      {uploadedFileName ? 'Đổi file khác' : 'Chọn file danh sách'}
+                    </button>
+                    {uploadedRecipients.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUploadedRecipients([]);
+                          setUploadedFileName('');
+                        }}
+                        title="Xóa danh sách đã tải lên"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '6px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid #e2e8f0',
+                          background: '#ffffff',
+                          color: '#64748b',
+                          fontSize: '0.74rem',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Trash2 size={13} />
+                        Xóa file
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-              <input
-                type="text"
-                className="form-input"
-                placeholder="CC email"
-                value={ccEmails}
-                onChange={e => setCcEmails(e.target.value)}
-                style={{ fontSize: '0.74rem', padding: '5px 8px' }}
-              />
+                {uploadedRecipients.length > 0 && (
+                  <div style={{
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    padding: '8px 10px'
+                  }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#0f172a', marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>📄 {uploadedFileName}</span>
+                      <span style={{ color: '#BD1D2D' }}>Đã nạp {uploadedRecipients.length} email hợp lệ</span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', maxHeight: '96px', overflowY: 'auto' }}>
+                      {uploadedRecipients.map(item => (
+                        <span
+                          key={item.email}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            fontSize: '0.7rem',
+                            background: '#fef2f2',
+                            color: '#991b1b',
+                            border: '1px solid #fecaca',
+                            borderRadius: '6px',
+                            padding: '2px 7px'
+                          }}
+                        >
+                          <span>{item.name ? `${item.name} (${item.email})` : item.email}</span>
+                          <button
+                            type="button"
+                            onClick={() => setUploadedRecipients(prev => prev.filter(r => r.email !== item.email))}
+                            style={{ border: 'none', background: 'transparent', color: '#991b1b', cursor: 'pointer', padding: 0, display: 'flex' }}
+                            title="Gỡ email này"
+                          >
+                            <X size={11} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '0.73rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                    Nhập thêm email nhận ngoài danh sách:
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="VD: a@gmail.com, b@gmail.com..."
+                    value={customEmailsInput}
+                    onChange={e => setCustomEmailsInput(e.target.value)}
+                    style={{ fontSize: '0.78rem', padding: '6px 10px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.73rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                    CC email (Đồng kính gửi):
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="CC email"
+                    value={ccEmails}
+                    onChange={e => setCcEmails(e.target.value)}
+                    style={{ fontSize: '0.78rem', padding: '6px 10px' }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
+        )}
 
-          {/* RIGHT PANEL: SUBJECT + LANGUAGE SELECTOR + WYSIWYG PREVIEW */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', minWidth: 0 }}>
+        {/* STEP 3: SOẠN THẢO & XEM TRƯỚC ĐA KÊNH */}
+        {step === 3 && (
+          <div
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '18px 22px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              background: '#f8fafc'
+            }}
+          >
             {/* TIÊU ĐỀ EMAIL */}
             <div
               style={{
@@ -2644,7 +3173,7 @@ IDEAS`;
                               display: 'block'
                             }}
                             onError={e => {
-                              (e.target as HTMLImageElement).src = 'https://ideas.edu.vn/wp-content/uploads/2026/06/Logo_IDEAS_Slg-optimized.webp';
+                              (e.target as HTMLImageElement).src = getTenantLogoUrl('/LOGO.webp');
                               (e.target as HTMLImageElement).style.filter = 'brightness(0) invert(1)';
                             }}
                           />
@@ -2736,87 +3265,289 @@ IDEAS`;
               )}
             </div>
           </div>
-        </div>
+        )}
 
         {/* MODAL FOOTER */}
         <div
           style={{
-            padding: '12px 20px',
+            padding: '14px 24px',
             background: '#ffffff',
             borderTop: '1px solid #e2e8f0',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
-            gap: '10px'
+            gap: '12px'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button
-              type="button"
-              className="btn outline"
-              onClick={() => {
-                navigator.clipboard.writeText(zaloText).then(() => {
-                  notify('Đã sao chép nội dung tin nhắn Zalo vào Clipboard!', 'success');
-                });
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontWeight: 700,
-                fontSize: '0.78rem',
-                color: '#334155',
-                borderColor: '#cbd5e1'
-              }}
-            >
-              <Copy size={13} />
-              Copy Bản Tin Nhắn Zalo
-            </button>
-          </div>
+          {step === 1 && (
+            <>
+              <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                Bước 1/3: Cấu hình thông tin môn &amp; phòng học
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn outline"
+                  onClick={handleSafeClose}
+                  style={{ fontWeight: 700, fontSize: '0.82rem' }}
+                >
+                  Đóng
+                </button>
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => setStep(2)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '9px 20px',
+                    fontWeight: 800,
+                    fontSize: '0.84rem',
+                    background: 'linear-gradient(135deg, #BD1D2D 0%, #8C111E 100%)',
+                    borderRadius: '10px',
+                    boxShadow: '0 4px 12px rgba(189, 29, 45, 0.25)'
+                  }}
+                >
+                  Tiếp tục: Chọn Người Nhận <ChevronRight size={16} />
+                </button>
+              </div>
+            </>
+          )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button
-              type="button"
-              className="btn outline"
-              onClick={onClose}
-              disabled={isSending}
-              style={{ fontWeight: 700, fontSize: '0.8rem' }}
-            >
-              Đóng
-            </button>
-            <button
-              type="button"
-              className="btn primary"
-              onClick={handleSendAnnouncement}
-              disabled={isSending}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '9px 20px',
-                fontWeight: 800,
-                fontSize: '0.84rem',
-                background: 'linear-gradient(135deg, #BD1D2D 0%, #8C111E 100%)',
-                borderRadius: '10px',
-                boxShadow: '0 4px 12px rgba(189, 29, 45, 0.25)'
-              }}
-            >
-              {isSending ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  Đang gửi thông báo...
-                </>
-              ) : (
-                <>
-                  <Send size={15} />
-                  Gửi Thông Báo 1 Lượt ({finalRecipientEmails.length} học viên)
-                </>
-              )}
-            </button>
-          </div>
+          {step === 2 && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn outline"
+                  onClick={() => setStep(1)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    color: '#334155'
+                  }}
+                >
+                  <ChevronLeft size={16} /> Quay lại: Cấu hình môn
+                </button>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn outline"
+                  onClick={handleSafeClose}
+                  style={{ fontWeight: 700, fontSize: '0.82rem' }}
+                >
+                  Đóng
+                </button>
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={handleProceedToStep3}
+                  disabled={finalRecipientEmails.length === 0}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '9px 20px',
+                    fontWeight: 800,
+                    fontSize: '0.84rem',
+                    background: finalRecipientEmails.length === 0 ? '#94a3b8' : 'linear-gradient(135deg, #BD1D2D 0%, #8C111E 100%)',
+                    cursor: finalRecipientEmails.length === 0 ? 'not-allowed' : 'pointer',
+                    borderRadius: '10px',
+                    boxShadow: finalRecipientEmails.length === 0 ? 'none' : '0 4px 12px rgba(189, 29, 45, 0.25)'
+                  }}
+                >
+                  Tiếp tục: Soạn &amp; Xem Trước ({finalRecipientEmails.length}) <ChevronRight size={16} />
+                </button>
+              </div>
+            </>
+          )}
+
+          {step === 3 && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(zaloText).then(() => {
+                      notify('Đã sao chép nội dung tin nhắn Zalo vào Clipboard!', 'success');
+                    });
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontWeight: 700,
+                    fontSize: '0.78rem',
+                    color: '#334155',
+                    borderColor: '#cbd5e1'
+                  }}
+                >
+                  <Copy size={13} />
+                  Copy Bản Tin Nhắn Zalo
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn outline"
+                  onClick={() => setStep(2)}
+                  disabled={isSending}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    color: '#334155'
+                  }}
+                >
+                  <ChevronLeft size={16} /> Quay lại: Chọn Người Nhận
+                </button>
+                <button
+                  type="button"
+                  className="btn outline"
+                  onClick={handleSafeClose}
+                  disabled={isSending}
+                  style={{ fontWeight: 700, fontSize: '0.8rem' }}
+                >
+                  Đóng
+                </button>
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={handleSendAnnouncement}
+                  disabled={isSending || finalRecipientEmails.length === 0}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '9px 20px',
+                    fontWeight: 800,
+                    fontSize: '0.84rem',
+                    background: finalRecipientEmails.length === 0 ? '#94a3b8' : 'linear-gradient(135deg, #BD1D2D 0%, #8C111E 100%)',
+                    cursor: finalRecipientEmails.length === 0 || isSending ? 'not-allowed' : 'pointer',
+                    borderRadius: '10px',
+                    boxShadow: '0 4px 12px rgba(189, 29, 45, 0.25)'
+                  }}
+                >
+                  {isSending ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Đang gửi thông báo...
+                    </>
+                  ) : (
+                    <>
+                      <Send size={15} />
+                      Gửi Thông Báo ({finalRecipientEmails.length} học viên)
+                    </>
+                  )}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
+
+      {/* UNSAVED CHANGES CONFIRM DIALOG */}
+      {showDiscardConfirm && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2147483647,
+            background: 'rgba(15, 23, 42, 0.7)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+          onClick={e => {
+            if (e.target === e.currentTarget) setShowDiscardConfirm(false);
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              maxWidth: '440px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+              border: '1px solid #e2e8f0',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  background: '#fef2f2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#BD1D2D'
+                }}
+              >
+                <AlertCircle size={20} />
+              </div>
+              <div>
+                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                  Xác nhận đóng thông báo
+                </div>
+                <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                  Thay đổi chưa được lưu
+                </div>
+              </div>
+            </div>
+            <p style={{ fontSize: '0.84rem', color: '#475569', lineHeight: 1.5, margin: '4px 0' }}>
+              Bạn có thay đổi chưa lưu trong thông báo. Bạn có chắc chắn muốn đóng và hủy bỏ các thay đổi không?
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+              <button
+                type="button"
+                className="btn outline"
+                onClick={() => setShowDiscardConfirm(false)}
+                style={{ fontSize: '0.82rem', fontWeight: 600, padding: '7px 16px' }}
+              >
+                Hủy / Tiếp tục soạn
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                onClick={() => {
+                  setShowDiscardConfirm(false);
+                  setIsUserEdited(false);
+                  onClose();
+                }}
+                style={{
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  background: '#BD1D2D',
+                  borderColor: '#BD1D2D',
+                  color: '#ffffff',
+                  padding: '7px 16px'
+                }}
+              >
+                Bỏ thay đổi &amp; Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>,
     document.body
   );

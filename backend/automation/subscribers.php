@@ -18,7 +18,8 @@ function formatSubscriber($row, $tags = [])
     // 10M UPGRADE: Tags passed explicitly from relational fetch
     $row['tags'] = $tags;
 
-    $row['customAttributes'] = json_decode($row['custom_attributes'] ?? '{}'); // FIX: Changed key to camelCase
+    $decodedAttrs = json_decode($row['custom_attributes'] ?: '{}');
+    $row['customAttributes'] = is_object($decodedAttrs) ? $decodedAttrs : (object) []; // FIX: Changed key to camelCase
 
     // FIX: Keep first_name and last_name separate for proper UI editing
     $row['firstName'] = $row['first_name'] ?? '';
@@ -130,7 +131,7 @@ if ($method === 'GET' && $route === 'count_unique') {
                     $whereGroups[] = "(" . $segRes['sql'] . ")";
                     $params = array_merge($params, $segRes['params']);
                 }
-            } catch (Exception $e) {
+            } catch (\Throwable $e) {
                 // Ignore invalid segments
             }
         }
@@ -149,8 +150,9 @@ if ($method === 'GET' && $route === 'count_unique') {
         $stmt->execute($params);
         $count = $stmt->fetchColumn();
         jsonResponse(true, ['count' => (int) $count]);
-    } catch (Exception $e) {
-        jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');
+    } catch (\Throwable $e) {
+        error_log("subscribers_bulk ERROR: " . $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine());
+        jsonResponse(false, ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()], 'Lỗi: ' . $e->getMessage());
     }
 }
 // --- ROUTE: FIELD DEFINITIONS ---
@@ -223,7 +225,7 @@ if ($method === 'GET' && $route === 'field_definitions') {
                 'is_custom' => true
             ];
         }
-    } catch (Exception $e) {
+    } catch (\Throwable $e) {
         // Fallback if JSON_KEYS is not supported or query fails
     }
 
@@ -332,10 +334,10 @@ if ($method === 'POST' && ($route === 'bulk-add-tag' || $route === 'bulk-add-to-
 
         $pdo->prepare("
             UPDATE lists 
-            SET subscriber_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl WHERE sl.workspace_id = ? AND sl.list_id = ?),
-                phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '' AND TRIM(s.phone_number) != '0')
+            SET subscriber_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? AND s.deleted_at IS NULL WHERE sl.workspace_id = ? AND sl.list_id = ?),
+                phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? AND s.deleted_at IS NULL WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '' AND TRIM(s.phone_number) != '0')
             WHERE workspace_id = ? AND id = ?
-        ")->execute([$workspace_id, $listId, $workspace_id, $workspace_id, $listId, $workspace_id, $listId]);
+        ")->execute([$workspace_id, $workspace_id, $listId, $workspace_id, $workspace_id, $listId, $workspace_id, $listId]);
 
         jsonResponse(true, ['count' => $totalAdded], 'Đã thêm vào danh sách thành công');
     }
@@ -361,7 +363,10 @@ if ($method === 'POST' && ($route === 'bulk-add-tag' || $route === 'bulk-add-to-
 
 // --- ROUTE: BULK IMPORT ---
 if ($method === 'POST' && $route === 'subscribers_bulk') {
-    $list = json_decode(file_get_contents("php://input"), true);
+    $rawInput = json_decode(file_get_contents("php://input"), true);
+    $list = isset($rawInput['subscribers']) && is_array($rawInput['subscribers'])
+        ? $rawInput['subscribers']
+        : (isset($rawInput['data']) && is_array($rawInput['data']) ? $rawInput['data'] : $rawInput);
     if (!is_array($list)) {
         jsonResponse(false, null, 'Invalid data format. Expected an array.');
     }
@@ -513,10 +518,10 @@ if ($method === 'POST' && $route === 'subscribers_bulk') {
                             FROM contacts c
                             LEFT JOIN users u ON u.id = c.owner_id
                             LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
-                            WHERE c.deleted_at IS NULL AND (" . implode(' OR ', $cConds) . ")
+                            WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND (" . implode(' OR ', $cConds) . ")
                             ORDER BY c.id DESC
                         ");
-                        $stmtCrm->execute($cParams);
+                        $stmtCrm->execute(array_merge([$workspace_id], $cParams));
                         while ($cRow = $stmtCrm->fetch(PDO::FETCH_ASSOC)) {
                             $cEm = strtolower(trim((string)($cRow['email'] ?? '')));
                             if ($cEm !== '' && !isset($existingContactByEmail[$cEm])) {
@@ -652,7 +657,18 @@ if ($method === 'POST' && $route === 'subscribers_bulk') {
                 $program = !empty($data['program'])
                     ? $data['program']
                     : ($matchedContact && !empty($matchedContact['program']) ? (string)$matchedContact['program'] : null);
-                $job = $data['jobTitle'] ?? $data['job_title'] ?? '';
+                if (class_exists('DomationContactMatcher')) {
+                    $normalizedCustom = DomationContactMatcher::normalizeSubscriberCustomImportFields($data);
+                    $job = $normalizedCustom['job_title'];
+                    $customAt = $normalizedCustom['custom_attributes_json'];
+                } else {
+                    $job = trim((string) ($data['jobTitle'] ?? $data['job_title'] ?? ''));
+                    if (mb_strtolower($job, 'UTF-8') === 'chưa cập nhật') {
+                        $job = '';
+                    }
+                    $rawAttrs = $data['customAttributes'] ?? $data['custom_attributes'] ?? [];
+                    $customAt = !empty($rawAttrs) ? (json_encode($rawAttrs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}') : '{}';
+                }
                 $company = $data['companyName'] ?? $data['company_name'] ?? '';
                 $country = $data['country'] ?? '';
                 $city = $data['city'] ?? '';
@@ -660,7 +676,7 @@ if ($method === 'POST' && $route === 'subscribers_bulk') {
                 $dob = normalizeDate($data['dateOfBirth'] ?? $data['date_of_birth'] ?? null);
                 $anniv = normalizeDate($data['anniversaryDate'] ?? $data['anniversary_date'] ?? null);
 
-                $subValues[] = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), '[]', ?, ?, ?, ?, ?, ?, ?, ?)";
+                $subValues[] = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 array_push(
                     $subParams,
                     $workspace_id,
@@ -686,7 +702,8 @@ if ($method === 'POST' && $route === 'subscribers_bulk') {
                     $city,
                     $gender,
                     $dob,
-                    $anniv
+                    $anniv,
+                    $customAt
                 );
 
                 if (!empty($data['tags']) && is_array($data['tags'])) {
@@ -703,7 +720,7 @@ if ($method === 'POST' && $route === 'subscribers_bulk') {
                                 $tagMap[$tnL] = $newTagId;
                                 $tagSubValues[] = "(?, ?, ?)";
                                 array_push($tagSubParams, $workspace_id, $id, $newTagId);
-                            } catch (Exception $e) {
+                            } catch (\Throwable $e) {
                             }
                         }
                     }
@@ -723,9 +740,10 @@ if ($method === 'POST' && $route === 'subscribers_bulk') {
 
             if (!empty($subValues)) {
                 $sqlSub = "INSERT INTO subscribers (workspace_id, id, contact_id, owner_id, stage_id, pipeline_status, lead_status, program, email, email_norm, phone_norm9, first_name, last_name, status, source, joined_at, notes, salesperson,
-phone_number, job_title, company_name, country, city, gender, date_of_birth, anniversary_date)
+phone_number, job_title, company_name, country, city, gender, date_of_birth, anniversary_date, custom_attributes)
 VALUES " . implode(',', $subValues) . "
 ON DUPLICATE KEY UPDATE
+deleted_at = NULL,
 contact_id = COALESCE(subscribers.contact_id, VALUES(contact_id)),
 owner_id = COALESCE(subscribers.owner_id, VALUES(owner_id)),
 stage_id = COALESCE(subscribers.stage_id, VALUES(stage_id)),
@@ -742,9 +760,15 @@ email = IF((email LIKE '%@facebook.com' OR email LIKE '%@no-email.domation' OR e
 email_norm = COALESCE(VALUES(email_norm), email_norm),
 phone_norm9 = COALESCE(VALUES(phone_norm9), phone_norm9),
 status = VALUES(status), salesperson = IF(VALUES(salesperson) != '', VALUES(salesperson), salesperson),
-phone_number = IF(VALUES(phone_number) != '', VALUES(phone_number), phone_number), job_title = IF(VALUES(job_title) != '', VALUES(job_title), job_title), company_name = IF(VALUES(company_name) != '', VALUES(company_name), company_name),
+phone_number = IF(VALUES(phone_number) != '', VALUES(phone_number), phone_number), job_title = IF(VALUES(job_title) != '' AND LOWER(TRIM(VALUES(job_title))) != 'chưa cập nhật', VALUES(job_title), job_title), company_name = IF(VALUES(company_name) != '', VALUES(company_name), company_name),
 country = IF(VALUES(country) != '', VALUES(country), country), city = IF(VALUES(city) != '', VALUES(city), city), gender = IF(VALUES(gender) != '', VALUES(gender), gender), date_of_birth = COALESCE(VALUES(date_of_birth), date_of_birth),
-anniversary_date = COALESCE(VALUES(anniversary_date), anniversary_date)";
+anniversary_date = COALESCE(VALUES(anniversary_date), anniversary_date),
+custom_attributes = CASE
+    WHEN VALUES(custom_attributes) IS NULL OR VALUES(custom_attributes) = '' OR VALUES(custom_attributes) = '{}' THEN custom_attributes
+    WHEN custom_attributes IS NOT NULL AND JSON_VALID(custom_attributes) AND LEFT(TRIM(custom_attributes), 1) = '{'
+        THEN JSON_MERGE_PATCH(custom_attributes, VALUES(custom_attributes))
+    ELSE VALUES(custom_attributes)
+END";
                 $pdo->prepare($sqlSub)->execute($subParams);
             }
 
@@ -768,16 +792,17 @@ anniversary_date = COALESCE(VALUES(anniversary_date), anniversary_date)";
 
             $pdo->prepare("
                 UPDATE lists 
-                SET subscriber_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl WHERE sl.workspace_id = ? AND sl.list_id = ?),
-                    phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '' AND TRIM(s.phone_number) != '0')
+                SET subscriber_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? AND s.deleted_at IS NULL WHERE sl.workspace_id = ? AND sl.list_id = ?),
+                    phone_count = (SELECT COUNT(DISTINCT sl.subscriber_id) FROM subscriber_lists sl INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ? AND s.deleted_at IS NULL WHERE sl.workspace_id = ? AND sl.list_id = ? AND s.phone_number IS NOT NULL AND TRIM(s.phone_number) != '' AND TRIM(s.phone_number) != '0')
                 WHERE workspace_id = ? AND id = ?
-            ")->execute([$workspace_id, $lid, $workspace_id, $workspace_id, $lid, $workspace_id, $lid]);
+            ")->execute([$workspace_id, $workspace_id, $lid, $workspace_id, $workspace_id, $lid, $workspace_id, $lid]);
         }
         $pdo->commit();
         jsonResponse(true, ['count' => $totalProcessed], 'Import thành công');
-    } catch (Exception $e) {
+    } catch (\Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
-        jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');
+        error_log("subscribers_bulk ERROR: " . $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine());
+        jsonResponse(false, ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()], 'Lỗi: ' . $e->getMessage());
     }
 }
 
@@ -790,13 +815,13 @@ switch ($method) {
             $wsClauseSingle = ($workspace_id === 1) ? "(s.workspace_id = ? OR s.workspace_id IS NULL)" : "s.workspace_id = ?";
             $creatorSelect = "s.*, c.id AS crm_contact_id, u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email, u_creator.avatar_url AS creator_avatar, u_creator.role AS creator_role";
             if (isset($_GET['email'])) {
-                $stmt = $pdo->prepare("SELECT {$creatorSelect} FROM subscribers s LEFT JOIN contacts c ON c.id = s.contact_id AND c.deleted_at IS NULL LEFT JOIN users u_creator ON u_creator.id = s.created_by WHERE s.email = ? AND {$wsClauseSingle}");
+                $stmt = $pdo->prepare("SELECT {$creatorSelect} FROM subscribers s LEFT JOIN contacts c ON c.id = s.contact_id AND c.deleted_at IS NULL LEFT JOIN users u_creator ON u_creator.id = s.created_by WHERE s.email = ? AND {$wsClauseSingle} AND s.deleted_at IS NULL");
                 $stmt->execute([$_GET['email'], $workspace_id]);
             } elseif (isset($_GET['visitor_id'])) {
-                $stmt = $pdo->prepare("SELECT {$creatorSelect} FROM subscribers s JOIN web_visitors v ON s.id = v.subscriber_id LEFT JOIN contacts c ON c.id = s.contact_id AND c.deleted_at IS NULL LEFT JOIN users u_creator ON u_creator.id = s.created_by WHERE v.id = ? AND {$wsClauseSingle}");
+                $stmt = $pdo->prepare("SELECT {$creatorSelect} FROM subscribers s JOIN web_visitors v ON s.id = v.subscriber_id LEFT JOIN contacts c ON c.id = s.contact_id AND c.deleted_at IS NULL LEFT JOIN users u_creator ON u_creator.id = s.created_by WHERE v.id = ? AND {$wsClauseSingle} AND s.deleted_at IS NULL");
                 $stmt->execute([$_GET['visitor_id'], $workspace_id]);
             } else {
-                $stmt = $pdo->prepare("SELECT {$creatorSelect} FROM subscribers s LEFT JOIN contacts c ON c.id = s.contact_id AND c.deleted_at IS NULL LEFT JOIN users u_creator ON u_creator.id = s.created_by WHERE s.id = ? AND {$wsClauseSingle}");
+                $stmt = $pdo->prepare("SELECT {$creatorSelect} FROM subscribers s LEFT JOIN contacts c ON c.id = s.contact_id AND c.deleted_at IS NULL LEFT JOIN users u_creator ON u_creator.id = s.created_by WHERE s.id = ? AND {$wsClauseSingle} AND s.deleted_at IS NULL");
                 $stmt->execute([$path, $workspace_id]);
             }
             $sub = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -880,7 +905,7 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
 
             // [FIX P0] workspace_id prepared param + support legacy NULL workspace_id for tenant 1
             $wsClauseList = ($workspace_id === 1) ? "(s.workspace_id = ? OR s.workspace_id IS NULL)" : "s.workspace_id = ?";
-            $whereClauses = [$wsClauseList];
+            $whereClauses = [$wsClauseList, "s.deleted_at IS NULL"];
             $params = [$workspace_id];
             $joins = []; // New: Handle JOINs for performance
 
@@ -1315,7 +1340,7 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
                 // INJECT: Global stats for Dashboard KPIs when limit=1 (initial load)
                 if ($limit === 1 && $page === 1) {
                     try {
-                        $wsStatsSql = ($workspace_id === 1) ? "(workspace_id = ? OR workspace_id IS NULL)" : "workspace_id = ?";
+                        $wsStatsSql = ($workspace_id === 1) ? "(workspace_id = ? OR workspace_id IS NULL) AND deleted_at IS NULL" : "workspace_id = ? AND deleted_at IS NULL";
                         $stmtStats = $pdo->prepare("SELECT IFNULL(status, 'active') as status_val, COUNT(*) as c FROM subscribers WHERE {$wsStatsSql} GROUP BY IFNULL(status, 'active')");
                         $stmtStats->execute([$workspace_id]);
                         $statusCounts = $stmtStats->fetchAll(PDO::FETCH_KEY_PAIR);
@@ -1367,8 +1392,7 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
         $checkEmail = $pdo->prepare("SELECT id FROM subscribers WHERE email = ? AND workspace_id = ? AND id != ?");
         $checkEmail->execute([$data['email'], $workspace_id, $path ?? '']);
         if ($checkEmail->fetch()) {
-            jsonResponse(false, null, 'Email đã tồn tại trong hệ thống (Email already exists). Vui lòng sử dụng email khác hoặc
-    cập nhật subscriber hiện tại.');
+            jsonResponse(false, null, 'Email đã tồn tại trong hệ thống (Email already exists). Vui lòng sử dụng email khác hoặc cập nhật subscriber hiện tại.', [], 409);
         }
         $email = strtolower(trim($data['email'] ?? ''));
         $phone = $data['phoneNumber'] ?? '';
@@ -1388,11 +1412,19 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
             $id = $existingId;
             // Proceed to UPDATE logic by switching to PUT-like behavior or just return success with existing ID
             // For better UX, we'll update the record with new data.
-            $attrs = json_encode($data['customAttributes'] ?? (object) []);
-            $notes = json_encode($data['notes'] ?? []);
+            $normSingle = class_exists('DomationContactMatcher') ? DomationContactMatcher::normalizeSubscriberCustomImportFields($data) : null;
+            $attrs = $normSingle ? $normSingle['custom_attributes_json'] : (json_encode($data['customAttributes'] ?? (object) [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}');
+            $singleJob = $normSingle ? $normSingle['job_title'] : ($data['jobTitle'] ?? '');
+            $notes = json_encode($data['notes'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $sql = "UPDATE subscribers SET 
-                    email = ?, email_norm = ?, phone_norm9 = COALESCE(?, phone_norm9), first_name = ?, last_name = ?, gender = ?, custom_attributes = ?, 
-                    phone_number = ?, job_title = ?, company_name = ?, country = ?, city = ?, 
+                    email = ?, email_norm = ?, phone_norm9 = COALESCE(?, phone_norm9), first_name = ?, last_name = ?, gender = ?,
+                    custom_attributes = CASE
+                        WHEN ? IS NULL OR ? = '' OR ? = '{}' THEN custom_attributes
+                        WHEN custom_attributes IS NOT NULL AND JSON_VALID(custom_attributes) AND LEFT(TRIM(custom_attributes), 1) = '{'
+                            THEN JSON_MERGE_PATCH(custom_attributes, ?)
+                        ELSE ?
+                    END,
+                    phone_number = ?, job_title = IF(? != '', ?, job_title), company_name = ?, country = ?, city = ?, 
                     address = ?, source = ?, salesperson = ?, notes = ?, status = ?, 
                     date_of_birth = ?, anniversary_date = ?, updated_by = ?, updated_at = NOW()
                     WHERE id = ? AND workspace_id = ?";
@@ -1405,8 +1437,13 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
                 $data['lastName'] ?? '',
                 $data['gender'] ?? '',
                 $attrs,
+                $attrs,
+                $attrs,
+                $attrs,
+                $attrs,
                 $data['phoneNumber'] ?? '',
-                $data['jobTitle'] ?? '',
+                $singleJob,
+                $singleJob,
                 $data['companyName'] ?? '',
                 $data['country'] ?? '',
                 $data['city'] ?? '',
@@ -1423,8 +1460,10 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
             ]);
         } else {
             $id = (!empty($data['id'])) ? $data['id'] : bin2hex(random_bytes(16));
-            $attrs = json_encode($data['customAttributes'] ?? (object) []);
-            $notes = json_encode($data['notes'] ?? []);
+            $normSingle = class_exists('DomationContactMatcher') ? DomationContactMatcher::normalizeSubscriberCustomImportFields($data) : null;
+            $attrs = $normSingle ? $normSingle['custom_attributes_json'] : (json_encode($data['customAttributes'] ?? (object) [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}');
+            $singleJob = $normSingle ? $normSingle['job_title'] : ($data['jobTitle'] ?? '');
+            $notes = json_encode($data['notes'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $sql = "INSERT INTO subscribers (id, workspace_id, email, email_norm, phone_norm9, first_name, last_name, gender, custom_attributes, phone_number,
                 job_title, company_name, country, city, address, source, salesperson, joined_at, notes, status, date_of_birth,
                 anniversary_date, created_by, updated_by)
@@ -1441,7 +1480,7 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
                 $data['gender'] ?? '',
                 $attrs,
                 $data['phoneNumber'] ?? '',
-                $data['jobTitle'] ?? '',
+                $singleJob,
                 $data['companyName'] ?? '',
                 $data['country'] ?? '',
                 $data['city'] ?? '',
@@ -1482,7 +1521,7 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
                         triggerFlows($pdo, $id, 'list', $lid, $workspace_id);
                         // [PERF] Use incremental update instead of full count
                         $hasPhone = !empty($data['phoneNumber']) ? 1 : 0;
-                        $pdo->prepare("UPDATE lists SET subscriber_count = subscriber_count + 1, phone_count = phone_count + ? WHERE id = ?")->execute([$hasPhone, $lid]);
+                        $pdo->prepare("UPDATE lists SET subscriber_count = subscriber_count + 1, phone_count = phone_count + ? WHERE id = ? AND workspace_id = ?")->execute([$hasPhone, $lid, $workspace_id]);
                     }
                 }
             }
@@ -1501,8 +1540,9 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
             }
 
             jsonResponse(true, $data);
-        } catch (Exception $e) {
-            jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');
+        } catch (\Throwable $e) {
+            error_log("subscribers_bulk ERROR: " . $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine());
+        jsonResponse(false, ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()], 'Lỗi: ' . $e->getMessage());
         }
         break;
 
@@ -1520,11 +1560,12 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
 
         $actorUserId = function_exists('get_current_user_id') ? get_current_user_id() : null;
         $data = json_decode(file_get_contents("php://input"), true);
-        $tags = json_encode($data['tags'] ?? []);
-        $attrs = json_encode($data['customAttributes'] ?? (object) []);
+        $tags = json_encode($data['tags'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $normPut = class_exists('DomationContactMatcher') ? DomationContactMatcher::normalizeSubscriberCustomImportFields($data) : null;
+        $attrs = $normPut ? $normPut['custom_attributes_json'] : (json_encode($data['customAttributes'] ?? (object) [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}');
         $dob = !empty($data['dateOfBirth']) ? $data['dateOfBirth'] : null;
         $anniversary = !empty($data['anniversaryDate']) ? $data['anniversaryDate'] : null;
-        $notes = json_encode($data['notes'] ?? []); // Save notes on PUT
+        $notes = json_encode($data['notes'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); // Save notes on PUT
 
         // Check if phone number changed to update list phone_counts
         $stmtOldPhone = $pdo->prepare("SELECT phone_number FROM subscribers WHERE id = ? AND workspace_id = ?");
@@ -1557,7 +1598,7 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
                 $attrs,
                 $data['status'],
                 $newPhone,
-                $data['jobTitle'] ?? '',
+                (array_key_exists('jobTitle', $data) && trim((string)$data['jobTitle']) !== '') ? trim((string)$data['jobTitle']) : (array_key_exists('jobTitle', $data) ? '' : ($normPut ? $normPut['job_title'] : '')),
                 $data['companyName'] ?? '',
                 $data['country'] ?? '',
                 $data['city'] ?? '',
@@ -1617,8 +1658,8 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
                 if (!empty($toRemove)) {
                     $hasPhone = (!empty($newPhone) && trim($newPhone) !== '') ? 1 : 0;
                     foreach ($toRemove as $lid) {
-                        $pdo->prepare("DELETE FROM subscriber_lists WHERE subscriber_id = ? AND list_id = ?")->execute([$path, $lid]);
-                        $pdo->prepare("UPDATE lists SET subscriber_count = GREATEST(0, subscriber_count - 1), phone_count = GREATEST(0, phone_count - ?) WHERE id = ?")->execute([$hasPhone, $lid]);
+                        $pdo->prepare("DELETE FROM subscriber_lists WHERE subscriber_id = ? AND list_id = ? AND workspace_id = ?")->execute([$path, $lid, $workspace_id]);
+                        $pdo->prepare("UPDATE lists SET subscriber_count = GREATEST(0, subscriber_count - 1), phone_count = GREATEST(0, phone_count - ?) WHERE id = ? AND workspace_id = ?")->execute([$hasPhone, $lid, $workspace_id]);
                     }
                 }
 
@@ -1627,7 +1668,7 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
                     $hasPhone = (!empty($newPhone) && trim($newPhone) !== '') ? 1 : 0;
                     foreach ($toAddL as $lid) {
                         $pdo->prepare("INSERT IGNORE INTO subscriber_lists (workspace_id, subscriber_id, list_id) VALUES (?, ?, ?)")->execute([$workspace_id, $path, $lid]);
-                        $pdo->prepare("UPDATE lists SET subscriber_count = subscriber_count + 1, phone_count = phone_count + ? WHERE id = ?")->execute([$hasPhone, $lid]);
+                        $pdo->prepare("UPDATE lists SET subscriber_count = subscriber_count + 1, phone_count = phone_count + ? WHERE id = ? AND workspace_id = ?")->execute([$hasPhone, $lid, $workspace_id]);
                         enrollSubscribersBulk($pdo, [$path], 'list', $lid, $workspace_id);
                     }
                 }
@@ -1646,8 +1687,9 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
             }
 
             jsonResponse(true, $data);
-        } catch (Exception $e) {
-            jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');
+        } catch (\Throwable $e) {
+            error_log("subscribers_bulk ERROR: " . $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine());
+        jsonResponse(false, ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()], 'Lỗi: ' . $e->getMessage());
         }
         break;
 
@@ -1678,32 +1720,34 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
             $phone = (string) $subData['phone_number'];
             $hasPhone = (!empty($phone) && trim($phone) !== '') ? 1 : 0;
 
-            $stmtLists = $pdo->prepare("SELECT list_id FROM subscriber_lists WHERE subscriber_id = ?");
-            $stmtLists->execute([$path]);
+            $stmtLists = $pdo->prepare("SELECT list_id FROM subscriber_lists WHERE subscriber_id = ? AND workspace_id = ?");
+            $stmtLists->execute([$path, $workspace_id]);
             $lids = $stmtLists->fetchAll(PDO::FETCH_COLUMN);
             foreach ($lids as $lid) {
-                $pdo->prepare("UPDATE lists SET subscriber_count = GREATEST(0, subscriber_count - 1), phone_count = GREATEST(0, phone_count - ?) WHERE id = ?")->execute([$hasPhone, $lid]);
+                $pdo->prepare("UPDATE lists SET subscriber_count = GREATEST(0, subscriber_count - 1), phone_count = GREATEST(0, phone_count - ?) WHERE id = ? AND workspace_id = ?")->execute([$hasPhone, $lid, $workspace_id]);
             }
 
-            // 10M UPGRADE: Delete tags relationship
-            $pdo->prepare("DELETE FROM subscriber_tags WHERE subscriber_id = ?")->execute([$path]);
-            $pdo->prepare("DELETE FROM subscriber_activity WHERE subscriber_id = ?")->execute([$path]);
-            $pdo->prepare("DELETE FROM subscriber_flow_states WHERE subscriber_id = ?")->execute([$path]);
-            $pdo->prepare("DELETE FROM subscriber_lists WHERE subscriber_id = ?")->execute([$path]);
-            $pdo->prepare("DELETE FROM mail_delivery_logs WHERE subscriber_id = ?")->execute([$path]);
-            $pdo->prepare("DELETE FROM activity_buffer WHERE subscriber_id = ?")->execute([$path]);
-            $pdo->prepare("DELETE FROM zalo_delivery_logs WHERE subscriber_id = ?")->execute([$path]);
+            // AGENTS.md Rule 4 Mandate: 100% Soft-Delete. Preserve historical activity & delivery logs.
+            $pdo->prepare("DELETE FROM subscriber_tags WHERE subscriber_id = ? AND workspace_id = ?")->execute([$path, $workspace_id]);
+            // subscriber_activity preserved for historical analytics
+            $pdo->prepare("UPDATE subscriber_flow_states SET status = 'cancelled', updated_at = NOW() WHERE subscriber_id = ? AND workspace_id = ? AND status IN ('waiting', 'processing', 'queued')")->execute([$path, $workspace_id]);
+            $pdo->prepare("DELETE FROM subscriber_lists WHERE subscriber_id = ? AND workspace_id = ?")->execute([$path, $workspace_id]);
+            // mail_delivery_logs, activity_buffer, and zalo_delivery_logs preserved for compliance & analytics
+            // activity_buffer preserved
+            // zalo_delivery_logs preserved
             $pdo->prepare("UPDATE zalo_subscribers SET subscriber_id = NULL WHERE subscriber_id = ?")->execute([$path]);
             $pdo->prepare("UPDATE voucher_codes SET subscriber_id = NULL, status = 'unused', sent_at = NULL WHERE subscriber_id = ? AND status = 'available'")->execute([$path]);
 
-            $pdo->prepare("DELETE FROM subscribers WHERE id = ? AND workspace_id = ?")->execute([$path, $workspace_id]);
+            // Soft delete subscriber - preserve contact_id so CRM sync does not resurrect as zombie
+            $pdo->prepare("UPDATE subscribers SET deleted_at = NOW(), status = 'archived', updated_at = NOW() WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL")->execute([$path, $workspace_id]);
 
             $pdo->commit();
             jsonResponse(true, ['id' => $path]);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             if ($pdo->inTransaction())
                 $pdo->rollBack();
-            jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');
+            error_log("subscribers_bulk ERROR: " . $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine());
+        jsonResponse(false, ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()], 'Lỗi: ' . $e->getMessage());
         }
         break;
 

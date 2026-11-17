@@ -158,8 +158,8 @@ try {
                         $trigger = $s;
 
                 if ($trigger && isset($trigger['nextStepId'])) {
-                    // [SECURITY FIX] Added workspace_id check to prevent wiping other tenant states if ID collision occurs
-                    $pdo->prepare("DELETE FROM subscriber_flow_states WHERE subscriber_id = ? AND flow_id = ? AND workspace_id = ? AND status IN ('waiting', 'processing')")
+                    // [100% Soft-Delete Mandate] Transition status to cancelled instead of hard DELETE
+                    $pdo->prepare("UPDATE subscriber_flow_states SET status = 'cancelled', updated_at = NOW() WHERE subscriber_id = ? AND flow_id = ? AND workspace_id = ? AND status IN ('waiting', 'processing')")
                         ->execute([$prioritySid, $manualFlow['id'], $priorityWorkspaceId]);
 
                     // [OPT] Explicit column select — avoid SELECT * on heavy subscribers table
@@ -185,37 +185,13 @@ try {
                         // [SMART SCHEDULE FIX] Calculate future wait date if first step is wait
                         foreach ($steps as $fs) {
                             if (($fs['id'] ?? '') === $trigger['nextStepId'] && strtolower($fs['type'] ?? '') === 'wait') {
-                                $fsWaitConfig = $fs['config'] ?? [];
-                                $fsWaitMode = $fsWaitConfig['mode'] ?? 'duration';
-                                if ($fsWaitMode === 'duration') {
-                                    $dur = (int) ($fsWaitConfig['duration'] ?? 0);
-                                    $unit = $fsWaitConfig['unit'] ?? 'minutes';
-                                    $unitSeconds = match ($unit) {
-                                        'weeks' => 604800,
-                                        'days' => 86400,
-                                        'hours' => 3600,
-                                        default => 60,
-                                    };
-                                    if (($unitSeconds * $dur) > 0) {
-                                        $initialSchedule = date('Y-m-d H:i:s', time() + ($unitSeconds * $dur));
-                                    }
-                                } elseif ($fsWaitMode === 'until_date') {
-                                    $specDate = $fsWaitConfig['specificDate'] ?? '';
-                                    $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                                    if ($specDate) {
-                                        $targetTs = strtotime("$specDate $targetTime:00");
-                                        if ($targetTs > time()) {
-                                            $initialSchedule = date('Y-m-d H:i:s', $targetTs);
-                                        }
-                                    }
-                                } elseif ($fsWaitMode === 'until') {
-                                    $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                                    $dt = new DateTime();
-                                    $parts2 = explode(':', $targetTime);
-                                    $dt->setTime((int)$parts2[0], (int)($parts2[1] ?? 0), 0);
-                                    if ($dt->getTimestamp() <= time()) $dt->modify('+1 day');
-                                    $initialSchedule = $dt->format('Y-m-d H:i:s');
-                                }
+                                $waitCalc = calculateWaitStepScheduledAt($fs, null, [
+                                    'for_enrollment' => true,
+                                    'past_fallback' => $pastTime,
+                                    'duration_default' => 0,
+                                    'unit_default' => 'minutes',
+                                ]);
+                                $initialSchedule = $waitCalc['scheduled_at'];
                                 break;
                             }
                         }
@@ -230,9 +206,30 @@ try {
                             }
                         }
 
-                        $stmtE = $pdo->prepare("INSERT INTO subscriber_flow_states (workspace_id, subscriber_id, contact_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW())");
+                        $stmtE = $pdo->prepare(
+                            "INSERT INTO subscriber_flow_states (workspace_id, subscriber_id, contact_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW())
+                             ON DUPLICATE KEY UPDATE
+                                 id = LAST_INSERT_ID(id),
+                                 contact_id = COALESCE(VALUES(contact_id), contact_id),
+                                 step_id = VALUES(step_id),
+                                 step_type = VALUES(step_type),
+                                 scheduled_at = VALUES(scheduled_at),
+                                 waiting_until = NULL,
+                                 branch_taken = NULL,
+                                 last_error = NULL,
+                                 status = 'waiting',
+                                 created_at = NOW(),
+                                 updated_at = NOW(),
+                                 last_step_at = NOW()"
+                        );
                         $stmtE->execute([$priorityWorkspaceId, $prioritySid, $subDetails['contact_id'] ?? null, $manualFlow['id'], $nextStepId, $nextStepType, $initialSchedule]);
                         $newQueueId = $pdo->lastInsertId();
+                        if (!$newQueueId) {
+                            $stmtQid = $pdo->prepare("SELECT id FROM subscriber_flow_states WHERE workspace_id = ? AND flow_id = ? AND subscriber_id = ? LIMIT 1");
+                            $stmtQid->execute([$priorityWorkspaceId, $manualFlow['id'], $prioritySid]);
+                            $newQueueId = $stmtQid->fetchColumn() ?: 0;
+                        }
 
                         logActivity($pdo, $prioritySid, 'enter_flow', $manualFlow['id'], $manualFlow['name'], "Manual Trigger by Admin", $manualFlow['id'], null, [], $priorityWorkspaceId);
                         $pdo->prepare("UPDATE flows SET stat_enrolled = stat_enrolled + 1 WHERE id = ?")->execute([$manualFlow['id']]);
@@ -329,11 +326,11 @@ try {
 
                     if ($existingState) {
 
-                        // Check Max Enrollments if applicable
+                        // Check Max Enrollments if applicable (count historical enter_flow runs, since subscriber_flow_states keeps 1 row per composite PK)
                         if ($maxEnrollments > 0) {
-                            $stmtTotal = $pdo->prepare("SELECT COUNT(*) FROM subscriber_flow_states WHERE subscriber_id = ? AND flow_id = ?");
-                            $stmtTotal->execute([$prioritySid, $flow['id']]);
-                            $totalEnrollments = (int) $stmtTotal->fetchColumn();
+                            $stmtTotal = $pdo->prepare("SELECT COUNT(*) FROM subscriber_activity WHERE workspace_id = ? AND subscriber_id = ? AND type = 'enter_flow' AND (flow_id = ? OR reference_id = ?)");
+                            $stmtTotal->execute([$priorityWorkspaceId, $prioritySid, $flow['id'], $flow['id']]);
+                            $totalEnrollments = max(1, (int) $stmtTotal->fetchColumn());
                             if ($totalEnrollments >= $maxEnrollments) {
                                 $logs[] = "[Priority-Enroll] Sub $prioritySid reached max enrollments ($maxEnrollments) for Flow {$flow['id']}." . " Skipping.";
                                 continue;
@@ -386,37 +383,13 @@ try {
                     // [SMART SCHEDULE FIX] Calculate future wait date if first step is wait
                     foreach ($steps as $fs) {
                         if (($fs['id'] ?? '') === $trigger['nextStepId'] && strtolower($fs['type'] ?? '') === 'wait') {
-                            $fsWaitConfig = $fs['config'] ?? [];
-                            $fsWaitMode = $fsWaitConfig['mode'] ?? 'duration';
-                            if ($fsWaitMode === 'duration') {
-                                $dur = (int) ($fsWaitConfig['duration'] ?? 0);
-                                $unit = $fsWaitConfig['unit'] ?? 'minutes';
-                                $unitSeconds = match ($unit) {
-                                    'weeks' => 604800,
-                                    'days' => 86400,
-                                    'hours' => 3600,
-                                    default => 60,
-                                };
-                                if (($unitSeconds * $dur) > 0) {
-                                    $initialSchedule = date('Y-m-d H:i:s', time() + ($unitSeconds * $dur));
-                                }
-                            } elseif ($fsWaitMode === 'until_date') {
-                                $specDate = $fsWaitConfig['specificDate'] ?? '';
-                                $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                                if ($specDate) {
-                                    $targetTs = strtotime("$specDate $targetTime:00");
-                                    if ($targetTs > time()) {
-                                        $initialSchedule = date('Y-m-d H:i:s', $targetTs);
-                                    }
-                                }
-                            } elseif ($fsWaitMode === 'until') {
-                                $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                                $dt = new DateTime();
-                                $parts2 = explode(':', $targetTime);
-                                $dt->setTime((int)$parts2[0], (int)($parts2[1] ?? 0), 0);
-                                if ($dt->getTimestamp() <= time()) $dt->modify('+1 day');
-                                $initialSchedule = $dt->format('Y-m-d H:i:s');
-                            }
+                            $waitCalc = calculateWaitStepScheduledAt($fs, null, [
+                                'for_enrollment' => true,
+                                'past_fallback' => $pastTime,
+                                'duration_default' => 0,
+                                'unit_default' => 'minutes',
+                            ]);
+                            $initialSchedule = $waitCalc['scheduled_at'];
                             break;
                         }
                     }
@@ -446,9 +419,22 @@ try {
                             }
                         }
 
-                        // [FIX] Respect allowMultiple flag in SQL INSERT
+                        // [FIX] Respect allowMultiple flag and composite PK (workspace_id, flow_id, subscriber_id)
+                        $odkuClause = " ON DUPLICATE KEY UPDATE
+                                           id = LAST_INSERT_ID(id),
+                                           contact_id = COALESCE(VALUES(contact_id), contact_id),
+                                           step_id = VALUES(step_id),
+                                           step_type = VALUES(step_type),
+                                           scheduled_at = VALUES(scheduled_at),
+                                           waiting_until = NULL,
+                                           branch_taken = NULL,
+                                           last_error = NULL,
+                                           status = 'waiting',
+                                           created_at = NOW(),
+                                           updated_at = NOW(),
+                                           last_step_at = NOW()";
                         if ($allowMultiple) {
-                            traceLog("[Priority] allowMultiple=true, using debounce INSERT");
+                            traceLog("[Priority] allowMultiple=true, using debounce UPSERT");
                             $sqlIns = "INSERT INTO subscriber_flow_states (workspace_id, subscriber_id, contact_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
                                        SELECT ?, ?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW()
                                        FROM DUAL
@@ -456,7 +442,7 @@ try {
                                            SELECT 1 FROM subscriber_flow_states
                                            WHERE subscriber_id = ? AND flow_id = ? AND workspace_id = ?
                                            AND created_at >= DATE_SUB(NOW(), INTERVAL 3 SECOND)
-                                       )";
+                                       )" . $odkuClause;
                             $stmtE = $pdo->prepare($sqlIns);
                             $stmtE->execute([$priorityWorkspaceId, $prioritySid, $subDetails['contact_id'] ?? null, $flow['id'], $nextStepId, $nextStepType, $initialSchedule, $prioritySid, $flow['id'], $priorityWorkspaceId]);
                         } else {
@@ -464,10 +450,10 @@ try {
                             if ($frequency === 'one-time') {
                                 $blockCondition = "1=1"; // Always block if any record exists
                             } else {
-                            $safeChHours = (int)$cooldownHours;
-                            $blockCondition = "status IN ('waiting', 'processing') OR updated_at > DATE_SUB(NOW(), INTERVAL $safeChHours HOUR)";
+                                $safeChHours = (int)$cooldownHours;
+                                $blockCondition = "status IN ('waiting', 'processing') OR updated_at > DATE_SUB(NOW(), INTERVAL $safeChHours HOUR)";
                             }
-    
+
                             $sqlIns = "INSERT INTO subscriber_flow_states (workspace_id, subscriber_id, contact_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
                                        SELECT ?, ?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW()
                                        FROM DUAL
@@ -475,7 +461,7 @@ try {
                                            SELECT 1 FROM subscriber_flow_states 
                                            WHERE subscriber_id = ? AND flow_id = ? AND workspace_id = ?
                                            AND ($blockCondition)
-                                       )";
+                                       )" . $odkuClause;
                             $stmtE = $pdo->prepare($sqlIns);
                             $stmtE->execute([$priorityWorkspaceId, $prioritySid, $subDetails['contact_id'] ?? null, $flow['id'], $nextStepId, $nextStepType, $initialSchedule, $prioritySid, $flow['id'], $priorityWorkspaceId]);
                         }
@@ -486,6 +472,11 @@ try {
                     }
 
                     $newQueueId = $pdo->lastInsertId();
+                    if (!$newQueueId) {
+                        $stmtQid = $pdo->prepare("SELECT id FROM subscriber_flow_states WHERE workspace_id = ? AND flow_id = ? AND subscriber_id = ? LIMIT 1");
+                        $stmtQid->execute([$priorityWorkspaceId, $flow['id'], $prioritySid]);
+                        $newQueueId = $stmtQid->fetchColumn() ?: 0;
+                    }
 
                     $detailMessage = "Priority Trigger: {$priorityTriggerType} ({$priorityTargetId})";
                     logActivity($pdo, $prioritySid, 'enter_flow', $flow['id'], $flow['name'], $detailMessage, $flow['id'], null, [], $priorityWorkspaceId);
@@ -510,7 +501,12 @@ try {
                         $foundFlowForPriority = true;
                     } else {
                         // Multi-flow trigger...
-                        $workerParams = http_build_query(['priority_queue_id' => $newQueueId, 'subscriber_id' => $prioritySid, 'priority_flow_id' => $flow['id']]);
+                        $workerParams = http_build_query([
+                            'priority_queue_id' => $newQueueId,
+                            'subscriber_id' => $prioritySid,
+                            'priority_flow_id' => $flow['id'],
+                            'depth' => $priorityDepth + 1
+                        ]);
                         // [OPTIMIZED] Use centralized WorkerTriggerService for non-blocking self-trigger
                         require_once __DIR__ . '/WorkerTriggerService.php';
                         $triggerService = new WorkerTriggerService($pdo, API_BASE_URL);
@@ -635,7 +631,8 @@ try {
                     'priority_queue_id' => $bi['queue_id'],
                     'subscriber_id' => $bi['subscriber_id'],
                     'priority_flow_id' => $bi['flow_id'],
-                    'workspace_id' => $priorityWorkspaceId
+                    'workspace_id' => $priorityWorkspaceId,
+                    'depth' => $priorityDepth + 1
                 ]);
                 $workerUrl = API_BASE_URL . "/worker_priority.php?" . $workerParams;
 
@@ -858,13 +855,13 @@ try {
         // [SCHEDULE PROTECT]
         if ($isPriorityChain && !($_GET['force_skip'] ?? 0)) {
             $scheduledTime = strtotime($item['scheduled_at'] ?? $now);
-            if ($scheduledTime > (time() + 1)) {
+            if ($scheduledTime !== false && $scheduledTime > time()) {
                 $sType = strtolower($currentStep['type'] ?? '');
                 if (!in_array($sType, ['condition', 'advanced_condition', 'trigger'])) {
                     $logs[] = "  -> [SCHEDULE PROTECT] Step '{$currentStep['label']}' paused (Scheduled: {$item['scheduled_at']}).";
-                    // [FIX] Also update step_id so worker resumes at correct step, not the previous one
-                    $pdo->prepare("UPDATE subscriber_flow_states SET status = 'waiting', step_id = ?, updated_at = NOW() WHERE id = ?")
-                        ->execute([$currentStepId, $queueId]);
+                    // [FIX] Also update step_id and step_type so worker resumes safely without losing step_type
+                    $pdo->prepare("UPDATE subscriber_flow_states SET status = 'waiting', step_id = ?, step_type = ?, updated_at = NOW() WHERE id = ?")
+                        ->execute([$currentStepId, ($sType ?: null), $queueId]);
                     $shouldContinueChain = false;
                     break;
                 }

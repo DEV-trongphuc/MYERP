@@ -155,7 +155,7 @@ export const CT_TYPES: Record<string, string> = {
 
 export const CO_FIELDS: Array<[string, string, string, string]> = [
   ['mst', 'MST doanh nghiệp *', '', 'VD: 0101234567'],
-  ['tenNNT', 'Tên doanh nghiệp *', 'wide', 'VD: CÔNG TY TNHH VIỆN QUỐC TẾ IDEAS'],
+  ['tenNNT', 'Tên doanh nghiệp *', 'wide', 'VD: CÔNG TY TNHH TẬP ĐOÀN DOANH NGHIỆP'],
   ['dchiNNT', 'Địa chỉ', 'wide', ''],
   ['tenXaNNT', 'Phường/xã', '', ''],
   ['maXaNNT', 'Mã phường/xã', '', ''],

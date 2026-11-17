@@ -61,7 +61,8 @@ class HRMController {
     }
 
     private function isAdmin(array $auth): bool {
-        return in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        return TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'super_admin', 'superadmin', 'director', 'hr'], 'hrm', 'read', ['all']);
     }
 
     private function resolveEmployeeLateGraceMinutes(?string $gender, ?string $fullName, int $graceMale = 30, int $graceFemale = 60): array {
@@ -85,24 +86,23 @@ class HRMController {
         ];
     }
 
-    private function getSystemLateGraceSettings(): array {
-        if (self::$lateGraceSettingsCache !== null) {
-            return self::$lateGraceSettingsCache;
-        }
+    private function getSystemLateGraceSettings(int $tenantId = 0): array {
+        $tid = $tenantId > 0 ? $tenantId : (int)($GLOBALS['current_tenant_id'] ?? 1);
         $graceMale = 30;
         $graceFemale = 60;
         try {
-            $stmtGrace = $this->db->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('hrm_late_grace_male', 'hrm_late_grace_female')");
-            foreach (($stmtGrace ? $stmtGrace->fetchAll(PDO::FETCH_ASSOC) : []) as $sRow) {
-                if (($sRow['setting_key'] ?? '') === 'hrm_late_grace_male' && (int)$sRow['setting_value'] > 0) {
-                    $graceMale = (int)$sRow['setting_value'];
-                } elseif (($sRow['setting_key'] ?? '') === 'hrm_late_grace_female' && (int)$sRow['setting_value'] > 0) {
-                    $graceFemale = (int)$sRow['setting_value'];
-                }
-            }
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $mVal = TenantConfigService::getSetting($this->db, $tid, 'hrm_late_grace_male', '');
+            $fVal = TenantConfigService::getSetting($this->db, $tid, 'hrm_late_grace_female', '');
+            if (is_numeric($mVal) && (int)$mVal > 0) $graceMale = (int)$mVal;
+            if (is_numeric($fVal) && (int)$fVal > 0) $graceFemale = (int)$fVal;
         } catch (\Throwable $e) {}
-        self::$lateGraceSettingsCache = [$graceMale, $graceFemale];
-        return self::$lateGraceSettingsCache;
+        return [$graceMale, $graceFemale];
+    }
+
+    private function excludedEmailClause(int $tenantId, string $colExpr = 'u.email'): string {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        return TenantConfigService::buildExcludedEmailSqlCondition($this->db, $tenantId, $colExpr);
     }
 
     public static function formatLeaveTypeText(string $type): string {
@@ -306,7 +306,7 @@ class HRMController {
         [$graceMale, $graceFemale] = $this->getSystemLateGraceSettings();
         $otCompMap = [];
         try {
-            $stmtOtComp = $this->db->query("
+            $stmtOtComp = $this->db->prepare("
                 SELECT u.id AS user_id,
                        ROUND(COALESCE(p.misa_comp_carryover, 0.0) + COALESCE((
                            SELECT SUM(ROUND(l.total_days * COALESCE(NULLIF(l.ot_rate, 0), 1.0), 2))
@@ -315,7 +315,9 @@ class HRMController {
                        ), 0.0), 2) AS earned_comp
                 FROM users u
                 LEFT JOIN hrm_profiles p ON p.user_id = u.id
+                WHERE u.tenant_id = ?
             ");
+            $stmtOtComp->execute([(int)($auth['tenant_id'] ?? 1)]);
             foreach ($stmtOtComp->fetchAll(PDO::FETCH_ASSOC) ?: [] as $otRow) {
                 $otCompMap[(int)$otRow['user_id']] = round((float)$otRow['earned_comp'], 2);
             }
@@ -420,7 +422,7 @@ class HRMController {
                 FROM users u
                 LEFT JOIN hrm_profiles p ON u.id = p.user_id
                 LEFT JOIN teams t ON u.team_id = t.id
-                WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+                WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND " . $this->excludedEmailClause((int)($auth['tenant_id'] ?? $tid ?? $GLOBALS['current_tenant_id'] ?? 1), 'u.email') . "
                 ORDER BY u.full_name
             ");
             $stmt->execute([$auth['tenant_id']]);
@@ -446,7 +448,7 @@ class HRMController {
                 FROM users u
                 LEFT JOIN hrm_profiles p ON u.id = p.user_id
                 LEFT JOIN teams t ON u.team_id = t.id
-                WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+                WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND " . $this->excludedEmailClause((int)($auth['tenant_id'] ?? $tid ?? $GLOBALS['current_tenant_id'] ?? 1), 'u.email') . "
                 ORDER BY u.full_name
             ");
             $stmt->execute([$auth['tenant_id']]);
@@ -618,8 +620,8 @@ class HRMController {
         }
 
         if ($targetUserId !== $callerId && !$this->isAdmin($auth)) {
-            $role = strtolower((string)($auth['role'] ?? ''));
-            $isManager = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead', 'accountant', 'ke_toan'], true);
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $isManager = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['manager', 'truong_phong', 'leader', 'team_lead', 'accountant', 'ke_toan'], 'hrm', 'read');
             if (!$isManager) {
                 respond(403, null, 'Không có quyền xem số dư phép của nhân sự khác', false);
             }
@@ -860,39 +862,8 @@ class HRMController {
 
         $approverId = !empty($b['approver_id']) ? (int)$b['approver_id'] : null;
         if (empty($approverId) && !$isDraft) {
-            $stmtUser = $this->db->prepare("SELECT email, department, team_id FROM users WHERE id = ?");
-            $stmtUser->execute([$auth['user_id']]);
-            $uInfo = $stmtUser->fetch(PDO::FETCH_ASSOC);
-            $uEmail = strtolower($uInfo['email'] ?? '');
-            $uDept = mb_strtolower($uInfo['department'] ?? '', 'UTF-8');
-
-            if ($uEmail === 'nganph@ideas.edu.vn' || str_contains($uDept, 'học vụ') || str_contains($uDept, 'học thuật')) {
-                $stmtLead = $this->db->prepare("SELECT id FROM users WHERE email = 'tramlth@ideas.edu.vn' OR username = 'tramlth' OR full_name LIKE '%Huyền Trâm%' LIMIT 1");
-                $stmtLead->execute();
-                $foundLead = $stmtLead->fetchColumn();
-                if (!empty($foundLead) && (int)$foundLead !== (int)$auth['user_id']) {
-                    $approverId = (int)$foundLead;
-                }
-            } elseif ($uEmail === 'cuongnph@ideas.edu.vn' || str_contains($uDept, 'nhân sự') || str_contains($uDept, 'hành chính')) {
-                $stmtLead = $this->db->prepare("SELECT id FROM users WHERE email LIKE 'phuongntd%' OR username = 'phuongntd' OR full_name LIKE '%Duy Phương%' LIMIT 1");
-                $stmtLead->execute();
-                $foundLead = $stmtLead->fetchColumn();
-                if (!empty($foundLead) && (int)$foundLead !== (int)$auth['user_id']) {
-                    $approverId = (int)$foundLead;
-                }
-            }
-
-            if (empty($approverId)) {
-                $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
-                $stmtLeader->execute([$auth['user_id']]);
-                $leadId = $stmtLeader->fetchColumn();
-                if (!empty($leadId) && (int)$leadId !== (int)$auth['user_id']) {
-                    $approverId = (int)$leadId;
-                } else {
-                    $stmtDir = $this->db->query("SELECT id FROM users WHERE LOWER(role) IN ('director', 'superadmin', 'super_admin') AND id != " . (int)$auth['user_id'] . " LIMIT 1");
-                    $approverId = (int)($stmtDir->fetchColumn() ?: 1003);
-                }
-            }
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $approverId = TenantConfigService::resolveUserApprover($this->db, (int)($auth['tenant_id'] ?? 1), (int)$auth['user_id'], 'leave');
         }
         $approverId2 = !empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : null;
 
@@ -982,7 +953,8 @@ class HRMController {
             $approvedBy = null;
             $approvedAt = null;
         } else {
-            $canSelfApprove = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $canSelfApprove = TenantConfigService::canUserSelfApprove($this->db, $auth, 'leave');
             if ($approverId > 0 && $approverId === (int)$auth['user_id'] && !$canSelfApprove) {
                 respond(403, null, 'Người tạo đề xuất không được tự chỉ định chính mình làm người phê duyệt', false);
                 return;
@@ -1298,33 +1270,40 @@ class HRMController {
             respond(400, null, 'Thiếu ID hoặc trạng thái phê duyệt', false);
         }
 
-        $statusInput = $b['status'];
+        $statusInput = strtolower(trim((string)$b['status']));
+        if (!in_array($statusInput, ['approved', 'rejected'], true)) {
+            respond(400, null, 'Trạng thái phê duyệt không hợp lệ (chỉ chấp nhận approved hoặc rejected)', false);
+        }
         $approverNote = $b['reason'] ?? $b['reject_reason'] ?? $b['manager_note'] ?? $b['note'] ?? 'Không có ghi chú thêm';
 
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $forUpdate = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite') ? '' : ' FOR UPDATE';
         $ownTx = !$this->db->inTransaction();
         if ($ownTx) {
             $this->db->beginTransaction();
         }
 
         try {
-            $stmtLock = $this->db->prepare("SELECT * FROM hrm_leave_requests WHERE id = ? FOR UPDATE");
-            $stmtLock->execute([$id]);
-            $lockedLeave = $stmtLock->fetch(PDO::FETCH_ASSOC);
-
-            $stmtL = $this->db->prepare("SELECT l.*, u.full_name FROM hrm_leave_requests l JOIN users u ON l.user_id = u.id WHERE l.id = ? AND u.tenant_id = ? FOR UPDATE");
+            $stmtL = $this->db->prepare("SELECT l.*, u.full_name FROM hrm_leave_requests l JOIN users u ON l.user_id = u.id WHERE l.id = ? AND u.tenant_id = ? AND l.deleted_at IS NULL{$forUpdate}");
             $stmtL->execute([$id, $auth['tenant_id']]);
             $leaveRow = $stmtL->fetch(PDO::FETCH_ASSOC);
 
-            if (!$lockedLeave || !$leaveRow) {
+            if (!$leaveRow) {
                 if ($ownTx && $this->db->inTransaction()) $this->db->rollBack();
                 respond(404, null, 'Yêu cầu nghỉ phép không tồn tại', false);
             }
 
+            if (in_array($leaveRow['status'] ?? '', ['approved', 'rejected', 'completed'], true)) {
+                if ($ownTx && $this->db->inTransaction()) $this->db->rollBack();
+                respond(422, null, 'Yêu cầu nghỉ phép này đã được xử lý trước đó', false);
+            }
+
             $isApprover1 = ((int)$auth['user_id'] === (int)$leaveRow['approver_id']);
             $isApprover2 = ((int)$auth['user_id'] === (int)$leaveRow['approver_id_2']);
-            $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
-            $isHrOrSuper = $isSuperAdmin || in_array(strtolower($auth['role'] ?? ''), ['hr'], true);
-            $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true);
+            $isSuperAdmin = TenantConfigService::canUserSelfApprove($this->db, $auth, 'leave');
+            $curLvl = (($leaveRow['status_level_1'] ?? 'pending') === 'approved' && !empty($leaveRow['approver_id_2'])) ? 2 : 1;
+            $wfDec = TenantConfigService::canUserApproveWorkflowLevel($this->db, $auth, 'leave', 'hrm', (int)$leaveRow['user_id'], $curLvl === 2 ? (int)$leaveRow['approver_id_2'] : (int)$leaveRow['approver_id'], $curLvl);
+            $isHrOrSuper = $isSuperAdmin || !empty($wfDec['allowed']) || TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['hr'], 'hrm', 'approve', ['all']);
 
             $isCreator = ((int)$auth['user_id'] === (int)$leaveRow['user_id']);
             if ($isCreator && !$isSuperAdmin) {
@@ -1335,6 +1314,11 @@ class HRMController {
             if (!$isApprover1 && !$isApprover2 && !$isHrOrSuper) {
                 if ($ownTx && $this->db->inTransaction()) $this->db->rollBack();
                 respond(403, null, 'Bạn không phải là người phê duyệt được chỉ định cho yêu cầu này', false);
+            }
+
+            if ($isApprover1 && !$isApprover2 && !$isSuperAdmin && ($leaveRow['status_level_1'] ?? '') === 'approved') {
+                if ($ownTx && $this->db->inTransaction()) $this->db->rollBack();
+                respond(422, null, 'Cấp 1 đã phê duyệt trước đó, đang chờ Cấp 2 xử lý', false);
             }
 
             if ($isApprover2 && !$isApprover1 && !$isSuperAdmin) {
@@ -1370,7 +1354,9 @@ class HRMController {
                 if (!empty($approverNote) && $approverNote !== 'Không có ghi chú thêm') {
                     $reasonAppend = "\n[Từ chối: " . $approverNote . "]";
                     try {
-                        $stmtReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?) WHERE id = ?");
+                        $stmtReason = ($forUpdate === '')
+                            ? $this->db->prepare("UPDATE hrm_leave_requests SET reason = COALESCE(reason, '') || ? WHERE id = ?")
+                            : $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?) WHERE id = ?");
                         $stmtReason->execute([$reasonAppend, $id]);
                     } catch (\Throwable $e) {}
                 }
@@ -1430,14 +1416,16 @@ class HRMController {
                             $updCompStmt->execute([$userId, $compDays]);
 
                             $compLog = " [Đã tự động cộng +{$compDays} ngày vào quỹ nghỉ bù (Hệ số {$otRate}x)]";
-                            $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?) WHERE id = ?");
+                            $updReason = ($forUpdate === '')
+                                ? $this->db->prepare("UPDATE hrm_leave_requests SET reason = COALESCE(reason, '') || ? WHERE id = ?")
+                                : $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?) WHERE id = ?");
                             $updReason->execute([$compLog, (int)$leaveRow['id']]);
                         }
                     }
                 }
 
                 if (($type === 'annual' || $type === 'compensatory') && ($leaveRow['status'] ?? '') !== 'approved') {
-                    $profStmt = $this->db->prepare("SELECT annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used FROM hrm_profiles WHERE user_id = ? LIMIT 1 FOR UPDATE");
+                    $profStmt = $this->db->prepare("SELECT annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used FROM hrm_profiles WHERE user_id = ? LIMIT 1{$forUpdate}");
                     $profStmt->execute([$userId]);
                     $profile = $profStmt->fetch(PDO::FETCH_ASSOC);
                     
@@ -1487,7 +1475,9 @@ class HRMController {
                     if ($deductUnpaid > 0) $parts[] = "-{$deductUnpaid} ngày không lương";
                     
                     $deductionLog = " [Khấu trừ thực tế: " . implode(', ', $parts) . "]";
-                    $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?), unpaid_days = ? WHERE id = ?");
+                    $updReason = ($forUpdate === '')
+                        ? $this->db->prepare("UPDATE hrm_leave_requests SET reason = COALESCE(reason, '') || ?, unpaid_days = ? WHERE id = ?")
+                        : $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?), unpaid_days = ? WHERE id = ?");
                     $updReason->execute([$deductionLog, $deductUnpaid, (int)$leaveRow['id']]);
                 } elseif ($type === 'special_paid') {
                     // Phân bổ nghỉ chế độ Hiếu/Hỉ theo Điều 115 BLLĐ 2019
@@ -1507,7 +1497,7 @@ class HRMController {
                     $deductUnpaid = 0.0;
 
                     if ($overQuotaDays > 0) {
-                        $profStmt = $this->db->prepare("SELECT annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used FROM hrm_profiles WHERE user_id = ? LIMIT 1 FOR UPDATE");
+                        $profStmt = $this->db->prepare("SELECT annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used FROM hrm_profiles WHERE user_id = ? LIMIT 1{$forUpdate}");
                         $profStmt->execute([$userId]);
                         $profile = $profStmt->fetch(PDO::FETCH_ASSOC);
                         
@@ -1552,7 +1542,9 @@ class HRMController {
                     if ($deductUnpaid > 0) $parts[] = "-{$deductUnpaid} ngày không lương";
                     
                     $deductionLog = " [Phân bổ ngày nghỉ: " . implode(', ', $parts) . "]";
-                    $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?), unpaid_days = ? WHERE id = ?");
+                    $updReason = ($forUpdate === '')
+                        ? $this->db->prepare("UPDATE hrm_leave_requests SET reason = COALESCE(reason, '') || ?, unpaid_days = ? WHERE id = ?")
+                        : $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?), unpaid_days = ? WHERE id = ?");
                     $updReason->execute([$deductionLog, $deductUnpaid, (int)$leaveRow['id']]);
                 } elseif ($type === 'unpaid') {
                     $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET unpaid_days = ? WHERE id = ?");
@@ -1564,7 +1556,9 @@ class HRMController {
                     $unpaidDays = round($days * (1.0 - ($salaryRate / 100.0)), 2);
                     $paidDays = round($days - $unpaidDays, 2);
                     $wfhLog = " [Đã duyệt WFH: Hưởng {$salaryRate}% lương ~ {$paidDays} công]";
-                    $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?), unpaid_days = ?, salary_rate = ? WHERE id = ?");
+                    $updReason = ($forUpdate === '')
+                        ? $this->db->prepare("UPDATE hrm_leave_requests SET reason = COALESCE(reason, '') || ?, unpaid_days = ?, salary_rate = ? WHERE id = ?")
+                        : $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?), unpaid_days = ?, salary_rate = ? WHERE id = ?");
                     $updReason->execute([$wfhLog, $unpaidDays, $salaryRate, (int)$leaveRow['id']]);
                 }
 
@@ -1785,10 +1779,10 @@ class HRMController {
     }
 
     public function showAdvance(array $auth, int $id): void {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
         $userId = (int)($auth['user_id'] ?? $auth['id'] ?? 0);
-        $role = strtolower((string)($auth['role'] ?? ''));
-        $isFinOrAdmin = $this->isAdmin($auth) || in_array($role, ['accountant', 'ke_toan'], true);
-        $where = "a.id = ? AND u.tenant_id = ? AND (a.status != 'draft' OR a.user_id = ?)";
+        $isFinOrAdmin = $this->isAdmin($auth) || TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['accountant', 'ke_toan'], 'expenses', 'approve', ['all']);
+        $where = "a.id = ? AND u.tenant_id = ? AND a.deleted_at IS NULL AND (a.status != 'draft' OR a.user_id = ?)";
         $params = [$id, $auth['tenant_id'], $userId];
         if (!$isFinOrAdmin) {
             $where .= " AND (a.user_id = ? OR a.approver_id = ? OR a.approver_id_2 = ? OR a.related_user_ids LIKE ? OR a.related_user_ids LIKE ? OR u.team_id IN (SELECT id FROM teams WHERE leader_id = ?))";
@@ -2109,12 +2103,17 @@ class HRMController {
             respond(400, null, 'Thiếu ID hoặc trạng thái phê duyệt', false);
         }
 
-        $statusInput = $b['status'];
+        $statusInput = strtolower(trim((string)$b['status']));
+        if (!in_array($statusInput, ['approved', 'rejected'], true)) {
+            respond(400, null, 'Trạng thái phê duyệt không hợp lệ (chỉ chấp nhận approved hoặc rejected)', false);
+        }
         $approverNote = $b['reason'] ?? $b['reject_reason'] ?? $b['manager_note'] ?? $b['note'] ?? 'Không có ghi chú thêm';
 
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $forUpdate = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite') ? '' : ' FOR UPDATE';
         $this->db->beginTransaction();
         try {
-            $stmtA = $this->db->prepare("SELECT a.*, u.full_name FROM hrm_salary_advances a JOIN users u ON a.user_id = u.id WHERE a.id = ? AND u.tenant_id = ? FOR UPDATE");
+            $stmtA = $this->db->prepare("SELECT a.*, u.full_name FROM hrm_salary_advances a JOIN users u ON a.user_id = u.id WHERE a.id = ? AND u.tenant_id = ? AND a.deleted_at IS NULL{$forUpdate}");
             $stmtA->execute([$id, $auth['tenant_id']]);
             $advRow = $stmtA->fetch(PDO::FETCH_ASSOC);
 
@@ -2125,17 +2124,17 @@ class HRMController {
 
             if (in_array($advRow['status'] ?? '', ['approved', 'rejected', 'paid', 'completed'], true)) {
                 $this->db->rollBack();
-                respond(400, null, 'Đơn tạm ứng này đã được xử lý trước đó', false);
+                respond(422, null, 'Đơn tạm ứng này đã được xử lý trước đó', false);
             }
 
             $isApprover1 = ((int)$auth['user_id'] === (int)$advRow['approver_id']);
             $isApprover2 = ((int)$auth['user_id'] === (int)$advRow['approver_id_2']);
-            $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
-            $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true);
-
-            $isExecutive = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
+            $isSuperAdmin = TenantConfigService::canUserSelfApprove($this->db, $auth, 'advance');
+            $curAdvLvl = (($advRow['status_level_1'] ?? 'pending') === 'approved' && !empty($advRow['approver_id_2'])) ? 2 : 1;
+            $wfAdvDec = TenantConfigService::canUserApproveWorkflowLevel($this->db, $auth, 'advance', 'hrm', (int)$advRow['user_id'], $curAdvLvl === 2 ? (int)$advRow['approver_id_2'] : (int)$advRow['approver_id'], $curAdvLvl, (float)($advRow['amount'] ?? 0));
+            $isExecutive = $isSuperAdmin || !empty($wfAdvDec['allowed']) || TenantConfigService::hasGlobalScope($this->db, $auth, 'hrm', 'approve') || TenantConfigService::hasGlobalScope($this->db, $auth, 'expenses', 'approve');
             $isCreator = ((int)$auth['user_id'] === (int)$advRow['user_id']);
-            if ($isCreator && !$isExecutive) {
+            if ($isCreator && !$isSuperAdmin) {
                 $this->db->rollBack();
                 respond(403, null, 'Chỉ Ban Giám đốc mới có thẩm quyền phê duyệt đề xuất tạm ứng của cấp Quản lý', false);
             }
@@ -2143,6 +2142,11 @@ class HRMController {
             if (!$isApprover1 && !$isApprover2 && !$isExecutive) {
                 $this->db->rollBack();
                 respond(403, null, 'Bạn không phải là người phê duyệt được chỉ định cho yêu cầu tạm ứng này', false);
+            }
+
+            if ($isApprover1 && !$isApprover2 && !$isSuperAdmin && ($advRow['status_level_1'] ?? '') === 'approved') {
+                $this->db->rollBack();
+                respond(422, null, 'Cấp 1 đã phê duyệt trước đó, đang chờ Cấp 2 xử lý', false);
             }
 
             if ($isApprover2 && !$isApprover1 && !$isSuperAdmin) {
@@ -2174,7 +2178,9 @@ class HRMController {
                 if (!empty($approverNote) && $approverNote !== 'Không có ghi chú thêm') {
                     $reasonAppend = "\n[Từ chối: " . $approverNote . "]";
                     try {
-                        $stmtReason = $this->db->prepare("UPDATE hrm_salary_advances SET reason = CONCAT(COALESCE(reason, ''), ?) WHERE id = ?");
+                        $stmtReason = ($forUpdate === '')
+                            ? $this->db->prepare("UPDATE hrm_salary_advances SET reason = COALESCE(reason, '') || ? WHERE id = ?")
+                            : $this->db->prepare("UPDATE hrm_salary_advances SET reason = CONCAT(COALESCE(reason, ''), ?) WHERE id = ?");
                         $stmtReason->execute([$reasonAppend, $id]);
                     } catch (\Throwable $e) {}
                 }
@@ -2212,8 +2218,9 @@ class HRMController {
             $stmtUpdate->execute($params);
 
             $this->db->commit();
-        } catch (\Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            if (in_array(get_class($e), ['RespondException', 'ResponseException'], true)) throw $e;
             respond(500, null, 'Lỗi khi phê duyệt tạm ứng: ' . $e->getMessage(), false);
         }
 
@@ -2307,14 +2314,8 @@ class HRMController {
         // Standard work days in month (usually 26, custom if provided)
         $workDaysRequired = (int)($b['work_days_required'] ?? 26);
 
-        // Fetch system settings for grace minutes
-        $stmtGrace = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ? LIMIT 1");
-        
-        $stmtGrace->execute(['hrm_late_grace_male']);
-        $graceMale = (int)($stmtGrace->fetchColumn() ?: 30); // Default 30 mins
-        
-        $stmtGrace->execute(['hrm_late_grace_female']);
-        $graceFemale = (int)($stmtGrace->fetchColumn() ?: 60); // Default 60 mins
+        // Fetch system settings for grace minutes (tenant-scoped)
+        [$graceMale, $graceFemale] = $this->getSystemLateGraceSettings((int)$auth['tenant_id']);
 
         // Check if special period
         $isSpecialPeriod = false;
@@ -2327,6 +2328,7 @@ class HRMController {
         }
 
         // Fetch all employees in tenant (excluding admin and director roles)
+        $exclEmpCond = $this->excludedEmailClause((int)$auth['tenant_id'], 'u.email');
         $empStmt = $this->db->prepare("
             SELECT u.id, u.full_name, u.gender, u.role, p.base_salary, p.deal_salary, p.has_insurance,
                    p.allowance_meal, p.allowance_meal_type, p.allowance_travel, p.allowance_phone, p.kpi_target, p.joined_date, p.custom_fields_json,
@@ -2334,7 +2336,7 @@ class HRMController {
                    p.annual_leave_total, p.annual_leave_used, p.compensatory_leave_total, p.compensatory_leave_used
             FROM users u
             LEFT JOIN hrm_profiles p ON u.id = p.user_id
-            WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+            WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND {$exclEmpCond}
         ");
         $empStmt->execute([$auth['tenant_id']]);
         $employees = $empStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2370,9 +2372,8 @@ class HRMController {
                 }
             }
 
-            // Load holiday schedules for automatic paid holiday credit
-            $stmtHol = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'holiday_schedules' LIMIT 1");
-            $holidaysJson = $stmtHol ? (string)$stmtHol->fetchColumn() : '[]';
+            // Load holiday schedules for automatic paid holiday credit (tenant-scoped)
+            $holidaysJson = (string)TenantConfigService::getSetting($this->db, (int)$auth['tenant_id'], 'holiday_schedules', '[]');
             $holidayList = json_decode($holidaysJson, true) ?: [];
         }
         $this->db->beginTransaction();
@@ -2521,7 +2522,7 @@ class HRMController {
             }
 
             $userRole = strtolower($emp['role'] ?? '');
-            $isDirector = in_array($userRole, ['director', 'superadmin', 'super_admin'], true);
+            $isDirector = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['director', 'superadmin', 'super_admin', 'admin']);
 
             if ($isSpecialPeriod) {
                 $actualWorkedDays = $isThang13 ? $workDaysRequired : 0;
@@ -3012,7 +3013,7 @@ class HRMController {
                     JOIN users u ON p.user_id = u.id
                     LEFT JOIN hrm_profiles hp ON hp.user_id = u.id
                     LEFT JOIN teams tm ON u.team_id = tm.id
-                    WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'{$extraWhere}
+                    WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND " . $this->excludedEmailClause((int)($auth['tenant_id'] ?? $tid ?? $GLOBALS['current_tenant_id'] ?? 1), 'u.email') . "{$extraWhere}
                     ORDER BY p.month_year DESC, p.id DESC
                 ");
                 $stmt->execute(array_merge([$auth['tenant_id']], $extraParams));
@@ -3023,7 +3024,7 @@ class HRMController {
                     JOIN users u ON p.user_id = u.id
                     LEFT JOIN hrm_profiles hp ON hp.user_id = u.id
                     LEFT JOIN teams tm ON u.team_id = tm.id
-                    WHERE u.tenant_id = ? AND p.user_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'{$extraWhere}
+                    WHERE u.tenant_id = ? AND p.user_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND " . $this->excludedEmailClause((int)($auth['tenant_id'] ?? $tid ?? $GLOBALS['current_tenant_id'] ?? 1), 'u.email') . "{$extraWhere}
                     ORDER BY p.month_year DESC, p.id DESC
                 ");
                 $stmt->execute(array_merge([$auth['tenant_id'], $auth['user_id']], $extraParams));
@@ -3039,7 +3040,7 @@ class HRMController {
                 JOIN users u ON p.user_id = u.id
                 LEFT JOIN hrm_profiles hp ON hp.user_id = u.id
                 LEFT JOIN teams tm ON u.team_id = tm.id
-                WHERE u.tenant_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'{$extraWhere}
+                WHERE u.tenant_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND " . $this->excludedEmailClause((int)($auth['tenant_id'] ?? $tid ?? $GLOBALS['current_tenant_id'] ?? 1), 'u.email') . "{$extraWhere}
             ");
             $stmt->execute(array_merge([$auth['tenant_id'], $monthYear], $extraParams));
         } else {
@@ -3049,7 +3050,7 @@ class HRMController {
                 JOIN users u ON p.user_id = u.id
                 LEFT JOIN hrm_profiles hp ON hp.user_id = u.id
                 LEFT JOIN teams tm ON u.team_id = tm.id
-                WHERE u.tenant_id = ? AND p.user_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'{$extraWhere}
+                WHERE u.tenant_id = ? AND p.user_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND " . $this->excludedEmailClause((int)($auth['tenant_id'] ?? $tid ?? $GLOBALS['current_tenant_id'] ?? 1), 'u.email') . "{$extraWhere}
             ");
             $stmt->execute(array_merge([$auth['tenant_id'], $auth['user_id'], $monthYear], $extraParams));
         }
@@ -4199,24 +4200,27 @@ class HRMController {
     }
 
     private function fetchPendingApprovals(array $auth): array {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
         $pending = [];
+        $tid = (int)($auth['tenant_id'] ?? 1);
         $userId = (int)$auth['user_id'];
         $userFullName = trim(mb_strtolower($auth['full_name'] ?? $auth['name'] ?? ''));
         $role = strtolower($auth['role'] ?? '');
-        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
-        $isHrAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true);
+        $isGlobalAdmin = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director'], 'hrm', 'approve', ['all']);
+        $isHrAdmin = $isGlobalAdmin || TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['hr'], 'hrm', 'approve', ['all']);
+        $isAccountantApprover = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['accountant'], 'expenses', 'approve');
 
         $ledTeamIds = [];
         $managedUserIds = [];
-        if ($role === 'manager') {
-            $stmtL = $this->db->prepare("SELECT id FROM teams WHERE leader_id = ?");
-            $stmtL->execute([$userId]);
+        if (TenantConfigService::resolvePermissionScope($this->db, $auth, 'hrm', 'approve') === 'team' || $role === 'manager') {
+            $stmtL = $this->db->prepare("SELECT id FROM teams WHERE tenant_id = ? AND (leader_id = ? OR default_approver_id = ?)");
+            $stmtL->execute([$tid, $userId, $userId]);
             $ledTeamIds = array_map('intval', $stmtL->fetchAll(PDO::FETCH_COLUMN) ?: []);
 
             if (!empty($ledTeamIds)) {
                 $placeholders = implode(',', array_fill(0, count($ledTeamIds), '?'));
-                $stmtM = $this->db->prepare("SELECT id FROM users WHERE team_id IN ($placeholders)");
-                $stmtM->execute($ledTeamIds);
+                $stmtM = $this->db->prepare("SELECT id FROM users WHERE tenant_id = ? AND team_id IN ($placeholders)");
+                $stmtM->execute(array_merge([$tid], $ledTeamIds));
                 $managedUserIds = array_map('intval', $stmtM->fetchAll(PDO::FETCH_COLUMN) ?: []);
             }
         }
@@ -4236,7 +4240,7 @@ class HRMController {
             LEFT JOIN users u_app1 ON l.approver_id = u_app1.id
             LEFT JOIN users u_app2 ON l.approver_id_2 = u_app2.id
             LEFT JOIN users u_real ON l.approved_by = u_real.id
-            WHERE u.tenant_id = ? AND l.status = 'pending' AND l.user_id != ?
+            WHERE u.tenant_id = ? AND l.deleted_at IS NULL AND l.status = 'pending' AND l.user_id != ?
             ORDER BY l.created_at DESC
             LIMIT 200
         ");
@@ -4329,7 +4333,7 @@ class HRMController {
             LEFT JOIN users u_app1 ON a.approver_id = u_app1.id
             LEFT JOIN users u_app2 ON a.approver_id_2 = u_app2.id
             LEFT JOIN users u_real ON a.approved_by = u_real.id
-            WHERE u.tenant_id = ? AND a.status = 'pending' AND a.user_id != ?
+            WHERE u.tenant_id = ? AND a.deleted_at IS NULL AND a.status = 'pending' AND a.user_id != ?
             ORDER BY a.created_at DESC
             LIMIT 200
         ");
@@ -4446,7 +4450,7 @@ class HRMController {
                         $shouldShow = true;
                         $levelText = ' - Cấp 2';
                     }
-                } else if (in_array($role, ['accountant'], true) || $isGlobalAdmin) {
+                } else if ($isAccountantApprover || $isGlobalAdmin) {
                     $shouldShow = true;
                     $levelText = ' - Cấp 2';
                 }
@@ -4527,14 +4531,10 @@ class HRMController {
 
         // 4. Pending Checkins - CHỈ LẤY ĐƠN BỔ SUNG CHẤM CÔNG THỦ CÔNG (Bỏ giải trình đi trễ và ngoài bán kính vì auto-accept)
         self::healPollutedCheckIns($this->db);
-        if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true) || !empty($managedUserIds)) {
-            // Lấy ID của Trưởng phòng HCNS (Phương) để tự động gắn vào người theo dõi
-            $phuongId = 0;
-            try {
-                $stmtHrP = $this->db->prepare("SELECT id FROM users WHERE (username = 'phuongntd' OR full_name LIKE '%Duy Phương%' OR role = 'hr') LIMIT 1");
-                $stmtHrP->execute();
-                $phuongId = (int)$stmtHrP->fetchColumn();
-            } catch (\Throwable $eP) {}
+        if ($isHrAdmin || !empty($managedUserIds)) {
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $hrRep = TenantConfigService::resolveHrRepresentative($this->db, $tid, 0);
+            $phuongId = (int)($hrRep['id'] ?? 0);
 
             $sqlCheck = "SELECT c.id, c.user_id, c.manager_id, u.full_name as employee_name, u.avatar_url as employee_avatar, u.team_id,
                                 c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, 
@@ -4556,7 +4556,7 @@ class HRMController {
                            AND c.reason NOT LIKE '%Ngoài bán kính%'
                            AND c.reason NOT LIKE '%Không có tọa độ GPS%'";
             $pCheck = [$auth['tenant_id'], $userId];
-            if (!in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true)) {
+            if (!$isHrAdmin) {
                 $placeholders = implode(',', array_fill(0, count($managedUserIds), '?'));
                 $sqlCheck .= " AND c.user_id IN ($placeholders)";
                 $pCheck = array_merge($pCheck, $managedUserIds);
@@ -4891,12 +4891,9 @@ class HRMController {
 
         // 4. My Checkins (Chỉ lấy đơn bổ sung chấm công thủ công, tuyệt đối không lấy chấm công thường/đi trễ/ngoài bán kính)
         self::healPollutedCheckIns($this->db);
-        $phuongMyId = 0;
-        try {
-            $stmtHrMyP = $this->db->prepare("SELECT id FROM users WHERE (username = 'phuongntd' OR full_name LIKE '%Duy Phương%' OR role = 'hr') LIMIT 1");
-            $stmtHrMyP->execute();
-            $phuongMyId = (int)$stmtHrMyP->fetchColumn();
-        } catch (\Throwable $eMyP) {}
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $hrMyRep = TenantConfigService::resolveHrRepresentative($this->db, (int)($auth['tenant_id'] ?? 1), 0);
+        $phuongMyId = (int)($hrMyRep['id'] ?? 0);
 
         $stmtCheckins = $this->db->prepare("
             SELECT c.id, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, 
@@ -5318,23 +5315,25 @@ class HRMController {
     }
 
     private function fetchAllApprovals(array $auth): array {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
         $userId = (int)$auth['user_id'];
+        $tidAll = (int)($auth['tenant_id'] ?? 1);
         $role = strtolower($auth['role'] ?? '');
-        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'general_director', 'sale_director', 'executive'], true);
-        $isHrAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'general_director', 'sale_director', 'executive', 'hr', 'nhan_su'], true);
-        $isFinanceAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'general_director', 'sale_director', 'executive', 'accountant', 'ke_toan', 'finance'], true);
+        $isGlobalAdmin = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'general_director', 'sale_director', 'executive'], 'hrm', 'approve', ['all']);
+        $isHrAdmin = $isGlobalAdmin || TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['hr', 'nhan_su'], 'hrm', 'approve', ['all']);
+        $isFinanceAdmin = $isGlobalAdmin || TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['accountant', 'ke_toan', 'finance'], 'expenses', 'approve', ['all']);
 
-        $isManagerOrLeader = in_array($role, ['manager', 'leader', 'head_of_department', 'truongphong', 'quanly', 'assistant', 'tro_ly'], true);
+        $isManagerOrLeader = TenantConfigService::resolvePermissionScope($this->db, $auth, 'hrm', 'approve') === 'team' || TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['manager', 'leader', 'head_of_department', 'truongphong', 'quanly', 'assistant', 'tro_ly']);
         $managedUserIds = [];
         if ($isManagerOrLeader) {
-            $stmtL = $this->db->prepare("SELECT id FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))");
-            $stmtL->execute([$userId, $userId]);
+            $stmtL = $this->db->prepare("SELECT id FROM teams WHERE tenant_id = ? AND (leader_id = ? OR default_approver_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, '')))");
+            $stmtL->execute([$tidAll, $userId, $userId, $userId]);
             $ledTeamIds = array_map('intval', $stmtL->fetchAll(PDO::FETCH_COLUMN) ?: []);
 
             if (!empty($ledTeamIds)) {
                 $placeholders = implode(',', array_fill(0, count($ledTeamIds), '?'));
-                $stmtM = $this->db->prepare("SELECT id FROM users WHERE team_id IN ($placeholders)");
-                $stmtM->execute($ledTeamIds);
+                $stmtM = $this->db->prepare("SELECT id FROM users WHERE tenant_id = ? AND team_id IN ($placeholders)");
+                $stmtM->execute(array_merge([$tidAll], $ledTeamIds));
                 $managedUserIds = array_map('intval', $stmtM->fetchAll(PDO::FETCH_COLUMN) ?: []);
             }
         }
@@ -5650,12 +5649,9 @@ class HRMController {
             AND c.reason NOT LIKE '%Ngoài bán kính%'
             AND c.reason NOT LIKE '%Không có tọa độ GPS%'";
         
-        $phuongAllId = 0;
-        try {
-            $stmtHrAllP = $this->db->prepare("SELECT id FROM users WHERE (username = 'phuongntd' OR full_name LIKE '%Duy Phương%' OR role = 'hr') LIMIT 1");
-            $stmtHrAllP->execute();
-            $phuongAllId = (int)$stmtHrAllP->fetchColumn();
-        } catch (\Throwable $eAllP) {}
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $hrAllRep = TenantConfigService::resolveHrRepresentative($this->db, (int)$tidAll, 0);
+        $phuongAllId = (int)($hrAllRep['id'] ?? 0);
 
         if ($isHrAdmin) {
             $stmtCheckins = $this->db->prepare("
@@ -5979,40 +5975,46 @@ class HRMController {
         if (!$row) {
             respond(404, null, 'Không tìm thấy yêu cầu nghỉ phép', false);
         }
-        if (in_array($row['status'], ['approved', 'completed'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isStrictAdmin = $this->isAdmin($auth);
+        if (in_array($row['status'], ['approved', 'completed'], true) && !$isStrictAdmin) {
             respond(400, null, 'Không thể xóa đơn nghỉ phép đã được duyệt', false);
         }
-        $isPrivileged = $this->isAdmin($auth) || in_array($auth['role'], ['manager', 'director', 'hr'], true);
+        $isPrivileged = $isStrictAdmin || TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['manager', 'director', 'hr'], 'hrm', 'delete');
         $isCreator = ((int)$row['user_id'] === (int)$auth['user_id']);
         if (!$isCreator && !$isPrivileged) {
             respond(403, null, 'Bạn không có quyền xóa yêu cầu này', false);
         }
         
-        $this->db->prepare("DELETE l FROM hrm_leave_requests l JOIN users u ON l.user_id = u.id WHERE l.id = ? AND u.tenant_id = ?")->execute([$id, $auth['tenant_id']]);
+        $nowExpr = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite') ? 'CURRENT_TIMESTAMP' : 'NOW()';
+        $this->db->prepare("UPDATE hrm_leave_requests SET deleted_at = {$nowExpr} WHERE id = ? AND deleted_at IS NULL")->execute([$id]);
         respond(200, null, 'Đã xóa yêu cầu nghỉ phép');
     }
 
     public function deleteAdvance(array $auth, int $id): void {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
         $stmt = $this->db->prepare("
             SELECT a.* FROM hrm_salary_advances a
             JOIN users u ON a.user_id = u.id
-            WHERE a.id = ? AND u.tenant_id = ?
+            WHERE a.id = ? AND u.tenant_id = ? AND a.deleted_at IS NULL
         ");
         $stmt->execute([$id, $auth['tenant_id']]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
             respond(404, null, 'Không tìm thấy yêu cầu tạm ứng', false);
         }
-        if (in_array($row['status'], ['approved', 'paid', 'completed'], true)) {
+        $isStrictAdmin = $this->isAdmin($auth);
+        if ($row['status'] === 'paid' || (in_array($row['status'], ['approved', 'completed'], true) && !$isStrictAdmin)) {
             respond(400, null, 'Không thể xóa yêu cầu tạm ứng đã được duyệt hoặc chi tiền', false);
         }
-        $isPrivileged = $this->isAdmin($auth) || in_array($auth['role'], ['manager', 'director', 'hr'], true);
+        $isPrivileged = $isStrictAdmin || TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['manager', 'director', 'hr'], 'hrm', 'delete');
         $isCreator = ((int)$row['user_id'] === (int)$auth['user_id']);
         if (!$isCreator && !$isPrivileged) {
             respond(403, null, 'Bạn không có quyền xóa yêu cầu này', false);
         }
         
-        $this->db->prepare("DELETE a FROM hrm_salary_advances a JOIN users u ON a.user_id = u.id WHERE a.id = ? AND u.tenant_id = ?")->execute([$id, $auth['tenant_id']]);
+        $nowExpr = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite') ? 'CURRENT_TIMESTAMP' : 'NOW()';
+        $this->db->prepare("UPDATE hrm_salary_advances SET deleted_at = {$nowExpr} WHERE id = ? AND deleted_at IS NULL")->execute([$id]);
         respond(200, null, 'Đã xóa yêu cầu tạm ứng');
     }
 
@@ -6286,16 +6288,16 @@ class HRMController {
             $stmt->execute([$jsonVal, $id, $tid]);
         } elseif ($type === 'bulk_attendance' || $type === 'bulk' || $type === 'checkin_bulk') {
             if (!$isPrivileged) {
-                $chk = $this->db->prepare("SELECT r.id FROM attendance_bulk_requests r JOIN users u ON r.user_id = u.id WHERE r.id = ? AND u.tenant_id = ? AND (r.user_id = ? OR r.approver_id = ?)");
-                $chk->execute([$id, $tid, $uid, $uid]);
+                $chk = $this->db->prepare("SELECT r.id FROM attendance_bulk_requests r JOIN users u ON r.user_id = u.id WHERE r.id = ? AND u.tenant_id = ? AND (r.user_id = ? OR r.manager_id = ? OR r.approver2_id = ? OR r.hr_id = ?)");
+                $chk->execute([$id, $tid, $uid, $uid, $uid, $uid]);
                 if (!$chk->fetch()) respond(403, null, 'Bạn không có quyền cập nhật người liên quan cho đơn này', false);
             }
             $stmt = $this->db->prepare("UPDATE attendance_bulk_requests r JOIN users u ON r.user_id = u.id SET r.related_user_ids = ? WHERE r.id = ? AND u.tenant_id = ?");
             $stmt->execute([$jsonVal, $id, $tid]);
         } elseif ($type === 'deposit' || $type === 'deposits') {
             if (!$isPrivileged) {
-                $chk = $this->db->prepare("SELECT d.id FROM deposits d LEFT JOIN contacts c ON d.contact_id = c.id LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ? AND (c.tenant_id = ? OR p.tenant_id = ?) AND (d.created_by = ? OR d.sale_id = ?)");
-                $chk->execute([$id, $tid, $tid, $uid, $uid]);
+                $chk = $this->db->prepare("SELECT d.id FROM deposits d LEFT JOIN contacts c ON d.contact_id = c.id LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ? AND (c.tenant_id = ? OR p.tenant_id = ?) AND (d.created_by = ? OR c.owner_id = ? OR d.accountant_id = ?)");
+                $chk->execute([$id, $tid, $tid, $uid, $uid, $uid]);
                 if (!$chk->fetch()) respond(403, null, 'Bạn không có quyền cập nhật người liên quan cho khoản đặt cọc này', false);
             }
             $stmt = $this->db->prepare("UPDATE deposits d LEFT JOIN contacts c ON d.contact_id = c.id LEFT JOIN projects p ON d.project_id = p.id SET d.related_user_ids = ? WHERE d.id = ? AND (c.tenant_id = ? OR p.tenant_id = ?)");
@@ -6459,11 +6461,14 @@ class HRMController {
     }
 
     private function requireAccountingAzAccess(array $auth, bool $write = false): void {
-        $role = strtolower(trim($auth['role'] ?? ''));
+        require_once __DIR__ . '/../config/TenantConfigService.php';
         $allowed = $write
             ? ['admin', 'super_admin', 'superadmin', 'director', 'accountant', 'ketoan', 'hr', 'cfo']
             : ['admin', 'super_admin', 'superadmin', 'director', 'accountant', 'ketoan', 'hr', 'cfo', 'manager'];
-        if (!in_array($role, $allowed, true)) {
+        $act = $write ? 'write' : 'read';
+        $ok = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, $allowed, 'finance', $act)
+            || TenantConfigService::doesUserSatisfyRoles($this->db, $auth, $allowed, 'hrm', $act);
+        if (!$ok) {
             respond(403, null, 'Bạn không có quyền truy cập phân hệ Kế toán & Lương A-Z', false);
         }
     }
@@ -6484,7 +6489,7 @@ class HRMController {
         $uStmt = $this->db->prepare("
             SELECT id, full_name, email, phone, role, is_active, citizen_id, bank_name, bank_account, avatar_url, job_title, gender, created_at
             FROM users
-            WHERE tenant_id = ? AND role NOT IN ('superadmin', 'super_admin') AND email != 'info@ideas.edu.vn' AND id != 9000001 AND full_name != 'SI IDEAS' AND deleted_at IS NULL
+            WHERE tenant_id = ? AND role NOT IN ('superadmin', 'super_admin') AND " . $this->excludedEmailClause((int)($auth['tenant_id'] ?? $tid ?? $GLOBALS['current_tenant_id'] ?? 1), 'email') . " AND id != 9000001 AND full_name != 'SI IDEAS' AND deleted_at IS NULL
         ");
         $uStmt->execute([$tid]);
         $allUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -6542,7 +6547,7 @@ class HRMController {
                 COALESCE(SUM(CASE WHEN COALESCE(p.has_insurance, 1) = 1 THEN (CASE WHEN COALESCE(p.base_salary, 0) > 0 THEN p.base_salary ELSE COALESCE(p.deal_salary, 0) END) ELSE 0 END), 0) as projected_ins_salary
             FROM users u
             LEFT JOIN hrm_profiles p ON u.id = p.user_id
-            WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn' AND u.id != 9000001 AND u.full_name != 'SI IDEAS' AND u.deleted_at IS NULL
+            WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND " . $this->excludedEmailClause((int)($auth['tenant_id'] ?? $tid ?? $GLOBALS['current_tenant_id'] ?? 1), 'u.email') . " AND u.id != 9000001 AND u.full_name != 'SI IDEAS' AND u.deleted_at IS NULL
         ");
         $profStmt->execute([$tid]);
         $profData = $profStmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -6934,7 +6939,7 @@ class HRMController {
                 COALESCE(SUM(CASE WHEN COALESCE(p.has_insurance, 1) = 1 THEN (CASE WHEN COALESCE(p.base_salary, 0) > 0 THEN p.base_salary ELSE COALESCE(p.deal_salary, 0) END) ELSE 0 END), 0) as projected_ins_salary
             FROM users u
             LEFT JOIN hrm_profiles p ON u.id = p.user_id
-            WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn' AND u.id != 9000001 AND u.full_name != 'SI IDEAS' AND u.deleted_at IS NULL
+            WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND " . $this->excludedEmailClause((int)($auth['tenant_id'] ?? $tid ?? $GLOBALS['current_tenant_id'] ?? 1), 'u.email') . " AND u.id != 9000001 AND u.full_name != 'SI IDEAS' AND u.deleted_at IS NULL
         ");
         $profStmt->execute([$tid]);
         $profData = $profStmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -7449,7 +7454,7 @@ class HRMController {
                 WHERE month_year LIKE ?
                 GROUP BY user_id
             ) ot ON ot.user_id = u.id
-            WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+            WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND " . $this->excludedEmailClause((int)($auth['tenant_id'] ?? $tid ?? $GLOBALS['current_tenant_id'] ?? 1), 'u.email') . "
             ORDER BY u.id ASC
         ";
         try {
@@ -7463,7 +7468,7 @@ class HRMController {
                        p.base_salary, p.deal_salary, p.annual_leave_used, p.annual_leave_total
                 FROM users u
                 LEFT JOIN hrm_profiles p ON u.id = p.user_id
-                WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+                WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND " . $this->excludedEmailClause((int)($auth['tenant_id'] ?? $tid ?? $GLOBALS['current_tenant_id'] ?? 1), 'u.email') . "
                 ORDER BY u.id ASC
             ");
             $stmt->execute([$tid]);
@@ -7618,16 +7623,10 @@ class HRMController {
             $targetMonth = date('Y-m');
         }
 
-        // 1. Lấy thông tin Tenant
-        $tenantName = 'CÔNG TY TNHH VIỆN QUỐC TẾ IDEAS';
-        try {
-            $tStmt = $this->db->prepare("SELECT name FROM tenants WHERE id = ? LIMIT 1");
-            $tStmt->execute([$tid]);
-            $tRow = $tStmt->fetch(PDO::FETCH_ASSOC);
-            if (!empty($tRow['name'])) {
-                $tenantName = $tRow['name'];
-            }
-        } catch (\Throwable $e) {}
+        // 1. Lấy thông tin Tenant động từ TenantConfigService
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $orgProfile = TenantConfigService::getOrganizationProfile($this->db, $tid);
+        $tenantName = !empty($orgProfile['name']) ? $orgProfile['name'] : 'DOANH NGHIỆP';
 
         // 2. Lấy danh sách nhân sự thật từ users + hrm_profiles (loại trừ tài khoản AI bot SI IDEAS)
         $otCompMap = [];
@@ -7662,7 +7661,7 @@ class HRMController {
                 COALESCE(p.compensatory_leave_used, 0.0) AS compensatory_leave_used
             FROM users u
             LEFT JOIN hrm_profiles p ON u.id = p.user_id
-            WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn' AND u.id != 9000001 AND u.full_name != 'SI IDEAS' AND u.deleted_at IS NULL
+            WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND " . $this->excludedEmailClause((int)($auth['tenant_id'] ?? $tid ?? $GLOBALS['current_tenant_id'] ?? 1), 'u.email') . " AND u.id != 9000001 AND u.full_name != 'SI IDEAS' AND u.deleted_at IS NULL
             ORDER BY u.is_active DESC, u.id ASC
         ");
         $uStmt->execute([$tid]);
@@ -8003,9 +8002,9 @@ class HRMController {
             'id'        => 'myerp-primary',
             'sample'    => false,
             'info'      => [
-                'mst'           => '0316892451',
+                'mst'           => !empty($orgProfile['tax_id']) ? (string)$orgProfile['tax_id'] : ($tid === 1 ? '0316892451' : ''),
                 'tenNNT'        => $tenantName,
-                'dchiNNT'       => 'TP. Hồ Chí Minh',
+                'dchiNNT'       => !empty($orgProfile['address']) ? (string)$orgProfile['address'] : 'TP. Hồ Chí Minh',
                 'tenXaNNT'      => '',
                 'maXaNNT'       => '',
                 'tenTinhNNT'    => 'TP. Hồ Chí Minh',
@@ -8013,9 +8012,9 @@ class HRMController {
                 'maCQTNoiNop'   => '70100',
                 'tenCQTNoiNop'  => 'Cục Thuế TP. Hồ Chí Minh',
                 'nguoiKy'       => 'BAN GIÁM ĐỐC',
-                'nganhNgheKD'   => 'Giáo dục và Đào tạo quốc tế',
-                'dthoaiNNT'     => '',
-                'emailNNT'      => 'info@ideas.edu.vn',
+                'nganhNgheKD'   => 'Dịch vụ & Đào tạo',
+                'dthoaiNNT'     => (string)($orgProfile['support_hotline'] ?? ''),
+                'emailNNT'      => (string)($orgProfile['support_email'] ?: $orgProfile['sender_email'] ?: ''),
             ],
             'cfg'       => [
                 'vung'      => 1,

@@ -22,6 +22,7 @@ import ContactsTab from '../../components/marketing/components/audience/tabs/Con
 import IntegrationsTab from '../../components/marketing/components/audience/tabs/IntegrationsTab';
 import ConfirmModal from '../../components/marketing/components/common/ConfirmModal';
 import { isManualList } from '../../components/marketing/utils/listHelpers';
+import { extractCustomAttributesFromRow } from '../../components/marketing/utils/importMapping';
 import ColumnCustomizer from '../../components/marketing/components/audience/ColumnCustomizer';
 import AdvancedFilters from '../../components/marketing/components/audience/AdvancedFilters';
 import MetaCustomers from '../../components/marketing/components/meta/MetaCustomers';
@@ -96,7 +97,7 @@ const COLUMN_DEFINITIONS = [
     { id: 'joinedAt', label: 'Ngày tham gia', required: false },
 ];
 
-const DEFAULT_VISIBLE_COLUMNS = ['name', 'phone', 'status', 'source', 'lastActivity', 'tags'];
+const DEFAULT_VISIBLE_COLUMNS = ['name', 'phone', 'status', 'source', 'lastActivity'];
 
 const PIPELINE_STAGE_LABELS: Record<number, string> = {
     1: '01 – New Lead',
@@ -241,19 +242,29 @@ const Audience: React.FC = () => {
     });
 
     const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+        const migrationKey = 'mailflow_visible_columns_v2_no_default_tags';
+        const hasMigrated = localStorage.getItem(migrationKey) === '1';
         const saved = localStorage.getItem('mailflow_visible_columns');
         if (saved) {
             try {
                 const parsed = JSON.parse(saved);
                 if (Array.isArray(parsed)) {
-                    const normalized = parsed
+                    let normalized = parsed
                         .map((col: string) => (col === 'email' ? 'phone' : col))
                         .filter((col: string, idx: number, arr: string[]) => col !== 'salesperson' && col !== 'leadScore' && arr.indexOf(col) === idx);
+                    if (!hasMigrated) {
+                        normalized = normalized.filter((col: string) => col !== 'tags');
+                        localStorage.setItem(migrationKey, '1');
+                        localStorage.setItem('mailflow_visible_columns', JSON.stringify(normalized));
+                    }
                     return normalized.length > 0 ? normalized : DEFAULT_VISIBLE_COLUMNS;
                 }
             } catch {
                 // Ignore parsing errors
             }
+        }
+        if (!hasMigrated) {
+            localStorage.setItem(migrationKey, '1');
         }
         return DEFAULT_VISIBLE_COLUMNS;
     });
@@ -2066,24 +2077,14 @@ const Audience: React.FC = () => {
                                 }
 
                                 if (newSubs.length > 0) {
-                                    const STANDARD_KEYS = [
-                                        'email', 'firstName', 'lastName', 'phoneNumber', 'jobTitle',
-                                        'companyName', 'city', 'country', 'gender', 'dateOfBirth',
-                                        'anniversaryDate', 'tags', 'source', 'salesperson', 'joinedAt'
-                                    ];
-
                                     const subsPayload = newSubs.map((s: any) => {
-                                        const customAttr: Record<string, any> = {};
-                                        Object.keys(s).forEach(key => {
-                                            if (!STANDARD_KEYS.includes(key)) {
-                                                customAttr[key] = s[key];
-                                            }
-                                        });
+                                        const customAttr = extractCustomAttributesFromRow(s);
 
                                         return {
                                             ...s,
+                                            phoneNumber: s.phoneNumber || s.phone || '',
                                             listIds: finalListId ? [finalListId] : [],
-                                            tags: s.tags ? s.tags.split(',').map((t: string) => t.trim().toUpperCase().replace(/\s+/g, '_')) : [],
+                                            tags: s.tags ? (typeof s.tags === 'string' ? s.tags.split(',').map((t: string) => t.trim().toUpperCase().replace(/\s+/g, '_')) : s.tags) : [],
                                             joinedAt: new Date().toISOString(),
                                             status: 'active',
                                             source: s.source || 'Import CSV',
@@ -2328,7 +2329,7 @@ const Audience: React.FC = () => {
             )}
 
             {isDateRangeModalOpen && createPortal(
-                <div className="fixed inset-0 z-[110000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 z-[2147483646] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-[var(--color-surface)] rounded-[18px] border border-[var(--color-border)] w-full max-w-sm shadow-xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
                         <div className="flex items-center justify-between">
                             <h3 className="text-base font-bold text-[var(--color-text)]">Chọn khoảng thời gian</h3>
@@ -2375,7 +2376,7 @@ const Audience: React.FC = () => {
             )}
 
             {isBulkListModalOpen && createPortal(
-                <div className="fixed inset-0 z-[110000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 z-[2147483646] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-[var(--color-surface)] rounded-[18px] w-full max-w-lg shadow-2xl p-6 space-y-6 animate-in zoom-in-95 duration-200 relative border border-[var(--color-border)]">
                         <button onClick={() => setIsBulkListModalOpen(false)} className="absolute top-5 right-5 p-2 hover:bg-[var(--color-bg)] rounded-lg text-[var(--color-text-light)] hover:text-[var(--color-text)] transition-all">
                             <X className="w-5 h-5" />
@@ -2454,7 +2455,7 @@ const Audience: React.FC = () => {
             )}
 
             {formProtectionModal.isOpen && createPortal(
-                <div className="fixed inset-0 z-[110000] flex items-center justify-center p-4">
+                <div className="fixed inset-0 z-[2147483646] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setFormProtectionModal(prev => ({ ...prev, isOpen: false }))} />
                     <div className="relative bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
                         <div className="flex items-start gap-4 mb-5">

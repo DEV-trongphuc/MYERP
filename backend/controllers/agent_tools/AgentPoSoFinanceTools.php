@@ -219,7 +219,9 @@ class AgentPoSoFinanceTools
     private static function isFinancePrivileged(array $auth): bool
     {
         $role = strtolower(trim((string)($auth['role'] ?? '')));
-        return in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'assistant'], true);
+        require_once __DIR__ . '/../../config/Database.php';
+        require_once __DIR__ . '/../../config/TenantConfigService.php';
+        return TenantConfigService::doesUserSatisfyRoles(Database::getInstance(), $auth, ['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'assistant'], 'expenses', 'read', ['all']);
     }
 
     /**
@@ -230,8 +232,9 @@ class AgentPoSoFinanceTools
         $userIds = [$uid];
         if (strtolower($role) === 'manager' && $uid > 0) {
             try {
-                $stmt = $db->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?) AND is_active = 1 AND deleted_at IS NULL");
-                $stmt->execute([$uid]);
+                $tid = (int)($GLOBALS['current_tenant_id'] ?? 1);
+                $stmt = $db->prepare("SELECT id FROM users WHERE tenant_id = ? AND team_id IN (SELECT id FROM teams WHERE tenant_id = ? AND deleted_at IS NULL AND leader_id = ?) AND is_active = 1 AND deleted_at IS NULL");
+                $stmt->execute([$tid, $tid, $uid]);
                 $rows = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
                 foreach ($rows as $r) {
                     $userIds[] = (int)$r;
@@ -629,8 +632,9 @@ class AgentPoSoFinanceTools
         $tid = (int)($auth['tenant_id'] ?? 1);
         $uid = (int)($auth['user_id'] ?? 0);
         $role = strtolower(trim((string)($auth['role'] ?? '')));
-        $isAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
-        $isAccountant = in_array($role, ['accountant', 'assistant'], true);
+        require_once __DIR__ . '/../../config/TenantConfigService.php';
+        $isAdmin = TenantConfigService::hasGlobalScope($db, $auth, 'purchase_orders', 'read');
+        $isAccountant = TenantConfigService::doesUserSatisfyRoles($db, $auth, ['accountant', 'assistant'], 'purchase_orders', 'read', ['all']);
 
         $ticketType = strtolower(trim((string)($args['ticket_type'] ?? ($args['record_type'] ?? 'expense'))));
         $ticketId = (int)($args['ticket_id'] ?? ($args['record_id'] ?? ($args['milestone_id'] ?? 0)));

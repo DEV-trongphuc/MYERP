@@ -26,6 +26,7 @@ import { CustomSelect, getAvatarRingStyle, type SelectOption } from '../componen
 import { MentionInput } from '../components/ui/MentionInput';
 import { motion, AnimatePresence } from 'framer-motion';
 import { isExecutive, isHR, isManagement, isAccountant } from '../utils/roleUtils';
+import { resolveHrRepresentativeUser } from '../utils/teamLeader';
 import { VIETNAM_BANKS, getVietQrUrl, findBank, standardizeBankName, isForeignOrCustomBank } from '../utils/vietnamBanks';
 import { BankSelect } from '../components/ui/BankSelect';
 import { BankLogo } from '../components/ui/BankLogo';
@@ -684,6 +685,7 @@ export default function Approvals() {
   }, []);
   
   const isAdmin = isManagement(user) || isHR(user);
+  const isStrictAdmin = ['admin', 'superadmin', 'super_admin', 'director'].includes(String(user?.role || '').toLowerCase());
   const [activeTab, setActiveTab] = useState<'pending' | 'my_requests' | 'following' | 'all'>('pending');
   const hasAutoSwitchedTabRef = useRef(false);
   const handleTabChange = useCallback((tab: 'pending' | 'my_requests' | 'following' | 'all') => {
@@ -2695,17 +2697,10 @@ export default function Approvals() {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [showRelatedDropdown]);
 
-  // Helper to find default HR Leader / Phụ trách HCNS dynamically (ưu tiên Nguyễn Thị Duy Phương / role HR, không lấy nhầm Ban Giám đốc)
   const getDefaultHrLeader = () => {
     if (!users || users.length === 0) return null;
-
-    // 1. Ưu tiên số 1: Nhân sự phụ trách HCNS (Duy Phương / phuongntd) hoặc role === 'hr'
-    const explicitHr = users.find(u => {
-      const uname = String(u.username || '').toLowerCase();
-      const fname = String(u.full_name || u.name || '').toLowerCase();
-      return uname === 'phuongntd' || fname.includes('duy phương');
-    });
-    if (explicitHr) return explicitHr;
+    const dynamicHr = resolveHrRepresentativeUser(users, teams);
+    if (dynamicHr) return dynamicHr;
 
     const hrRoleUser = users.find(u => String(u.role || '').toLowerCase() === 'hr');
     if (hrRoleUser) return hrRoleUser;
@@ -4507,14 +4502,17 @@ export default function Approvals() {
     }
   };
 
-  const handleDeleteRequest = (item: any) => {
-    if (item.status === 'approved' || item.status === 'completed') {
+  const handleDeleteRequest = (item: any, onDeleted?: () => void) => {
+    const isApproved = item.status === 'approved' || item.status === 'completed';
+    if (isApproved && !isStrictAdmin) {
       toast.error(t('Đơn/đề xuất này đã được duyệt đủ cấp, không thể xóa!'));
       return;
     }
     showConfirm({
-      title: t('Xác nhận xóa / thu hồi yêu cầu'),
-      message: t('Bạn có chắc chắn muốn xóa hoặc thu hồi yêu cầu này không? Hành động này không thể hoàn tác.'),
+      title: isApproved ? t('Xác nhận Admin xóa quy trình đã duyệt') : t('Xác nhận xóa / thu hồi yêu cầu'),
+      message: isApproved
+        ? t('Cảnh báo: Quy trình này đã được duyệt. Bạn có chắc chắn muốn xóa vĩnh viễn không? Hành động này không thể hoàn tác.')
+        : t('Bạn có chắc chắn muốn xóa hoặc thu hồi yêu cầu này không? Hành động này không thể hoàn tác.'),
       confirmText: t('Xóa yêu cầu'),
       isDanger: true,
       onConfirm: async () => {
@@ -4560,6 +4558,7 @@ export default function Approvals() {
             return;
           }
           toast.success(t('Đã xóa yêu cầu thành công'));
+          onDeleted?.();
           loadData(true);
         } catch (err: any) {
           toast.error(err.response?.data?.message || err.message || t('Lỗi khi xóa yêu cầu'));
@@ -5783,9 +5782,8 @@ export default function Approvals() {
       const parsedExecName = mExec ? mExec[1].trim() : '';
       const matchedExec = findApproverUserInMaps(0, parsedExecName);
       if (matchedExec) return matchedExec;
-      const phuongExec = usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương') ||
-        Array.from(usersMap.values()).find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương') || u.username === 'phuongntd');
-      if (phuongExec) return phuongExec;
+      const hrExec = resolveHrRepresentativeUser(Array.from(usersMap.values()), teams);
+      if (hrExec) return hrExec;
     }
 
     // 1. Check explicit step 1 / approver / manager / approved_by fields
@@ -5813,8 +5811,7 @@ export default function Approvals() {
     }
 
     // 3. Domain-specific fallback (HR / Check-in / Leave / Stationery vs Director / General Director)
-    const phuongUser = usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương') ||
-      Array.from(usersMap.values()).find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương') || u.username === 'phuongntd');
+    const hrFallbackUser = resolveHrRepresentativeUser(Array.from(usersMap.values()), teams);
 
     const directorUser =
       Array.from(usersMap.values()).find(u =>
@@ -5837,11 +5834,11 @@ export default function Approvals() {
       lowerTitle.includes('văn phòng phẩm');
 
     if (isHrOrStationery) {
-      if (phuongUser && Number(phuongUser.id) !== creatorId) return phuongUser;
-      return directorUser || phuongUser || creator || null;
+      if (hrFallbackUser && Number(hrFallbackUser.id) !== creatorId) return hrFallbackUser;
+      return directorUser || hrFallbackUser || creator || null;
     }
 
-    return directorUser || phuongUser || creator || null;
+    return directorUser || hrFallbackUser || creator || null;
   }, [usersMap, usersByNameMap, findApproverUserInMaps]);
 
   const renderCurrentApprover = useCallback((item: ApprovalItem) => {
@@ -7336,7 +7333,7 @@ export default function Approvals() {
                               >
                                 <Copy size={12} />
                               </button>
-                              {(isCreator || isManagement(user) || isHR(user)) && item.status !== 'approved' && item.status !== 'completed' && (
+                              {(isStrictAdmin || ((isCreator || isManagement(user) || isHR(user)) && item.status !== 'approved' && item.status !== 'completed')) && (
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteRequest(item)}
@@ -7576,7 +7573,7 @@ export default function Approvals() {
                                 >
                                   <Copy size={12} />
                                 </button>
-                                {(isCreator || isManagement(user) || isHR(user)) && item.status !== 'approved' && item.status !== 'completed' && (
+                                {(isStrictAdmin || ((isCreator || isManagement(user) || isHR(user)) && item.status !== 'approved' && item.status !== 'completed')) && (
                                   <button
                                     type="button"
                                     onClick={() => handleDeleteRequest(item)}
@@ -15041,7 +15038,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   isAdmin: boolean;
   onDuplicate?: (item: ApprovalItem) => void;
   onEdit?: (item: ApprovalItem) => void;
-  onDelete?: (item: ApprovalItem) => void;
+  onDelete?: (item: ApprovalItem, onDeleted?: () => void) => void;
   zIndex?: number;
   highlightCommentId?: string | null;
 }) {
@@ -15474,7 +15471,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       mapped.sort((a, b) => b.timestamp - a.timestamp);
 
       // Build birth system log (ALWAYS at the bottom)
-      const ideasLogoUrl = 'https://ideas.edu.vn/wp-content/uploads/2023/04/cropped-logofavicon-1.webp';
+      const ideasLogoUrl = '/cropped-logofavicon-1.webp';
       const createdAtVal = detail?.created_at || item.created_at;
       const sys1 = { 
         id: 'sys-1', 
@@ -15981,13 +15978,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       return null;
     };
 
-    // Default HR Leader helper (Nguyễn Thị Duy Phương - HCNS)
-    const defaultHrLeader = effectiveUsers.find(u => 
-      (u.username && u.username.toLowerCase() === 'phuongntd') ||
-      (u.full_name && (u.full_name.toLowerCase().includes('duy phương') || u.full_name.toLowerCase().includes('nguyễn thị duy phương'))) ||
-      (u.name && (u.name.toLowerCase().includes('duy phương') || u.name.toLowerCase().includes('nguyễn thị duy phương'))) ||
-      ((u.role === 'hr' || (u.department && u.department.toLowerCase().includes('nhân sự'))) && ['manager', 'leader', 'admin', 'director'].includes(String(u.role).toLowerCase()))
-    );
+    const defaultHrLeader = resolveHrRepresentativeUser(effectiveUsers);
 
     // Direct team leader of creator (if exists, belongs to same team, and different from creator)
     const directTeamLeader = creatorUser?.team_id ? effectiveUsers.find(u => 
@@ -16137,7 +16128,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           );
         }
         if (!printStampSendExecUser) {
-          printStampSendExecUser = effectiveUsers.find(u => (u.full_name || u.name || '').toLowerCase().includes('duy phương') || u.username === 'phuongntd');
+          printStampSendExecUser = resolveHrRepresentativeUser(effectiveUsers);
         }
       }
 
@@ -20375,11 +20366,10 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 <Copy size={isMobile ? 15 : 16} />
               </button>
             )}
-            {onDelete && item.status !== 'approved' && item.status !== 'completed' && (Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id) || ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'].includes(String(user?.role).toLowerCase())) && (
+            {onDelete && (['admin', 'superadmin', 'super_admin', 'director'].includes(String(user?.role || '').toLowerCase()) || (item.status !== 'approved' && item.status !== 'completed' && (Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id) || ['manager', 'hr'].includes(String(user?.role).toLowerCase())))) && (
               <button
-                onClick={async () => {
-                  await onDelete(item);
-                  handleClose();
+                onClick={() => {
+                  onDelete(item, handleClose);
                 }}
                 className="btn secondary hover-lift"
                 style={{

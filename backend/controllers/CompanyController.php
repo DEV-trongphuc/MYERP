@@ -6,43 +6,18 @@ class CompanyController {
     public function __construct(PDO $db) { $this->db = $db; }
 
     private function getScope(array $auth, string $action): string {
-        // Tất cả mọi role đều fetch và thấy được đối tác
-        if ($action === 'read') {
-            return 'all';
-        }
-
-        $permissionsJson = null;
-        $stmtQ = $this->db->prepare("SELECT permissions_json FROM users WHERE id = ? LIMIT 1");
-        $stmtQ->execute([$auth['user_id']]);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $stmtQ = $this->db->prepare("SELECT permissions_json FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+        $stmtQ->execute([(int)($auth['user_id'] ?? 0), (int)($auth['tenant_id'] ?? 1)]);
         $resQ = $stmtQ->fetch(PDO::FETCH_ASSOC);
         if ($resQ && !empty($resQ['permissions_json'])) {
-            $permissionsJson = json_decode($resQ['permissions_json'], true);
+            $auth['permissions'] = json_decode($resQ['permissions_json'], true);
         }
-
-        $role = strtolower($auth['role'] ?? '');
-        if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'assistant', 'manager', 'sale_admin', 'saleadmin'], true)) {
+        $resolved = TenantConfigService::resolvePermissionScope($this->db, $auth, 'companies', $action);
+        if ($action === 'read' && $resolved !== 'none') {
             return 'all';
         }
-
-        if (in_array($role, ['marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'accountant', 'ke_toan', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true)) {
-            if ($action === 'delete') {
-                return 'none';
-            }
-            return 'all';
-        }
-
-        if ($permissionsJson && isset($permissionsJson['companies'][$action])) {
-            $val = $permissionsJson['companies'][$action];
-            if (in_array($val, ['all', 'team', 'own', 'none'], true)) {
-                return $val;
-            }
-        }
-
-        // Fallbacks
-        if ($role === 'sale' || $role === 'sales' || $role === 'viewer') {
-            return $action === 'read' ? 'all' : 'none';
-        }
-        return 'none';
+        return $resolved;
     }
 
     public function index(array $auth): void {

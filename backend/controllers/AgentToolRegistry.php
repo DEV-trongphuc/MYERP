@@ -451,7 +451,7 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'search_ideas_knowledge',
-                        'description' => 'Tra cứu tri thức cốt lõi Viện IDEAS, 12 tình huống sale thực chiến, kiểm định Swiss UMEF & ISTEC Paris, công nhận văn bằng, cẩm nang xử lý từ chối.',
+                        'description' => 'Tra cứu tri thức cốt lõi của tổ chức, quy chế nhân sự, chương trình đào tạo, kiểm định và cẩm nang xử lý từ chối.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
@@ -1281,7 +1281,7 @@ class AgentToolRegistry {
                                 ],
                                 'subject' => [
                                     'type' => 'STRING',
-                                    'description' => 'Tiêu đề cuộc hẹn hoặc nội dung cần nhắc (vd: "Gọi tư vấn học phí EMBA K28", "Hẹn gặp tại Viện IDEAS")'
+                                    'description' => 'Tiêu đề cuộc hẹn hoặc nội dung cần nhắc (vd: "Gọi tư vấn học phí", "Hẹn gặp tại văn phòng")'
                                 ],
                                 'due_date' => [
                                     'type' => 'STRING',
@@ -1349,7 +1349,7 @@ class AgentToolRegistry {
                     ],
                     [
                         'name' => 'get_academic_schedule_and_intakes',
-                        'description' => 'Tra cứu lịch học, lịch khai giảng các khóa học (EMBA, MBA, MSc AI, DBA), thông tin giảng viên đứng lớp, phòng học, hình thức học (Zoom/Trực tiếp) và các mốc luận văn tốt nghiệp từ hệ thống đào tạo IDEAS.',
+                        'description' => 'Tra cứu lịch học, lịch khai giảng các khóa học, thông tin giảng viên đứng lớp, phòng học, hình thức học (Zoom/Trực tiếp) và các mốc luận văn tốt nghiệp.',
                         'parameters' => [
                             'type' => 'OBJECT',
                             'properties' => [
@@ -2453,7 +2453,10 @@ class AgentToolRegistry {
         $status = (string)($data['status'] ?? '');
         $link = (string)($data['direct_url'] ?? ($data['url'] ?? ($data['link'] ?? '/contacts?id=' . $id)));
         if (str_starts_with($link, '/')) {
-            $directUrl = 'https://myerp.ideas.edu.vn' . $link;
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $dbRef = ($GLOBALS['db'] ?? $GLOBALS['pdo'] ?? null);
+            $feBase = ($dbRef instanceof PDO) ? TenantConfigService::getFrontendUrl($dbRef, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '';
+            $directUrl = $feBase !== '' ? ($feBase . $link) : $link;
         } else {
             $directUrl = $link;
         }
@@ -2544,28 +2547,32 @@ class AgentToolRegistry {
      * Global Admin/Director, and users with permissions_json['leads']['read'] === 'all' can view all leads across all sales reps.
      */
     public static function evaluateLeadReadScope(PDO $db, array $auth): array {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
         $uid = (int)($auth['user_id'] ?? $auth['id'] ?? 0);
-        if ($uid > 0 && isset(self::$leadScopeCache[$uid])) {
-            return self::$leadScopeCache[$uid];
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $cacheKey = $tid . ':' . $uid . ':' . strtolower((string)($auth['role'] ?? ''));
+        if ($uid > 0 && isset(self::$leadScopeCache[$cacheKey])) {
+            return self::$leadScopeCache[$cacheKey];
         }
 
         $role = strtolower(trim((string)($auth['role'] ?? 'user')));
         $teamId = isset($auth['team_id']) ? (int)$auth['team_id'] : null;
         $teamName = $auth['team_name'] ?? null;
+        $deptCode = $auth['department_code'] ?? null;
         $jobTitle = $auth['job_title'] ?? null;
         $department = $auth['department'] ?? null;
         $permsRaw = $auth['permissions_json'] ?? ($auth['permissions'] ?? null);
 
-        if ($uid > 0 && ($teamId === null || $teamName === null || $jobTitle === null || $department === null || $permsRaw === null)) {
+        if ($uid > 0 && ($teamId === null || $teamName === null || $deptCode === null || $jobTitle === null || $department === null || $permsRaw === null)) {
             try {
                 $stmtU = $db->prepare("
-                    SELECT u.role, u.team_id, t.name as team_name, u.job_title, u.department, u.permissions_json
+                    SELECT u.role, u.team_id, t.name as team_name, t.department_code, u.job_title, u.department, u.permissions_json
                     FROM users u
-                    LEFT JOIN teams t ON u.team_id = t.id
-                    WHERE u.id = ?
+                    LEFT JOIN teams t ON u.team_id = t.id AND t.tenant_id = u.tenant_id AND t.deleted_at IS NULL
+                    WHERE u.id = ? AND u.tenant_id = ?
                     LIMIT 1
                 ");
-                $stmtU->execute([$uid]);
+                $stmtU->execute([$uid, $tid]);
                 $uRow = $stmtU->fetch(PDO::FETCH_ASSOC);
                 if ($uRow) {
                     if ($role === '' || $role === 'user' || $role === 'nhân sự') {
@@ -2573,6 +2580,7 @@ class AgentToolRegistry {
                     }
                     $teamId = (int)($uRow['team_id'] ?? 0);
                     $teamName = (string)($uRow['team_name'] ?? '');
+                    $deptCode = strtolower((string)($uRow['department_code'] ?? ''));
                     $jobTitle = (string)($uRow['job_title'] ?? '');
                     $department = (string)($uRow['department'] ?? '');
                     $permsRaw = $uRow['permissions_json'] ?? null;
@@ -2580,42 +2588,61 @@ class AgentToolRegistry {
             } catch (\Throwable $e) {}
         }
 
-        $perms = is_string($permsRaw) ? (json_decode($permsRaw, true) ?: []) : (is_array($permsRaw) ? $permsRaw : []);
-        $leadsReadPerm = strtolower(trim((string)($perms['leads']['read'] ?? '')));
+        $enrichedAuth = array_merge($auth, [
+            'user_id' => $uid,
+            'tenant_id' => $tid,
+            'role' => $role,
+            'permissions_json' => $permsRaw,
+        ]);
+        $leadsScope = TenantConfigService::resolvePermissionScope($db, $enrichedAuth, 'leads', 'read');
+        $contactsScope = TenantConfigService::resolvePermissionScope($db, $enrichedAuth, 'contacts', 'read');
 
         $combMkt = mb_strtolower(($teamName ?? '') . ' ' . ($jobTitle ?? '') . ' ' . ($department ?? ''));
-        $isMarketing = in_array($role, ['marketing', 'mkt'], true)
-            || ((int)$teamId === 3)
+        $isMarketing = TenantConfigService::doesUserSatisfyRoles($db, $enrichedAuth, ['marketing'], 'marketing', 'read')
+            || ($deptCode === 'marketing')
+            || ($tid === 1 && (int)$teamId === 3)
             || (mb_strpos($combMkt, 'marketing') !== false)
             || (mb_strpos($combMkt, 'mkt') !== false);
 
         $combAcad = mb_strtolower(($department ?? '') . ' ' . ($jobTitle ?? ''));
-        $isAcademic = in_array($role, ['academic', 'hoc_vu', 'hoc_thuat', 'tro_giang', 'teacher', 'giang_vien', 'academic_officer'], true)
+        $isAcademic = TenantConfigService::doesUserSatisfyRoles($db, $enrichedAuth, ['academic'])
+            || ($deptCode === 'academic')
             || (mb_strpos($combAcad, 'học vụ') !== false)
             || (mb_strpos($combAcad, 'học thuật') !== false)
             || (mb_strpos($combAcad, 'academic') !== false)
             || (mb_strpos($combAcad, 'giảng viên') !== false)
             || (mb_strpos($combAcad, 'trợ giảng') !== false);
 
-        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'general_director', 'sale_director', 'executive', 'ceo'], true);
-        $isSaleAdmin = in_array($role, ['sale_admin', 'saleadmin', 'lead_admin', 'lead_manager'], true);
-        $isAssistant = in_array($role, ['assistant', 'tro_ly'], true);
+        $isGlobalAdmin = TenantConfigService::doesUserSatisfyRoles($db, $enrichedAuth, ['admin', 'superadmin', 'director'])
+            || in_array($role, ['general_director', 'sale_director', 'executive', 'ceo'], true);
+        $isSaleAdmin = TenantConfigService::doesUserSatisfyRoles($db, $enrichedAuth, ['sale_admin'])
+            || in_array($role, ['lead_admin', 'lead_manager'], true);
+        $isAssistant = TenantConfigService::doesUserSatisfyRoles($db, $enrichedAuth, ['assistant']);
         $isViewer = ($role === 'viewer');
-        $isManager = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+        $isManager = TenantConfigService::doesUserSatisfyRoles($db, $enrichedAuth, ['manager'])
+            || in_array($role, ['truong_phong', 'leader', 'team_lead'], true);
 
-        $canViewAllLeads = $isGlobalAdmin
+        $explicitDenied = ($leadsScope === 'none' && $contactsScope === 'none' && !$isGlobalAdmin);
+        $canViewAllLeads = !$explicitDenied && (
+            $leadsScope === 'all'
+            || $contactsScope === 'all'
+            || $isGlobalAdmin
             || $isSaleAdmin
             || $isMarketing
             || $isAcademic
             || $isAssistant
             || $isViewer
-            || ($leadsReadPerm === 'all');
+        );
 
-        $canViewTeamLeads = !$canViewAllLeads && ($isManager || $leadsReadPerm === 'team');
+        $canViewTeamLeads = !$explicitDenied && !$canViewAllLeads && (
+            $leadsScope === 'team'
+            || $contactsScope === 'team'
+            || $isManager
+        );
 
         $result = [
             'role' => $role,
-            'scope' => $canViewAllLeads ? 'all' : ($canViewTeamLeads ? 'team' : 'own'),
+            'scope' => $canViewAllLeads ? 'all' : ($canViewTeamLeads ? 'team' : ($explicitDenied ? 'none' : 'own')),
             'can_view_all_leads' => $canViewAllLeads,
             'can_view_team_leads' => $canViewTeamLeads,
             'is_global_admin' => $isGlobalAdmin,
@@ -2631,7 +2658,7 @@ class AgentToolRegistry {
         ];
 
         if ($uid > 0) {
-            self::$leadScopeCache[$uid] = $result;
+            self::$leadScopeCache[$cacheKey] = $result;
         }
         return $result;
     }
@@ -2903,8 +2930,12 @@ class AgentToolRegistry {
      * Centralized Safe Executor with Strict Zero-Trust RBAC Guards
      */
     public static function executeTool(PDO $db, string $toolName, array $args, array $auth): array {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
         $uid = (int)($auth['user_id'] ?? 0);
         $tid = (int)($auth['tenant_id'] ?? 1);
+        $tenantBaseUrl = TenantConfigService::getFrontendUrl($db, $tid);
+        $tenantOrgProfile = TenantConfigService::getOrganizationProfile($db, $tid);
+        $tenantOrgName = $tenantOrgProfile['name'] ?: 'ERP';
         $leadRbac = self::evaluateLeadReadScope($db, $auth);
         $role = $leadRbac['role'];
         $userName = $auth['full_name'] ?? ($auth['name'] ?? 'Bạn');
@@ -2915,10 +2946,10 @@ class AgentToolRegistry {
         $isSaleAdmin = $leadRbac['is_sale_admin'];
         $canViewAllLeads = $leadRbac['can_view_all_leads'];
         $canViewTeamLeads = $leadRbac['can_view_team_leads'];
-        $isAccountant = in_array($role, ['accountant', 'ke_toan'], true);
-        $isHR = in_array($role, ['hr', 'nhan_su'], true);
+        $isAccountant = TenantConfigService::doesUserSatisfyRoles($db, $auth, ['accountant'], 'finance', 'read');
+        $isHR = TenantConfigService::doesUserSatisfyRoles($db, $auth, ['hr'], 'hrm', 'read');
         $isAcademic = $leadRbac['is_academic'];
-        $isSale = in_array($role, ['sales', 'sale', 'kinh_doanh', 'sale_admin', 'saleadmin', 'consultant', 'tu_van'], true);
+        $isSale = TenantConfigService::doesUserSatisfyRoles($db, $auth, ['sales', 'sale_admin']) || in_array($role, ['kinh_doanh', 'tu_van'], true);
         $canAccessAllContacts = $canViewAllLeads;
 
         // Zero-Trust Contact RBAC Condition: if not authorized for all/team contacts, strictly isolate to owner, collaborator, or cooperation slip
@@ -3087,7 +3118,7 @@ class AgentToolRegistry {
                         }
 
                         $tId = (int)$t['id'];
-                        $directUrl = "https://myerp.ideas.edu.vn/workspace?task_id={$tId}";
+                        $directUrl = "{$tenantBaseUrl}/workspace?task_id={$tId}";
                         $escSub = addslashes($t['subject']);
                         $smartTag = "<<<ERP_CARD:{\"entity_type\":\"task\",\"entity_id\":{$tId},\"title\":\"{$escSub}\",\"status\":\"{$statusRaw}\",\"direct_url\":\"{$directUrl}\",\"action_label\":\"Mở công việc\"}>>>";
 
@@ -3440,7 +3471,7 @@ class AgentToolRegistry {
                             $isReadyForSo = ($stageOrder >= 13);
                             $stageName = $c['stage_name'] ?: ($c['status'] ?: 'Mới');
                             $cId = (int)$c['id'];
-                            $directUrl = "https://myerp.ideas.edu.vn/contacts?id={$cId}";
+                            $directUrl = "{$tenantBaseUrl}/contacts?id={$cId}";
                             $escName = addslashes($c['full_name']);
                             $cPhone = $c['phone'] ?: '';
                             $smartTag = "<<<ERP_CARD:{\"entity_type\":\"contact\",\"entity_id\":{$cId},\"title\":\"{$escName}\",\"subtitle\":\"{$cPhone} • {$stageName}\",\"status\":\"in_progress\",\"direct_url\":\"{$directUrl}\",\"action_label\":\"Mở hồ sơ\"}>>>";
@@ -3863,7 +3894,7 @@ class AgentToolRegistry {
                                 'remaining_late_grace_minutes' => max(0, $empGrace - $empTotalLate),
                                 'excess_late_minutes' => max(0, $empTotalLate - $empGrace),
                                 'late_count' => (int)$item['late_count'],
-                                'direct_profile_url' => "https://myerp.ideas.edu.vn/hrm?user_id=" . $item['user_id']
+                                'direct_profile_url' => "{$tenantBaseUrl}/hrm?user_id=" . $item['user_id']
                             ];
                         }
 
@@ -4548,7 +4579,7 @@ class AgentToolRegistry {
                         ],
                         'preview_samples' => $maskedSamples,
                         'download_url' => $exportUrl,
-                        'direct_download_link' => "https://myerp.ideas.edu.vn{$exportUrl}",
+                        'direct_download_link' => "{$tenantBaseUrl}{$exportUrl}",
                         'export_link_markdown' => "[Bấm vào đây để tải " . ($limit > 0 ? "danh sách {$limit} Lead gần đây" : "danh sách Lead") . " kèm chức vụ (File Excel/CSV)]({$exportUrl})",
                         'instruction' => 'BẮT BUỘC: 1. Thông báo rõ ràng: Hệ thống đã lọc và ghi nhận **' . $scopeDesc . '** trong ' . $stageFullDesc . '. 2. BẢNG XEM TRƯỚC (Preview) BẮT BUỘC ĐẦY ĐỦ CÁC CỘT: (| ID | HỌ VÀ TÊN | CHỨC VỤ | CÔNG TY | SĐT | GIAI ĐOẠN | SALE PHỤ TRÁCH | NGÀY TẠO |). Cột HỌ VÀ TÊN BẮT BUỘC dùng link `[Tên](/contact/ID)`. BẮT BUỘC hiển thị rõ cột CHỨC VỤ của từng lead. 3. Đính kèm nút hoặc link tải file: `[Bấm vào đây để tải ' . ($limit > 0 ? "danh sách {$limit} Lead gần đây" : "danh sách Lead") . ' kèm chức vụ (File Excel/CSV)](' . $exportUrl . ')`. TUYỆT ĐỐI KHÔNG dùng từ "(Zero-Trust)".'
                     ];
@@ -4921,115 +4952,44 @@ class AgentToolRegistry {
                         // Safe ignore
                     }
 
+                    $dynamicPrograms = [];
+                    foreach (TenantConfigService::getAcademicPrograms($db, $tid) as $progRow) {
+                        $pKey = $progRow['name'] ?: $progRow['program_code'];
+                        $currItems = is_array($progRow['curriculum'] ?? null) ? $progRow['curriculum'] : [];
+                        $totalCredits = 0;
+                        foreach ($currItems as $ci) {
+                            $totalCredits += (int)($ci['credits'] ?? 0);
+                        }
+                        $dynamicPrograms[$pKey] = [
+                            'program_code' => $progRow['program_code'],
+                            'name' => $progRow['name'],
+                            'school_name' => $progRow['school_name'] ?? '',
+                            'credits' => $totalCredits > 0 ? "{$totalCredits} ECTS (" . count($currItems) . " modules)" : (count($currItems) . " modules"),
+                            'lms_url' => $progRow['lms_url'] ?: ($tenantOrgProfile['lms_url'] ?? ''),
+                            'partner_portal_url' => $progRow['partner_portal_url'] ?? '',
+                            'doc_folder_url' => $progRow['doc_folder_url'] ?? '',
+                            'subjects_count' => count($currItems),
+                        ];
+                    }
+
+                    $lateMale = (int)TenantConfigService::getSetting($db, $tid, 'hrm_late_grace_minutes_male', 30);
+                    $lateFemale = (int)TenantConfigService::getSetting($db, $tid, 'hrm_late_grace_minutes_female', 60);
+
                     return [
                         'success' => true,
-                        'institute' => 'Viện Quản trị & Công nghệ IDEAS (Hơn 15 năm kết nối giáo dục toàn cầu từ 2011, 2.500+ Thạc sĩ/Tiến sĩ tốt nghiệp, 74 khóa đào tạo)',
-                        'slogan' => 'Tri thức Nguyên bản - Đồng hành Bản địa (Original Knowledge - Localized Mentorship)',
-                        'role' => 'Đối tác hỗ trợ học thuật toàn diện (Academic Support Partner) cho các trường đại học quốc tế hàng đầu Thụy Sĩ, Pháp, Anh, Mỹ.',
-                        'partners' => [
-                            'Swiss UMEF' => 'Geneva, Thụy Sĩ (thành lập 1984), Kiểm định liên bang SAC cao nhất, Swiss ENIC, VN-NARIC (Bộ GD&ĐT), ACBSP, CHEA, EDUQUA, IACBE, QS Stars 5 Stars Overall.',
-                            'ISTEC Paris' => 'Paris, Pháp (thành lập 1961), Hệ thống Grande École danh giá, Top 8 Le Parisien, RNCP Level 7 & 8 (EQF Level 8 cao nhất), WES Earned Doctorate tại Mỹ & Canada.',
-                            'ESTIAM & RB College' => 'Chương trình song bằng Dual DBA Pháp & Anh quốc.'
+                        'organization' => $tenantOrgName,
+                        'support_email' => $tenantOrgProfile['support_email'] ?? '',
+                        'support_hotline' => $tenantOrgProfile['support_hotline'] ?? '',
+                        'lms_learning_ecosystem' => [
+                            'lms_url' => $tenantOrgProfile['lms_url'] ?? '',
+                            'ai_platform_url' => $tenantOrgProfile['ai_platform_url'] ?? '',
                         ],
-                        'labor_regulations_qd001_2024' => [
-                            'document_title' => 'Quyết định 001/2024 - Nội quy Lao động Viện IDEAS (Ký ban hành ngày 26/03/2024 bởi Viện Trưởng Phạm Quang Vinh, gồm 7 Chương & 28 Điều)',
-                            'scope_entities' => 'Áp dụng cho toàn thể người lao động (kể cả thử việc, tập việc, học nghề) tại Viện IDEAS, Viện TIME, Công ty TSSAC và Trung tâm RICH (Điều 1, 2, 3, 4).',
-                            'work_hours_and_rest' => 'Làm việc 5 ngày/tuần (40 giờ/tuần), 8 tiếng/ngày: Sáng 08:00 - 12:00, Nghỉ trưa 12:00 - 13:00 (01 tiếng), Chiều 13:00 - 17:00. Nghỉ hàng tuần 02 ngày/tuần (Điều 5.1, 5.2).',
-                            'monthly_late_and_early_quota' => 'Định mức đi trễ và về sớm được phép hàng tháng theo giới tính (Điều 14): Lao động Nữ có 60 phút/tháng đi trễ và về sớm; Lao động Nam có 30 phút/tháng đi trễ và về sớm. Chỉ khi tổng số phút đi trễ trong tháng vượt quá định mức (Nữ > 60p, Nam > 30p) thì phần phút vượt mới bị khấu trừ vào nghỉ bù / phép năm / ngày công. Nghiêm cấm phạt tiền hoặc cắt lương thay việc xử lý kỷ luật (Điều 23.1.4).',
-                            'remote_work_wfh' => 'Chỉ áp dụng WFH và hưởng nguyên đãi ngộ đối với 4 trường hợp (Điều 5.3): (1) Phụ nữ hưởng thai sản đi làm sớm khi nuôi con từ tháng thứ 4 trở lên; (2) NLĐ mắc bệnh điều trị dài ngày theo TT 46/2016/TT-BYT; (3) Bất khả kháng thiên tai, dịch bệnh, hỏa hoạn theo Khoản 1 Điều 156 BLDS 2015; (4) Chăm sóc học viên online, trực lớp online.',
-                            'public_holidays' => '11 ngày nghỉ Lễ, Tết hưởng nguyên lương (Điều 6): Tết Dương lịch (01 ngày - 01/01), Tết Âm lịch (05 ngày), Giỗ Tổ Hùng Vương (01 ngày - 10/03 âm lịch), Giải phóng miền Nam (01 ngày - 30/04), Quốc tế Lao động (01 ngày - 01/05), Quốc khánh (02 ngày - 02/09 và 01 ngày liền kề). Trùng ngày nghỉ hàng tuần được nghỉ bù vào ngày làm việc kế tiếp.',
-                            'annual_and_compensatory_leave' => 'Phép năm chuẩn 12 ngày/năm (1 ngày/tháng cộng dồn), đủ 05 năm thâm niên tăng 01 ngày; nghỉ từ 05 ngày trở lên nộp đơn trước 02 tuần; khẩn cấp báo điện thoại trước 08h00 sáng. Phép tồn chuyển sang năm sau phải nghỉ hết trước Quý I (trước 30/03 năm sau); quá 30/03 năm sau hoặc thôi việc được thanh toán tiền lương tối đa 10 ngày phép năm (Điều 7A). Làm việc buổi tối, Thứ 7, Chủ nhật được tính vào ngày nghỉ bù và không quy đổi thành tiền lương nếu không nghỉ hết trước 30/03 năm sau (Điều 7B, Điều 12A).',
-                            'sick_maternity_personal_leave' => 'Nghỉ bệnh >3 ngày liên tục phải có giấy xác nhận Bác sĩ, nếu không trừ phép năm; hưởng BHXH tối đa 30-60 ngày/năm tùy năm đóng BHXH (Điều 8). Thai sản Nữ 06 tháng (sinh đôi thêm 1 tháng/con), đi làm sớm sau tối thiểu 4 tháng phải báo trước 7 ngày; nghỉ thêm không lương sau thai sản tối đa 30 ngày báo trước 10 ngày. Nam đóng BHXH khi vợ sinh được nghỉ 5 ngày (sinh thường), 7 ngày (phẫu thuật/<32 tuần), 10 ngày (sinh đôi), 14 ngày (sinh đôi phẫu thuật) trong 30 ngày đầu (Điều 9). Nghỉ việc riêng có lương: Bản thân kết hôn 03 ngày, con kết hôn 01 ngày, tứ thân phụ mẫu/vợ/chồng/con mất 03 ngày (Điều 10). Nghỉ không lương: Ông bà/anh chị em ruột mất hoặc bố mẹ/anh chị em ruột kết hôn nghỉ 01 ngày; nghỉ không lương thỏa thuận tối đa 14 ngày/năm (Điều 11).',
-                            'meeting_and_uniform_rules' => 'Họp toàn Viện định kỳ 01 lần/tháng (HCNS báo trước >=2 ngày); Họp phòng ban 01 lần/tuần vào Thứ 2 hoặc Thứ 6 (Điều 12B). Mặc đồng phục Viện vào Thứ 2, Thứ 7 và Chủ nhật; Thứ 3 - Thứ 6 mặc trang phục công sở lịch sự, đeo thẻ tên; dự án Thuê phòng được mặc áo thun có tay (Điều 16). Danh sách/giấy tờ hoạt động của Viện phải chuyển về Phòng HCNS để hủy giấy, cấm đem ra ngoài (Điều 15B).',
-                            'disciplinary_and_compensation' => '3 hình thức kỷ luật (Điều 24): (1) Khiển trách bằng văn bản & trừ điểm đánh giá Tháng/Quý/Năm (vi phạm lần đầu Điều 5, 13, 14, 15, 16, 19, 20 hoặc điểm a, b, c Điều 17, hậu quả <5.000.000đ); (2) Kéo dài thời hạn nâng lương <=06 tháng (tái phạm trong 1 tháng sau khiển trách, khiếm nhã với khách hàng/cấp trên, vi phạm ATVSLĐ) hoặc Cách chức (vi phạm điểm d, e Điều 17, dùng danh nghĩa Viện cho việc riêng, cản trở giao dịch, giả mạo giấy bác sĩ, lừa đảo công việc); (3) Sa thải (trộm cắp, tham ô, đánh bạc, ma túy, tiết lộ bí mật kinh doanh, tái phạm khi chưa xóa kỷ luật, hoặc tự ý bỏ việc 05 ngày cộng dồn/30 ngày hay 20 ngày cộng dồn/365 ngày). Thời hiệu xử lý 6-12 tháng (Điều 25); xóa kỷ luật sau 3 tháng (khiển trách), 6 tháng (kéo dài nâng lương), 3 năm (cách chức) (Điều 26); tạm đình chỉ tối đa 15-90 ngày, tạm ứng 50% lương (Điều 27); bồi thường thiệt hại sơ suất tối đa 3 tháng lương (Điều 28).'
+                        'labor_regulations' => [
+                            'monthly_late_and_early_quota' => "Định mức đi trễ và về sớm được phép hàng tháng theo giới tính: Nữ {$lateFemale} phút/tháng; Nam {$lateMale} phút/tháng.",
+                            'work_hours_and_rest' => 'Làm việc giờ hành chính theo cấu hình ca làm việc của doanh nghiệp.',
                         ],
                         'matched_training_chunks' => $matchedChunks,
-                        'lms_learning_ecosystem' => [
-                            'url' => 'https://ideas.edu.vn/he-thong-ho-tro-hoc-tap-lms-ideas',
-                            'highlights' => '24/7 học tập chủ động; 1.000+ tài liệu Cengage toàn cầu; 100% bổ trợ tiếng Việt chuyên sâu cuối tuần.',
-                            'four_pillars' => [
-                                '1. LMS Powered by Moodle' => 'Quản lý học tập trực tuyến 24/7, lưu trữ video bài giảng chất lượng cao, tải giáo trình/slide bài giảng, nộp bài tập & theo dõi deadline tự động, nhận feedback trực tiếp từ giảng viên, diễn đàn lớp học.',
-                                '2. IDEAS AI Platform' => 'Trợ lý học thuật 4.0 độc quyền tại IDEAS, tích hợp LLM tinh chỉnh cho sau đại học, giải đáp thuật ngữ kinh tế/tài chính tức thì bằng tiếng Việt, tóm tắt tài liệu nghiên cứu hàng trăm trang, gợi ý cấu trúc đề án luận văn (Capstone/Thesis scaffolding), đóng vai trò gia sư công nghệ 24/7. Trải nghiệm tại /dang-ky-tai-khoan-ai.',
-                                '3. Global Digital Library (Cengage)' => 'Miễn phí truy cập 1.000+ đầu sách học thuật nguyên bản tiếng Anh chuyên ngành Kinh tế, Quản trị, Marketing, Tài chính cập nhật mới nhất, đọc trực tuyến trên PC, Tablet, Mobile.',
-                                '4. Weekend Workshops' => 'Lớp chuyên đề bổ trợ cuối tuần cùng giảng viên & chuyên gia đầu ngành, phân tích cấu trúc bài thi, hướng dẫn làm bài luận chuẩn Châu Âu tránh rủi ro lạc đề/trượt môn, kết nối kiến thức quốc tế với thực tiễn doanh nghiệp Việt.'
-                            ],
-                            'six_barrier_solutions' => [
-                                'Rào cản ngoại ngữ' => 'IDEAS AI dịch & giải nghĩa thuật ngữ tức thì + Lớp Chủ Nhật tiếng Việt.',
-                                'Rào cản thời gian' => 'LMS Moodle học 24/7 linh hoạt mọi lúc mọi nơi + EMBA 10 môn không luận văn.',
-                                'Rào cản phương pháp' => 'Cố vấn học thuật 1-1 + Hội đồng chuyên môn Final Draft Review.',
-                                'Rào cản tài liệu' => 'Thư viện số Cengage Learning 1.000+ đầu sách bản quyền miễn phí.',
-                                'Rào cản động lực' => 'Quản lý lớp đôn đốc nhắc nhở deadline + Diễn đàn kết nối học viên.',
-                                'Rào cản thực tế' => 'Workshop chuyên đề cùng CEO và chuyên gia đầu ngành phân tích case study tại Việt Nam.'
-                            ]
-                        ],
-                        'programs' => [
-                            'Swiss UMEF MBA' => [
-                                'name' => 'Online MBA (Thạc sĩ Quản trị Kinh doanh Trực tuyến)',
-                                'tuition_fee' => '12.900 CHF',
-                                'url' => 'https://ideas.edu.vn/mba',
-                                'credits' => '90 ECTS (12 modules + MBA Thesis)',
-                                'duration' => '16-18 tháng',
-                                'target' => 'Quản lý, chuyên viên, định hướng nghiên cứu, giảng dạy hoặc định cư quốc tế.'
-                            ],
-                            'Swiss UMEF EMBA' => [
-                                'name' => 'Executive MBA (Thạc sĩ Điều hành QTKD)',
-                                'tuition_fee' => '12.900 CHF',
-                                'url' => 'https://ideas.edu.vn/emba',
-                                'credits' => '60 ECTS (10 modules, KHÔNG LÀM LUẬN VĂN)',
-                                'duration' => '12-14 tháng',
-                                'target' => 'Giám đốc, Founder, Quản lý cấp cao bận rộn; học nhanh nhất, áp dụng ngay vào quản trị; đủ điều kiện học tiếp lên Tiến sĩ (DBA).'
-                            ],
-                            'Swiss UMEF MSc Applied AI' => [
-                                'name' => 'Master AI - MSc Applied AI (Thạc sĩ AI Ứng dụng)',
-                                'tuition_fee' => '12.900 CHF',
-                                'url' => 'https://ideas.edu.vn/mscai',
-                                'credits' => '90 ECTS (12 modules + Capstone Project)',
-                                'duration' => '16-18 tháng',
-                                'target' => 'Lãnh đạo ứng dụng AI vào quản trị & tự động hóa doanh nghiệp, KHÔNG YÊU CẦU BIẾT VIẾT CODE.'
-                            ],
-                            'Swiss UMEF MBA in AI' => [
-                                'name' => 'MBA in AI (Thạc sĩ QTKD Ứng dụng AI)',
-                                'tuition_fee' => '10.970 CHF',
-                                'url' => 'https://ideas.edu.vn/mbainai',
-                                'duration' => '14-16 tháng'
-                            ],
-                            'Swiss UMEF BBA' => [
-                                'name' => 'Global Online BBA (Cử nhân QTKD Quốc tế)',
-                                'tuition_fee' => '13.500 CHF',
-                                'url' => 'https://ideas.edu.vn/bba',
-                                'target' => 'Đầu tư thông minh cho Cử nhân Quốc tế Thụy Sĩ.'
-                            ],
-                            'Swiss UMEF Top-up BBA' => [
-                                'name' => 'Top-up BBA (Liên thông Cử nhân Quốc tế 12 tháng)',
-                                'duration' => '12 tháng',
-                                'target' => 'Người tốt nghiệp Cao đẳng hoặc sinh viên đã hoàn thành năm 2-3 Đại học.'
-                            ],
-                            'MBA ISTEC Paris' => [
-                                'name' => 'MBA ISTEC Paris (Leadership & Business Transformation)',
-                                'tuition_fee' => '6.500 EUR + 200 EUR lệ phí hồ sơ (Học phí gốc 8.500 EUR)',
-                                'credits' => '60 ECTS, chuẩn Pháp RNCP Level 7 (Bac+5)',
-                                'duration' => '14-16 tháng',
-                                'target' => 'Thạc sĩ chuẩn Pháp Grande École, định hướng Chiến lược & Chuyển đổi số.'
-                            ],
-                            'DBA ISTEC Paris' => [
-                                'name' => 'DBA ISTEC Paris (Tiến sĩ Quản trị Kinh doanh)',
-                                'tuition_fee' => '13.000 EUR trọn gói 3 năm',
-                                'credits' => '180 ECTS, RNCP Level 8 / EQF Level 8 cao nhất Châu Âu, WES Earned Doctorate tại Mỹ/Canada',
-                                'duration' => '03 năm chính quy',
-                                'mentorship' => 'Hướng dẫn 1:1 Giáo sư quốc tế + AI Copilot 24/7 + hỗ trợ độc quyền từ IDEAS.'
-                            ],
-                            'Dual DBA ESTIAM & RB College' => [
-                                'name' => 'Dual DBA (Tiến sĩ song bằng Pháp & Anh)',
-                                'tuition_fee' => '12.500 EUR (Giảm 3.000 EUR còn 9.500 EUR cho cựu học viên IDEAS)',
-                                'duration' => '2.5 - 4 năm',
-                                'support' => 'Hội đồng chuyên môn Viện IDEAS thẩm định Final Draft Review hỗ trợ hướng đi luận án.'
-                            ]
-                        ],
-                        'training_systems' => [
-                            'Standard' => 'Tự học qua LMS Moodle, Video bài giảng, Lớp bổ trợ Chủ Nhật tiếng Việt và IDEAS AI Platform.',
-                            'High Quality (HQ)' => 'Tương tác trực tiếp (Live) với giảng viên Thụy Sĩ, ĐẶC BIỆT bao gồm 2 chuyến đi Thụy Sĩ (Study Trip + Lễ tốt nghiệp).'
-                        ],
-                        'notes' => 'Bằng cấp nhận được giữa hệ HQ và Standard giống nhau 100%. Bằng online 100% chưa thuộc diện công nhận VN-NARIC cho thi công chức nhưng có uy tín và giá trị thực tiễn vượt trội tại khối Doanh nghiệp Tư nhân và Tập đoàn nước ngoài. Nếu cần công nhận tại VN, học viên chọn chương trình kết hợp 70% trực tiếp Thụy Sĩ - 30% online.'
+                        'programs' => $dynamicPrograms,
                     ];
                 }
 
@@ -5507,7 +5467,7 @@ class AgentToolRegistry {
                                 'id' => (int)$p['id'],
                                 'name' => $p['name'],
                                 'code' => $p['code'],
-                                'partner' => $p['developer'] ?: 'IDEAS'
+                                'partner' => $p['developer'] ?: $tenantOrgName
                             ];
                         }, $resProjects),
                         'total_campaigns_found' => count($resCampaigns),
@@ -5532,7 +5492,7 @@ class AgentToolRegistry {
                     $searchQuery = trim($args['search_query'] ?? '');
                     $targetId = (int)($args['target_id'] ?? 0);
                     $entityType = strtolower(trim($args['entity_type'] ?? ''));
-                    $baseUrl = 'https://myerp.ideas.edu.vn';
+                    $baseUrl = $tenantBaseUrl;
 
                     // Auto-detect specific entity intent and ID from destination
                     $isExplicitPo = ($entityType === 'po') || preg_match('/(?:^|\b|\s)(?:po|phiếu chi|chi phí|đề nghị thanh toán)(?:\b|\s|[0-9]|$)/iu', $dest);
@@ -6752,7 +6712,7 @@ class AgentToolRegistry {
                         'subtitle' => ($contact['program'] ?: 'CRM') . ' • ' . ($contact['phone'] ?: 'Chưa có SĐT'),
                         'status' => $contact['stage_name'] ?: 'Đã chuyển giao',
                         'meta' => "Sale mới: {$resolvedName}",
-                        'direct_url' => "https://myerp.ideas.edu.vn/contacts?id={$contactId}",
+                        'direct_url' => "{$tenantBaseUrl}/contacts?id={$contactId}",
                         'action_label' => 'Mở hồ sơ'
                     ]);
 
@@ -8720,7 +8680,7 @@ class AgentToolRegistry {
                         return [
                             'success' => true,
                             'is_duplicate' => false,
-                            'message' => 'SỐ ĐIỆN THOẠI / HỒ SƠ MỚI HOÀN TOÀN! Khách hàng này chưa từng tồn tại trên hệ thống CRM của Viện IDEAS. Bạn có thể tự tin tiếp nhận, tư vấn và tạo hồ sơ mới ngay.',
+                            'message' => 'SỐ ĐIỆN THOẠI / HỒ SƠ MỚI HOÀN TOÀN! Khách hàng này chưa từng tồn tại trên hệ thống CRM của {$tenantOrgName}. Bạn có thể tự tin tiếp nhận, tư vấn và tạo hồ sơ mới ngay.',
                             'recommendation' => 'Sử dụng Thẻ Thêm Học Viên Nhanh (quick add lead) để đưa vào danh bạ chăm sóc.'
                         ];
                     }
@@ -8737,7 +8697,7 @@ class AgentToolRegistry {
                         if ($isOwnedBySelf) {
                             $fairShareVerdict = "Học viên này ĐÃ THUỘC VỀ BẠN. Hãy tiếp tục chăm sóc!";
                         } elseif ($isStale) {
-                            $fairShareVerdict = "BỊ BỎ QUÊN ({$daysNeglected} ngày không có tương tác). Theo Quy chế Fair Share của IDEAS, bạn CÓ QUYỀN YÊU CẦU TRƯỞNG NHÓM CHUYỂN GIAO để chăm sóc.";
+                            $fairShareVerdict = "BỊ BỎ QUÊN ({$daysNeglected} ngày không có tương tác). Theo Quy chế Fair Share của {$tenantOrgName}, bạn CÓ QUYỀN YÊU CẦU TRƯỞNG NHÓM CHUYỂN GIAO để chăm sóc.";
                         } else {
                             $fairShareVerdict = "ĐANG ĐƯỢC CHĂM SÓC TÍCH CỰC bởi {$m['owner_name']} (tương tác {$daysNeglected} ngày trước). Vui lòng không nhận để tránh tranh chấp quyền lợi!";
                         }
@@ -8839,7 +8799,7 @@ class AgentToolRegistry {
                             'status' => $statusText,
                             'student_name' => $r['contact_name'] ?: 'Khách hàng',
                             'student_phone' => $phoneMasked,
-                            'program' => $r['project_name'] ?: 'Chương trình IDEAS',
+                            'program' => $r['project_name'] ?: ('Chương trình ' . $tenantOrgName),
                             'creator' => $r['creator_name'] ?: 'Nhân viên kinh doanh',
                             'created_at' => date('d/m/Y H:i', strtotime($r['created_at'])),
                             'notes' => $r['notes'] ?: 'Không có ghi chú'
@@ -8899,7 +8859,7 @@ class AgentToolRegistry {
                                     $sName = $s['name'] ?? ($s['subject_name'] ?? 'Môn học');
                                     $lecturer = $s['lecturer_name'] ?? ($s['instructor'] ?? 'Chưa công bố');
                                     $time = $s['time'] ?? ($s['schedule'] ?? ($s['dates'] ?? 'Theo thông báo đào tạo'));
-                                    $room = $s['room'] ?? ($s['location'] ?? 'Viện IDEAS / Trực tuyến');
+                                    $room = $s['room'] ?? ($s['location'] ?? ($tenantOrgName . ' / Trực tuyến'));
                                     $subjects[] = [
                                         'subject' => $sName,
                                         'lecturer' => $lecturer,
@@ -8938,7 +8898,7 @@ class AgentToolRegistry {
                         'cohorts' => $scheduleResults,
                         'summary' => empty($scheduleResults)
                             ? "Không tìm thấy lịch học hoặc khóa đào tạo nào khớp với từ khóa '{$programKw}'."
-                            : "Tìm thấy " . count($scheduleResults) . " khóa/lớp đào tạo. Dữ liệu lịch học và giảng viên được trích xuất từ phân hệ Quản lý Đào tạo IDEAS."
+                            : "Tìm thấy " . count($scheduleResults) . " khóa/lớp đào tạo. Dữ liệu lịch học và giảng viên được trích xuất từ phân hệ Quản lý Đào tạo {$tenantOrgName}."
                     ];
                 }
 
@@ -10050,7 +10010,7 @@ class AgentToolRegistry {
 
                     $items = array_map(function($r) {
                         $eId = (int)$r['id'];
-                        $directUrl = "https://myerp.ideas.edu.vn/finance?tab=expenses&id={$eId}";
+                        $directUrl = "{$tenantBaseUrl}/finance?tab=expenses&id={$eId}";
                         $amtFormatted = number_format((float)$r['amount'], 0, ',', '.') . ' ' . ($r['currency'] ?: 'VND');
                         $smartTag = "<<<ERP_CARD:{\"entity_type\":\"po\",\"entity_id\":{$eId},\"title\":\"[PO-{$eId}] " . addslashes($r['title']) . "\",\"subtitle\":\"{$amtFormatted} • " . ($r['vendor_name'] ?: 'Nội bộ') . "\",\"status\":\"" . ($r['status'] === 'approved' ? 'completed' : 'in_progress') . "\",\"direct_url\":\"{$directUrl}\",\"action_label\":\"Mở phiếu chi\"}>>>";
                         return [
@@ -10363,7 +10323,7 @@ class AgentToolRegistry {
                         if (!$hasTranslation) $missingList[] = 'Bản dịch công chứng';
                         if (!$hasContract) $missingList[] = 'Hợp đồng đào tạo';
 
-                        $directUrl = "https://myerp.ideas.edu.vn/contacts?id={$cId}";
+                        $directUrl = "{$tenantBaseUrl}/contacts?id={$cId}";
                         $smartTag = "<<<ERP_CARD:{\"entity_type\":\"contact\",\"entity_id\":{$cId},\"title\":\"" . addslashes($c['full_name']) . "\",\"subtitle\":\"" . ($c['phone'] ?: '') . " • " . (empty($missingList) ? 'Đủ hồ sơ' : 'Thiếu ' . count($missingList) . ' mục') . "\",\"status\":\"" . (empty($missingList) ? 'completed' : 'in_progress') . "\",\"direct_url\":\"{$directUrl}\",\"action_label\":\"Mở hồ sơ học viên\"}>>>";
 
                         $results[] = [
@@ -11238,7 +11198,7 @@ class AgentToolRegistry {
                     $formattedPreviews = array_map(function($r) use ($totalMatching, &$singleSmartCardTag) {
                         $cId = (int)$r['id'];
                         $cName = $r['full_name'];
-                        $directUrl = "https://myerp.ideas.edu.vn/contacts?id={$cId}";
+                        $directUrl = "{$tenantBaseUrl}/contacts?id={$cId}";
                         $depAmt = (float)($r['total_deposit'] ?? $r['contact_deposit_amount'] ?? 0);
                         $depStr = $depAmt > 0 ? number_format($depAmt, 0, ',', '.') . ' VNĐ' : 'Chưa cọc';
                         $ownerDisplay = $r['owner_name'] ?: 'Chưa gán';
@@ -11598,7 +11558,7 @@ class AgentToolRegistry {
 
                     $formattedTop = array_map(function($e) use ($totalCount) {
                         $eId = (int)$e['id'];
-                        $directUrl = "https://myerp.ideas.edu.vn/expenses?id={$eId}";
+                        $directUrl = "{$tenantBaseUrl}/expenses?id={$eId}";
                         $amtStr = number_format((float)$e['amount'], 0, ',', '.') . ' VNĐ';
 
                         $item = [
@@ -11688,8 +11648,9 @@ class AgentToolRegistry {
                     $params = [$tid, $tid, $tid];
 
                     // Zero-Trust RBAC
-                    $isFinAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'accountant', 'ke_toan', 'sale_admin', 'saleadmin'], true);
-                    $isManager  = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+                    $depAiScope = TenantConfigService::resolvePermissionScope($db, $auth, 'deposits', 'read');
+                    $isFinAdmin = ($depAiScope === 'all');
+                    $isManager  = ($depAiScope === 'team');
                     if (!$isFinAdmin) {
                         if ($isManager) {
                             $where[] = "(d.created_by = ? OR c.owner_id = ? OR d.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR c.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
@@ -12124,8 +12085,9 @@ class AgentToolRegistry {
                     array_push($params, $uid, $uid);
 
                     // Zero-Trust RBAC
-                    $isTaskAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'sale_admin', 'saleadmin'], true);
-                    $isManager   = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+                    $taskAiScope = TenantConfigService::resolvePermissionScope($db, $auth, 'workspace', 'read');
+                    $isTaskAdmin = ($taskAiScope === 'all');
+                    $isManager   = ($taskAiScope === 'team');
                     if (!$isTaskAdmin) {
                         if ($isManager) {
                             $where[] = "(t.user_id = ? OR t.created_by = ? OR t.approver_id = ? OR FIND_IN_SET(?, IFNULL(t.participant_ids, '')) > 0 OR t.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR t.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
@@ -12483,7 +12445,7 @@ class AgentToolRegistry {
                     $params = [$tid];
 
                     // Zero-Trust RBAC
-                    $isDealAdmin = $canViewAllLeads || in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'sale_admin', 'saleadmin', 'accountant', 'ke_toan'], true);
+                    $isDealAdmin = $canViewAllLeads || TenantConfigService::hasGlobalScope($db, $auth, 'deals', 'read');
                     if (!$isDealAdmin) {
                         if ($canViewTeamLeads) {
                             $where[] = "(d.owner_id = ? OR c.owner_id = ? OR d.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))) OR (? > 0 AND team_id = ?)))";
@@ -12738,8 +12700,9 @@ class AgentToolRegistry {
                     $params = [$tid];
 
                     // Zero-Trust RBAC
-                    $isTicketAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'academic', 'hoc_vu', 'hoc_thuat', 'sale_admin', 'saleadmin', 'hr'], true);
-                    $isManager     = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+                    $tktAiScope    = TenantConfigService::resolvePermissionScope($db, $auth, 'tickets', 'read');
+                    $isTicketAdmin = ($tktAiScope === 'all');
+                    $isManager     = ($tktAiScope === 'team');
                     if (!$isTicketAdmin) {
                         if ($isManager) {
                             $where[] = "(t.assignee_id = ? OR t.created_by = ? OR t.assignee_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
@@ -12966,8 +12929,9 @@ class AgentToolRegistry {
                     $params = [$monthYear, $tid];
 
                     // Zero-Trust RBAC for HRM & Payroll
-                    $canViewFullHrm = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'nhan_su', 'accountant', 'ke_toan'], true);
-                    $isManager      = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+                    $hrmAiScope     = TenantConfigService::resolvePermissionScope($db, $auth, 'hrm', 'read');
+                    $canViewFullHrm = ($hrmAiScope === 'all');
+                    $isManager      = ($hrmAiScope === 'team');
                     if (!$canViewFullHrm) {
                         if ($isManager) {
                             $where[] = "(u.id = ? OR u.team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))))";
@@ -13397,7 +13361,7 @@ class AgentToolRegistry {
                     // 2. Revenue & Deposits Synthesis (by deposit date)
                     $depWhere = ['(c.tenant_id = ? OR p.tenant_id = ? OR u.tenant_id = ?)', '(c.id IS NULL OR c.deleted_at IS NULL)'];
                     $depParams = [$tid, $tid, $tid];
-                    $isFinExec = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'accountant', 'ke_toan', 'sale_admin', 'saleadmin'], true);
+                    $isFinExec = TenantConfigService::hasGlobalScope($db, $auth, 'expenses', 'read') || TenantConfigService::hasGlobalScope($db, $auth, 'invoices', 'read');
                     if (!$isFinExec) {
                         [$rbacSqlDep, $rbacParamsDep] = self::getContactRbacClause('c', $leadRbac, $uid);
                         if ($rbacSqlDep !== '') {
@@ -13521,7 +13485,7 @@ class AgentToolRegistry {
                     $roasRatio   = $mktExp > 0 ? round($activeRev / $mktExp, 2) : null;
 
                     // 4. Consolidated HRM, Tasks & Tickets Pulse (Single Multi-Subquery SELECT)
-                    $canViewFullHrm = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'nhan_su', 'accountant', 'ke_toan'], true);
+                    $canViewFullHrm = TenantConfigService::hasGlobalScope($db, $auth, 'hrm', 'read');
                     $stmtOps = $db->prepare("
                         SELECT
                             (SELECT COUNT(*) FROM users u WHERE u.tenant_id = ? AND COALESCE(u.is_active, 1) = 1 AND u.role NOT IN ('superadmin', 'super_admin', 'bot', 'system') AND u.id != 9000001) as active_staff,

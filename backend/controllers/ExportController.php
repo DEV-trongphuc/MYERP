@@ -1,16 +1,18 @@
 <?php
 require_once __DIR__ . '/../utils/search_helpers.php';
+require_once __DIR__ . '/../config/TenantConfigService.php';
 
 class ExportController {
     private PDO $db;
     public function __construct(PDO $db) { $this->db = $db; }
 
     public function export(array $auth): void {
+        $tid = (int)($auth['tenant_id'] ?? 1);
         require_once __DIR__ . '/../utils/search_helpers.php';
         require_once __DIR__ . '/AgentToolRegistry.php';
         $leadRbacTop = AgentToolRegistry::evaluateLeadReadScope($this->db, $auth);
         $allowedRoles = ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'general_director', 'sale_director', 'executive', 'ceo', 'leader', 'team_lead', 'truong_phong', 'sales', 'sale', 'consultant', 'tu_van', 'kinh_doanh', 'sale_admin', 'saleadmin', 'marketing', 'mkt', 'assistant', 'tro_ly', 'accountant', 'ke_toan', 'hr', 'nhan_su', 'cskh', 'academic_officer', 'academic', 'hoc_vu', 'hoc_thuat', 'tro_giang', 'teacher', 'giang_vien', 'viewer'];
-        if (!$leadRbacTop['can_view_all_leads'] && !$leadRbacTop['can_view_team_leads'] && !in_array(strtolower($auth['role'] ?? ''), $allowedRoles, true)) {
+        if (!$leadRbacTop['can_view_all_leads'] && !$leadRbacTop['can_view_team_leads'] && !TenantConfigService::doesUserSatisfyRoles($this->db, $auth, $allowedRoles)) {
             respond(403, null, 'Bạn không có quyền xuất dữ liệu', false);
         }
         
@@ -815,15 +817,22 @@ class ExportController {
             switch ($segment) {
                 case 'tiem_nang':
                     if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id']) && empty($stagesParam) && empty($_GET['stage_ids']) && $exportMode !== 'full' && $dataType === '') {
-                        $where[] = "((t.stage_id IS NULL OR t.stage_id != 44) AND (t.pipeline_status IS NULL OR t.pipeline_status NOT IN ('enrolled', 'hoc_vien', 'won')) AND (t.status IS NULL OR t.status != 'customer'))";
+                        require_once __DIR__ . '/../config/TenantConfigService.php';
+                        $wonStageIds = TenantConfigService::getStageIdsBySlugs($this->db, (int)$tid, ['enrolled', 'hoc_vien', 'won']);
+                        $stageExcl = !empty($wonStageIds) ? "(t.stage_id IS NULL OR t.stage_id NOT IN (" . implode(',', array_map('intval', $wonStageIds)) . "))" : "1=1";
+                        $where[] = "({$stageExcl} AND (t.pipeline_status IS NULL OR t.pipeline_status NOT IN ('enrolled', 'hoc_vien', 'won')) AND (t.status IS NULL OR t.status != 'customer'))";
                     }
                     break;
                 case 'hot':        $where[] = 't.lead_score >= 80'; break;
                 case 'customer':
-                    if ($studentSubTab === 'le_phi' || $studentSubTab === 'nop_ho_so') {
-                        // Candidate stages
+                    require_once __DIR__ . '/../config/TenantConfigService.php';
+                    $dynExportTabClause = $studentSubTab !== ''
+                        ? TenantConfigService::buildStudentSubTabClause($this->db, (int)$tid, $studentSubTab, 't')
+                        : null;
+                    if ($dynExportTabClause !== null) {
+                        $where[] = $dynExportTabClause;
                     } else {
-                        $where[] = "(t.status = 'customer' OR EXISTS (SELECT 1 FROM pipeline_stages ps2 WHERE ps2.id = t.stage_id AND (ps2.system_slug IN ('enrolled', 'hoc_vien') OR ps2.is_won = 1)) OR t.pipeline_status IN ('enrolled', 'hoc_vien'))";
+                        $where[] = "(t.status = 'customer' OR EXISTS (SELECT 1 FROM pipeline_stages ps2 WHERE ps2.id = t.stage_id AND ps2.tenant_id = t.tenant_id AND ps2.deleted_at IS NULL AND (ps2.system_slug IN ('enrolled', 'hoc_vien') OR ps2.is_won = 1)) OR t.pipeline_status IN ('enrolled', 'hoc_vien'))";
                     }
                     break;
                 case 'has_deal':   $where[] = "EXISTS (SELECT 1 FROM deals d WHERE d.contact_id = t.id AND d.deleted_at IS NULL)"; break;
@@ -851,26 +860,6 @@ class ExportController {
                     )";
                     break;
                 case 'new_week':   $where[] = "t.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"; break;
-            }
-
-            if ($segment === 'customer' && $studentSubTab !== '') {
-                if ($studentSubTab === 'le_phi') {
-                    $where[] = "(
-                        EXISTS (SELECT 1 FROM pipeline_stages ps2 WHERE ps2.id = t.stage_id AND ps2.system_slug IN ('deposit_tuition_payment', 'dong_le_phi_ho_so'))
-                        OR t.pipeline_status IN ('deposit_tuition_payment', 'dong_le_phi_ho_so')
-                    )";
-                } elseif ($studentSubTab === 'nop_ho_so') {
-                    $where[] = "(
-                        EXISTS (SELECT 1 FROM pipeline_stages ps2 WHERE ps2.id = t.stage_id AND ps2.system_slug IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))
-                        OR t.pipeline_status IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so')
-                    )";
-                } elseif ($studentSubTab === 'chinh_thuc') {
-                    $where[] = "(
-                        EXISTS (SELECT 1 FROM pipeline_stages ps2 WHERE ps2.id = t.stage_id AND (ps2.system_slug IN ('enrolled', 'hoc_vien') OR ps2.is_won = 1))
-                        OR t.pipeline_status IN ('enrolled', 'hoc_vien')
-                        OR t.status = 'customer'
-                    )";
-                }
             }
 
             $multiProgram = !empty($_GET['multi_program']) && in_array(strtolower((string)$_GET['multi_program']), ['1', 'true', 'yes', '2'], true);
@@ -1029,9 +1018,9 @@ class ExportController {
             
             $where = ['t.tenant_id = ?', 't.deleted_at IS NULL'];
             $params = [$auth['tenant_id']];
-            $userRole = strtolower($auth['role'] ?? 'user');
-            $isGlobalAdmin = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'sale_admin', 'saleadmin', 'accountant', 'ke_toan'], true);
-            $isManager = in_array($userRole, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+            $dealExpScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'deals', 'read');
+            $isGlobalAdmin = ($dealExpScope === 'all');
+            $isManager = ($dealExpScope === 'team');
 
             if (!$isGlobalAdmin) {
                 if ($isManager) {
@@ -1612,10 +1601,10 @@ class ExportController {
     public function exportAttendance(array $auth): void {
         $uid = (int)($auth['user_id'] ?? 0);
         $tid = (int)($auth['tenant_id'] ?? 1);
-        $role = strtolower($auth['role'] ?? 'user');
-        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
-        $isHR = in_array($role, ['hr', 'nhan_su'], true);
-        $isManager = in_array($role, ['manager', 'truong_phong', 'leader'], true);
+        $hrmExpScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'hrm', 'read');
+        $isGlobalAdmin = ($hrmExpScope === 'all');
+        $isHR = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['hr', 'nhan_su'], 'hrm', 'read', ['all']);
+        $isManager = ($hrmExpScope === 'team');
         $canViewAll = ($isGlobalAdmin || $isHR);
 
         $month = isset($_GET['month']) && !empty($_GET['month']) ? min(12, max(1, (int)$_GET['month'])) : (int)date('n');
@@ -1822,10 +1811,10 @@ class ExportController {
     public function exportExpenses(array $auth): void {
         $uid = (int)($auth['user_id'] ?? 0);
         $tid = (int)($auth['tenant_id'] ?? 1);
-        $role = strtolower($auth['role'] ?? 'user');
-        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
-        $isAccountant = in_array($role, ['accountant', 'ke_toan'], true);
-        $isManager = in_array($role, ['manager', 'truong_phong', 'leader'], true);
+        $expListScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'expenses', 'read');
+        $isGlobalAdmin = ($expListScope === 'all');
+        $isAccountant = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['accountant', 'ke_toan'], 'expenses', 'read', ['all']);
+        $isManager = ($expListScope === 'team');
 
         while (ob_get_level() > 0) {
             @ob_end_clean();
@@ -2167,8 +2156,9 @@ class ExportController {
         ];
         $params = [$tid, $tid, $tid];
 
-        $isFinAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'accountant', 'ke_toan', 'sale_admin', 'saleadmin'], true);
-        $isManager  = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+        $depExpScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'deposits', 'read');
+        $isFinAdmin = ($depExpScope === 'all');
+        $isManager  = ($depExpScope === 'team');
         if (!$isFinAdmin) {
             if ($isManager) {
                 $where[] = "(d.created_by = ? OR c.owner_id = ? OR d.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR c.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
@@ -2468,8 +2458,9 @@ class ExportController {
         $params[] = $uid;
         $params[] = $uid;
 
-        $isTaskAdmin  = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'sale_admin', 'saleadmin'], true);
-        $isManager    = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+        $taskExpScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'workspace', 'read');
+        $isTaskAdmin  = ($taskExpScope === 'all');
+        $isManager    = ($taskExpScope === 'team');
         $isAdminOrMgr = $isTaskAdmin || $isManager;
         if (!$isTaskAdmin) {
             if ($isManager) {
@@ -2745,8 +2736,9 @@ class ExportController {
         $where = ['t.tenant_id = ?'];
         $params = [$tid];
 
-        $isTicketAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'academic', 'hoc_vu', 'hoc_thuat', 'sale_admin', 'saleadmin', 'hr'], true);
-        $isManager     = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+        $tktExpScope   = TenantConfigService::resolvePermissionScope($this->db, $auth, 'tickets', 'read');
+        $isTicketAdmin = ($tktExpScope === 'all');
+        $isManager     = ($tktExpScope === 'team');
         if (!$isTicketAdmin) {
             if ($isManager) {
                 $where[] = "(t.assignee_id = ? OR t.created_by = ? OR t.assignee_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
@@ -3007,20 +2999,29 @@ class ExportController {
             }
         } catch (\Throwable $eLv) {}
 
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $exclEmails = TenantConfigService::getExcludedSystemEmails($this->db, (int)$tid);
         $where = [
             'u.tenant_id = ?',
             "u.role NOT IN ('superadmin', 'super_admin', 'bot', 'system')",
-            "u.email != 'info@ideas.edu.vn'",
             'u.id != 9000001'
         ];
         $params = [$monthYear, $tid];
+        if (!empty($exclEmails)) {
+            $phExcl = implode(',', array_fill(0, count($exclEmails), '?'));
+            $where[] = "(u.email IS NULL OR LOWER(TRIM(u.email)) NOT IN ($phExcl))";
+            foreach ($exclEmails as $emExcl) {
+                $params[] = $emExcl;
+            }
+        }
 
-        $canViewFullHrm = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'nhan_su', 'accountant', 'ke_toan'], true);
-        $isManager      = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+        $hrmDirScope    = TenantConfigService::resolvePermissionScope($this->db, $auth, 'hrm', 'read');
+        $canViewFullHrm = ($hrmDirScope === 'all');
+        $isManager      = ($hrmDirScope === 'team');
         if (!$canViewFullHrm) {
             if ($isManager) {
-                $where[] = "(u.id = ? OR u.team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))))";
-                array_push($params, $uid, $uid);
+                $where[] = "(u.id = ? OR u.team_id IN (SELECT id FROM teams WHERE tenant_id = ? AND deleted_at IS NULL AND FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))))";
+                array_push($params, $uid, $tid, $uid);
             } else {
                 $where[] = "u.id = ?";
                 $params[] = $uid;
@@ -3225,7 +3226,7 @@ class ExportController {
         $where = ['a.tenant_id = ?'];
         $params = [$tid];
 
-        $canViewAllAssets = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'nhan_su', 'accountant', 'ke_toan', 'manager', 'truong_phong', 'leader', 'team_lead'], true);
+        $canViewAllAssets = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'nhan_su', 'accountant', 'ke_toan', 'manager', 'truong_phong', 'leader', 'team_lead'], 'inventory', 'read', ['all', 'team']);
         if (!$canViewAllAssets) {
             $where[] = 'a.user_id = ?';
             $params[] = $uid;
@@ -3303,9 +3304,10 @@ class ExportController {
         $where = ['po.tenant_id = ?', 'po.deleted_at IS NULL'];
         $params = [$tid];
 
-        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo'], true);
-        $isAccountant  = in_array($role, ['accountant', 'ke_toan'], true);
-        $isManager     = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+        $poExpScope    = TenantConfigService::resolvePermissionScope($this->db, $auth, 'purchase_orders', 'read');
+        $isGlobalAdmin = ($poExpScope === 'all');
+        $isAccountant  = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['accountant', 'ke_toan'], 'purchase_orders', 'read', ['all']);
+        $isManager     = ($poExpScope === 'team');
 
         if (!$isGlobalAdmin && !$isAccountant) {
             if ($isManager) {
@@ -3457,8 +3459,9 @@ class ExportController {
         $where = ['so.tenant_id = ?', 'so.deleted_at IS NULL'];
         $params = [$tid];
 
-        $isFinAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'accountant', 'ke_toan', 'sale_admin', 'saleadmin'], true);
-        $isManager  = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+        $depExpScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'deposits', 'read');
+        $isFinAdmin = ($depExpScope === 'all');
+        $isManager  = ($depExpScope === 'team');
         if (!$isFinAdmin) {
             if ($isManager) {
                 $where[] = "(so.created_by = ? OR c.owner_id = ? OR so.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR c.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))))";
@@ -3598,7 +3601,8 @@ class ExportController {
         $where = ['i.tenant_id = ?', 'i.deleted_at IS NULL'];
         $params = [$tid];
 
-        $isFinAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'accountant', 'ke_toan', 'sale_admin', 'saleadmin', 'manager', 'truong_phong', 'leader'], true);
+        $invExpScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'invoices', 'read');
+        $isFinAdmin = in_array($invExpScope, ['all', 'team'], true);
         if (!$isFinAdmin) {
             $where[] = '(i.created_by = ? OR ct.owner_id = ?)';
             array_push($params, $uid, $uid);
@@ -3715,7 +3719,8 @@ class ExportController {
         $where = ['q.tenant_id = ?', 'q.deleted_at IS NULL'];
         $params = [$tid];
 
-        $isAdminOrMgr = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'accountant', 'ke_toan', 'sale_admin', 'saleadmin', 'manager', 'truong_phong', 'leader', 'team_lead'], true);
+        $qExpScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'quotes', 'read');
+        $isAdminOrMgr = in_array($qExpScope, ['all', 'team'], true);
         if (!$isAdminOrMgr) {
             $where[] = '(q.created_by = ? OR c.owner_id = ?)';
             array_push($params, $uid, $uid);
@@ -3917,8 +3922,9 @@ class ExportController {
         $where = ['u.tenant_id = ?'];
         $params = [$tid];
 
-        $canViewAll = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'ceo', 'hr', 'nhan_su', 'accountant', 'ke_toan'], true);
-        $isManager  = in_array($role, ['manager', 'truong_phong', 'leader', 'team_lead'], true);
+        $payExpScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'hrm', 'read');
+        $canViewAll = ($payExpScope === 'all');
+        $isManager  = ($payExpScope === 'team');
         if (!$canViewAll) {
             if ($isManager) {
                 $where[] = "(a.user_id = ? OR a.approver_id = ? OR a.approver_id_2 = ? OR u.team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))))";

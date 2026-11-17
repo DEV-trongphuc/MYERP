@@ -477,7 +477,7 @@ const ZaloAudienceTab: React.FC = () => {
         <div className="p-4 flex flex-col gap-4">
             <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-[var(--radius-lg)] bg-[var(--color-bg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-3">
-                    <img src="https://automation.ideas.edu.vn/imgs/zalolog.png" alt="Zalo" className="w-8 h-8 object-contain shrink-0" />
+                    <div className="w-8 h-8 rounded-lg bg-[#0068FF] text-white font-extrabold text-[10px] flex items-center justify-center shrink-0">Zalo</div>
                     <div>
                         <h3 className="text-sm font-semibold text-[var(--color-text)]">Danh sách đối tượng Zalo OA</h3>
                         <p className="text-xs text-[var(--color-text-muted)]">Tự động đồng bộ từ tài khoản Zalo Official Account</p>

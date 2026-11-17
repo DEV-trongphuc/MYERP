@@ -10,6 +10,10 @@ class UserController {
         if ($userId > 0) {
             @unlink($tmpDir . "/myerp_auth_u_{$userId}_{$tenantId}.json");
             @unlink($tmpDir . "/myerp_api_u_{$userId}.json");
+        } else {
+            foreach (glob($tmpDir . "/myerp_auth_u_*_{$tenantId}.json") ?: [] as $f) {
+                @unlink($f);
+            }
         }
         foreach (glob($tmpDir . "/myerp_users_list_t{$tenantId}_*.json") ?: [] as $f) {
             @unlink($f);
@@ -50,7 +54,9 @@ class UserController {
         $uid = (int)($auth['user_id'] ?? 0);
         $role = strtolower((string)($auth['role'] ?? ''));
         $teamOnlyFlag = isset($_GET['team_only']) && (string)$_GET['team_only'] === '1';
-        $canViewSensitivePii = in_array($role, ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $canViewSensitivePii = in_array($role, ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true)
+            || TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'director', 'hr'], 'users', 'write');
         $cacheKey = sprintf(
             '%s/myerp_users_list_t%d_r%s_to%d_u%d.json',
             sys_get_temp_dir(),
@@ -65,12 +71,19 @@ class UserController {
                 respond(200, $cachedRows);
             }
         }
+        $botExclEmails = array_values(array_filter(
+            TenantConfigService::getExcludedSystemEmails($this->db, $tid),
+            fn($em) => !str_starts_with($em, 'info@')
+        ));
+        $botExclSql = !empty($botExclEmails)
+            ? "LOWER(COALESCE(a.email, '')) NOT IN (" . implode(',', array_map(fn($e) => $this->db->quote($e), $botExclEmails)) . ")"
+            : "1=1";
         // Allow all authenticated users to retrieve the active user list based on unified accounts.is_active = 1
         $where = [
             "a.is_active = 1",
             "a.id != 9000001",
             "LOWER(COALESCE(a.role, '')) NOT IN ('bot', 'system')",
-            "LOWER(COALESCE(a.email, '')) NOT IN ('turniodev@gmail.com', 'turnlodev@gmail.com', 'ideas.ai@ideas.vn', 'ai@ideas.edu.vn')",
+            $botExclSql,
             "LOWER(COALESCE(NULLIF(a.status, ''), 'active')) NOT IN ('inactive', 'locked', 'resigned', 'terminated', 'disabled', 'nghi_viec', 'tam_nghi', 'suspended', 'khoa')"
         ];
         $params = [];
@@ -222,7 +235,10 @@ class UserController {
     }
 
     public function store(array $auth): void {
-        if (!in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true)) respond(403, null, 'Quyền admin là bắt buộc', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'super_admin', 'superadmin', 'director', 'hr'], 'users', 'write')) {
+            respond(403, null, 'Quyền admin là bắt buộc', false);
+        }
         $b=getBody();
         if(empty($b['email'])||empty($b['password'])||empty($b['full_name'])) respond(422,null,'Email, mật khẩu và tên là bắt buộc',false);
         // Check duplicate
@@ -253,8 +269,9 @@ class UserController {
         $this->show($auth, $newId);
     }
     public function show(array $auth,int $id): void {
-        if (!in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'manager', 'sales', 'sale', 'assistant', 'viewer', 'hr', 'sale_admin', 'saleadmin', 'accountant', 'marketing', 'academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor', 'staff', 'employee'], true)) {
-            respond(403, null, 'Quyền truy cập không đủ', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (empty($auth['user_id'])) {
+            respond(401, null, 'Chưa đăng nhập', false);
         }
         try {
             $stmt=$this->db->prepare("SELECT id,email,full_name,role,job_title,department,avatar_url,signature_url,phone,is_active,last_login_at,created_at,dob,gender,citizen_id,address,bank_name,bank_account,two_factor_enabled,two_factor_type,permissions_json,bio,extra_fields_json,manager_behavior_mode,work_start_time,work_end_time,work_schedule,vacation_mode,overtime_mode,use_custom_work_hours,leave_start,leave_end,team_id FROM users WHERE id=? AND tenant_id=?");
@@ -264,18 +281,20 @@ class UserController {
             $stmt->execute([$id,$auth['tenant_id']]); $row=$stmt->fetch();
         }
         if(!$row) respond(404,null,'Không tìm thấy người dùng',false);
-        $canViewSensitivePii = in_array(strtolower($auth['role'] ?? ''), ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true);
+        $canViewSensitivePii = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'super_admin', 'superadmin', 'director', 'hr'], 'users', 'write');
         if (!$canViewSensitivePii && (int)$row['id'] !== (int)$auth['user_id']) {
             unset($row['citizen_id'], $row['bank_name'], $row['bank_account'], $row['address'], $row['dob']);
         }
         respond(200,$row);
     }
     public function update(array $auth,int $id): void {
-        if (!in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true) && (int)$auth['user_id'] !== (int)$id) respond(403, null, 'Không có quyền cập nhật thông tin người khác', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $canAdminUsers = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'super_admin', 'superadmin', 'director', 'hr'], 'users', 'write');
+        if (!$canAdminUsers && (int)$auth['user_id'] !== (int)$id) respond(403, null, 'Không có quyền cập nhật thông tin người khác', false);
         
         $b = getBody();
         $fields = ['email', 'full_name', 'phone', 'department', 'avatar_url', 'signature_url', 'dob', 'gender', 'citizen_id', 'address', 'bank_name', 'bank_account', 'zalo_chat_id', 'telegram_chat_id', 'bio', 'extra_fields_json'];
-        if (in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true)) {
+        if ($canAdminUsers) {
             $fields[] = 'role';
             $fields[] = 'is_active';
             $fields[] = 'permissions_json';
@@ -428,17 +447,24 @@ class UserController {
         $this->show($auth,$id);
     }
     public function destroy(array $auth, int $id): void {
-        if (!in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true)) respond(403, null, 'Quyền admin là bắt buộc', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'super_admin', 'superadmin', 'director', 'hr'], 'users', 'delete')) {
+            respond(403, null, 'Quyền admin là bắt buộc', false);
+        }
         if($id===$auth['user_id']) respond(403,null,'Không thể xóa tài khoản của chính mình',false);
         try {
             $hasDeletedAt = false;
-            try {
-                $uCols = $this->db->query("SHOW COLUMNS FROM users LIKE 'deleted_at'")->fetch();
-                if ($uCols) $hasDeletedAt = true;
-            } catch (\Throwable $eCol) {}
+            if (TenantConfigService::isSqlite($this->db)) {
+                $hasDeletedAt = true;
+            } else {
+                try {
+                    $uCols = $this->db->query("SHOW COLUMNS FROM users LIKE 'deleted_at'")->fetch();
+                    if ($uCols) $hasDeletedAt = true;
+                } catch (\Throwable $eCol) {}
+            }
 
             if ($hasDeletedAt) {
-                $this->db->prepare("UPDATE users SET is_active = 0, deleted_at = NOW() WHERE id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
+                $this->db->prepare("UPDATE users SET is_active = 0, deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
             } else {
                 $this->db->prepare("UPDATE users SET is_active = 0 WHERE id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
             }

@@ -43,7 +43,7 @@ if (basename($_SERVER['SCRIPT_FILENAME']) === 'worker_tracking_aggregator.php') 
         $pdo->beginTransaction();
         $stmt = $pdo->prepare(
             "SELECT id, type, payload FROM raw_event_buffer
-             WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) AND processed = 0 ORDER BY id ASC LIMIT ? FOR UPDATE $skipLockedClause"
+             WHERE (created_at = 0 OR created_at >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 30 DAY))) AND processed = 0 ORDER BY id ASC LIMIT ? FOR UPDATE $skipLockedClause"
         );
         $stmt->execute([$batchSize]);
         $events = $stmt->fetchAll();
@@ -202,11 +202,14 @@ if (basename($_SERVER['SCRIPT_FILENAME']) === 'worker_tracking_aggregator.php') 
     syncZaloActivityBuffer($pdo);
     syncTimestampBuffer($pdo);
 
+    $processedCount = count($processedIds ?? []);
+    $unprocessedCount = count($unprocessedIds ?? []);
+
     // [PHASE 9 MEMORY FIX] Dọn dẹp RAM rác khổng lồ từ mảng Tracking Event (hàng nghìn objects JSON)
     unset($events, $processedIds, $unprocessedIds, $seenRapidEvents);
     gc_collect_cycles();
 
-    echo json_encode(['status' => 'success', 'processed' => count($processedIds), 'retried' => count($unprocessedIds)]);
+    echo json_encode(['status' => 'success', 'processed' => $processedCount, 'retried' => $unprocessedCount]);
 }
 
 /**

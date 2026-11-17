@@ -15,15 +15,17 @@ try {
 
             // 1. Load MYERP core system_settings first
             try {
-                $sysStmt = $pdo->query("
+                $effTid = $workspace_id > 0 ? (int)$workspace_id : 1;
+                $sysStmt = $pdo->prepare("
                     SELECT setting_key, setting_value 
                     FROM system_settings 
-                    WHERE setting_key IN (
+                    WHERE tenant_id = ? AND setting_key IN (
                         'email_provider','ses_host','ses_username','ses_sender_email','ses_sender_name',
                         'smtp_port','verified_from_senders','qa_test_emails','automation_sandbox_mode',
                         'company_name','brand_name'
                     )
                 ");
+                $sysStmt->execute([$effTid]);
                 if ($sysStmt) {
                     foreach ($sysStmt->fetchAll(PDO::FETCH_ASSOC) as $sRow) {
                         $sk = (string)$sRow['setting_key'];
@@ -35,10 +37,11 @@ try {
             }
 
             // 2. Load global (0) mkt_system_settings, then overlay with workspace-specific rows
+            $wsFilterSql = ((int)$workspace_id <= 1) ? 'workspace_id IN (0, ?)' : 'workspace_id = ?';
             $stmt = $pdo->prepare("
                 SELECT `key`, `value` 
                 FROM mkt_system_settings 
-                WHERE workspace_id IN (0, ?)
+                WHERE {$wsFilterSql}
                 ORDER BY workspace_id ASC
             ");
             $stmt->execute([$workspace_id]);
@@ -74,7 +77,8 @@ try {
             }
 
             try {
-                $vsStmt = $pdo->prepare("SELECT email, name FROM verified_senders WHERE workspace_id IN (0, ?) AND is_verified = 1 ORDER BY is_default DESC, id ASC");
+                $vsWhereSql = ((int)$workspace_id <= 1) ? 'workspace_id IN (0, ?)' : 'workspace_id = ?';
+                $vsStmt = $pdo->prepare("SELECT email, name FROM verified_senders WHERE {$vsWhereSql} AND is_verified = 1 ORDER BY is_default DESC, id ASC");
                 $vsStmt->execute([$workspace_id]);
                 foreach ($vsStmt->fetchAll(PDO::FETCH_ASSOC) as $vsRow) {
                     $em = strtolower(trim((string)($vsRow['email'] ?? '')));
@@ -92,21 +96,29 @@ try {
                 }
             }
 
-            if (empty($verifiedMap)) {
-                foreach (['tuyensinh@ideas.edu.vn', 'cskh@ideas.edu.vn', 'marketing@ideas.edu.vn', 'systemnoti@ideas.edu.vn'] as $defEm) {
-                    $verifiedMap[$defEm] = $defEm;
+            $effWsTid = (int)$workspace_id > 0 ? (int)$workspace_id : 1;
+            $orgCfg = (isset($pdo) && $pdo instanceof PDO && class_exists('TenantConfigService'))
+                ? TenantConfigService::getOrganizationProfile($pdo, $effWsTid)
+                : [];
+            if (empty($verifiedMap) && !empty($orgCfg['verified_senders'])) {
+                foreach ($orgCfg['verified_senders'] as $defEm) {
+                    $defEm = strtolower(trim((string)$defEm));
+                    if ($defEm !== '' && filter_var($defEm, FILTER_VALIDATE_EMAIL)) {
+                        $verifiedMap[$defEm] = $defEm;
+                    }
                 }
             }
 
             $verifiedSenders = array_values($verifiedMap);
             $settings['verified_senders'] = $verifiedSenders;
             $settings['sender_emails'] = $verifiedSenders;
-            $settings['default_sender_email'] = $verifiedSenders[0] ?? 'marketing@ideas.edu.vn';
+            $settings['default_sender_email'] = $verifiedSenders[0] ?? ($orgCfg['sender_email'] ?? '');
+            $fallbackOrg = trim((string)($settings['company_name'] ?? $settings['brand_name'] ?? ($orgCfg['name'] ?? 'Workspace')));
             $rawSenderName = !empty($settings['smtp_from_name'])
                 ? trim((string)$settings['smtp_from_name'])
-                : (!empty($settings['ses_sender_name']) ? trim((string)$settings['ses_sender_name']) : 'IDEAS');
-            if ($rawSenderName === '' || preg_match('/^viện\s+quốc\s+tế\s+ideas$/iu', $rawSenderName)) {
-                $rawSenderName = 'IDEAS';
+                : (!empty($settings['ses_sender_name']) ? trim((string)$settings['ses_sender_name']) : $fallbackOrg);
+            if ($rawSenderName === '') {
+                $rawSenderName = $fallbackOrg;
             }
             $settings['default_sender_name'] = $rawSenderName;
             $settings['smtp_from_name'] = $rawSenderName;

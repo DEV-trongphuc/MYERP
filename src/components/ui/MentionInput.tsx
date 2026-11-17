@@ -7,6 +7,7 @@ import { Avatar } from './Avatar';
 import { toast } from 'react-hot-toast';
 import { Bold, Italic, Underline as UnderlineIcon, Link2, ImageIcon, Paperclip, List, ListOrdered, Trash2, Smile, Search, X, User as UserIcon, CheckSquare, FileText, Building2, ShoppingCart, Tag, Sparkles, Loader2 } from 'lucide-react';
 import { StickerPickerModal } from './StickerPickerModal';
+import { isExcludedSystemEmail } from '../../contexts/TenantConfigContext';
 
 interface User {
   id: number;
@@ -81,7 +82,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     const role = String(u.role || '').toLowerCase().trim();
     if (role === 'bot' || role === 'system' || Number(u.id) === 9000001) return false;
     const email = String((u as any).email || '').toLowerCase().trim();
-    if (['turniodev@gmail.com', 'turnlodev@gmail.com', 'ideas.ai@ideas.vn', 'ai@ideas.edu.vn'].includes(email)) return false;
+    if (!email.startsWith('info@') && isExcludedSystemEmail(email)) return false;
     return true;
   };
 

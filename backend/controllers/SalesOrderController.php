@@ -6,9 +6,10 @@ class SalesOrderController {
     private $db;
     private static bool $schemaChecked = false;
 
-    public function __construct() {
-        $this->db = Database::getInstance();
-        if (!self::$schemaChecked && !$this->db->inTransaction()) {
+    public function __construct(?PDO $db = null) {
+        $this->db = $db ?? Database::getInstance();
+        $isSqlite = strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite';
+        if (!$isSqlite && !self::$schemaChecked && !$this->db->inTransaction()) {
             self::$schemaChecked = true;
             try {
                 $col = $this->db->query("SHOW COLUMNS FROM sales_orders LIKE 'deleted_at'")->fetch();
@@ -383,9 +384,11 @@ class SalesOrderController {
             respond(400, null, 'Dữ liệu không hợp lệ', false);
         }
 
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $forUpdate = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite') ? '' : ' FOR UPDATE';
         $this->db->beginTransaction();
         try {
-            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
+            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ?{$forUpdate}");
             $stmt->execute([$id, $tenantId]);
             $so = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -394,8 +397,13 @@ class SalesOrderController {
                 respond(404, null, 'Đơn bán hàng không tồn tại', false);
             }
 
-            $isAdmin = in_array($auth['role'] ?? '', ['admin', 'superadmin', 'super_admin', 'director'], true);
-            if (!$isAdmin && (int)$so['created_by'] !== $userId && ($auth['role'] ?? '') !== 'manager') {
+            $soWriteScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'sales_orders', 'write');
+            if ($soWriteScope === 'none') {
+                $this->db->rollBack();
+                respond(403, null, 'Bạn không có quyền chỉnh sửa đơn bán hàng này', false);
+            }
+            $isAdmin = ($soWriteScope === 'all');
+            if (!$isAdmin && (int)$so['created_by'] !== $userId && !($soWriteScope === 'team' && TenantConfigService::isUserInManagerTeam($this->db, $tenantId, $userId, (int)$so['created_by']))) {
                 $this->db->rollBack();
                 respond(403, null, 'Bạn không có quyền chỉnh sửa đơn bán hàng này', false);
             }
@@ -507,14 +515,15 @@ class SalesOrderController {
      * Phê duyệt Đơn bán hàng
      */
     public function approve(array $auth, int $id): void {
-        $role = strtolower(trim((string)($auth['role'] ?? '')));
-        if (!in_array($role, ['admin', 'super_admin', 'superadmin', 'director', 'manager', 'accountant', 'sale_admin'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'super_admin', 'superadmin', 'director', 'manager', 'accountant', 'sale_admin'], 'sales_orders', 'approve')) {
             respond(403, null, 'Bạn không có quyền phê duyệt đơn bán hàng', false);
         }
+        $forUpdate = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite') ? '' : ' FOR UPDATE';
 
         $this->db->beginTransaction();
         try {
-            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
+            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL{$forUpdate}");
             $stmt->execute([$id, $auth['tenant_id']]);
             $so = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -522,17 +531,32 @@ class SalesOrderController {
                 $this->db->rollBack();
                 respond(404, null, 'Đơn bán hàng không tồn tại', false);
             }
-            if (!in_array($role, ['admin', 'super_admin', 'superadmin', 'director'], true) && (int)$so['created_by'] === (int)$auth['user_id']) {
+            $authDecision = TenantConfigService::canUserApproveWorkflowLevel(
+                $this->db,
+                $auth,
+                'sales_order',
+                'sales_orders',
+                (int)($so['created_by'] ?? 0),
+                null,
+                1,
+                (float)($so['total'] ?? 0)
+            );
+            if (empty($authDecision['allowed'])) {
                 $this->db->rollBack();
-                respond(403, null, 'Không thể tự duyệt đơn hàng của chính mình', false);
+                if (($authDecision['reason'] ?? '') === 'self_approval_forbidden') {
+                    respond(403, null, 'Không thể tự duyệt đơn hàng của chính mình', false);
+                } elseif (($authDecision['reason'] ?? '') === 'outside_team_scope') {
+                    respond(403, null, 'Bạn chỉ có quyền duyệt đơn bán hàng thuộc nhóm của mình', false);
+                }
+                respond(403, null, 'Bạn không có quyền phê duyệt đơn bán hàng này', false);
             }
             if ($so['status'] !== 'draft' && $so['status'] !== 'pending') {
                 $this->db->rollBack();
                 respond(422, null, 'Chỉ có thể phê duyệt đơn bán hàng ở trạng thái nháp hoặc chờ duyệt', false);
             }
 
-            $update = $this->db->prepare("UPDATE sales_orders SET status = 'approved' WHERE id = ?");
-            $update->execute([$id]);
+            $update = $this->db->prepare("UPDATE sales_orders SET status = 'approved' WHERE id = ? AND tenant_id = ? AND status IN ('draft', 'pending')");
+            $update->execute([$id, $auth['tenant_id']]);
             $this->db->commit();
         } catch (\Throwable $e) {
             if ($this->db->inTransaction()) {
@@ -561,17 +585,18 @@ class SalesOrderController {
      * Từ chối Đơn bán hàng
      */
     public function reject(array $auth, int $id): void {
-        $role = strtolower(trim((string)($auth['role'] ?? '')));
-        if (!in_array($role, ['admin', 'super_admin', 'superadmin', 'director', 'manager', 'accountant', 'sale_admin'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'super_admin', 'superadmin', 'director', 'manager', 'accountant', 'sale_admin'], 'sales_orders', 'approve')) {
             respond(403, null, 'Bạn không có quyền từ chối đơn bán hàng', false);
         }
+        $forUpdate = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite') ? '' : ' FOR UPDATE';
 
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
         $reason = trim($data['reason'] ?? $data['reject_reason'] ?? '');
 
         $this->db->beginTransaction();
         try {
-            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
+            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL{$forUpdate}");
             $stmt->execute([$id, $auth['tenant_id']]);
             $so = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -579,9 +604,22 @@ class SalesOrderController {
                 $this->db->rollBack();
                 respond(404, null, 'Đơn bán hàng không tồn tại', false);
             }
-            if (!in_array($role, ['admin', 'super_admin', 'superadmin', 'director'], true) && (int)$so['created_by'] === (int)$auth['user_id']) {
+            $authDecision = TenantConfigService::canUserApproveWorkflowLevel(
+                $this->db,
+                $auth,
+                'sales_order',
+                'sales_orders',
+                (int)($so['created_by'] ?? 0),
+                null,
+                1,
+                (float)($so['total'] ?? 0)
+            );
+            if (empty($authDecision['allowed'])) {
                 $this->db->rollBack();
-                respond(403, null, 'Không thể tự duyệt đơn hàng của chính mình', false);
+                if (($authDecision['reason'] ?? '') === 'self_approval_forbidden') {
+                    respond(403, null, 'Không thể tự duyệt đơn hàng của chính mình', false);
+                }
+                respond(403, null, 'Bạn không có quyền từ chối đơn bán hàng này', false);
             }
             if ($so['status'] !== 'draft' && $so['status'] !== 'pending') {
                 $this->db->rollBack();
@@ -593,8 +631,8 @@ class SalesOrderController {
                 $notes = trim($notes . "\n[Từ chối ngày " . date('d/m/Y H:i') . " bởi " . ($auth['full_name'] ?? 'Quản lý') . "]: " . $reason);
             }
 
-            $update = $this->db->prepare("UPDATE sales_orders SET status = 'rejected', notes = ? WHERE id = ?");
-            $update->execute([$notes, $id]);
+            $update = $this->db->prepare("UPDATE sales_orders SET status = 'rejected', notes = ? WHERE id = ? AND tenant_id = ?");
+            $update->execute([$notes, $id, $auth['tenant_id']]);
             $this->db->commit();
         } catch (\Throwable $e) {
             if ($this->db->inTransaction()) {
@@ -624,12 +662,13 @@ class SalesOrderController {
      * Hủy Đơn bán hàng
      */
     public function cancel(array $auth, int $id): void {
-        $role = strtolower(trim((string)($auth['role'] ?? '')));
-        $isPrivileged = in_array($role, ['admin', 'super_admin', 'superadmin', 'director', 'manager', 'accountant', 'sale_admin'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isPrivileged = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'super_admin', 'superadmin', 'director', 'manager', 'accountant', 'sale_admin'], 'sales_orders', 'approve');
+        $forUpdate = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite') ? '' : ' FOR UPDATE';
 
         $this->db->beginTransaction();
         try {
-            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? FOR UPDATE");
+            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL{$forUpdate}");
             $stmt->execute([$id, $auth['tenant_id']]);
             $so = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -646,7 +685,7 @@ class SalesOrderController {
                 respond(422, null, 'Không thể hủy đơn bán hàng đã hoàn thành', false);
             }
 
-            $this->db->prepare("UPDATE sales_orders SET status = 'cancelled' WHERE id = ?")->execute([$id]);
+            $this->db->prepare("UPDATE sales_orders SET status = 'cancelled' WHERE id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
             $this->db->commit();
         } catch (\Throwable $e) {
             if ($this->db->inTransaction()) {
@@ -661,9 +700,13 @@ class SalesOrderController {
      * Xóa Đơn bán hàng (chỉ cho phép xóa khi là nháp hoặc người dùng có quyền admin)
      */
     public function destroy(array $auth, int $id): void {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isSqlite = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite');
+        $forUpdate = $isSqlite ? '' : ' FOR UPDATE';
+        $nowExpr = $isSqlite ? 'CURRENT_TIMESTAMP' : 'NOW()';
         $this->db->beginTransaction();
         try {
-            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL FOR UPDATE");
+            $stmt = $this->db->prepare("SELECT * FROM sales_orders WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL{$forUpdate}");
             $stmt->execute([$id, $auth['tenant_id']]);
             $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -672,9 +715,14 @@ class SalesOrderController {
                 respond(404, null, 'Đơn bán hàng không tồn tại', false);
             }
 
-            $isAdmin = in_array($auth['role'] ?? '', ['admin', 'superadmin', 'super_admin', 'director'], true);
+            $delScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'sales_orders', 'delete');
+            if ($delScope === 'none') {
+                $this->db->rollBack();
+                respond(403, null, 'Bạn không có quyền xóa đơn bán hàng', false);
+            }
+            $isAdmin = ($delScope === 'all');
             if (!$isAdmin) {
-                if ((int)$order['created_by'] !== (int)$auth['user_id']) {
+                if ((int)$order['created_by'] !== (int)$auth['user_id'] && !($delScope === 'team' && TenantConfigService::isUserInManagerTeam($this->db, (int)$auth['tenant_id'], (int)$auth['user_id'], (int)$order['created_by']))) {
                     $this->db->rollBack();
                     respond(403, null, 'Bạn không có quyền xóa đơn bán hàng của người khác', false);
                 }
@@ -684,7 +732,7 @@ class SalesOrderController {
                 }
             }
 
-            $this->db->prepare("UPDATE sales_orders SET deleted_at = NOW(), status = 'cancelled' WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL")
+            $this->db->prepare("UPDATE sales_orders SET deleted_at = {$nowExpr}, status = 'cancelled' WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL")
                 ->execute([$id, $auth['tenant_id']]);
             $this->db->commit();
             respond(200, ['id' => $id], 'Xóa đơn bán hàng thành công');

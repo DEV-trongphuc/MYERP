@@ -4,11 +4,7 @@ require_once 'db_connect.php';
 
 // [FIX M-04] Root admin emails extracted to single constant — no longer duplicated 3x in code.
 // To add/remove root admins, only change this list.
-define('ROOT_ADMIN_EMAILS', [
-    'dom.marketing.vn@gmail.com',
-    'marketing@ideas.edu.vn',
-    'ledaovuphuong@gmail.com',
-]);
+define('ROOT_ADMIN_EMAILS', array_values(array_filter(array_map('strtolower', array_map('trim', explode(',', (string)(getenv('ROOT_ADMIN_EMAILS') ?: ($_ENV['ROOT_ADMIN_EMAILS'] ?? ''))))))));
 
 // Auth Check: Must be admin
 if (session_status() === PHP_SESSION_NONE) {
@@ -25,7 +21,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
 if ($method === 'GET' && $action === 'list') {
-    $stmt = $pdo->query("SELECT u.id, u.email, u.full_name AS name, u.role, u.status, u.last_login_at AS last_login, u.avatar_url AS picture FROM users u ORDER BY u.last_login_at DESC, u.created_at DESC");
+    $stmt = $pdo->query("SELECT u.id, u.email, u.full_name AS name, u.role, u.status, u.last_login_at AS last_login, u.avatar_url AS picture FROM users u WHERE u.deleted_at IS NULL ORDER BY u.last_login_at DESC, u.created_at DESC");
     $users = $stmt->fetchAll();
 
     if (!empty($users)) {
@@ -119,7 +115,7 @@ if ($method === 'DELETE' || ($method === 'POST' && $action === 'delete')) {
     $rootAdmins = ROOT_ADMIN_EMAILS;
     if (in_array($userEmail, $rootAdmins)) jsonResponse(false, null, 'Cannot delete root admin');
 
-    $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
+    $stmt = $pdo->prepare("UPDATE users SET deleted_at = NOW() WHERE id = ?");
     $stmt->execute([$id]);
     jsonResponse(true, null, 'User deleted');
 }

@@ -34,7 +34,7 @@ export const ApiV1DocumentationPage: React.FC = () => {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const baseUrl = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : "https://myerp.ideas.edu.vn";
+  const baseUrl = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
 
   // Keyboard shortcut Ctrl+K or / to search
   useEffect(() => {

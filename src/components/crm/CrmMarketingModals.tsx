@@ -18,6 +18,7 @@ import erpApi from '../../api/axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { pushOverlay } from '../../utils/overlayStack';
 import { useSettings } from '../marketing/components/contexts/SettingsContext';
+import { getTenantOrganizationName, getTenantDefaultSenderEmail, getTenantVerifiedSenders } from '../../contexts/TenantConfigContext';
 
 export interface CrmMarketingContact {
   id: number;
@@ -153,10 +154,10 @@ export const CrmSendTemplateEmailModal: React.FC<CrmSendTemplateEmailModalProps>
   useEffect(() => {
     if (!isOpen) return;
     refreshSettings?.();
-    const normalizedAppSender = defaultAppSenderName === 'Viện Quốc Tế IDEAS' ? 'IDEAS' : defaultAppSenderName;
-    const defaultSender = normalizedAppSender || currentUser?.full_name || currentUser?.name || 'IDEAS';
+    const orgBrand = getTenantOrganizationName('Organization');
+    const defaultSender = defaultAppSenderName || currentUser?.full_name || currentUser?.name || orgBrand;
     setSenderName(defaultSender);
-    setSenderEmail((prev) => prev || verifiedSenders[0] || 'tuyensinh@ideas.edu.vn');
+    setSenderEmail((prev) => prev || verifiedSenders[0] || getTenantDefaultSenderEmail());
     setPreviewContactIdx(0);
     setActiveEditorTab('compose');
     if (contacts.length === 1 && !contacts[0].email) {
@@ -167,14 +168,14 @@ export const CrmSendTemplateEmailModal: React.FC<CrmSendTemplateEmailModalProps>
     if (!subject && !htmlBody) {
       const firstContact = contacts[0];
       const prog = firstContact?.program ? ` - Chương trình ${firstContact.program}` : '';
-      setSubject(`Thông tin tư vấn học tập từ Viện Quốc Tế IDEAS${prog}`);
+      setSubject(`Thông tin tư vấn học tập từ ${orgBrand}${prog}`);
       setHtmlBody(
         `<div style="font-family: Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #1e293b; max-width: 640px; margin: 0 auto;">\n` +
         `  <p>Xin chào <strong>{{full_name}}</strong>,</p>\n` +
-        `  <p>Cảm ơn anh/chị đã quan tâm đến chương trình <strong>{{program}}</strong> tại <strong>Viện Quốc Tế IDEAS</strong>.</p>\n` +
+        `  <p>Cảm ơn anh/chị đã quan tâm đến chương trình <strong>{{program}}</strong> tại <strong>${orgBrand}</strong>.</p>\n` +
         `  <p>Em là <strong>{{consultant_name}}</strong> ({{consultant_role}}) — phụ trách hỗ trợ hồ sơ trực tiếp cho anh/chị.</p>\n` +
         `  <p>Nếu cần trao đổi thêm thông tin lộ trình học tập hoặc ưu đãi học phí, anh/chị có thể phản hồi trực tiếp email này hoặc liên hệ số điện thoại <strong>{{consultant_phone}}</strong>.</p>\n` +
-        `  <p style="margin-top: 24px;">Trân trọng,<br/><strong>{{consultant_name}}</strong><br/>Viện Quốc Tế IDEAS</p>\n` +
+        `  <p style="margin-top: 24px;">Trân trọng,<br/><strong>{{consultant_name}}</strong><br/>${orgBrand}</p>\n` +
         `</div>`
       );
     }
@@ -278,7 +279,7 @@ export const CrmSendTemplateEmailModal: React.FC<CrmSendTemplateEmailModalProps>
     const firstName = parts.length > 0 ? parts[parts.length - 1] : fullName;
     const lastName = parts.length > 1 ? parts.slice(0, -1).join(' ') : '';
     const consultantName = c?.owner_name || currentUser?.full_name || currentUser?.name || 'Chuyên viên Tư vấn';
-    const consultantEmail = c?.owner_email || currentUser?.email || 'support@ideas.edu.vn';
+    const consultantEmail = c?.owner_email || currentUser?.email || getTenantDefaultSenderEmail();
     const consultantPhone = c?.owner_phone || (currentUser as any)?.phone || '028 2244 6688';
     const consultantRole = currentUser?.job_title || 'Chuyên viên Tư vấn Đào tạo';
 
@@ -408,8 +409,8 @@ export const CrmSendTemplateEmailModal: React.FC<CrmSendTemplateEmailModalProps>
         custom_emails: customEmailsList,
         subject: subject.trim(),
         html_content: htmlBody,
-        sender_email: senderEmail.trim() || verifiedSenders[0] || 'tuyensinh@ideas.edu.vn',
-        from_email: senderEmail.trim() || verifiedSenders[0] || 'tuyensinh@ideas.edu.vn',
+        sender_email: senderEmail.trim() || verifiedSenders[0] || getTenantDefaultSenderEmail(),
+        from_email: senderEmail.trim() || verifiedSenders[0] || getTenantDefaultSenderEmail(),
         sender_name: senderName.trim() || undefined,
         from_name: senderName.trim() || undefined,
         template_id: selectedTemplate?.id || undefined,
@@ -637,11 +638,11 @@ export const CrmSendTemplateEmailModal: React.FC<CrmSendTemplateEmailModalProps>
                     Email gửi đi (Đã xác minh)
                   </label>
                   <select
-                    value={senderEmail || verifiedSenders[0] || 'tuyensinh@ideas.edu.vn'}
+                    value={senderEmail || verifiedSenders[0] || getTenantDefaultSenderEmail()}
                     onChange={(e) => setSenderEmail(e.target.value)}
                     className="w-full h-9 px-2.5 text-xs font-medium rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)] cursor-pointer"
                   >
-                    {(verifiedSenders.length > 0 ? verifiedSenders : ['tuyensinh@ideas.edu.vn', 'cskh@ideas.edu.vn', 'marketing@ideas.edu.vn']).map((em, idx) => (
+                    {(verifiedSenders.length > 0 ? verifiedSenders : getTenantVerifiedSenders()).map((em, idx) => (
                       <option key={em} value={em}>
                         {em}{idx === 0 ? ' (Mặc định)' : ''}
                       </option>
@@ -656,7 +657,7 @@ export const CrmSendTemplateEmailModal: React.FC<CrmSendTemplateEmailModalProps>
                     type="text"
                     value={senderName}
                     onChange={(e) => setSenderName(e.target.value)}
-                    placeholder="VD: Nguyễn Văn A - Viện Quốc Tế IDEAS"
+                    placeholder={`VD: Nguyễn Văn A - ${getTenantOrganizationName()}`}
                     className="w-full h-9 px-3 text-xs rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
                   />
                 </div>

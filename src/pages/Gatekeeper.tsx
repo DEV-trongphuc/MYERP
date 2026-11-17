@@ -1549,9 +1549,10 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
 
       {/* Intro explain card styled identically to FairShareAudit */}
       <div className="hide-on-mobile" style={{
-        background: 'linear-gradient(135deg, rgba(189, 29, 45, 0.05) 0%, rgba(189, 29, 45, 0.08) 100%)',
-        border: '1px solid rgba(189, 29, 45, 0.15)', borderLeft: '4px solid var(--color-primary)',
-        borderRadius: 'var(--radius-lg)', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem'
+        background: '#ffffff',
+        border: '1px solid #E2E8F0',
+        borderRadius: '16px', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem',
+        boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
       }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', width: '100%' }}>
           <div style={{
@@ -3984,7 +3985,7 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
                         statsData.rounds_breakdown?.map((item: any, idx: number) => {
                           const totalBS = statsData.stats?.total_below_standard || 1;
                           const pct = Math.round((item.count / totalBS) * 100);
-                          const colors = ['#a31422', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+                          const colors = ['#C6333D', '#334155', '#E11D48', '#64748B', '#991B1B', '#475569', '#FB7185', '#94A3B8', '#1E293B', '#CBD5E1'];
                           const color = colors[idx % colors.length];
                           return (
                             <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -4026,7 +4027,7 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
                         statsData.sources_breakdown?.map((item: any, idx: number) => {
                           const totalBS = statsData.stats?.total_below_standard || 1;
                           const pct = Math.round((item.count / totalBS) * 100);
-                          const colors = ['#3b82f6', '#10b981', '#a31422', '#f59e0b', '#ef4444'];
+                          const colors = ['#C6333D', '#334155', '#E11D48', '#64748B', '#991B1B', '#475569', '#FB7185', '#94A3B8', '#1E293B', '#CBD5E1'];
                           const color = colors[idx % colors.length];
                           return (
                             <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>

@@ -1791,6 +1791,98 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
     );
   }
 
+  // 39. KẾ TOÁN A-Z / TÀI CHÍNH (Emerald Gold - Sổ cái & Cân đối kế toán)
+  if (normName.includes('kế toán') || normName.includes('accounting') || normName === 'finance' || normName.includes('báo cáo tài chính')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_acc_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#10b981" />
+            <stop offset="100%" stopColor="#065f46" />
+          </linearGradient>
+          {filterDef('ai_acc_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_acc_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <rect x="14" y="12" width="28" height="32" rx="5" fill="#ffffff" filter="url(#ai_acc_sh)" />
+        <rect x="18" y="16" width="20" height="7" rx="2.5" fill="#d1fae5" />
+        <text x="28" y="21.5" textAnchor="middle" fill="#047857" fontSize="6.5" fontWeight="900">A-Z</text>
+        <rect x="18" y="27" width="5" height="4" rx="1" fill="#34d399" />
+        <rect x="25.5" y="27" width="5" height="4" rx="1" fill="#34d399" />
+        <rect x="33" y="27" width="5" height="10" rx="1.2" fill="#f59e0b" />
+        <rect x="18" y="33" width="5" height="4" rx="1" fill="#a7f3d0" />
+        <rect x="25.5" y="33" width="5" height="4" rx="1" fill="#a7f3d0" />
+      </svg>
+    );
+  }
+
+  // 40. KHO HÀNG HÓA & SẢN PHẨM (Warm Amber Indigo - Hộp kho vận 3D)
+  if (normName.includes('kho hàng') || normName.includes('inventory') || normName.includes('sản phẩm') || normName.includes('products')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_inv_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#6366f1" />
+            <stop offset="100%" stopColor="#312e81" />
+          </linearGradient>
+          {filterDef('ai_inv_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_inv_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <g filter="url(#ai_inv_sh)">
+          <path d="M28 13L42 20.5V35.5L28 43L14 35.5V20.5L28 13Z" fill="#ffffff" />
+          <path d="M28 13L42 20.5L28 28L14 20.5L28 13Z" fill="#e0e7ff" />
+          <path d="M28 28V43L42 35.5V20.5L28 28Z" fill="#c7d2fe" />
+          <path d="M21 16.8L35 24.2" stroke="#f59e0b" strokeWidth="2.4" strokeLinecap="round" />
+        </g>
+      </svg>
+    );
+  }
+
+  // 41. BÁO GIÁ & HÓA ĐƠN (Ocean Cyan - Phiếu báo giá & Dấu tick)
+  if (normName.includes('báo giá') || normName.includes('quotes') || normName.includes('hóa đơn') || normName.includes('invoice')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_qt_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#0ea5e9" />
+            <stop offset="100%" stopColor="#0369a1" />
+          </linearGradient>
+          {filterDef('ai_qt_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_qt_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <rect x="15" y="13" width="26" height="30" rx="5" fill="#ffffff" filter="url(#ai_qt_sh)" />
+        <rect x="20" y="19" width="16" height="2.8" rx="1.4" fill="#0284c7" />
+        <rect x="20" y="25" width="11" height="2.5" rx="1.25" fill="#94a3b8" />
+        <rect x="20" y="31" width="8" height="2.5" rx="1.25" fill="#cbd5e1" />
+        <circle cx="37" cy="36" r="7" fill="#10b981" stroke="#ffffff" strokeWidth="1.5" />
+        <path d="M34.2 36L36.2 38L39.8 34.2" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  // 42. BÁO CÁO / ANALYTICS (Cobalt Slate - Biểu đồ cột & xu hướng)
+  if (normName.includes('báo cáo') || normName.includes('reports')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_rep_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#334155" />
+            <stop offset="100%" stopColor="#0f172a" />
+          </linearGradient>
+          {filterDef('ai_rep_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_rep_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <rect x="13" y="14" width="30" height="28" rx="5" fill="#ffffff" filter="url(#ai_rep_sh)" />
+        <rect x="18" y="28" width="4.5" height="9" rx="1.5" fill="#94a3b8" />
+        <rect x="25.75" y="22" width="4.5" height="15" rx="1.5" fill="#3b82f6" />
+        <rect x="33.5" y="18" width="4.5" height="19" rx="1.5" fill="#e11d48" />
+      </svg>
+    );
+  }
+
   // DEFAULT FALLBACK (Xanh Dương - Square Widget)
   return (
     <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>

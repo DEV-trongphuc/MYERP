@@ -8,6 +8,7 @@ import {
 import { fetchAPI } from '../utils/api';
 import { compressToWebP } from '../utils/imageCompress';
 import { useAuth } from '../contexts/AuthContext';
+import { isInternalTenantEmail } from '../contexts/TenantConfigContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Avatar } from '../components/ui/Avatar';
 import { StatRowSkeleton } from '../components/ui/Skeleton';
@@ -780,7 +781,7 @@ export const ProfilePage: React.FC = () => {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                     <label className="form-label" style={{ fontWeight: 600, color: 'var(--color-text-muted)', margin: 0 }}>{t('Email đăng nhập')}</label>
                     {user && (
-                      (Number((user as any).is_confirmed) === 1 || (user as any).email?.endsWith('@ideas.edu.vn')) ? (
+                      (Number((user as any).is_confirmed) === 1 || isInternalTenantEmail((user as any).email)) ? (
                         <span style={{ fontSize: '0.7rem', color: 'var(--color-success)', background: 'var(--color-success-light)', padding: '2px 8px', borderRadius: 12, fontWeight: 700 }}>
                           {t('Đã xác thực')}
                         </span>

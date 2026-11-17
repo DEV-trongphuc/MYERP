@@ -235,7 +235,7 @@ try {
                 jsonResponse(false, null, "Không thể lưu file local");
 
             $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
-            $domain = $_SERVER['HTTP_HOST'] ?? 'automation.ideas.edu.vn';
+            $domain = $_SERVER['HTTP_HOST'] ?? (parse_url(resolve_automation_app_base_url($pdo), PHP_URL_HOST) ?: 'localhost');
             $localUrl = "$protocol://$domain/uploads/zalo/" . $localName;
             $url = "https://openapi.zalo.me/v2.0/oa/upload/image";
             $cfile = new CURLFile($localPath, $file['type'], $file['name']);

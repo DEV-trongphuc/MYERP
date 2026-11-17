@@ -26,7 +26,7 @@ if (!$isAuthorized) {
 $NUM_WORKERS = 10; 
 
 // URL gốc trỏ tới worker flow 
-$domain = $_SERVER['HTTP_HOST'] ?? 'automation.ideas.edu.vn';
+$domain = $_SERVER['HTTP_HOST'] ?? (parse_url(resolve_automation_app_base_url($pdo), PHP_URL_HOST) ?: 'localhost');
 $path = $_SERVER['REQUEST_URI'] ?? '/mail_api/orchestrator_flow.php';
 
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || ($_SERVER['SERVER_PORT'] ?? 80) == 443) ? "https://" : "http://";

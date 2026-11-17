@@ -19,6 +19,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { API_BASE } from '../../config/env';
+import { getCachedTenantBootstrap, getTenantOrganizationName } from '../../contexts/TenantConfigContext';
 import {
   STANDARD_PROGRAM_NAMES,
   resolveCurriculumSubjects,
@@ -49,8 +50,7 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<Respons
   return fetch(buildAcademicApiUrl(url), { ...options, headers });
 }
 
-const DEFAULT_ACADEMIC_CC =
-  'it.dept@ideas.edu.vn, student.notice@ideas.edu.vn, support@ideas.edu.vn';
+const getDefaultAcademicCc = () => getCachedTenantBootstrap()?.organization?.academic_cc_emails || '';
 
 export const AFTERNOON_SLOTS = [
   '13:30-14:00',
@@ -135,7 +135,7 @@ export const LecturerInvitationAnd1on1Modal: React.FC<
     'contract_invitation' | 'schedule_confirmation' | 'mentoring_1on1_invite'
   >('contract_invitation');
   const [toEmail, setToEmail] = useState<string>(lecturer?.email || '');
-  const [ccEmails, setCcEmails] = useState<string>(DEFAULT_ACADEMIC_CC);
+  const [ccEmails, setCcEmails] = useState<string>(getDefaultAcademicCc());
   const [subject, setSubject] = useState<string>('');
   const [courseName, setCourseName] = useState<string>(
     campaignName ||
@@ -215,7 +215,7 @@ export const LecturerInvitationAnd1on1Modal: React.FC<
       week_end_date: fmt(nextSun),
       slot_duration: 30,
       meeting_link: 'https://zoom.us/j/ideas-1on1',
-      cc_emails: DEFAULT_ACADEMIC_CC,
+      cc_emails: getDefaultAcademicCc(),
       notes_vn:
         '1. Xem lịch trống trong tuần để chọn các khung giờ phù hợp.\n2. Đăng ký trực tiếp khung giờ 30 phút bên dưới.\n3. Học viên phải đăng ký lịch ít nhất 1 ngày trước buổi hướng dẫn để Ban Học vụ IDEAS có thời gian sắp xếp với Giảng viên.',
       notes_en:
@@ -304,14 +304,16 @@ export const LecturerInvitationAnd1on1Modal: React.FC<
             </div>`
           : '';
 
+      const orgBrand = getTenantOrganizationName('IDEAS');
+      const orgSupportEm = getCachedTenantBootstrap()?.organization?.support_email || getDefaultAcademicCc().split(',')[0]?.trim() || '';
       if (tpl === 'contract_invitation') {
         setSubject(
-          `[IDEAS] Thư Mời Giảng & Hợp Đồng Giảng Dạy - ${subjectName} (${gvTitle}${gvName})`
+          `[${orgBrand}] Thư Mời Giảng & Hợp Đồng Giảng Dạy - ${subjectName} (${gvTitle}${gvName})`
         );
         setBodyHtml(`<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.65;color:#1e293b;">
   <p>Kính gửi <strong>${gvTitle}${gvName}</strong>,</p>
-  <p>Lời đầu tiên, <strong>Ban Học vụ — IDEAS</strong> xin gửi lời chào trân trọng và lời chúc sức khỏe, thành công đến Quý Thầy/Cô.</p>
-  <p>Căn cứ vào kế hoạch đào tạo chương trình <strong>${courseName}</strong>, IDEAS trân trọng kính mời <strong>${gvTitle}${gvName}</strong> tham gia giảng dạy và hướng dẫn chuyên môn với thông tin chi tiết như sau:</p>
+  <p>Lời đầu tiên, <strong>Ban Học vụ — ${orgBrand}</strong> xin gửi lời chào trân trọng và lời chúc sức khỏe, thành công đến Quý Thầy/Cô.</p>
+  <p>Căn cứ vào kế hoạch đào tạo chương trình <strong>${courseName}</strong>, ${orgBrand} trân trọng kính mời <strong>${gvTitle}${gvName}</strong> tham gia giảng dạy và hướng dẫn chuyên môn với thông tin chi tiết như sau:</p>
   ${scheduleTable}
   <ul style="padding-left:20px;margin:12px 0;">
     <li><strong>Hình thức giảng dạy / Link lớp học:</strong> <a href="${meetingLink}" style="color:#BD1D2D;">${meetingLink}</a></li>
@@ -319,28 +321,28 @@ export const LecturerInvitationAnd1on1Modal: React.FC<
     <li><strong>Hồ sơ đính kèm:</strong> Hợp đồng mời giảng & Tài liệu hướng dẫn giảng dạy (đính kèm trong email này).</li>
   </ul>
   ${link1on1Block}
-  <p>Quý Thầy/Cô vui lòng xem xét dự thảo <strong>Hợp đồng mời giảng</strong> đính kèm và phản hồi xác nhận lại giúp Ban Học vụ để IDEAS hoàn tất thủ tục đào tạo cho lớp.</p>
+  <p>Quý Thầy/Cô vui lòng xem xét dự thảo <strong>Hợp đồng mời giảng</strong> đính kèm và phản hồi xác nhận lại giúp Ban Học vụ để ${orgBrand} hoàn tất thủ tục đào tạo cho lớp.</p>
   <p>Mọi thông tin hỗ trợ học thuật và kỹ thuật lớp học, Quý Thầy/Cô có thể liên hệ trực tiếp Ban Học vụ qua email này.</p>
   <p>Trân trọng cảm ơn sự đồng hành của Quý Thầy/Cô,<br/>
-  <strong>Ban Học vụ — IDEAS</strong><br/>
-  Email: student.notice@ideas.edu.vn | support@ideas.edu.vn | it.dept@ideas.edu.vn</p>
+  <strong>Ban Học vụ — ${orgBrand}</strong><br/>
+  Email: ${getDefaultAcademicCc() || orgSupportEm}</p>
 </div>`);
       } else if (tpl === 'schedule_confirmation') {
         setSubject(
-          `[IDEAS] Thông Báo Lịch Giảng Dạy Chính Thức - ${subjectName} (${gvTitle}${gvName})`
+          `[${orgBrand}] Thông Báo Lịch Giảng Dạy Chính Thức - ${subjectName} (${gvTitle}${gvName})`
         );
         setBodyHtml(`<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.65;color:#1e293b;">
   <p>Kính gửi <strong>${gvTitle}${gvName}</strong>,</p>
-  <p>Ban Học vụ — IDEAS xin trân trọng gửi đến Quý Thầy/Cô lịch giảng dạy chính thức của học phần <strong>${subjectName}</strong> thuộc chương trình <strong>${courseName}</strong>:</p>
+  <p>Ban Học vụ — ${orgBrand} xin trân trọng gửi đến Quý Thầy/Cô lịch giảng dạy chính thức của học phần <strong>${subjectName}</strong> thuộc chương trình <strong>${courseName}</strong>:</p>
   ${scheduleTable}
   <p><strong>Link phòng học trực tuyến (Zoom):</strong> <a href="${meetingLink}" style="color:#BD1D2D;">${meetingLink}</a></p>
   ${link1on1Block}
-  <p>Bộ phận Kỹ thuật (<code>it.dept@ideas.edu.vn</code>) và Học vụ sẽ mở lớp trước 15 phút để đón tiếp Thầy/Cô và học viên.</p>
-  <p>Trân trọng,<br/><strong>Ban Học vụ — IDEAS</strong></p>
+  <p>Bộ phận Kỹ thuật${orgSupportEm ? ` (<code>${orgSupportEm}</code>)` : ''} và Học vụ sẽ mở lớp trước 15 phút để đón tiếp Thầy/Cô và học viên.</p>
+  <p>Trân trọng,<br/><strong>Ban Học vụ — ${orgBrand}</strong></p>
 </div>`);
       } else {
         setSubject(
-          `[IDEAS] Lịch Hướng Dẫn 1:1 (Slot 30 Phút) & Danh Sách Đăng Ký - ${subjectName}`
+          `[${orgBrand}] Lịch Hướng Dẫn 1:1 (Slot 30 Phút) & Danh Sách Đăng Ký - ${subjectName}`
         );
         setBodyHtml(`<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.65;color:#1e293b;">
   <p>Kính gửi <strong>${gvTitle}${gvName}</strong>,</p>
@@ -405,7 +407,7 @@ export const LecturerInvitationAnd1on1Modal: React.FC<
             week_end_date: first.week_end_date || prev.week_end_date,
             slot_duration: Number(first.slot_duration || 30),
             meeting_link: first.meeting_link || prev.meeting_link,
-            cc_emails: first.cc_emails || DEFAULT_ACADEMIC_CC,
+            cc_emails: first.cc_emails || getDefaultAcademicCc(),
             notes_vn: first.notes_vn || prev.notes_vn,
             notes_en: first.notes_en || prev.notes_en,
             available_slots:

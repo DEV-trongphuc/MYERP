@@ -57,8 +57,8 @@ async function convertUrlToJpgBlob(url: string, quality = 0.92): Promise<Blob> {
   // Normalize local dev proxy if needed
   let fetchUrl = url;
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    if (url.includes('myerp.ideas.edu.vn/backend/')) {
-      fetchUrl = url.replace(/https?:\/\/myerp\.ideas\.edu\.vn\/backend\//, '/backend/');
+    if (/^https?:\/\/[^/]+\/backend\//i.test(url)) {
+      fetchUrl = url.replace(/^https?:\/\/[^/]+\/backend\//i, '/backend/');
     }
   }
 
@@ -115,8 +115,8 @@ function resolveFetchableUrl(url: string): string {
 
   // Normalize localhost dev proxy if needed
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    if (resolvedUrl.includes('myerp.ideas.edu.vn/backend/')) {
-      resolvedUrl = resolvedUrl.replace(/https?:\/\/myerp\.ideas\.edu\.vn\/backend\//, '/backend/');
+    if (/^https?:\/\/[^/]+\/backend\//i.test(resolvedUrl)) {
+      resolvedUrl = resolvedUrl.replace(/^https?:\/\/[^/]+\/backend\//i, '/backend/');
     }
   }
   return resolvedUrl;

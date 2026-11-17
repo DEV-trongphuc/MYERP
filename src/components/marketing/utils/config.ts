@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getTenantFrontendUrl } from '../../../contexts/TenantConfigContext';
 
 /**
  * Core Configuration Hub — Unified MYERP Marketing & Automation Backend
@@ -16,18 +17,18 @@ export const API_BASE_URL = isLocal
     ? '/backend/automation'
     : typeof window !== 'undefined'
       ? `${window.location.origin}/backend/automation`
-      : 'https://crm.ideas.edu.vn/backend/automation';
+      : `${getTenantFrontendUrl() || ''}/backend/automation`;
 
 // External absolute URL for webhooks, embedded scripts, and email tracking/timer images
 export const EXTERNAL_API_BASE =
     typeof window !== 'undefined' && !isLocal
         ? `${window.location.origin}/backend/automation`
-        : 'https://crm.ideas.edu.vn/backend/automation';
+        : `${getTenantFrontendUrl() || ''}/backend/automation`;
 
 export const EXTERNAL_ASSET_BASE =
     typeof window !== 'undefined' && !isLocal
         ? window.location.origin
-        : 'https://crm.ideas.edu.vn';
+        : (getTenantFrontendUrl() || '');
 
 export function getMarketingAuthToken(): string {
     if (typeof window === 'undefined') return '';
@@ -52,9 +53,9 @@ export function getMarketingAuthHeaders(): Record<string, string> {
 export function rewriteLegacyMarketingUrl(rawUrl: string): string {
     if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
     let url = rawUrl;
-    // Rewrite legacy /mail_api or automation.ideas.edu.vn/mail_api to /backend/automation
-    if (url.includes('https://automation.ideas.edu.vn/mail_api')) {
-        url = url.replace('https://automation.ideas.edu.vn/mail_api', API_BASE_URL);
+    // Rewrite legacy /mail_api endpoints to unified /backend/automation
+    if (/^https?:\/\/[^/]+\/mail_api/i.test(url)) {
+        url = url.replace(/^https?:\/\/[^/]+\/mail_api/i, API_BASE_URL);
     } else if (url.startsWith('/mail_api/') || url === '/mail_api') {
         url = url.replace(/^\/mail_api/, '/backend/automation');
     } else if (url.startsWith('/api/surveys.php')) {

@@ -471,9 +471,26 @@
     // --- AI CHATBOT INJECTION ---
     if (window._mf_config && window._mf_config.ai_chat) {
         var chatScript = document.createElement('script');
-        chatScript.src = 'https://automation.ideas.edu.vn/ai-chat-embedded.js';
+        var customChatUrl = window._mf_config.ai_chat_script_url || '';
+        if (!customChatUrl) {
+            try {
+                customChatUrl = new URL('/ai-chat-embedded.js', ENDPOINT).href;
+            } catch (e) {
+                customChatUrl = '/ai-chat-embedded.js';
+            }
+        }
+        chatScript.src = customChatUrl;
         chatScript.async = true;
         document.head.appendChild(chatScript);
     }
 
-})(window, document, 'https://automation.ideas.edu.vn/mail_api/track.php', (function(){ if(window._mf_config && window._mf_config.property_id) return window._mf_config.property_id; var c = document.currentScript; if(c && c.getAttribute('data-website-id')) return c.getAttribute('data-website-id'); var s = document.querySelector('script[data-website-id]'); if(s) return s.getAttribute('data-website-id'); return window._mf_property_id || null; })());
+})(window, document, (function () {
+    if (window._mf_config && window._mf_config.endpoint) return window._mf_config.endpoint;
+    var el = document.currentScript || document.querySelector('script[data-website-id], script[src*="tracker.js"]');
+    if (el && el.src) {
+        try {
+            return new URL('track.php', el.src).href;
+        } catch (e) {}
+    }
+    return (window.location && window.location.origin ? window.location.origin : '') + '/backend/automation/track.php';
+})(), (function(){ if(window._mf_config && window._mf_config.property_id) return window._mf_config.property_id; var c = document.currentScript; if(c && c.getAttribute('data-website-id')) return c.getAttribute('data-website-id'); var s = document.querySelector('script[data-website-id]'); if(s) return s.getAttribute('data-website-id'); return window._mf_property_id || null; })());

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api } from '../../services/storageAdapter';
+import { getTenantOrganizationName, getTenantVerifiedSenders, getTenantDefaultSenderEmail } from '../../../../contexts/TenantConfigContext';
 
 export interface SettingsContextType {
   settings: Record<string, any>;
@@ -8,13 +9,6 @@ export interface SettingsContextType {
   updateSettings: (newSettings: Record<string, any>) => void;
   refreshSettings: () => Promise<void>;
 }
-
-const DEFAULT_VERIFIED_SENDERS = [
-  'tuyensinh@ideas.edu.vn',
-  'cskh@ideas.edu.vn',
-  'marketing@ideas.edu.vn',
-  'systemnoti@ideas.edu.vn',
-];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -55,25 +49,25 @@ export function parseVerifiedSenderEmails(rawSettings?: Record<string, any> | nu
   }
 
   if (set.size === 0) {
-    DEFAULT_VERIFIED_SENDERS.forEach((em) => set.add(em));
+    getTenantVerifiedSenders().forEach((em) => set.add(em));
   }
   return Array.from(set);
 }
 
 const normalizeSenderBrandName = (raw?: string | null): string => {
   const trimmed = String(raw || '').trim();
-  if (!trimmed || /^viện\s+quốc\s+tế\s+ideas$/i.test(trimmed)) {
-    return 'IDEAS';
+  if (!trimmed) {
+    return getTenantOrganizationName('Enterprise');
   }
   return trimmed;
 };
 
 let cachedSettingsData: Record<string, any> = {
-  senderName: 'IDEAS',
-  senderEmail: DEFAULT_VERIFIED_SENDERS[0],
-  replyTo: DEFAULT_VERIFIED_SENDERS[1],
+  senderName: getTenantOrganizationName('Enterprise'),
+  senderEmail: getTenantDefaultSenderEmail(),
+  replyTo: getTenantDefaultSenderEmail(),
 };
-let cachedSenderEmails: string[] = [...DEFAULT_VERIFIED_SENDERS];
+let cachedSenderEmails: string[] = [...getTenantVerifiedSenders()];
 let inflightSettingsPromise: Promise<void> | null = null;
 let hasFetchedSettingsOnce = false;
 const listeners = new Set<() => void>();
@@ -93,14 +87,14 @@ async function fetchGlobalMktSettings(force = false): Promise<void> {
           payload.smtp_from_name ||
           payload.ses_sender_name ||
           payload.company_name ||
-          'IDEAS'
+          getTenantOrganizationName('Enterprise')
         );
         cachedSenderEmails = parsedEmails;
         cachedSettingsData = {
           ...cachedSettingsData,
           ...payload,
           senderName,
-          senderEmail: parsedEmails[0] || DEFAULT_VERIFIED_SENDERS[0],
+          senderEmail: parsedEmails[0] || getTenantDefaultSenderEmail(),
         };
         hasFetchedSettingsOnce = true;
         listeners.forEach((fn) => fn());

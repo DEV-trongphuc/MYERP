@@ -41,8 +41,8 @@ class LeadDistributionController {
     }
 
     public function assignLead(array $auth): void {
-        $role = strtolower($auth['role'] ?? '');
-        $canAssign = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'lead_admin', 'sale_admin', 'saleadmin', 'team_lead', 'teamlead', 'leader'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $canAssign = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'lead_admin', 'sale_admin', 'saleadmin', 'team_lead', 'teamlead', 'leader'], 'contacts', 'approve');
         if (!$canAssign) {
             respond(403, null, 'Bạn không có quyền phân bổ hoặc bàn giao lead cho nhân sự khác', false);
         }
@@ -174,24 +174,30 @@ class LeadDistributionController {
     }
 
     public function releaseHeldLeads(array $auth): void {
-        $role = strtolower($auth['role'] ?? '');
-        $canRelease = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'lead_admin'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $canRelease = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'lead_admin'], 'contacts', 'approve');
         if (!$canRelease) {
             respond(403, null, 'Bạn không có quyền thu hồi lead về kho chung', false);
         }
 
-        $tid = $auth['tenant_id'];
+        $tid = (int)$auth['tenant_id'];
         $body = getBody();
         $leadIds = $body['lead_ids'] ?? [];
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $newLeadStageIds = TenantConfigService::getStageIdsBySlugs($this->db, $tid, ['new_lead']);
+        $newLeadStageId = !empty($newLeadStageIds) ? (int)$newLeadStageIds[0] : null;
 
         if (!empty($leadIds) && is_array($leadIds)) {
-            $inClause = implode(',', array_map('intval', $leadIds));
-            $this->db->prepare("UPDATE contacts SET pipeline_status = 'new_lead', stage_id = 31, owner_id = NULL, updated_at = NOW() WHERE id IN ($inClause) AND tenant_id = ? AND deleted_at IS NULL")
-                ->execute([$tid]);
+            $cleanLeadIds = array_values(array_filter(array_map('intval', $leadIds), fn($v) => $v > 0));
+            if (!empty($cleanLeadIds)) {
+                $inClause = implode(',', array_fill(0, count($cleanLeadIds), '?'));
+                $this->db->prepare("UPDATE contacts SET pipeline_status = 'new_lead', stage_id = COALESCE(?, stage_id), owner_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id IN ($inClause) AND tenant_id = ? AND deleted_at IS NULL")
+                    ->execute(array_merge([$newLeadStageId], $cleanLeadIds, [$tid]));
+            }
         } else {
             // Release holding leads
-            $this->db->prepare("UPDATE contacts SET pipeline_status = 'new_lead', stage_id = 31, owner_id = NULL, updated_at = NOW() WHERE pipeline_status = 'held' AND tenant_id = ? AND deleted_at IS NULL")
-                ->execute([$tid]);
+            $this->db->prepare("UPDATE contacts SET pipeline_status = 'new_lead', stage_id = COALESCE(?, stage_id), owner_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE pipeline_status = 'held' AND tenant_id = ? AND deleted_at IS NULL")
+                ->execute([$newLeadStageId, $tid]);
         }
 
         respond(200, null, 'Đã thu hồi lead về kho chung thành công');
@@ -199,12 +205,14 @@ class LeadDistributionController {
 
     public function updateConfig(array $auth): void {
         $role = strtolower($auth['role'] ?? '');
-        $canConfig = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $canConfig = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true)
+            || TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'director'], 'settings', 'write');
         if (!$canConfig) {
             respond(403, null, 'Chỉ Ban Giám đốc hoặc Quản trị viên cấp cao mới có quyền thay đổi cấu hình phân bổ lead', false);
         }
 
-        $tid = $auth['tenant_id'];
+        $tid = (int)$auth['tenant_id'];
         $body = getBody();
 
         if (isset($body['fallback_round_id'])) {
@@ -222,24 +230,23 @@ class LeadDistributionController {
 
     public function deleteQueueItem(array $auth, int $id): void {
         $role = strtolower($auth['role'] ?? '');
-        $canDelete = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'lead_admin'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $canDelete = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'lead_admin'], true)
+            || TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'director', 'manager'], 'leads', 'write');
         if (!$canDelete) {
             respond(403, null, 'Bạn không có quyền xóa lead khỏi hàng đợi phân bổ', false);
         }
 
-        $tid = $auth['tenant_id'];
-        // Remove from holding queue or reset lead
-        $stmt = $this->db->prepare("UPDATE contacts SET pipeline_status = 'new_lead', stage_id = 31, owner_id = NULL WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
-        $stmt->execute([$id, $tid]);
+        $tid = (int)$auth['tenant_id'];
+        $newLeadStageIds = TenantConfigService::getStageIdsBySlugs($this->db, $tid, ['new_lead']);
+        $newLeadStageId = !empty($newLeadStageIds) ? (int)$newLeadStageIds[0] : null;
+        $stmt = $this->db->prepare("UPDATE contacts SET pipeline_status = 'new_lead', stage_id = COALESCE(?, stage_id), owner_id = NULL WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $stmt->execute([$newLeadStageId, $id, $tid]);
         respond(200, null, 'Xóa khỏi hàng đợi thành công');
     }
 
     private function saveSetting(string $key, string $val, int $tid): void {
-        $stmt = $this->db->prepare("
-            INSERT INTO system_settings (setting_key, setting_value)
-            VALUES (?, ?)
-            ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
-        ");
-        $stmt->execute([$key, $val]);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        TenantConfigService::saveSettings($this->db, max(1, $tid), [$key => $val]);
     }
 }

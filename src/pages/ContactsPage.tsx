@@ -27,7 +27,8 @@ import { fetchAPI } from '../utils/api';
 import { downloadExportFile } from '../utils/exportHelper';
 import { useDebounce } from '../hooks/useDebounce';
 import { useAuth } from '../contexts/AuthContext';
-import { isAcademic, isManagement, isExecutive } from '../utils/roleUtils';
+import { isAcademic, isManagement, isExecutive, isMarketing, hasExplicitDynamicModuleGrant } from '../utils/roleUtils';
+import { useTenantConfig, getDynamicNonSalesTeamIds } from '../contexts/TenantConfigContext';
 import { calculateLeadScore, getLeadHeatTier } from '../utils/leadScoring';
 import { SalesLeadPerformanceDeck } from '../components/Dashboard/SalesLeadPerformanceDeck';
 import { CustomerPersonaOverviewDeck } from '../components/Dashboard/CustomerPersonaOverviewDeck';
@@ -706,18 +707,27 @@ interface ContactsPageProps {
 
 export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'tiem_nang' }) => {
   const { user } = useAuth();
+  const { config: tenantConfig } = useTenantConfig();
   const isSale = ['sale', 'sales'].includes(String(user?.role).toLowerCase());
   const canAddOrAssign = useMemo(() => {
-    const role = (user?.role as string) || '';
+    const role = String(user?.role || '').toLowerCase();
     return (
-      user?.email === 'dinhthanh@ideas.edu.vn' ||
-      role === 'marketing' ||
-      role === 'admin' ||
-      role === 'manager' ||
-      role === 'director' ||
-      role === 'leader'
+      isExecutive(user) ||
+      isMarketing(user) ||
+      ['marketing', 'admin', 'superadmin', 'super_admin', 'manager', 'director', 'leader'].includes(role) ||
+      hasExplicitDynamicModuleGrant(user, 'contacts', 'write')
     );
   }, [user]);
+  const dynamicStudentTabs = useMemo(() => {
+    if (Array.isArray(tenantConfig?.student_tabs) && tenantConfig.student_tabs.length > 0) {
+      return [...tenantConfig.student_tabs].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+    }
+    return [
+      { id: 1, tab_key: 'chinh_thuc', label: 'Học viên chính thức', badge_key: null, stage_slugs: ['enrolled'], include_customer_status: 1, order_index: 1 },
+      { id: 2, tab_key: 'le_phi', label: 'Lệ phí hồ sơ', badge_key: 'lePhi', stage_slugs: ['deposit_tuition_payment'], include_customer_status: 0, order_index: 2 },
+      { id: 3, tab_key: 'nop_ho_so', label: 'Nộp hồ sơ', badge_key: 'nopHoSo', stage_slugs: ['application_started', 'application_completed'], include_customer_status: 0, order_index: 3 },
+    ];
+  }, [tenantConfig?.student_tabs]);
   const navigate = useNavigate();
   const location = useLocation();
   const isActiveInstance = useMemo(() => {
@@ -757,22 +767,30 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
   const [contacts, setContacts] = useState<any[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [studentSubTab, setStudentSubTab] = useState<'le_phi' | 'chinh_thuc' | 'nop_ho_so'>(() => {
+  const [studentSubTab, setStudentSubTab] = useState<string>(() => {
     const tab = searchParams.get('tab');
-    return (tab === 'chinh_thuc' || tab === 'le_phi' || tab === 'nop_ho_so') ? tab : 'chinh_thuc';
+    return tab || 'chinh_thuc';
   });
 
   useEffect(() => {
     if (!isActiveInstance) return;
     const tab = searchParams.get('tab');
-    if (tab === 'chinh_thuc' || tab === 'le_phi' || tab === 'nop_ho_so') {
+    const fallbackTab = dynamicStudentTabs[0]?.tab_key || 'chinh_thuc';
+    if (tab && dynamicStudentTabs.some((t) => t.tab_key === tab)) {
+      setStudentSubTab(tab);
+    } else if (tab) {
       setStudentSubTab(tab);
     } else {
-      setStudentSubTab('chinh_thuc');
+      setStudentSubTab(fallbackTab);
     }
-  }, [searchParams, isActiveInstance]);
+  }, [searchParams, isActiveInstance, dynamicStudentTabs]);
 
-  const [studentCounts, setStudentCounts] = useState<{ nop_ho_so?: number; le_phi?: number; chinh_thuc?: number }>({});
+  const activeStudentTabObj = useMemo(
+    () => dynamicStudentTabs.find((t) => t.tab_key === studentSubTab) || dynamicStudentTabs[0],
+    [dynamicStudentTabs, studentSubTab]
+  );
+
+  const [studentCounts, setStudentCounts] = useState<Record<string, number>>({});
   const [showClassGradebookModal, setShowClassGradebookModal] = useState(false);
   const [showAcademic1on1Modal, setShowAcademic1on1Modal] = useState(false);
   const [lecturerModalState, setLecturerModalState] = useState<{ isOpen: boolean; tab: 'invitation' | '1on1' }>({ isOpen: false, tab: '1on1' });
@@ -1203,20 +1221,18 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   };
 
   const getEffectiveTeamId = () => {
-    const isMarketing = user?.role === 'marketing' || 
-      Number((user as any)?.team_id) === 3 || 
-      String((user as any)?.job_title || '').toLowerCase().includes('marketing') ||
-      String((user as any)?.team_name || '').toLowerCase().includes('marketing');
+    const isMkt = isMarketing(user);
     if (
-      isMarketing ||
+      isMkt ||
       isAcademic(user) ||
+      isExecutive(user) ||
       ['admin', 'superadmin', 'super_admin', 'director', 'sale_admin', 'saleadmin', 'accountant', 'hr', 'academic', 'hoc_vu', 'hoc_thuat', 'dao_tao', 'tro_giang', 'teacher', 'giang_vien', 'giao_vien', 'tutor', 'viewer'].includes(user?.role || '')
     ) {
       return null;
     }
-    const nonSalesTeamIds = [1, 2, 3, 5, 99983];
-    if (user?.role === 'manager') {
-      const managedTeam = teams.find(t => Number(t.leader_id) === Number(user.id));
+    const nonSalesTeamIds = getDynamicNonSalesTeamIds();
+    if (user?.role === 'manager' || isManagement(user)) {
+      const managedTeam = teams.find(t => Number(t.leader_id) === Number(user?.id));
       const candidateTeamId = Number(managedTeam?.id || (user as any)?.team_id || 0);
       if (!candidateTeamId || nonSalesTeamIds.includes(candidateTeamId)) return null;
       return candidateTeamId;
@@ -2543,14 +2559,18 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       activeFilters.expectedIntake
     );
     if (segment === 'tiem_nang' && !debouncedSearch && quickPipelineStage === 'all' && !activeFilters.status && !hasAcademicFilter) {
+      const stageList = Array.isArray(pipelineStages) ? pipelineStages : [];
       return contacts.filter(c => {
-        const isEnrolled = c.stage_id === 44 || c.pipeline_status === 'enrolled' || c.status === 'customer' || c.stage_name === '14 – Enrolled' || c.stage_name === 'Học viên';
+        const stObj = stageList.find((s: any) => Number(s.id) === Number(c.stage_id));
+        const stSlug = String(stObj?.system_slug || c.pipeline_status || '').toLowerCase();
+        const isEnrolled = Boolean(stObj?.is_won) || ['enrolled', 'hoc_vien', 'won'].includes(stSlug) || c.status === 'customer' || c.stage_name === '14 – Enrolled' || c.stage_name === 'Học viên';
         return !isEnrolled;
       });
     }
     return contacts;
   }, [
     contacts,
+    pipelineStages,
     segment,
     debouncedSearch,
     quickPipelineStage,
@@ -2694,7 +2714,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     }
 
     const filenamePrefix = isStudent 
-      ? (studentSubTab === 'chinh_thuc' ? 'danh_sach_hoc_vien_chinh_thuc' : studentSubTab === 'le_phi' ? 'danh_sach_le_phi_ho_so' : studentSubTab === 'nop_ho_so' ? 'danh_sach_nop_ho_so' : 'danh_sach_hoc_vien')
+      ? (studentSubTab === 'chinh_thuc' ? 'danh_sach_hoc_vien_chinh_thuc' : studentSubTab === 'le_phi' ? 'danh_sach_le_phi_ho_so' : studentSubTab === 'nop_ho_so' ? 'danh_sach_nop_ho_so' : `danh_sach_${studentSubTab || 'hoc_vien'}`)
       : 'danh_sach_lien_he';
     const defaultFilename = mode === 'full' ? `${filenamePrefix}_tat_ca_truong_${Date.now()}.csv` : `${filenamePrefix}_${Date.now()}.csv`;
 
@@ -2909,7 +2929,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', width: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <h1 className="page-title" style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800, color: '#0f172a' }}>
-                {studentSubTab === 'le_phi' ? 'Lệ phí hồ sơ' : studentSubTab === 'nop_ho_so' ? 'Nộp hồ sơ' : 'Học viên chính thức'}
+                {activeStudentTabObj?.label || 'Học viên chính thức'}
               </h1>
               {activeMainTab === 'list' && (
                 <span style={{ fontSize: '0.85rem', color: 'var(--color-text-light)', fontWeight: 600, marginTop: '2px' }}>
@@ -2931,7 +2951,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   borderRadius: '10px',
                   gap: '3px',
                   height: '40px',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
+                  maxWidth: '100%',
+                  overflowX: 'auto',
+                  scrollbarWidth: 'none',
+                  WebkitOverflowScrolling: 'touch'
                 }}
               >
                 <button
@@ -2951,7 +2975,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     fontSize: '0.82rem',
                     cursor: 'pointer',
                     boxShadow: activeMainTab === 'list' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                    transition: 'all 0.15s ease'
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
                   }}
                 >
                   <Users size={14} />
@@ -2975,7 +3001,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     fontSize: '0.82rem',
                     cursor: 'pointer',
                     boxShadow: activeMainTab === 'persona' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                    transition: 'all 0.15s ease'
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
                   }}
                 >
                   <img
@@ -3185,86 +3213,41 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   boxSizing: 'border-box'
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchParams({ tab: 'chinh_thuc' });
-                    setPage(1);
-                  }}
-                  style={{
-                    height: '32px',
-                    padding: '0 14px',
-                    borderRadius: '7px',
-                    border: 'none',
-                    background: studentSubTab === 'chinh_thuc' ? '#ffffff' : 'transparent',
-                    color: studentSubTab === 'chinh_thuc' ? '#BD1D2D' : '#64748b',
-                    fontWeight: studentSubTab === 'chinh_thuc' ? 700 : 600,
-                    fontSize: '0.82rem',
-                    boxShadow: studentSubTab === 'chinh_thuc' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <GraduationCap size={14} />
-                  <span>Học viên chính thức {studentCounts.chinh_thuc !== undefined ? `(${studentCounts.chinh_thuc})` : ''}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchParams({ tab: 'le_phi' });
-                    setPage(1);
-                  }}
-                  style={{
-                    height: '32px',
-                    padding: '0 14px',
-                    borderRadius: '7px',
-                    border: 'none',
-                    background: studentSubTab === 'le_phi' ? '#ffffff' : 'transparent',
-                    color: studentSubTab === 'le_phi' ? '#BD1D2D' : '#64748b',
-                    fontWeight: studentSubTab === 'le_phi' ? 700 : 600,
-                    fontSize: '0.82rem',
-                    boxShadow: studentSubTab === 'le_phi' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <CreditCard size={14} />
-                  <span>Lệ phí hồ sơ {studentCounts.le_phi !== undefined ? `(${studentCounts.le_phi})` : ''}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchParams({ tab: 'nop_ho_so' });
-                    setPage(1);
-                  }}
-                  style={{
-                    height: '32px',
-                    padding: '0 14px',
-                    borderRadius: '7px',
-                    border: 'none',
-                    background: studentSubTab === 'nop_ho_so' ? '#ffffff' : 'transparent',
-                    color: studentSubTab === 'nop_ho_so' ? '#BD1D2D' : '#64748b',
-                    fontWeight: studentSubTab === 'nop_ho_so' ? 700 : 600,
-                    fontSize: '0.82rem',
-                    boxShadow: studentSubTab === 'nop_ho_so' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <FileText size={14} />
-                  <span>Nộp hồ sơ {studentCounts.nop_ho_so !== undefined ? `(${studentCounts.nop_ho_so})` : ''}</span>
-                </button>
+                {Array.isArray(dynamicStudentTabs) && dynamicStudentTabs.map((tabItem) => {
+                  const isActiveTab = studentSubTab === tabItem.tab_key;
+                  const tabCount = studentCounts[tabItem.tab_key];
+                  const TabIcon = tabItem.tab_key === 'le_phi' ? CreditCard : tabItem.tab_key === 'nop_ho_so' ? FileText : GraduationCap;
+                  return (
+                    <button
+                      key={tabItem.tab_key}
+                      type="button"
+                      onClick={() => {
+                        setSearchParams({ tab: tabItem.tab_key });
+                        setPage(1);
+                      }}
+                      style={{
+                        height: '32px',
+                        padding: '0 14px',
+                        borderRadius: '7px',
+                        border: 'none',
+                        background: isActiveTab ? '#ffffff' : 'transparent',
+                        color: isActiveTab ? '#BD1D2D' : '#64748b',
+                        fontWeight: isActiveTab ? 700 : 600,
+                        fontSize: '0.82rem',
+                        boxShadow: isActiveTab ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <TabIcon size={14} />
+                      <span>{tabItem.label} {tabCount !== undefined ? `(${tabCount})` : ''}</span>
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Academic Actions Hub (Thanh công cụ Học vụ & CTSV đầy đủ nhất) */}
@@ -3466,7 +3449,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       fontSize: '0.82rem',
                       cursor: 'pointer',
                       boxShadow: activeMainTab === 'list' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                      transition: 'all 0.15s ease'
+                      transition: 'all 0.15s ease',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0
                     }}
                   >
                     <Users size={14} />
@@ -3490,7 +3475,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         fontSize: '0.82rem',
                         cursor: 'pointer',
                         boxShadow: activeMainTab === 'performance' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                        transition: 'all 0.15s ease'
+                        transition: 'all 0.15s ease',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0
                       }}
                     >
                       <BarChart3 size={14} />
@@ -3515,7 +3502,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       fontSize: '0.82rem',
                       cursor: 'pointer',
                       boxShadow: activeMainTab === 'persona' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                      transition: 'all 0.15s ease'
+                      transition: 'all 0.15s ease',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0
                     }}
                   >
                     <img
@@ -7214,11 +7203,12 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       String(s.name || '').toLowerCase() === rawStageSlug
                     );
                     const stageOrderIdx = Number(matchedStageObj?.order_index || 0);
+                    const matchedSlug = String(matchedStageObj?.system_slug || '').toLowerCase();
                     const isPipeline13Or14 =
                       stageOrderIdx === 13 ||
                       stageOrderIdx === 14 ||
                       Boolean(matchedStageObj?.is_won) ||
-                      ['deposit_tuition_payment', 'dong_le_phi', 'enrolled', 'hoc_vien', '43', '44'].includes(rawStageSlug) ||
+                      ['deposit_tuition_payment', 'dong_le_phi', 'dong_le_phi_ho_so', 'enrolled', 'hoc_vien', 'won'].includes(matchedSlug || rawStageSlug) ||
                       rawStageSlug.startsWith('13') ||
                       rawStageSlug.startsWith('14');
                     const isStudentRow = segment === 'customer' || String(c.status || '').toLowerCase() === 'customer' || isPipeline13Or14;

@@ -19,6 +19,8 @@ import { useUIStore } from '../store/uiStore';
 import type { Period, DateRange } from '../components/ui/PeriodFilter';
 import { motion } from 'framer-motion';
 import { canSelectAttendanceUser, canApproveAttendance, canApproveShifts as checkCanApproveShifts, isRegularEmployee, isHR, isExecutive } from '../utils/roleUtils';
+import { resolveTeamLeaderId, resolveHrRepresentativeUser } from '../utils/teamLeader';
+import { getCachedTenantBootstrap } from '../contexts/TenantConfigContext';
 import { isItemAtMyStepToApprove } from '../utils/approvalPermissions';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { VietnameseMonthInput } from '../components/ui/VietnameseMonthInput';
@@ -793,59 +795,28 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     const userTeamId = (user as any)?.team_id || currentUserInList?.team_id;
     const activeTeams = (teamsData && teamsData.length > 0) ? teamsData : teamsList;
 
-    // 1. Duy Phương (HR)
-    const hrDuyPhuong = list.find((u: any) =>
-      u.username === 'phuongntd' ||
-      String(u.full_name || u.name || '').toLowerCase().includes('duy phương') ||
-      Number(u.id) === 100065
-    ) || list.find((u: any) => ['hr'].includes(String(u.role).toLowerCase()));
+    const hrRepUser = resolveHrRepresentativeUser(list, activeTeams);
+    const excludedEmails = getCachedTenantBootstrap()?.organization?.excluded_system_emails || [];
 
-    // 2. Director or Admin (excluding technical superadmin)
     const directorOrAdmin = list.find((u: any) =>
       ['director'].includes(String(u.role).toLowerCase()) &&
       Number(u.id) !== Number(currentUserId)
     ) || list.find((u: any) =>
       ['admin'].includes(String(u.role).toLowerCase()) &&
       !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) &&
-      u.email !== 'turniodev@gmail.com' &&
+      !excludedEmails.includes(String(u.email || '').toLowerCase()) &&
       Number(u.id) !== Number(currentUserId)
     ) || approvers.find((u: any) => Number(u.id) !== Number(currentUserId));
 
-    // 3. Accountant (Thu Thảo)
     const accountantUser = list.find((u: any) =>
-      String(u.full_name || u.name || '').toLowerCase().includes('thu thảo') ||
-      String(u.role).toLowerCase() === 'accountant'
+      ['accountant', 'ke_toan', 'finance'].includes(String(u.role).toLowerCase())
     );
 
-    // 4. First priority: Team Leader from teams table or specific department mapping
-    let teamLeader = null;
-    const userEmail = (currentUserInList?.email || user?.email || '').toLowerCase();
-    const userDept = (currentUserInList?.department || (user as any)?.department || '').toLowerCase();
+    const dynamicLeaderId = resolveTeamLeaderId(currentUserInList || user, list, activeTeams);
+    const teamLeader = dynamicLeaderId
+      ? list.find((u: any) => Number(u.id) === Number(dynamicLeaderId) && Number(u.id) !== Number(currentUserId))
+      : null;
 
-    if (userEmail === 'nganph@ideas.edu.vn' || userDept.includes('học vụ') || userDept.includes('học thuật')) {
-      const tramLeader = list.find((u: any) =>
-        u.email === 'tramlth@ideas.edu.vn' ||
-        u.username === 'tramlth' ||
-        String(u.full_name || u.name || '').toLowerCase().includes('huyền trâm') ||
-        Number(u.id) === 100073
-      );
-      if (tramLeader && Number(tramLeader.id) !== Number(currentUserId)) {
-        teamLeader = tramLeader;
-      }
-    } else if (userEmail === 'cuongnph@ideas.edu.vn' || userDept.includes('hành chính') || userDept.includes('nhân sự')) {
-      if (hrDuyPhuong && Number(hrDuyPhuong.id) !== Number(currentUserId)) {
-        teamLeader = hrDuyPhuong;
-      }
-    }
-
-    if (!teamLeader && userTeamId && activeTeams.length > 0) {
-      const myTeam = activeTeams.find((t: any) => Number(t.id) === Number(userTeamId));
-      if (myTeam && myTeam.leader_id && Number(myTeam.leader_id) !== Number(currentUserId)) {
-        teamLeader = list.find((u: any) => Number(u.id) === Number(myTeam.leader_id));
-      }
-    }
-
-    // 5. Fallback: Manager in same team from users list
     const teamManager = teamLeader || list.find((u: any) => 
       userTeamId && (Number(u.team_id) === Number(userTeamId) || String(u.team_id) === String(userTeamId)) &&
       ['manager', 'leader', 'teamlead'].includes(String(u.role).toLowerCase()) &&
@@ -856,14 +827,12 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       Number(u.id) !== Number(currentUserId)
     );
 
-    // Level 1: Team Leader / Manager; if user is leader or no manager, fallback to Director / Admin
-    const defaultApprover1 = teamLeader || teamManager || directorOrAdmin || hrDuyPhuong || approvers[0];
+    const defaultApprover1 = teamLeader || teamManager || directorOrAdmin || hrRepUser || approvers[0];
 
-    // Level 2: Chỉ áp dụng cho tăng ca (overtime). Với nghỉ phép / đi muộn / WFH: Người duyệt 2 không cần, Duy Phương bên dưới liên quan theo dõi
     let defaultApprover2: any = null;
     if (currentType === 'overtime') {
       if (currentOtType === 'compensatory') {
-        defaultApprover2 = (hrDuyPhuong && Number(hrDuyPhuong.id) !== Number(defaultApprover1?.id)) ? hrDuyPhuong : directorOrAdmin;
+        defaultApprover2 = (hrRepUser && Number(hrRepUser.id) !== Number(defaultApprover1?.id)) ? hrRepUser : directorOrAdmin;
       } else {
         defaultApprover2 = (accountantUser && Number(accountantUser.id) !== Number(defaultApprover1?.id)) ? accountantUser : directorOrAdmin;
       }
@@ -880,9 +849,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       setApproverId2Field('');
     }
 
-    // Tự động thêm HR Duy Phương vào danh sách Người liên quan (Theo dõi) bên dưới
-    if (hrDuyPhuong && Number(hrDuyPhuong.id) !== Number(currentUserId) && Number(hrDuyPhuong.id) !== Number(defaultApprover1?.id)) {
-      const hrId = Number(hrDuyPhuong.id);
+    if (hrRepUser && Number(hrRepUser.id) !== Number(currentUserId) && Number(hrRepUser.id) !== Number(defaultApprover1?.id)) {
+      const hrId = Number(hrRepUser.id);
       setRelatedUserIds(prev => prev.includes(hrId) ? prev : [...prev, hrId]);
     }
   };
@@ -5909,10 +5877,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     onChange={(val: any) => {
                       setOtTypeField(val);
                       if (val === 'compensatory') {
-                        const hr = usersList.find((u: any) => u.full_name?.includes('Duy Phương') || u.username === 'phuongntd' || u.role === 'hr');
+                        const hr = resolveHrRepresentativeUser(usersList, teamsList);
                         if (hr) setApproverId2Field(String(hr.id));
                       } else {
-                        const acc = usersList.find((u: any) => u.role === 'accountant');
+                        const acc = usersList.find((u: any) => ['accountant', 'ke_toan', 'finance'].includes(String(u.role || '').toLowerCase()));
                         if (acc) setApproverId2Field(String(acc.id));
                       }
                     }}
@@ -8680,22 +8648,22 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           }}>
             {/* Card 1: Work Days & On-time performance */}
             <div className="stat-card hover-lift" style={{
-              backgroundColor: 'var(--color-surface)',
-              border: '1px solid var(--color-border-light)',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
               padding: isMobile ? '6px 10px' : '0.875rem 1.125rem',
-              borderRadius: isMobile ? '8px' : '14px',
+              borderRadius: isMobile ? '8px' : '16px',
               display: 'flex',
               flexDirection: 'column',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
+              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
               position: 'relative',
               overflow: 'hidden',
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: '#3b82f6', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                <span style={{ fontSize: isMobile ? '0.625rem' : '0.73rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                   {viewMode === 'calendar' ? t(`CÔNG THÁNG ${currentMonth}`) : t('NGÀY CÔNG')}
                 </span>
-                <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', flexShrink: 0 }}>
+                <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', flexShrink: 0 }}>
                   <Calendar size={isMobile ? 12 : 16} />
                 </div>
               </div>
@@ -8706,16 +8674,16 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     <div className="skeleton-pulse" style={{ width: '25px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
                   </div>
                 ) : (
-                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.625rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
                     {workDaysCount} <span style={{ fontSize: isMobile ? '0.65rem' : '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('ngày')}</span>
                   </div>
                 )}
                 {isStatsLoading ? (
                   <div className="skeleton-pulse" style={{ width: isMobile ? '60px' : '85px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
                 ) : (
-                  <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: '6px' }}>
-                    <span>{t('Đúng')}: <strong style={{ color: '#10b981' }}>{onTimeDays}</strong></span>
-                    <span>{t('Chuẩn')}: <strong style={{ color: onTimeRate >= 90 ? '#10b981' : onTimeRate >= 75 ? '#f59e0b' : '#ef4444' }}>{onTimeRate}%</strong></span>
+                  <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: '#64748b', display: 'flex', gap: '6px' }}>
+                    <span>{t('Đúng')}: <strong style={{ color: '#0f172a' }}>{onTimeDays}</strong></span>
+                    <span>{t('Chuẩn')}: <strong style={{ color: '#0f172a' }}>{onTimeRate}%</strong></span>
                   </div>
                 )}
               </div>
@@ -8723,22 +8691,22 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
             {/* Card 2: Lateness & Delay Minutes */}
             <div className="stat-card hover-lift" style={{
-              backgroundColor: 'var(--color-surface)',
-              border: '1px solid var(--color-border-light)',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
               padding: isMobile ? '6px 10px' : '0.875rem 1.125rem',
-              borderRadius: isMobile ? '8px' : '14px',
+              borderRadius: isMobile ? '8px' : '16px',
               display: 'flex',
               flexDirection: 'column',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
+              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
               position: 'relative',
               overflow: 'hidden',
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: lateDays > 0 ? '#f59e0b' : '#10b981', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                <span style={{ fontSize: isMobile ? '0.625rem' : '0.73rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                   {t('ĐI MUỘN & PHÚT TRỄ')}
                 </span>
-                <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: lateDays > 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: lateDays > 0 ? '#f59e0b' : '#10b981', flexShrink: 0 }}>
+                <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', flexShrink: 0 }}>
                   <Clock size={isMobile ? 12 : 16} />
                 </div>
               </div>
@@ -8749,22 +8717,22 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     <div className="skeleton-pulse" style={{ width: '25px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
                   </div>
                 ) : (
-                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.625rem', fontWeight: 800, color: lateDays > 0 ? '#f59e0b' : 'var(--color-text)', lineHeight: 1.1 }}>
+                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.85rem', fontWeight: 800, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
                     {lateDays} <span style={{ fontSize: isMobile ? '0.65rem' : '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('lần')}</span>
                   </div>
                 )}
                 {isStatsLoading ? (
                   <div className="skeleton-pulse" style={{ width: isMobile ? '60px' : '85px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
                 ) : (
-                  <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: '6px' }}>
-                    <span>{t('Trễ')}: <strong style={{ color: excessLateMinutes > 0 ? '#ef4444' : (totalLateMinutes > 0 ? '#f59e0b' : '#10b981') }}>{totalLateMinutes}/{lateGraceMinutes}p</strong></span>
-                    <span>{t('Chờ duyệt')}: <strong style={{ color: '#f59e0b' }}>{pendingCount}</strong></span>
+                  <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: '#64748b', display: 'flex', gap: '6px' }}>
+                    <span>{t('Trễ')}: <strong style={{ color: '#0f172a' }}>{totalLateMinutes}/{lateGraceMinutes}p</strong></span>
+                    <span>{t('Chờ duyệt')}: <strong style={{ color: '#0f172a' }}>{pendingCount}</strong></span>
                   </div>
                 )}
               </div>
               {!isStatsLoading && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px', marginTop: isMobile ? '3px' : '6px' }}>
-                  <span style={{ fontSize: isMobile ? '0.58rem' : '0.68rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                  <span style={{ fontSize: isMobile ? '0.58rem' : '0.68rem', color: '#64748b', fontWeight: 500 }}>
                     {`Tổng trễ: ${totalLateMinutes} / ${lateGraceMinutes} phút cho phép (${genderLabel})`}
                   </span>
                   <span style={{
@@ -8773,8 +8741,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     padding: '2px 7px',
                     borderRadius: '999px',
                     border: 'none',
-                    backgroundColor: excessLateMinutes > 0 ? 'rgba(239, 68, 68, 0.14)' : 'rgba(16, 185, 129, 0.14)',
-                    color: excessLateMinutes > 0 ? '#b91c1c' : '#065f46',
+                    backgroundColor: excessLateMinutes > 0 ? 'rgba(189, 29, 45, 0.08)' : 'rgba(15, 23, 42, 0.06)',
+                    color: excessLateMinutes > 0 ? '#BD1D2D' : '#334155',
                     whiteSpace: 'nowrap'
                   }}>
                     {excessLateMinutes > 0 ? `Vượt hạn mức ${excessLateMinutes}p` : `Trong hạn mức (còn ${remainingGraceMinutes}p)`}
@@ -8785,22 +8753,22 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
             {/* Card 3: Leave Requests & Status */}
             <div className="stat-card hover-lift" style={{
-              backgroundColor: 'var(--color-surface)',
-              border: '1px solid var(--color-border-light)',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
               padding: isMobile ? '6px 10px' : '0.875rem 1.125rem',
-              borderRadius: isMobile ? '8px' : '14px',
+              borderRadius: isMobile ? '8px' : '16px',
               display: 'flex',
               flexDirection: 'column',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
+              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
               position: 'relative',
               overflow: 'hidden',
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: '#10b981', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                <span style={{ fontSize: isMobile ? '0.625rem' : '0.73rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                   {t('ĐƠN TỪ & DUYỆT')}
                 </span>
-                <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981', flexShrink: 0 }}>
+                <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(15, 23, 42, 0.06)', color: '#334155', flexShrink: 0 }}>
                   <CheckCircle size={isMobile ? 12 : 16} />
                 </div>
               </div>
@@ -8811,16 +8779,16 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     <div className="skeleton-pulse" style={{ width: '35px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
                   </div>
                 ) : (
-                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.625rem', fontWeight: 800, color: '#10b981', lineHeight: 1.1 }}>
+                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
                     {approvedCount} <span style={{ fontSize: isMobile ? '0.65rem' : '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('hợp lệ')}</span>
                   </div>
                 )}
                 {isStatsLoading ? (
                   <div className="skeleton-pulse" style={{ width: isMobile ? '60px' : '85px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
                 ) : (
-                  <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: '6px' }}>
-                    <span>{t('Chờ')}: <strong style={{ color: '#f59e0b' }}>{pendingCount}</strong></span>
-                    <span>{t('Từ chối')}: <strong style={{ color: '#ef4444' }}>{rejectedCount}</strong></span>
+                  <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: '#64748b', display: 'flex', gap: '6px' }}>
+                    <span>{t('Chờ')}: <strong style={{ color: '#0f172a' }}>{pendingCount}</strong></span>
+                    <span>{t('Từ chối')}: <strong style={{ color: '#0f172a' }}>{rejectedCount}</strong></span>
                   </div>
                 )}
               </div>
@@ -8828,22 +8796,22 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
             {/* Card 4: Shifts & Overtime */}
             <div className="stat-card hover-lift" style={{
-              backgroundColor: 'var(--color-surface)',
-              border: '1px solid var(--color-border-light)',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
               padding: isMobile ? '6px 10px' : '0.875rem 1.125rem',
-              borderRadius: isMobile ? '8px' : '14px',
+              borderRadius: isMobile ? '8px' : '16px',
               display: 'flex',
               flexDirection: 'column',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
+              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
               position: 'relative',
               overflow: 'hidden',
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: '#8b5cf6', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                <span style={{ fontSize: isMobile ? '0.625rem' : '0.73rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                   {t('CA TRỰC & TĂNG CA')}
                 </span>
-                <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', flexShrink: 0 }}>
+                <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(15, 23, 42, 0.06)', color: '#334155', flexShrink: 0 }}>
                   <Moon size={isMobile ? 12 : 16} />
                 </div>
               </div>
@@ -8854,18 +8822,18 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     <div className="skeleton-pulse" style={{ width: '25px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
                   </div>
                 ) : (
-                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.625rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
                     {totalShiftsCount} <span style={{ fontSize: isMobile ? '0.65rem' : '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('ca')}</span>
                   </div>
                 )}
                 {isStatsLoading ? (
                   <div className="skeleton-pulse" style={{ width: isMobile ? '60px' : '85px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
                 ) : (
-                  <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    <span>{t('Đêm')}: <strong style={{ color: '#8b5cf6' }}>{nightShiftsCount}</strong></span>
-                    <span>{t('Tuần')}: <strong style={{ color: '#d97706' }}>{weekendShiftsCount}</strong></span>
+                  <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: '#64748b', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <span>{t('Đêm')}: <strong style={{ color: '#0f172a' }}>{nightShiftsCount}</strong></span>
+                    <span>{t('Tuần')}: <strong style={{ color: '#0f172a' }}>{weekendShiftsCount}</strong></span>
                     {overtimeShiftsCount > 0 && (
-                      <span>{t('OT')}: <strong style={{ color: '#a855f7' }}>{overtimeShiftsCount}</strong></span>
+                      <span>{t('OT')}: <strong style={{ color: '#0f172a' }}>{overtimeShiftsCount}</strong></span>
                     )}
                   </div>
                 )}
@@ -11049,12 +11017,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: 'rgba(59, 130, 246, 0.02)', 
-              borderLeft: '4px solid #3b82f6', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
+              background: '#FFFFFF', 
+              border: '1px solid #E2E8F0',
+              borderRadius: '12px'
             }}>
               <CheckCircle size={20} color="#3b82f6" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
@@ -11072,12 +11037,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: 'rgba(239, 68, 68, 0.02)', 
-              borderLeft: '4px solid #ef4444', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
+              background: '#FFFFFF', 
+              border: '1px solid #E2E8F0',
+              borderRadius: '12px'
             }}>
               <ShieldAlert size={20} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
@@ -11097,12 +11059,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: 'rgba(245, 158, 11, 0.02)', 
-              borderLeft: '4px solid #f59e0b', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
+              background: '#FFFFFF', 
+              border: '1px solid #E2E8F0',
+              borderRadius: '12px'
             }}>
               <Clock size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>

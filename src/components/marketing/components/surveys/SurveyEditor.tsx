@@ -473,14 +473,14 @@ const SurveyEditor: React.FC<SurveyEditorProps> = ({ surveyIdProp, initialSurvey
 
                     {/* Mobile / Tablet Drawer: Left Toolbox */}
                     {isMobileOrTablet && isToolboxOpen && (
-                        <div className="fixed inset-0 z-[2147483620] flex" style={{ zIndex: 2147483620 }}>
+                        <div className="fixed inset-0 z-[2147483635] flex" style={{ zIndex: 2147483635 }}>
                             <div
                                 className="fixed inset-0 bg-black/40 backdrop-blur-xs drawer-backdrop"
                                 onClick={() => setIsToolboxOpen(false)}
                             />
                             <div
                                 className="relative z-10 w-[320px] max-w-[90vw] h-full bg-white shadow-2xl flex flex-col drawer-panel"
-                                style={{ zIndex: 2147483625 }}
+                                style={{ zIndex: 2147483640 }}
                             >
                                 <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-200 bg-slate-50">
                                     <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -507,14 +507,14 @@ const SurveyEditor: React.FC<SurveyEditorProps> = ({ surveyIdProp, initialSurvey
 
                     {/* Mobile / Tablet Drawer: Right Properties */}
                     {isMobileOrTablet && isPropertiesOpen && (
-                        <div className="fixed inset-0 z-[2147483620] flex justify-end" style={{ zIndex: 2147483620 }}>
+                        <div className="fixed inset-0 z-[2147483635] flex justify-end" style={{ zIndex: 2147483635 }}>
                             <div
                                 className="fixed inset-0 bg-black/40 backdrop-blur-xs drawer-backdrop"
                                 onClick={() => setIsPropertiesOpen(false)}
                             />
                             <div
                                 className="relative z-10 w-[360px] max-w-[92vw] h-full bg-white shadow-2xl flex flex-col drawer-panel"
-                                style={{ zIndex: 2147483625 }}
+                                style={{ zIndex: 2147483640 }}
                             >
                                 <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-200 bg-slate-50">
                                     <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">

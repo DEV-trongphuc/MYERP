@@ -1,5 +1,6 @@
 
 import { EmailBlock, Template, EmailBodyStyle, EmailBlockStyle, ListItem, EmailBlockType } from '../types';
+import { getCachedTenantBootstrap, getTenantOrganizationName, getTenantFrontendUrl, getTenantDefaultSenderEmail, getTenantAiPlatformUrl } from '../../../contexts/TenantConfigContext';
 
 // --- ASSETS ---
 const IMAGES = {
@@ -94,12 +95,14 @@ const createDivider = (styleOverrides: EmailBlockStyle = {}) =>
 
 // 5. SaaS / Academy Welcome (Premium)
 const buildSaaSWelcome = (): Template => {
+    const brandName = getTenantOrganizationName();
+    const siteUrl = getTenantFrontendUrl() || '#';
     const blocks: EmailBlock[] = [
         createSection([
             createRow([
                 createColumn([
                     createImage('https://images.unsplash.com/photo-1611162617474-5b21e879e113?q=80&w=600&auto=format&fit=crop', 'Logo', { width: '120px', textAlign: 'center', marginBottom: '20px' }),
-                    createBlock('text', '<h1 style="text-align: center; font-size: 28px; color: #1e293b; margin-bottom: 10px;">Chào mừng {{fullName}} đến với Viện Quốc Tế IDEAS!</h1><p style="text-align: center; color: #64748b; font-size: 16px;">Cảm ơn Anh/Chị đã quan tâm đến chương trình <strong>{{program}}</strong>. Chuyên viên tư vấn <strong>{{consultantName}}</strong> ({{consultantPhone}}) sẽ đồng hành cùng Anh/Chị.</p>', { textAlign: 'center' })
+                    createBlock('text', `<h1 style="text-align: center; font-size: 28px; color: #1e293b; margin-bottom: 10px;">Chào mừng {{fullName}} đến với ${brandName}!</h1><p style="text-align: center; color: #64748b; font-size: 16px;">Cảm ơn Anh/Chị đã quan tâm đến chương trình <strong>{{program}}</strong>. Chuyên viên tư vấn <strong>{{consultantName}}</strong> ({{consultantPhone}}) sẽ đồng hành cùng Anh/Chị.</p>`, { textAlign: 'center' })
                 ])
             ], { backgroundColor: 'transparent' })
         ], { paddingTop: '40px', paddingBottom: '40px', backgroundColor: '#f9fafb' }),
@@ -121,21 +124,21 @@ const buildSaaSWelcome = (): Template => {
             createRow([
                 createColumn([
                     createBlock('check_list', '', { textAlign: 'left', checkIconColor: '#2563eb', color: '#1e293b' }, [], {
-                        checkListTitle: 'Đặc quyền học viên tại Viện Quốc Tế IDEAS',
+                        checkListTitle: `Đặc quyền học viên tại ${brandName}`,
                         items: [
                             { id: createId(), title: 'Bằng cấp quốc tế kiểm định', description: 'Được công nhận toàn cầu từ các trường đại học đối tác Thụy Sĩ, Anh, Pháp.' },
                             { id: createId(), title: 'Lịch học linh hoạt 100% Online / Blended', description: 'Thiết kế tối ưu cho nhà quản lý và nhân sự cấp cao bận rộn.' },
                             { id: createId(), title: 'Đồng hành học thuật 1-1', description: 'Đội ngũ trợ giảng và cố vấn hỗ trợ xuyên suốt khóa học.' }
                         ]
                     }),
-                    createButton('Khám phá chương trình ngay', 'https://ideas.edu.vn', { contentBackgroundColor: '#2563eb', color: '#ffffff', borderRadius: '30px', marginTop: '30px', fontWeight: 'bold' })
+                    createButton('Khám phá chương trình ngay', siteUrl, { contentBackgroundColor: '#2563eb', color: '#ffffff', borderRadius: '30px', marginTop: '30px', fontWeight: 'bold' })
                 ])
             ], { backgroundColor: 'transparent' })
         ], { paddingTop: '40px', paddingBottom: '40px', backgroundColor: '#f9fafb' }),
         createSection([
             createRow([
                 createColumn([
-                    createBlock('text', '<p style="color: #94a3b8; font-size: 11px; margin: 0;">© {{current_year}} Viện Quốc Tế IDEAS. Bảo lưu mọi quyền.<br><a href="{{unsubscribe_url}}" style="color: #64748b; text-decoration: underline;">Hủy đăng ký nhận bản tin</a></p>', { textAlign: 'center' })
+                    createBlock('text', `<p style="color: #94a3b8; font-size: 11px; margin: 0;">© {{current_year}} ${brandName}. Bảo lưu mọi quyền.<br><a href="{{unsubscribe_url}}" style="color: #64748b; text-decoration: underline;">Hủy đăng ký nhận bản tin</a></p>`, { textAlign: 'center' })
                 ])
             ], { paddingTop: '20px', paddingBottom: '20px' })
         ], { backgroundColor: '#f8fafc' })
@@ -194,7 +197,7 @@ const buildProductLaunch = (): Template => {
         createSection([
             createRow([
                 createColumn([
-                    createBlock('text', '<p style="color: #94a3b8; font-size: 11px; margin: 0;">© {{current_year}} Viện Quốc Tế IDEAS. Bảo lưu mọi quyền.<br><a href="{{unsubscribe_url}}" style="color: #64748b; text-decoration: underline;">Hủy đăng ký nhận bản tin</a></p>', { textAlign: 'center' })
+                    createBlock('text', `<p style="color: #94a3b8; font-size: 11px; margin: 0;">© {{current_year}} ${getTenantOrganizationName()}. Bảo lưu mọi quyền.<br><a href="{{unsubscribe_url}}" style="color: #64748b; text-decoration: underline;">Hủy đăng ký nhận bản tin</a></p>`, { textAlign: 'center' })
                 ])
             ], { paddingTop: '20px', paddingBottom: '20px' })
         ], { backgroundColor: '#ffffff' })
@@ -213,12 +216,14 @@ const buildProductLaunch = (): Template => {
 
 // 7. Tech Summit (Event)
 const buildEventInvite = (): Template => {
+    const brandName = getTenantOrganizationName();
+    const siteUrl = getTenantFrontendUrl() || '#';
     const blocks: EmailBlock[] = [
         createSection([
             createRow([
                 createColumn([
                     createBlock('text', '<h1 style="color: #ffffff; font-size: 36px; line-height: 1.2;">EXECUTIVE SUMMIT {{current_year}}</h1><p style="color: #c084fc; font-size: 18px; font-weight: bold; margin-top: 10px;">Kính mời {{fullName}} tham dự Hội thảo Lãnh đạo & AI</p>', { textAlign: 'center' }),
-                    createButton('Xác nhận tham dự ngay', 'https://ideas.edu.vn', { contentBackgroundColor: '#ffffff', color: '#581c87', borderRadius: '12px', marginTop: '30px', fontWeight: 'bold' })
+                    createButton('Xác nhận tham dự ngay', siteUrl, { contentBackgroundColor: '#ffffff', color: '#581c87', borderRadius: '12px', marginTop: '30px', fontWeight: 'bold' })
                 ])
             ], { backgroundColor: 'transparent', paddingTop: '80px', paddingBottom: '80px' })
         ], { paddingTop: '0px', paddingBottom: '0px', backgroundColor: '#581c87' }),
@@ -239,7 +244,7 @@ const buildEventInvite = (): Template => {
         createSection([
             createRow([
                 createColumn([
-                    createBlock('text', '<p style="color: #94a3b8; font-size: 11px; margin: 0;">© {{current_year}} Viện Quốc Tế IDEAS. Bảo lưu mọi quyền.<br><a href="{{unsubscribe_url}}" style="color: #64748b; text-decoration: underline;">Hủy đăng ký nhận bản tin</a></p>', { textAlign: 'center' })
+                    createBlock('text', `<p style="color: #94a3b8; font-size: 11px; margin: 0;">© {{current_year}} ${brandName}. Bảo lưu mọi quyền.<br><a href="{{unsubscribe_url}}" style="color: #64748b; text-decoration: underline;">Hủy đăng ký nhận bản tin</a></p>`, { textAlign: 'center' })
                 ])
             ], { paddingTop: '20px', paddingBottom: '20px' })
         ], { backgroundColor: '#f9fafb' })
@@ -291,7 +296,7 @@ const buildPortfolioReview = (): Template => {
         createSection([
             createRow([
                 createColumn([
-                    createBlock('text', '<p style="color: #94a3b8; font-size: 11px; margin: 0;">© {{current_year}} Viện Quốc Tế IDEAS. Bảo lưu mọi quyền.<br><a href="{{unsubscribe_url}}" style="color: #64748b; text-decoration: underline;">Hủy đăng ký nhận bản tin</a></p>', { textAlign: 'center' })
+                    createBlock('text', `<p style="color: #94a3b8; font-size: 11px; margin: 0;">© {{current_year}} ${getTenantOrganizationName()}. Bảo lưu mọi quyền.<br><a href="{{unsubscribe_url}}" style="color: #64748b; text-decoration: underline;">Hủy đăng ký nhận bản tin</a></p>`, { textAlign: 'center' })
                 ])
             ], { paddingTop: '20px', paddingBottom: '20px' })
         ], { backgroundColor: '#f8fafc' })
@@ -310,6 +315,8 @@ const buildPortfolioReview = (): Template => {
 
 // 9. Weekly Digest (Newsletter)
 const buildNewsletterDigest = (): Template => {
+    const brandName = getTenantOrganizationName();
+    const siteUrl = getTenantFrontendUrl() || '#';
     const blocks: EmailBlock[] = [
         createSection([
             createRow([
@@ -321,20 +328,20 @@ const buildNewsletterDigest = (): Template => {
         createSection([
             createRow([
                 createColumn([createImage('https://images.unsplash.com/photo-1677442136019-21780ecad995?q=80&w=400&auto=format&fit=crop', 'News 1', { width: '100%', borderRadius: '12px' })], { width: '40%' }),
-                createColumn([createBlock('text', '<h4 style="margin: 0 0 10px 0; color: #1e293b;">AI đang thay đổi cách các CEO ra quyết định</h4><p style="font-size: 13px; color: #64748b; margin: 0;">Khám phá cách ứng dụng dữ liệu và AI vào quản trị chiến lược hiện đại.</p><a href="https://ideas.edu.vn" style="color: #db2777; font-size: 12px; font-weight: bold; text-decoration: none; display: block; margin-top: 10px;">Đọc thêm →</a>', { textAlign: 'left' })], { width: '60%', paddingLeft: '20px' })
+                createColumn([createBlock('text', `<h4 style="margin: 0 0 10px 0; color: #1e293b;">AI đang thay đổi cách các CEO ra quyết định</h4><p style="font-size: 13px; color: #64748b; margin: 0;">Khám phá cách ứng dụng dữ liệu và AI vào quản trị chiến lược hiện đại.</p><a href="${siteUrl}" style="color: #db2777; font-size: 12px; font-weight: bold; text-decoration: none; display: block; margin-top: 10px;">Đọc thêm →</a>`, { textAlign: 'left' })], { width: '60%', paddingLeft: '20px' })
             ], { paddingTop: '20px', paddingBottom: '20px', borderStyle: 'solid', borderBottomWidth: '1px', borderColor: '#f1f5f9' }),
             createRow([
                 createColumn([createImage('https://images.unsplash.com/photo-1485827404703-89b55fcc595e?q=80&w=400&auto=format&fit=crop', 'News 2', { width: '100%', borderRadius: '12px' })], { width: '40%' }),
-                createColumn([createBlock('text', '<h4 style="margin: 0 0 10px 0; color: #1e293b;">Xu hướng phát triển lãnh đạo bền vững ESG</h4><p style="font-size: 13px; color: #64748b; margin: 0;">Những tiêu chuẩn mới dành cho nhà quản lý cấp cao trên toàn cầu.</p><a href="https://ideas.edu.vn" style="color: #db2777; font-size: 12px; font-weight: bold; text-decoration: none; display: block; margin-top: 10px;">Đọc thêm →</a>', { textAlign: 'left' })], { width: '60%', paddingLeft: '20px' })
+                createColumn([createBlock('text', `<h4 style="margin: 0 0 10px 0; color: #1e293b;">Xu hướng phát triển lãnh đạo bền vững ESG</h4><p style="font-size: 13px; color: #64748b; margin: 0;">Những tiêu chuẩn mới dành cho nhà quản lý cấp cao trên toàn cầu.</p><a href="${siteUrl}" style="color: #db2777; font-size: 12px; font-weight: bold; text-decoration: none; display: block; margin-top: 10px;">Đọc thêm →</a>`, { textAlign: 'left' })], { width: '60%', paddingLeft: '20px' })
             ], { paddingTop: '20px', paddingBottom: '20px' })
         ], { backgroundColor: '#ffffff', paddingLeft: '20px', paddingRight: '20px' }),
         createSection([
             createRow([
                 createColumn([
                     createBlock('social', '', { textAlign: 'center', iconMode: 'light', iconSize: '24' }, [], {
-                        socialLinks: [{ id: createId(), network: 'facebook', url: 'https://ideas.edu.vn' }, { id: createId(), network: 'twitter', url: 'https://ideas.edu.vn' }, { id: createId(), network: 'instagram', url: 'https://ideas.edu.vn' }]
+                        socialLinks: [{ id: createId(), network: 'facebook', url: siteUrl }, { id: createId(), network: 'twitter', url: siteUrl }, { id: createId(), network: 'instagram', url: siteUrl }]
                     }),
-                    createBlock('text', '<p style="color: #94a3b8; font-size: 11px; margin-top: 20px;">Bạn nhận được email này vì đã đăng ký nhận thông tin từ Viện Quốc Tế IDEAS.<br>© {{current_year}} Viện Quốc Tế IDEAS. <a href="{{unsubscribe_url}}" style="color: #2563eb;">Hủy đăng ký</a></p>', { textAlign: 'center' })
+                    createBlock('text', `<p style="color: #94a3b8; font-size: 11px; margin-top: 20px;">Bạn nhận được email này vì đã đăng ký nhận thông tin từ ${brandName}.<br>© {{current_year}} ${brandName}. <a href="{{unsubscribe_url}}" style="color: #2563eb;">Hủy đăng ký</a></p>`, { textAlign: 'center' })
                 ])
             ], { paddingTop: '40px', paddingBottom: '40px' })
         ], { backgroundColor: '#1e293b' })
@@ -353,11 +360,21 @@ const buildNewsletterDigest = (): Template => {
 
 // 10. ESTIAM Student Onboarding (Academic Welcome)
 const buildEstiamStudentOnboarding = (): Template => {
+    const org = getCachedTenantBootstrap()?.organization;
+    const brandName = getTenantOrganizationName();
+    const supportEmail = org?.support_email || getTenantDefaultSenderEmail();
+    const ccEmails = (org?.academic_cc_emails || supportEmail)
+        .split(/[,;]+/)
+        .map((e) => e.trim())
+        .filter(Boolean);
+    const ccLinksHtml = ccEmails.map((em) => `<a href="mailto:${em}" style="color: #BD1D2D; font-weight: 600;">${em}</a>`).join(', ');
+    const lmsUrl = org?.lms_url || getTenantFrontendUrl() || '#';
+    const aiUrl = getTenantAiPlatformUrl() || getTenantFrontendUrl() || '#';
     const blocks: EmailBlock[] = [
         createSection([
             createRow([
                 createColumn([
-                    createBlock('text', '<div style="text-align: center;"><span style="color: #ffffff; font-weight: 800; font-size: 24px; letter-spacing: 2px;">IDEAS</span><p style="color: rgba(255,255,255,0.92); font-size: 12px; font-weight: 700; text-transform: uppercase; margin-top: 6px; letter-spacing: 0.5px;">THÔNG BÁO TIẾP NHẬN HỌC VIÊN &amp; HƯỚNG DẪN HỌC TẬP - PARIS EDUCATION / ESTIAM</p></div>', { textAlign: 'center' })
+                    createBlock('text', `<div style="text-align: center;"><span style="color: #ffffff; font-weight: 800; font-size: 24px; letter-spacing: 2px;">${brandName}</span><p style="color: rgba(255,255,255,0.92); font-size: 12px; font-weight: 700; text-transform: uppercase; margin-top: 6px; letter-spacing: 0.5px;">THÔNG BÁO TIẾP NHẬN HỌC VIÊN &amp; HƯỚNG DẪN HỌC TẬP - PARIS EDUCATION / ESTIAM</p></div>`, { textAlign: 'center' })
                 ])
             ], { backgroundColor: '#BD1D2D', paddingTop: '26px', paddingBottom: '26px', paddingLeft: '20px', paddingRight: '20px' })
         ], { paddingTop: '0px', paddingBottom: '0px', backgroundColor: '#BD1D2D' }),
@@ -366,20 +383,20 @@ const buildEstiamStudentOnboarding = (): Template => {
                 createColumn([
                     createBlock('text', `<div style="font-size: 14.5px; line-height: 1.7; color: #334155; text-align: left;">
 <p style="margin: 0 0 12px 0;">Kính gửi Quý Anh/Chị học viên <strong>{{full_name}}</strong>,</p>
-<p style="margin: 0 0 16px 0;">Lời đầu tiên, Ban Công tác Sinh viên IDEAS xin gửi lời chúc mừng và trân trọng cảm ơn Anh/Chị đã tin chọn IDEAS làm người bạn đồng hành trên chặng đường chinh phục tấm bằng từ <strong>Paris Education/ESTIAM</strong>. Chúng tôi cam kết đồng hành và hỗ trợ Anh/Chị xuyên suốt quá trình học tập và nghiên cứu.</p>
+<p style="margin: 0 0 16px 0;">Lời đầu tiên, Ban Công tác Sinh viên ${brandName} xin gửi lời chúc mừng và trân trọng cảm ơn Anh/Chị đã tin chọn ${brandName} làm người bạn đồng hành trên chặng đường chinh phục tấm bằng từ <strong>Paris Education/ESTIAM</strong>. Chúng tôi cam kết đồng hành và hỗ trợ Anh/Chị xuyên suốt quá trình học tập và nghiên cứu.</p>
 
 <p style="margin: 18px 0 8px 0;"><strong style="color: #BD1D2D; font-size: 15px;">A. KÊNH LIÊN LẠC CHÍNH THỨC</strong></p>
-<p style="margin: 0 0 16px 0;">1. <strong>Kênh Hỗ trợ Nhanh (Zalo/Hotline):</strong> 098 736 3935<br/>
+<p style="margin: 0 0 16px 0;">1. <strong>Kênh Hỗ trợ Nhanh (Zalo/Hotline):</strong> ${org?.support_hotline || '098 736 3935'}<br/>
 2. <strong>Kênh Hỗ trợ Học vụ (Email):</strong><br/>
-&nbsp;&nbsp;- Tiếp nhận yêu cầu: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a><br/>
-&nbsp;&nbsp;- CC (Đồng gửi): <a href="mailto:it.dept@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">it.dept@ideas.edu.vn</a>, <a href="mailto:student.notice@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">student.notice@ideas.edu.vn</a>, <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; font-weight: 600;">support@ideas.edu.vn</a> <em>(Vui lòng luôn CC các địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
+&nbsp;&nbsp;- Tiếp nhận yêu cầu: <a href="mailto:${supportEmail}" style="color: #BD1D2D; font-weight: 600;">${supportEmail}</a><br/>
+&nbsp;&nbsp;- CC (Đồng gửi): ${ccLinksHtml} <em>(Vui lòng luôn CC các địa chỉ này để hệ thống ghi nhận và xử lý nhanh nhất)</em></p>
 
 <p style="margin: 18px 0 8px 0;"><strong style="color: #BD1D2D; font-size: 15px;">B. TÀI KHOẢN HỌC TẬP</strong></p>
 <p style="margin: 0 0 8px 0;">Anh/Chị sẽ được cấp 3 tài khoản học tập, sử dụng xuyên suốt chương trình:</p>
 <ul style="padding-left: 20px; margin: 0 0 10px 0; line-height: 1.8;">
-  <li><strong>1. Tài khoản LMS IDEAS</strong> (xem tài liệu, video record buổi học, hỗ trợ học thuật): <a href="https://lms.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://lms.ideas.edu.vn/</a> | Video hướng dẫn: <a href="https://drive.google.com/file/d/1wXQtghJSd7CHoek_hPXOfXuVuGuT8bMv/view?usp=sharing" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></li>
+  <li><strong>1. Tài khoản LMS</strong> (xem tài liệu, video record buổi học, hỗ trợ học thuật): <a href="${lmsUrl}" target="_blank" rel="noreferrer" style="color: #BD1D2D;">${lmsUrl}</a> | Video hướng dẫn: <a href="https://drive.google.com/file/d/1wXQtghJSd7CHoek_hPXOfXuVuGuT8bMv/view?usp=sharing" target="_blank" rel="noreferrer" style="color: #BD1D2D; font-weight: 600;">LINK tại đây</a></li>
   <li><strong>2. Tài khoản học tập Paris Education</strong> (làm bài, nộp bài chính thức): <a href="https://pariseducation-global.org/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://pariseducation-global.org/</a></li>
-  <li><strong>3. Platform IDEAS AI</strong> (công cụ bổ trợ học tập): <a href="https://ai.ideas.edu.vn/" target="_blank" rel="noreferrer" style="color: #BD1D2D;">https://ai.ideas.edu.vn/</a></li>
+  <li><strong>3. Platform AI</strong> (công cụ bổ trợ học tập): <a href="${aiUrl}" target="_blank" rel="noreferrer" style="color: #BD1D2D;">${aiUrl}</a></li>
 </ul>
 <p style="margin: 0 0 16px 0;"><em>(thông tin tài khoản sẽ được gửi trực tiếp đến email cá nhân của học viên đã đăng ký học tập)</em></p>
 
@@ -392,7 +409,7 @@ const buildEstiamStudentOnboarding = (): Template => {
 
 <p style="margin: 0 0 18px 0;">Nếu có bất kỳ vướng mắc nào, Anh/Chị vui lòng liên hệ CTSV để được hỗ trợ kịp thời. Chúc Anh/Chị có hành trình học tập, nghiên cứu thật thuận lợi và thành công!</p>
 
-<p style="margin: 20px 0 0 0;">Trân trọng,<br/><strong>Ban Công tác Sinh viên IDEAS</strong></p>
+<p style="margin: 20px 0 0 0;">Trân trọng,<br/><strong>Ban Công tác Sinh viên ${brandName}</strong></p>
 </div>`, { textAlign: 'left' })
                 ])
             ], { paddingTop: '28px', paddingBottom: '28px', paddingLeft: '28px', paddingRight: '28px', backgroundColor: '#ffffff' })
@@ -400,7 +417,7 @@ const buildEstiamStudentOnboarding = (): Template => {
         createSection([
             createRow([
                 createColumn([
-                    createBlock('text', '<div style="text-align: center; font-size: 12px; color: #64748b; line-height: 1.6;"><strong style="color: #334155;">Ban Công tác Sinh viên &amp; Học vụ - Viện Quốc Tế IDEAS</strong><br/>Hotline / Zalo: <strong style="color: #BD1D2D;">098 736 3935</strong> | Email: <a href="mailto:support@ideas.edu.vn" style="color: #BD1D2D; text-decoration: none;">support@ideas.edu.vn</a><br/>© {{current_year}} Viện Quốc Tế IDEAS. Bảo lưu mọi quyền.</div>', { textAlign: 'center' })
+                    createBlock('text', `<div style="text-align: center; font-size: 12px; color: #64748b; line-height: 1.6;"><strong style="color: #334155;">Ban Công tác Sinh viên &amp; Học vụ - ${brandName}</strong><br/>Hotline / Zalo: <strong style="color: #BD1D2D;">${org?.support_hotline || '098 736 3935'}</strong> | Email: <a href="mailto:${supportEmail}" style="color: #BD1D2D; text-decoration: none;">${supportEmail}</a><br/>© {{current_year}} ${brandName}. Bảo lưu mọi quyền.</div>`, { textAlign: 'center' })
                 ])
             ], { paddingTop: '18px', paddingBottom: '18px', paddingLeft: '20px', paddingRight: '20px' })
         ], { backgroundColor: '#f8fafc' })

@@ -1341,10 +1341,10 @@ const ConsultantsInner = () => {
         {activeTab === 'consultants' && (
         <div className="responsive-grid-4" style={{ display: isMobile ? 'none' : 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
           {/* Card 1: Tổng TVV */}
-          <div className="stat-card total-card" style={{ display: 'flex', flexDirection: 'column', padding: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', minHeight: '130px', boxShadow: '0 4px 12px rgba(0,0,0,0.015)', position: 'relative', overflow: 'hidden' }}>
+          <div className="stat-card total-card" style={{ display: 'flex', flexDirection: 'column', padding: '1.25rem', background: '#ffffff', border: '1px solid #E2E8F0', borderRadius: '16px', minHeight: '130px', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)', position: 'relative', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span className="stat-label" style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Tổng nhân sự')}</span>
-              <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(100, 116, 139, 0.08)', color: '#64748b', flexShrink: 0 }}>
+              <span className="stat-label" style={{ fontSize: '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('Tổng nhân sự')}</span>
+              <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', flexShrink: 0 }}>
                 <Users size={16} />
               </div>
             </div>
@@ -1352,16 +1352,16 @@ const ConsultantsInner = () => {
               {loading ? (
                 <div style={{ height: '28px', width: '48px', background: 'var(--color-border-light)', borderRadius: '4px' }} className="animate-pulse" />
               ) : (
-                <span className="stat-value" style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>{users.length}</span>
+                <span className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>{users.length}</span>
               )}
             </div>
           </div>
 
           {/* Card 2: Đang nhận Data */}
-          <div className="stat-card distributed-card" style={{ display: 'flex', flexDirection: 'column', padding: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', minHeight: '130px', boxShadow: '0 4px 12px rgba(0,0,0,0.015)', position: 'relative', overflow: 'hidden' }}>
+          <div className="stat-card distributed-card" style={{ display: 'flex', flexDirection: 'column', padding: '1.25rem', background: '#ffffff', border: '1px solid #E2E8F0', borderRadius: '16px', minHeight: '130px', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)', position: 'relative', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span className="stat-label" style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Đang hoạt động')}</span>
-              <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)', color: 'var(--color-success)', flexShrink: 0 }}>
+              <span className="stat-label" style={{ fontSize: '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('Đang hoạt động')}</span>
+              <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', flexShrink: 0 }}>
                 <CheckCircle size={16} />
               </div>
             </div>
@@ -1369,16 +1369,16 @@ const ConsultantsInner = () => {
               {loading ? (
                 <div style={{ height: '28px', width: '48px', background: 'var(--color-border-light)', borderRadius: '4px' }} className="animate-pulse" />
               ) : (
-                <span className="stat-value" style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-success)', lineHeight: 1.1 }}>{activeCount}</span>
+                <span className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>{activeCount}</span>
               )}
             </div>
           </div>
 
           {/* Card 3: Đang nghỉ phép */}
-          <div className="stat-card duplicates-card" style={{ display: 'flex', flexDirection: 'column', padding: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', minHeight: '130px', boxShadow: '0 4px 12px rgba(0,0,0,0.015)', position: 'relative', overflow: 'hidden' }}>
+          <div className="stat-card duplicates-card" style={{ display: 'flex', flexDirection: 'column', padding: '1.25rem', background: '#ffffff', border: '1px solid #E2E8F0', borderRadius: '16px', minHeight: '130px', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)', position: 'relative', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span className="stat-label" style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Đang nghỉ phép')}</span>
-              <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.08)', color: 'var(--color-warning)', flexShrink: 0 }}>
+              <span className="stat-label" style={{ fontSize: '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('Đang nghỉ phép')}</span>
+              <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', flexShrink: 0 }}>
                 <Calendar size={16} />
               </div>
             </div>
@@ -1386,16 +1386,16 @@ const ConsultantsInner = () => {
               {loading ? (
                 <div style={{ height: '28px', width: '48px', background: 'var(--color-border-light)', borderRadius: '4px' }} className="animate-pulse" />
               ) : (
-                <span className="stat-value" style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-warning)', lineHeight: 1.1 }}>{leaveCount}</span>
+                <span className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>{leaveCount}</span>
               )}
             </div>
           </div>
 
           {/* Card 4: Ngừng hoạt động */}
-          <div className="stat-card errors-card" style={{ display: 'flex', flexDirection: 'column', padding: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', minHeight: '130px', boxShadow: '0 4px 12px rgba(0,0,0,0.015)', position: 'relative', overflow: 'hidden' }}>
+          <div className="stat-card errors-card" style={{ display: 'flex', flexDirection: 'column', padding: '1.25rem', background: '#ffffff', border: '1px solid #E2E8F0', borderRadius: '16px', minHeight: '130px', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)', position: 'relative', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span className="stat-label" style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Ngừng hoạt động')}</span>
-              <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.08)', color: 'var(--color-danger)', flexShrink: 0 }}>
+              <span className="stat-label" style={{ fontSize: '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('Ngừng hoạt động')}</span>
+              <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', flexShrink: 0 }}>
                 <UserX size={16} />
               </div>
             </div>
@@ -1403,7 +1403,7 @@ const ConsultantsInner = () => {
               {loading ? (
                 <div style={{ height: '28px', width: '48px', background: 'var(--color-border-light)', borderRadius: '4px' }} className="animate-pulse" />
               ) : (
-                <span className="stat-value" style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-danger)', lineHeight: 1.1 }}>{inactiveCount}</span>
+                <span className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>{inactiveCount}</span>
               )}
             </div>
           </div>
@@ -4040,14 +4040,11 @@ const ConsultantsInner = () => {
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(59, 130, 246, 0.04)' : 'rgba(59, 130, 246, 0.02)', 
-              borderLeft: '4px solid #3b82f6', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
+              background: '#ffffff', 
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px'
             }}>
-              <Users size={20} color="#3b82f6" style={{ flexShrink: 0, marginTop: 2 }} />
+              <Users size={20} color="#334155" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
                 <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                   {t("1. Phòng ban (Departments)")}
@@ -4064,14 +4061,11 @@ const ConsultantsInner = () => {
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(16, 185, 129, 0.04)' : 'rgba(16, 185, 129, 0.02)', 
-              borderLeft: '4px solid #10b981', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
+              background: '#ffffff', 
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px'
             }}>
-              <Users size={20} color="#10b981" style={{ flexShrink: 0, marginTop: 2 }} />
+              <Users size={20} color="#BD1D2D" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
                 <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                   {t("2. Quản lý TVV & Chế độ Nghỉ phép (Vacation Mode)")}
@@ -4088,14 +4082,11 @@ const ConsultantsInner = () => {
               display: 'flex', 
               gap: 12, 
               padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(198, 51, 61, 0.04)' : 'rgba(198, 51, 61, 0.02)', 
-              borderLeft: '4px solid #C6333D', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
+              background: '#ffffff', 
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px'
             }}>
-              <TrendingUp size={20} color="#C6333D" style={{ flexShrink: 0, marginTop: 2 }} />
+              <TrendingUp size={20} color="#334155" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
                 <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                   {t("3. Thiết lập KPI & Giới hạn thành viên (KPI Targets & Capacity)")}

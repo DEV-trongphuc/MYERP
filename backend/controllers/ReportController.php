@@ -80,18 +80,11 @@ class ReportController
             ];
         }
 
-        // Retrieve dynamic settings
-        $resOpp = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'deal_opportunity_status' LIMIT 1");
-        $resOpp->execute();
-        $oppStatus = $resOpp->fetchColumn() ?: 'booking';
-
-        $resWon = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'deal_won_status' LIMIT 1");
-        $resWon->execute();
-        $wonStatus = $resWon->fetchColumn() ?: 'hoc_vien';
-
-        $resHier = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'pipeline_status_hierarchy' LIMIT 1");
-        $resHier->execute();
-        $hierJson = $resHier->fetchColumn();
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $tidRep = (int)($auth['tenant_id'] ?? $GLOBALS['current_tenant_id'] ?? 1);
+        $oppStatus = (string)TenantConfigService::getSetting($this->db, $tidRep, 'deal_opportunity_status', 'booking') ?: 'booking';
+        $wonStatus = (string)TenantConfigService::getSetting($this->db, $tidRep, 'deal_won_status', 'hoc_vien') ?: 'hoc_vien';
+        $hierJson = TenantConfigService::getSetting($this->db, $tidRep, 'pipeline_status_hierarchy', null);
         $hierarchy = $hierJson ? json_decode($hierJson, true) : ['new_lead', 'contact_attempted', 'connected', 'needed', 'discovery_completed', 'program_matched', 'proposal_sent', 'evaluation_objection', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'deposit_tuition_payment', 'enrolled'];
         if (!is_array($hierarchy)) {
             $hierarchy = ['new_lead', 'contact_attempted', 'connected', 'needed', 'discovery_completed', 'program_matched', 'proposal_sent', 'evaluation_objection', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'deposit_tuition_payment', 'enrolled'];

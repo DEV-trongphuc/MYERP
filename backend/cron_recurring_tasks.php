@@ -220,7 +220,7 @@ if (!function_exists('runRecurringTasksCron')) {
                         }
 
                         // Send email if user has email
-                        $stmtUser = $conn->prepare("SELECT email, full_name FROM users WHERE id=?");
+                        $stmtUser = $conn->prepare("SELECT email, full_name, tenant_id FROM users WHERE id=?");
                         if ($stmtUser) {
                             $stmtUser->bind_param("i", $userId);
                             $stmtUser->execute();
@@ -230,7 +230,9 @@ if (!function_exists('runRecurringTasksCron')) {
 
                             if ($u && !empty($u['email']) && function_exists('sendEmailNotification')) {
                                 try {
-                                    $emailSubject = "[IDEAS] " . $titleNotify;
+                                    $uTid = (int)($u['tenant_id'] ?? 1);
+                                    $GLOBALS['current_tenant_id'] = $uTid;
+                                    $emailSubject = get_tenant_brand_prefix($conn, $uTid) . " " . $titleNotify;
                                     $emailTitle = "Nhiệm vụ định kỳ";
                                     $emailContent = "Chào <strong>" . htmlspecialchars($u['full_name']) . "</strong>,<br/><br/>" .
                                                     htmlspecialchars($bodyNotify) . "<br/><br/>" .

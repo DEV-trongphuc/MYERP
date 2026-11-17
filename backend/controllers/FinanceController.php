@@ -256,7 +256,8 @@ class FinanceController
 
     public function createInvoice(array $auth): void
     {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) respond(403, null, 'Bạn không có quyền tạo hóa đơn', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant'], 'invoices', 'write')) respond(403, null, 'Bạn không có quyền tạo hóa đơn', false);
         $tid = $auth['tenant_id'];
         $uid = $auth['user_id'];
         $data = getBody();
@@ -302,7 +303,7 @@ class FinanceController
                     $data['company_id'] = null;
             }
 
-            $isManagerOrAccountant = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'accountant'], true);
+            $isManagerOrAccountant = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'accountant'], 'invoices', 'approve');
             $invStatus = $data['status'] ?? 'pending';
             if ($invStatus === 'paid' && !$isManagerOrAccountant) {
                 $invStatus = 'pending';
@@ -382,7 +383,8 @@ class FinanceController
 
     public function updateInvoice(array $auth, int $id): void
     {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) respond(403, null, 'Bạn không có quyền cập nhật hóa đơn', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant'], 'invoices', 'write')) respond(403, null, 'Bạn không có quyền cập nhật hóa đơn', false);
         $data = getBody();
         foreach (['subtotal', 'discount', 'tax', 'total', 'shipping_fee'] as $numField) {
             if (array_key_exists($numField, $data) && (float)$data[$numField] < 0) {
@@ -524,7 +526,8 @@ class FinanceController
 
     public function deleteInvoice(array $auth, int $id): void
     {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) respond(403, null, 'Bạn không có quyền xóa hóa đơn', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant'], 'invoices', 'delete')) respond(403, null, 'Bạn không có quyền xóa hóa đơn', false);
         try {
             $this->db->beginTransaction();
 
@@ -583,7 +586,8 @@ class FinanceController
 
     public function markPaid(array $auth, int $id): void
     {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) respond(403, null, 'Bạn không có quyền xác nhận thanh toán', false);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant'], 'invoices', 'approve')) respond(403, null, 'Bạn không có quyền xác nhận thanh toán', false);
         try {
             $this->db->beginTransaction();
 
@@ -678,16 +682,23 @@ class FinanceController
         $isSaleAdmin = $role === 'sale_admin' || $role === 'saleadmin';
         $isManager = $role === 'manager';
 
-        // Load team members if manager
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $expReadScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'expenses', 'read');
+        if ($expReadScope === 'none') {
+            respond(403, null, 'Bạn không có quyền xem danh sách chi phí', false);
+        }
+        $isManager = ($expReadScope === 'team');
+
+        // Load team members if team-scoped
         $userIds = [$uid];
         if ($isManager) {
-            $stmtTeam = $this->db->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
-            $stmtTeam->execute([$uid]);
+            $stmtTeam = $this->db->prepare("SELECT id FROM users WHERE tenant_id = ? AND team_id IN (SELECT id FROM teams WHERE tenant_id = ? AND (leader_id = ? OR default_approver_id = ?))");
+            $stmtTeam->execute([(int)$auth['tenant_id'], (int)$auth['tenant_id'], $uid, $uid]);
             $teamMemberIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [];
-            $userIds = array_merge($userIds, array_map('intval', $teamMemberIds));
+            $userIds = array_values(array_unique(array_merge($userIds, array_map('intval', $teamMemberIds))));
         }
 
-        $isAdminOrDirectorOrAccountant = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
+        $isAdminOrDirectorOrAccountant = ($expReadScope === 'all');
         $specificId = (int)($_GET['id'] ?? ($_GET['open_id'] ?? 0));
 
         if ($specificId > 0) {
@@ -996,8 +1007,10 @@ class FinanceController
     {
         $role = $auth['role'] ?? '';
         $uid = (int)($auth['user_id'] ?? $auth['id'] ?? 0);
-        $isAdminOrDirectorOrAccountant = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
-        $isManager = $role === 'manager';
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $showExpScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'expenses', 'read');
+        $isAdminOrDirectorOrAccountant = ($showExpScope === 'all');
+        $isManager = ($showExpScope === 'team');
         $isSaleAdmin = $role === 'sale_admin' || $role === 'saleadmin';
 
         $where = ['e.id=?', 'e.tenant_id=?', 'e.deleted_at IS NULL'];
@@ -1090,9 +1103,11 @@ class FinanceController
         $approver_id_2 = !empty($data['approver_id_2']) ? (int)$data['approver_id_2'] : null;
         $approver_id_3 = !empty($data['approver_id_3']) ? (int)$data['approver_id_3'] : null;
 
-        $canSelfApprove = in_array(strtolower($auth['role'] ?? ''), [
-            'admin', 'superadmin', 'super_admin', 'director'
-        ], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::hasPermission($this->db, $auth, 'expenses', 'write')) {
+            respond(403, null, 'Bạn không có quyền tạo đề xuất chi phí', false);
+        }
+        $canSelfApprove = TenantConfigService::canUserSelfApprove($this->db, $auth, 'expense');
         if (!$canSelfApprove) {
             foreach (['approver_id', 'approver_id_2', 'approver_id_3'] as $af) {
                 if (!empty($data[$af]) && (int)$data[$af] === (int)$auth['user_id']) {
@@ -1101,27 +1116,14 @@ class FinanceController
             }
         }
 
-        // Fetch threshold for 3-level approval
-        $threshold = 5000000;
-        $thQuery = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'po_three_level_threshold' LIMIT 1");
-        if ($thQuery) {
-            $thRow = $thQuery->fetch();
-            if ($thRow && is_numeric($thRow['setting_value'])) {
-                $threshold = (float)$thRow['setting_value'];
-            }
-        }
+        // Fetch threshold for 3-level approval (tenant-scoped)
+        $tidExp = (int)($auth['tenant_id'] ?? 1);
+        $thRaw = TenantConfigService::getSetting($this->db, $tidExp, 'po_three_level_threshold', '');
+        $threshold = is_numeric($thRaw) ? (float)$thRaw : 5000000.0;
 
         if ($statusVal !== 'draft' && $statusVal === 'pending') {
             if (empty($approver_id)) {
-                $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
-                $stmtLeader->execute([$auth['user_id']]);
-                $leadId = $stmtLeader->fetchColumn();
-                if (!empty($leadId) && (int)$leadId !== (int)$auth['user_id']) {
-                    $approver_id = (int)$leadId;
-                } else {
-                    $stmtDir = $this->db->query("SELECT id FROM users WHERE LOWER(role) IN ('director', 'superadmin', 'super_admin') AND id != " . (int)$auth['user_id'] . " LIMIT 1");
-                    $approver_id = (int)($stmtDir->fetchColumn() ?: 1003);
-                }
+                $approver_id = TenantConfigService::resolveUserApprover($this->db, $tidExp, (int)$auth['user_id'], 'expense');
             }
             if ($totalAmount >= $threshold) {
                 if (empty($approver_id_2)) {
@@ -1327,7 +1329,8 @@ class FinanceController
         if (!array_key_exists('notes', $data) && array_key_exists('note', $data)) {
             $data['notes'] = $data['note'];
         }
-        $isAdminOrFinance = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isAdminOrFinance = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], 'expenses', 'approve', ['all']);
         $fields = [
             'title',
             'category',
@@ -1358,14 +1361,12 @@ class FinanceController
                 $data['related_user_ids'] = json_encode($data['related_user_ids']);
             }
         }
-        $canUpdateRefund = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'hr'], true);
+        $canUpdateRefund = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'hr'], 'expenses', 'approve');
         if ($canUpdateRefund) {
             $fields[] = 'refund_image_url';
         }
 
-        $canSelfApprove = in_array(strtolower($auth['role'] ?? ''), [
-            'admin', 'superadmin', 'super_admin', 'director'
-        ], true);
+        $canSelfApprove = TenantConfigService::canUserSelfApprove($this->db, $auth, 'expense');
         if (!$canSelfApprove) {
             foreach (['approver_id', 'approver_id_2', 'approver_id_3'] as $af) {
                 if (array_key_exists($af, $data) && !empty($data[$af]) && (int)$data[$af] === (int)$auth['user_id']) {
@@ -1504,14 +1505,9 @@ class FinanceController
                 $data['status_level_2'] = 'none';
                 $data['status_level_3'] = 'none';
             } elseif ($isTransitionToPending || $isUpdatingApprovalChain) {
-                $threshold = 5000000;
-                $thQuery = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'po_three_level_threshold' LIMIT 1");
-                if ($thQuery) {
-                    $thRow = $thQuery->fetch();
-                    if ($thRow && is_numeric($thRow['setting_value'])) {
-                        $threshold = (float)$thRow['setting_value'];
-                    }
-                }
+                require_once __DIR__ . '/../config/TenantConfigService.php';
+                $thRaw = TenantConfigService::getSetting($this->db, (int)($auth['tenant_id'] ?? 1), 'po_three_level_threshold', '');
+                $threshold = is_numeric($thRaw) ? (float)$thRaw : 5000000.0;
                 if (empty($newApprover1)) {
                     $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
                     $stmtLeader->execute([$row['created_by'] ?? $auth['user_id']]);
@@ -1641,7 +1637,7 @@ class FinanceController
                 $creatorRow = $stmtUser->fetch();
                 if ($creatorRow && !empty($creatorRow['email'])) {
                     require_once __DIR__ . '/../mailer.php';
-                    $emailSubject = "[IDEAS] Yêu cầu chi phí của bạn đã được cập nhật bởi {$modifierName}";
+                    $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Yêu cầu chi phí của bạn đã được cập nhật bởi {$modifierName}";
                     $emailTitle = "CẬP NHẬT YÊU CẦU CHI PHÍ";
                     $emailContent = "Chào <strong>" . htmlspecialchars($creatorRow['full_name']) . "</strong>,<br/><br/>" .
                                     "Yêu cầu thanh toán chi phí của bạn cho mục <strong>" . htmlspecialchars($row['title']) . "</strong> đã được <strong>" . htmlspecialchars($modifierName) . "</strong> chỉnh sửa.<br/>" .
@@ -1749,12 +1745,19 @@ class FinanceController
             respond(400, null, 'Không thể xóa yêu cầu đã được duyệt hoặc chi tiền', false);
         }
 
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $delScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'expenses', 'delete');
+        if ($delScope === 'none') {
+            respond(403, null, 'Bạn không có quyền xóa chi phí', false);
+        }
         $sql = "UPDATE expenses SET deleted_at = NOW() WHERE id=? AND tenant_id=?";
         $p = [$id, $auth['tenant_id']];
-        $isPrivileged = in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'accountant', 'manager'], true);
-        if (!$isPrivileged) {
+        if ($delScope === 'own') {
             $sql .= " AND created_by = ?";
             $p[] = $auth['user_id'];
+        } elseif ($delScope === 'team') {
+            $sql .= " AND (created_by = ? OR created_by IN (SELECT id FROM users WHERE tenant_id = ? AND team_id IN (SELECT id FROM teams WHERE tenant_id = ? AND (leader_id = ? OR default_approver_id = ?))))";
+            array_push($p, $auth['user_id'], $auth['tenant_id'], $auth['tenant_id'], $auth['user_id'], $auth['user_id']);
         }
         $stmt = $this->db->prepare($sql);
         $stmt->execute($p);
@@ -1785,12 +1788,15 @@ class FinanceController
             respond(400, null, 'Trạng thái phê duyệt không hợp lệ', false);
         }
 
-        $userId = $auth['user_id'];
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $userId = (int)$auth['user_id'];
+        $forUpdate = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite') ? '' : ' FOR UPDATE';
+        $nowExpr = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite') ? 'CURRENT_TIMESTAMP' : 'NOW()';
 
         $this->db->beginTransaction();
         try {
             // Find creator of the expense WITH row-level lock (FOR UPDATE)
-            $stmtExp = $this->db->prepare("SELECT * FROM expenses WHERE id=? AND tenant_id=? AND deleted_at IS NULL FOR UPDATE");
+            $stmtExp = $this->db->prepare("SELECT * FROM expenses WHERE id=? AND tenant_id=? AND deleted_at IS NULL{$forUpdate}");
             $stmtExp->execute([$id, $auth['tenant_id']]);
             $expenseRow = $stmtExp->fetch();
             
@@ -1799,46 +1805,9 @@ class FinanceController
                 respond(404, null, 'Không tìm thấy chi phí', false);
             }
 
-            $isAssigned = ((int)($expenseRow['approver_id'] ?? 0) === (int)$auth['user_id']) || 
-                          ((int)($expenseRow['approver_id_2'] ?? 0) === (int)$auth['user_id']) || 
-                          ((int)($expenseRow['approver_id_3'] ?? 0) === (int)$auth['user_id']);
-            $isCreator = ((int)($expenseRow['created_by'] ?? 0) === (int)$auth['user_id']);
             $isCommission = ($expenseRow['category'] ?? '') === 'commission' || 
                             stripos($expenseRow['title'] ?? '', 'hoa hồng') !== false || 
                             stripos($expenseRow['notes'] ?? '', 'hoa hồng') !== false;
-
-            $canSelfApprove = in_array(strtolower($auth['role'] ?? ''), [
-                'admin', 'superadmin', 'super_admin', 'director'
-            ], true);
-            if ($isCreator && !$canSelfApprove) {
-                $this->db->rollBack();
-                respond(403, null, 'Người tạo đề xuất không được tự phê duyệt chi phí của chính mình', false);
-            }
-
-            $isPrivileged = in_array($auth['role'], ['admin', 'manager', 'super_admin', 'superadmin', 'director', 'accountant', 'hr', 'sale_admin', 'saleadmin'], true);
-
-            if (!$isAssigned && !$isPrivileged) {
-                $this->db->rollBack();
-                respond(403, null, 'Bạn không có quyền duyệt chi phí này', false);
-            }
-
-            if ($auth['role'] === 'manager' && !$isAssigned) {
-                $creatorId = (int)$expenseRow['created_by'];
-                
-                // Check if creator belongs to the manager's team
-                $stmtUserTeam = $this->db->prepare("SELECT team_id FROM users WHERE id = ?");
-                $stmtUserTeam->execute([$creatorId]);
-                $targetUserTeamId = $stmtUserTeam->fetchColumn();
-
-                $stmtLead = $this->db->prepare("SELECT 1 FROM teams WHERE id = ? AND leader_id = ?");
-                $stmtLead->execute([$targetUserTeamId, $auth['user_id']]);
-                $isTeamMember = $stmtLead->fetch();
-
-                if ($creatorId !== (int)$auth['user_id'] && !$isTeamMember) {
-                    $this->db->rollBack();
-                    respond(403, null, 'Bạn chỉ có quyền phê duyệt chi phí cho nhân viên thuộc nhóm của mình', false);
-                }
-            }
 
             // Determine which level needs to be approved next
             $currentLevel = 0;
@@ -1860,7 +1829,6 @@ class FinanceController
                 respond(422, null, 'Khoản chi đã được duyệt hoặc từ chối đầy đủ rồi', false);
             }
 
-            // Check if current user is the expected approver for this level
             $expectedApproverId = 0;
             if ($currentLevel === 1) {
                 $expectedApproverId = (int)($expenseRow['approver_id'] ?? 0);
@@ -1870,7 +1838,29 @@ class FinanceController
                 $expectedApproverId = (int)($expenseRow['approver_id_3'] ?? 0);
             }
 
-            if ($expectedApproverId > 0 && $expectedApproverId !== (int)$userId && !in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true)) {
+            $wfModuleKey = $isCommission ? 'commission' : 'expense';
+            $authDecision = TenantConfigService::canUserApproveWorkflowLevel(
+                $this->db,
+                $auth,
+                $wfModuleKey,
+                'expenses',
+                (int)($expenseRow['created_by'] ?? 0),
+                $expectedApproverId > 0 ? $expectedApproverId : null,
+                $currentLevel,
+                (float)($expenseRow['amount'] ?? 0)
+            );
+            if (empty($authDecision['allowed'])) {
+                $this->db->rollBack();
+                $reasonCode = $authDecision['reason'] ?? '';
+                if ($reasonCode === 'self_approval_forbidden') {
+                    respond(403, null, 'Người tạo đề xuất không được tự phê duyệt chi phí của chính mình', false);
+                } elseif ($reasonCode === 'outside_team_scope') {
+                    respond(403, null, 'Bạn chỉ có quyền phê duyệt chi phí cho nhân viên thuộc nhóm của mình', false);
+                }
+                respond(403, null, 'Bạn không có quyền duyệt chi phí này', false);
+            }
+
+            if ($expectedApproverId > 0 && $expectedApproverId !== $userId && !TenantConfigService::hasGlobalScope($this->db, $auth, 'expenses', 'approve')) {
                 $this->db->rollBack();
                 respond(403, null, 'Bạn không có quyền phê duyệt cấp này hoặc chưa đến lượt phê duyệt của bạn', false);
             }
@@ -1885,8 +1875,8 @@ class FinanceController
                 $nextApprovalStatus = 'rejected';
                 $nextStatus = 'rejected';
                 
-                $this->db->prepare("UPDATE expenses SET status='rejected', approval_status='rejected', $levelStatusField='rejected', $levelTimeField=NOW(), reject_reason=? WHERE id=?")
-                    ->execute([$rejectReason, $id]);
+                $this->db->prepare("UPDATE expenses SET status='rejected', approval_status='rejected', $levelStatusField='rejected', $levelTimeField={$nowExpr}, reject_reason=? WHERE id=? AND tenant_id=?")
+                    ->execute([$rejectReason, $id, $auth['tenant_id']]);
             } else {
                 $hasLevel2 = !empty($expenseRow['approver_id_2']) && $expenseRow['status_level_2'] !== 'none';
                 $hasLevel3 = !empty($expenseRow['approver_id_3']) && $expenseRow['status_level_3'] !== 'none';
@@ -1920,8 +1910,8 @@ class FinanceController
                 } elseif ($currentLevel === 3) {
                     $setApprovedBy = ", approved_by_3 = " . (int)$userId;
                 }
-                $this->db->prepare("UPDATE expenses SET status=?, approval_status=?, $levelStatusField='approved', $levelTimeField=NOW() $setApprovedBy WHERE id=?")
-                    ->execute([$nextStatus, $nextApprovalStatus, $id]);
+                $this->db->prepare("UPDATE expenses SET status=?, approval_status=?, $levelStatusField='approved', $levelTimeField={$nowExpr} $setApprovedBy WHERE id=? AND tenant_id=?")
+                    ->execute([$nextStatus, $nextApprovalStatus, $id, $auth['tenant_id']]);
             }
 
             $this->db->commit();
@@ -2028,6 +2018,9 @@ class FinanceController
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
             }
+            if (in_array(get_class($e), ['RespondException', 'ResponseException'], true)) {
+                throw $e;
+            }
             respond(500, null, 'Lỗi khi duyệt chi phí: ' . $e->getMessage(), false);
         }
     }
@@ -2085,8 +2078,12 @@ class FinanceController
     }
 
     private function checkContactAccess(int $uid, int $contactId, int $tid, string $role): bool {
-        if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'assistant'], true)) {
-            return true;
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $cScope = TenantConfigService::resolvePermissionScope($this->db, ['user_id' => $uid, 'tenant_id' => $tid, 'role' => $role], 'contacts', 'read');
+        if ($cScope === 'all') {
+            $stmtChk = $this->db->prepare("SELECT 1 FROM contacts WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $stmtChk->execute([$contactId, $tid]);
+            return (bool)$stmtChk->fetchColumn();
         }
         
         $stmt = $this->db->prepare("SELECT owner_id, collaborator_ids FROM contacts WHERE id = ? AND tenant_id = ?");
@@ -2124,8 +2121,12 @@ class FinanceController
     }
 
     private function checkDealAccess(int $uid, int $dealId, int $tid, string $role): bool {
-        if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'assistant'], true)) {
-            return true;
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $dScope = TenantConfigService::resolvePermissionScope($this->db, ['user_id' => $uid, 'tenant_id' => $tid, 'role' => $role], 'deals', 'read');
+        if ($dScope === 'all') {
+            $stmtChk = $this->db->prepare("SELECT 1 FROM deals WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $stmtChk->execute([$dealId, $tid]);
+            return (bool)$stmtChk->fetchColumn();
         }
         
         $stmt = $this->db->prepare("SELECT owner_id, contact_id FROM deals WHERE id = ? AND tenant_id = ?");
@@ -2415,7 +2416,7 @@ class FinanceController
                 $this->db->rollBack();
                 respond(409, null, 'Khoản hoa hồng của nhân sự này đã được xác nhận chi trả trước đó', false);
             }
-            if (isset($targetItem['user_id']) && (int)$targetItem['user_id'] === (int)$auth['user_id'] && !in_array($roleLower, ['admin', 'super_admin', 'superadmin', 'director'], true)) {
+            if (isset($targetItem['user_id']) && (int)$targetItem['user_id'] === (int)$auth['user_id'] && !TenantConfigService::canUserSelfApprove($this->db, $auth, 'commission')) {
                 $this->db->rollBack();
                 respond(403, null, 'Bạn không thể tự xác nhận chi trả khoản hoa hồng của chính mình', false);
             }
@@ -2448,7 +2449,7 @@ class FinanceController
 
             // Notification: Send EXCLUSIVELY to target beneficiary user if internal employee
             $beneficiaryUserId = isset($targetItem['user_id']) ? (int)$targetItem['user_id'] : 0;
-            if ($beneficiaryUserId > 0) {
+            if ($beneficiaryUserId > 0 && $beneficiaryUserId !== (int)$auth['user_id']) {
                 $paidAmt = (float)($targetItem['amount'] ?? 0);
                 $amtFormatted = number_format($paidAmt, 0, ',', '.') . ' ' . ($expenseRow['currency'] ?: 'VND');
                 $payerName = $targetItem['paid_by_name'];
@@ -2462,12 +2463,12 @@ class FinanceController
                 $stmtNotif->execute([$beneficiaryUserId, $auth['tenant_id'], $notifTitle, $notifBody, $notifType, $notifLink]);
 
                 // Email notification if available
-                $stmtUserEmail = $this->db->prepare("SELECT email, full_name FROM users WHERE id = ?");
-                $stmtUserEmail->execute([$beneficiaryUserId]);
+                $stmtUserEmail = $this->db->prepare("SELECT email, full_name FROM users WHERE id = ? AND tenant_id = ?");
+                $stmtUserEmail->execute([$beneficiaryUserId, $auth['tenant_id']]);
                 $beneUser = $stmtUserEmail->fetch(PDO::FETCH_ASSOC);
                 if ($beneUser && !empty($beneUser['email'])) {
                     require_once __DIR__ . '/../mailer.php';
-                    $emailSubject = "[IDEAS] Bạn đã nhận được thanh toán hoa hồng ({$amtFormatted})";
+                    $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Bạn đã nhận được thanh toán hoa hồng ({$amtFormatted})";
                     $emailTitle = "THÔNG BÁO THANH TOÁN HOA HỒNG";
                     $emailContent = "Chào <strong>" . htmlspecialchars($beneUser['full_name'] ?? 'Bạn') . "</strong>,<br/><br/>" .
                         "Khoản hoa hồng trị giá <strong>" . $amtFormatted . "</strong> của bạn trong đề xuất <strong>\"" . htmlspecialchars($expenseRow['title']) . "\"</strong> đã được Kế toán xác nhận giải ngân thành công.<br/>" .
@@ -2505,8 +2506,8 @@ class FinanceController
      */
     public function getAccountingFinancialSummary(array $auth): void
     {
-        $role = strtolower(trim($auth['role'] ?? ''));
-        if (!in_array($role, ['admin', 'super_admin', 'superadmin', 'director', 'accountant', 'ketoan', 'cfo', 'hr', 'manager'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'super_admin', 'superadmin', 'director', 'accountant', 'ketoan', 'cfo', 'hr', 'manager'], 'reports', 'read') && !TenantConfigService::hasPermission($this->db, $auth, 'expenses', 'approve')) {
             respond(403, null, 'Bạn không có quyền xem báo cáo tổng hợp tài chính & thuế doanh nghiệp', false);
         }
         $tid = (int)($auth['tenant_id'] ?? 1);
@@ -2568,13 +2569,15 @@ class FinanceController
         // Fallback: nếu chưa chốt bảng lương thực tế cho tháng này, dự toán quỹ lương từ hrm_profiles
         if ($payrollGross <= 0) {
             try {
+                require_once __DIR__ . '/../config/TenantConfigService.php';
+                $exclFinCond = TenantConfigService::buildExcludedEmailSqlCondition($this->db, (int)$tid, 'u.email');
                 $profStmt = $this->db->prepare("
                     SELECT 
                         COALESCE(SUM(COALESCE(p.base_salary, 0) + COALESCE(p.deal_salary, 0) + COALESCE(p.allowance_meal, 0) + COALESCE(p.allowance_travel, 0) + COALESCE(p.allowance_phone, 0)), 0) as projected_gross,
                         COALESCE(SUM(CASE WHEN COALESCE(p.has_insurance, 1) = 1 THEN COALESCE(p.base_salary, 0) ELSE 0 END), 0) as projected_ins_salary
                     FROM users u
                     LEFT JOIN hrm_profiles p ON u.id = p.user_id
-                    WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+                    WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND {$exclFinCond}
                 ");
                 $profStmt->execute([$tid]);
                 $profRow = $profStmt->fetch(PDO::FETCH_ASSOC) ?: [];

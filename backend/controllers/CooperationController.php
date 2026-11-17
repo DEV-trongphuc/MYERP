@@ -73,24 +73,31 @@ class CooperationController {
     }
 
     private function checkSlipAccess(array $auth, int $id): bool {
-        if (in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true)) {
-            return true;
-        }
+        require_once __DIR__ . '/../config/TenantConfigService.php';
 
-        // Fetch slip details
+        // Fetch slip details first to enforce strict tenant isolation even for admins/directors
         $stmtSlip = $this->db->prepare("
             SELECT cs.created_by, c.owner_id, cs.shares_json, COALESCE(c.tenant_id, u_cr.tenant_id, 1) AS tenant_id
             FROM cooperation_slips cs
             LEFT JOIN contacts c ON cs.contact_id = c.id
             LEFT JOIN users u_cr ON cs.created_by = u_cr.id
-            WHERE cs.id = ?
+            WHERE cs.id = ? AND cs.deleted_at IS NULL
         ");
         $stmtSlip->execute([$id]);
         $slip = $stmtSlip->fetch();
         if (!$slip) return false;
         
-        // Tenant check
+        // Tenant check (Zero Cross-Tenant IDOR)
         if ((int)$slip['tenant_id'] !== (int)$auth['tenant_id']) return false;
+
+        $readScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'cooperations', 'read');
+        $approveScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'cooperations', 'approve');
+        if ($readScope === 'all' || $approveScope === 'all') {
+            return true;
+        }
+        if ($readScope === 'none' && $approveScope === 'none') {
+            return false;
+        }
 
         $userId = (int)$auth['user_id'];
         $shares = json_decode($slip['shares_json'] ?? '[]', true) ?: [];
@@ -98,7 +105,7 @@ class CooperationController {
         $isCreator = (int)$slip['created_by'] === $userId;
         $isOwner = (int)$slip['owner_id'] === $userId;
 
-        if ($auth['role'] === 'manager') {
+        if ($readScope === 'team' || $approveScope === 'team') {
             if ($isCreator || $isOwner || $isShareholder) {
                 return true;
             }
@@ -111,9 +118,9 @@ class CooperationController {
                 $inUids = implode(',', array_fill(0, count($uidsToCheck), '?'));
                 $stmtTeamCheck = $this->db->prepare("
                     SELECT 1 FROM users 
-                    WHERE id IN ($inUids) AND team_id IN (SELECT id FROM teams WHERE leader_id = ?)
+                    WHERE tenant_id = ? AND id IN ($inUids) AND team_id IN (SELECT id FROM teams WHERE tenant_id = ? AND (leader_id = ? OR default_approver_id = ?))
                 ");
-                $stmtTeamCheck->execute(array_merge($uidsToCheck, [$userId]));
+                $stmtTeamCheck->execute(array_merge([(int)$auth['tenant_id']], $uidsToCheck, [(int)$auth['tenant_id'], $userId, $userId]));
                 if ($stmtTeamCheck->fetch()) {
                     return true;
                 }
@@ -411,7 +418,7 @@ class CooperationController {
 
         // Email all shareholders that a slip requires their signature (only if not auto-approved)
         if (!$isSingleShareholder) {
-            $emailSubject = "[IDEAS] Yêu cầu ký xác nhận Phiếu hợp tác #" . $slipId;
+            $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Yêu cầu ký xác nhận Phiếu hợp tác #" . $slipId;
             $emailTitle = "KÝ XÁC NHẬN PHIẾU HỢP TÁC";
             $emailContent = "Chào các thành viên,<br/><br/>" .
                             "Một phiếu hợp tác chia sẻ hoa hồng mới (#" . $slipId . ") đã được tự động khởi tạo trên hệ thống.<br/>" .
@@ -465,7 +472,8 @@ class CooperationController {
                 respond(403, null, 'Bạn không có quyền cập nhật tỷ lệ cho phiếu hợp tác này', false);
             }
 
-            $isManagerOrAdmin = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true);
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $isManagerOrAdmin = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'cooperations', 'approve');
 
             $allowedStatuses = ['pending_signatures', 'pending_manager_approval', 'approved_pending_signatures'];
             if (!$isManagerOrAdmin && !in_array($slip['status'], $allowedStatuses)) {
@@ -526,7 +534,7 @@ class CooperationController {
 
         if ($isManagerOrAdmin) {
             // Notify all shareholders about direct update
-            $emailSubject = "[IDEAS] Cập nhật tỷ lệ hoa hồng Phiếu hợp tác #" . $id;
+            $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Cập nhật tỷ lệ hoa hồng Phiếu hợp tác #" . $id;
             $emailTitle = "TỶ LỆ HOA HỒNG ĐÃ ĐƯỢC CẬP NHẬT";
             $emailContent = "Chào các thành viên,<br/><br/>" .
                             "Tỷ lệ hoa hồng hoặc số tiền hoa hồng trong Phiếu hợp tác #" . $id . " đã được điều chỉnh trực tiếp bởi Quản trị viên <strong>" . htmlspecialchars($auth['full_name']) . "</strong>.<br/>" .
@@ -548,7 +556,7 @@ class CooperationController {
             ]);
         } else {
             // Email all shareholders about the change and sign request
-            $emailSubject = "[IDEAS] Yêu cầu ký xác nhận lại Phiếu hợp tác #" . $id;
+            $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Yêu cầu ký xác nhận lại Phiếu hợp tác #" . $id;
             $emailTitle = "KÝ XÁC NHẬN LẠI PHIẾU HỢP TÁC";
             $emailContent = "Chào các thành viên,<br/><br/>" .
                             "Tỷ lệ hoa hồng trong Phiếu hợp tác #" . $id . " đã được cập nhật bởi <strong>" . htmlspecialchars($auth['full_name']) . "</strong>.<br/>" .
@@ -662,8 +670,8 @@ class CooperationController {
                 return false;
             };
 
-            $coopSettingStmt = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'coop_default_files' LIMIT 1");
-            $coopDefaultFilesSetting = $coopSettingStmt ? $coopSettingStmt->fetchColumn() : null;
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $coopDefaultFilesSetting = TenantConfigService::getSetting($this->db, (int)($auth['tenant_id'] ?? 1), 'coop_default_files', null);
             if ($coopDefaultFilesSetting) {
                 $requiredFiles = array_filter(array_map('trim', explode(',', $coopDefaultFilesSetting)));
                 if (!empty($requiredFiles)) {
@@ -792,11 +800,12 @@ class CooperationController {
                 }
             }
             if (!empty($remainingShares)) {
-                $emailSubject = "[IDEAS] Nhắc nhở ký xác nhận Phiếu hợp tác #" . $id;
+                $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Nhắc nhở ký xác nhận Phiếu hợp tác #" . $id;
                 $emailTitle = "NHẮC NHỞ KÝ XÁC NHẬN PHIẾU";
+                $brandNameCoop = htmlspecialchars(class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandName($this->db, (int)($auth['tenant_id'] ?? 1)) : 'Hệ thống');
                 $emailContent = "Chào bạn,<br/><br/>" .
                                 "Bạn có một yêu cầu ký xác nhận cho Phiếu hợp tác chia sẻ hoa hồng #" . $id . " chưa hoàn thành.<br/>" .
-                                "Vui lòng đăng nhập hệ thống IDEAS CRM và truy cập mục <strong>Phiếu hợp tác</strong> để ký xác nhận sớm nhất.";
+                                "Vui lòng đăng nhập hệ thống {$brandNameCoop} và truy cập mục <strong>Phiếu hợp tác</strong> để ký xác nhận sớm nhất.";
                 $this->notifyShareholders($id, $remainingShares, $emailSubject, $emailTitle, $emailContent, (int)$auth['user_id']);
             }
         }
@@ -806,7 +815,13 @@ class CooperationController {
     }
 
     public function approveSlip(array $auth, int $id): void {
-        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director']);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'sale_admin'], 'cooperations', 'approve')) {
+            respond(403, null, 'Bạn không có quyền phê duyệt phiếu hợp tác', false);
+        }
+        $isSqlite = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite');
+        $forUpdate = $isSqlite ? '' : ' FOR UPDATE';
+        $nowExpr = $isSqlite ? 'CURRENT_TIMESTAMP' : 'NOW()';
 
         $this->db->beginTransaction();
         try {
@@ -814,8 +829,7 @@ class CooperationController {
                 SELECT cs.*, c.tenant_id, c.project_id, c.owner_id
                 FROM cooperation_slips cs
                 JOIN contacts c ON cs.contact_id = c.id
-                WHERE cs.id = ? AND c.tenant_id = ?
-                FOR UPDATE
+                WHERE cs.id = ? AND c.tenant_id = ? AND cs.deleted_at IS NULL{$forUpdate}
             ");
             $stmtSlip->execute([$id, $auth['tenant_id']]);
             $slip = $stmtSlip->fetch();
@@ -825,18 +839,22 @@ class CooperationController {
                 respond(404, null, 'Phiếu hợp tác không tồn tại', false);
             }
 
-            // Restriction: Only GĐKD (director role) or Admin can approve.
-            // Deny regular team managers.
-            $isAdminOrSuper = in_array($auth['role'], ['admin', 'superadmin', 'super_admin'], true);
-            if (!$isAdminOrSuper) {
-                if ($auth['role'] === 'manager') {
-                    $this->db->rollBack();
-                    respond(403, null, 'Bạn không có quyền phê duyệt phiếu hợp tác (Quyền duyệt thuộc về GĐKD/Admin)', false);
-                }
-            }
-
-            if (!$this->checkSlipAccess($auth, $id)) {
+            $authDecision = TenantConfigService::canUserApproveWorkflowLevel(
+                $this->db,
+                $auth,
+                'cooperation',
+                'cooperations',
+                (int)($slip['created_by'] ?? 0),
+                null,
+                1
+            );
+            if (empty($authDecision['allowed'])) {
                 $this->db->rollBack();
+                if (($authDecision['reason'] ?? '') === 'self_approval_forbidden') {
+                    respond(403, null, 'Không được tự phê duyệt phiếu hợp tác do chính mình tạo', false);
+                } elseif (($authDecision['reason'] ?? '') === 'outside_team_scope') {
+                    respond(403, null, 'Bạn chỉ có quyền phê duyệt phiếu hợp tác thuộc nhóm của mình', false);
+                }
                 respond(403, null, 'Bạn không có quyền phê duyệt phiếu hợp tác này', false);
             }
 
@@ -845,7 +863,7 @@ class CooperationController {
                 respond(400, null, 'Phiếu chưa được ký đủ chữ ký của các bên để phê duyệt hoặc đã được duyệt', false);
             }
 
-            $stmt = $this->db->prepare("UPDATE cooperation_slips SET status = 'approved', approved_by = ?, approved_at = NOW() WHERE id = ?");
+            $stmt = $this->db->prepare("UPDATE cooperation_slips SET status = 'approved', approved_by = ?, approved_at = {$nowExpr} WHERE id = ? AND status = 'pending_manager_approval'");
             $stmt->execute([$auth['user_id'], $id]);
 
             $this->db->commit();
@@ -878,6 +896,9 @@ class CooperationController {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
             }
+            if (in_array(get_class($e), ['RespondException', 'ResponseException'], true)) {
+                throw $e;
+            }
             respond(500, null, 'Lỗi khi phê duyệt phiếu hợp tác: ' . $e->getMessage(), false);
         }
     }
@@ -885,6 +906,8 @@ class CooperationController {
     public function rejectSlip(array $auth, int $id): void {
         $b = getBody();
         $details = trim($b['reason'] ?? 'Không đồng ý ký');
+        $isSqlite = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite');
+        $forUpdate = $isSqlite ? '' : ' FOR UPDATE';
 
         $this->db->beginTransaction();
         try {
@@ -892,8 +915,7 @@ class CooperationController {
                 SELECT cs.*, c.tenant_id, c.owner_id
                 FROM cooperation_slips cs
                 JOIN contacts c ON cs.contact_id = c.id
-                WHERE cs.id = ? AND c.tenant_id = ?
-                FOR UPDATE
+                WHERE cs.id = ? AND c.tenant_id = ? AND cs.deleted_at IS NULL{$forUpdate}
             ");
             $stmtSlip->execute([$id, $auth['tenant_id']]);
             $slip = $stmtSlip->fetch();
@@ -919,14 +941,17 @@ class CooperationController {
             $stmt = $this->db->prepare("
                 UPDATE cooperation_slips 
                 SET status = 'rejected', dispute_details = ?, signatures_json = '{}' 
-                WHERE id = ?
+                WHERE id = ? AND deleted_at IS NULL
             ");
             $stmt->execute([$details, $id]);
 
             $this->db->commit();
-        } catch (Throwable $e) {
+        } catch (\Throwable $e) {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
+            }
+            if (in_array(get_class($e), ['RespondException', 'ResponseException'], true)) {
+                throw $e;
             }
             respond(500, null, 'Lỗi khi từ chối phiếu hợp tác: ' . $e->getMessage(), false);
         }
@@ -1105,7 +1130,7 @@ class CooperationController {
 
         // Email and notify all shareholders that a slip requires their signature (after commit)
         $custFullName = trim($contactRow['full_name'] ?? '') ?: 'Khách hàng';
-        $emailSubject = "[IDEAS] Yêu cầu ký xác nhận Phiếu hợp tác #" . $slipId;
+        $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Yêu cầu ký xác nhận Phiếu hợp tác #" . $slipId;
         $emailTitle = "KÝ XÁC NHẬN PHIẾU HỢP TÁC";
         $emailContent = "Chào các thành viên,<br/><br/>" .
                         "Một phiếu hợp tác chia sẻ hoa hồng mới (#" . $slipId . ") đã được khởi tạo trên hệ thống cho khách hàng <strong>" . htmlspecialchars($custFullName) . "</strong>.<br/>" .
@@ -1128,7 +1153,8 @@ class CooperationController {
         $stmtOwner->execute([$id, $tid]);
         $ownerId = $stmtOwner->fetchColumn();
 
-        $isAllowed = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true) || 
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isAllowed = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'cooperations', 'write') || 
                      ($ownerId && (int)$ownerId === (int)$auth['user_id']);
 
         if (!$isAllowed && !$this->checkSlipAccess($auth, $id)) {
@@ -1200,7 +1226,8 @@ class CooperationController {
         $stmtOwner->execute([$id, $tid]);
         $ownerId = $stmtOwner->fetchColumn();
 
-        $isAllowed = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true) || 
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isAllowed = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'cooperations', 'write') || 
                      ($ownerId && (int)$ownerId === (int)$auth['user_id']);
 
         if (!$isAllowed || !$this->checkSlipAccess($auth, $id)) {
@@ -1256,7 +1283,8 @@ class CooperationController {
             respond(404, null, 'Không tìm thấy phiếu hợp tác', false);
         }
         
-        $isAllowed = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true) || 
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isAllowed = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'cooperations', 'write') || 
                      ((int)$row['owner_id'] === (int)$auth['user_id']);
                      
         if (!$isAllowed || !$this->checkSlipAccess($auth, $id)) {
@@ -1328,75 +1356,26 @@ class CooperationController {
             respond(404, null, 'Không tìm thấy phiếu hợp tác', false);
         }
         
-        $isAllowed = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true) ||
-                     ((int)$row['owner_id'] === (int)$auth['user_id']) ||
-                     ((int)$row['created_by'] === (int)$auth['user_id']);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $delScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'cooperations', 'delete');
+        $isAllowed = ($delScope === 'all' || $delScope === 'team') ||
+                     ($delScope === 'own' && (((int)$row['owner_id'] === (int)$auth['user_id']) || ((int)$row['created_by'] === (int)$auth['user_id'])));
 
         if (!$isAllowed || !$this->checkSlipAccess($auth, $id)) {
             respond(403, null, 'Bạn không có quyền xóa phiếu hợp tác này', false);
         }
         
-        $stmtDel = $this->db->prepare("DELETE FROM cooperation_slips WHERE id = ?");
+        $nowExpr = (strtolower((string)$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite') ? 'CURRENT_TIMESTAMP' : 'NOW()';
+        $stmtDel = $this->db->prepare("UPDATE cooperation_slips SET deleted_at = {$nowExpr} WHERE id = ? AND deleted_at IS NULL");
         $stmtDel->execute([$id]);
         
         respond(200, null, 'Xóa phiếu hợp tác thành công');
     }
 
     private function getScope(array $auth, string $module, string $action): string {
-        $permissionsJson = null;
-        $stmtQ = $this->db->prepare("SELECT permissions_json FROM users WHERE id = ? LIMIT 1");
-        $stmtQ->execute([$auth['user_id']]);
-        $resQ = $stmtQ->fetch(PDO::FETCH_ASSOC);
-        if ($resQ && !empty($resQ['permissions_json'])) {
-            $permissionsJson = json_decode($resQ['permissions_json'], true);
-        }
-
-        if (in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
-            return 'all';
-        }
-
-        if (in_array($auth['role'], ['sale', 'sales'], true) && $module === 'deals') {
-            return $action === 'delete' ? 'none' : 'own';
-        }
-
-        if ($permissionsJson && isset($permissionsJson[$module][$action])) {
-            $val = $permissionsJson[$module][$action];
-            if (in_array($val, ['all', 'team', 'own', 'none'], true)) {
-                if ($action !== 'delete' && $val === 'none' && in_array($auth['role'], ['sale', 'sales', 'manager', 'director', 'assistant'], true)) {
-                    return 'own';
-                }
-                return $val;
-            }
-        }
-
-        // Default fallbacks
-        $role = $auth['role'];
-        if ($role === 'director') {
-            if ($module === 'settings') {
-                return 'none';
-            }
-            return 'all';
-        }
-        if ($role === 'assistant') {
-            return $action === 'delete' ? 'none' : 'all';
-        }
-        if ($role === 'manager') {
-            return $action === 'delete' ? 'none' : 'team';
-        }
-        if (in_array($role, ['sale', 'sales'], true)) {
-            if ($module === 'projects') {
-                return $action === 'read' ? 'all' : 'none';
-            }
-            return $action === 'delete' ? 'none' : 'own';
-        }
-        if ($role === 'viewer') {
-            return $action === 'read' ? 'all' : 'none';
-        }
-        if (in_array($role, ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
-            return $action === 'delete' ? 'own' : 'all';
-        }
-
-        return 'none';
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $mappedModule = ($module === 'deals') ? 'cooperation' : $module;
+        return TenantConfigService::resolvePermissionScope($this->db, $auth, $mappedModule, $action);
     }
 
     public function getSuggestions(array $auth): void {
@@ -1558,7 +1537,7 @@ class CooperationController {
 
         // Send email notifications to all shareholders of the new slip
         $shares = json_decode($sharesJson, true) ?: [];
-        $emailSubject = "[IDEAS] Yêu cầu ký xác nhận Phiếu điều chỉnh #" . $newSlipId;
+        $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Yêu cầu ký xác nhận Phiếu điều chỉnh #" . $newSlipId;
         $emailTitle = "KÝ XÁC NHẬN PHIẾU ĐIỀU CHỈNH HOA HỒNG";
         $emailContent = "Chào các thành viên,<br/><br/>" .
                         "Một phiếu điều chỉnh chia sẻ hoa hồng mới (#" . $newSlipId . ") đã được khởi tạo để thay thế cho phiếu #" . $id . ".<br/>" .
@@ -1624,13 +1603,15 @@ class CooperationController {
         $stmtUsers->execute([$auth['tenant_id']]);
         $usersToNotify = $stmtUsers->fetchAll(PDO::FETCH_ASSOC);
 
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $brandCoopAdj = TenantConfigService::getBrandName($this->db, (int)($auth['tenant_id'] ?? 1));
         $creatorName = $auth['full_name'] ?? 'Nhân viên';
-        $emailSubject = "[IDEAS] Yêu cầu chỉnh sửa tỷ lệ hoa hồng - Khách: " . $slip['customer_name'];
+        $emailSubject = TenantConfigService::getBrandPrefix($this->db, (int)($auth['tenant_id'] ?? 1)) . " Yêu cầu chỉnh sửa tỷ lệ hoa hồng - Khách: " . $slip['customer_name'];
         $emailTitle = "YÊU CẦU CHỈNH SỬA TỶ LỆ HOA HỒNG";
         $emailContent = "Chào ban quản lý,<br/><br/>" .
                         "Nhân viên <strong>" . htmlspecialchars($creatorName) . "</strong> đã gửi yêu cầu chỉnh sửa tỷ lệ chia sẻ hoa hồng cho Phiếu hợp tác #" . $id . " (Khách hàng: " . htmlspecialchars($slip['customer_name']) . ").<br/>" .
                         "<strong>Lý do yêu cầu:</strong> <em>" . htmlspecialchars($reason) . "</em>.<br/><br/>" .
-                        "Vui lòng đăng nhập IDEAS CRM để xem xét và cập nhật trực tiếp trên Phiếu cọc.";
+                        "Vui lòng đăng nhập " . htmlspecialchars($brandCoopAdj) . " để xem xét và cập nhật trực tiếp trên Phiếu cọc.";
 
         $stmtNotif = $this->db->prepare("
             INSERT INTO notifications (user_id, tenant_id, title, body, type, link) 
@@ -1641,6 +1622,9 @@ class CooperationController {
 
         require_once __DIR__ . '/../mailer.php';
         foreach ($usersToNotify as $u) {
+            if ((int)$u['id'] === (int)$auth['user_id']) {
+                continue;
+            }
             // In-app
             $stmtNotif->execute([
                 (int)$u['id'],
@@ -1657,9 +1641,7 @@ class CooperationController {
 
         // Fetch Zalo & Telegram group chat configurations from system_settings and notify
         try {
-            $stmtSettings = $this->db->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('zalo_bot_token', 'zalo_admin_group_chat_id', 'telegram_bot_token', 'telegram_admin_group_chat_id')");
-            $stmtSettings->execute();
-            $settings = $stmtSettings->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+            $settings = TenantConfigService::getSettings($this->db, (int)($auth['tenant_id'] ?? 1));
             
             $zaloBotToken = $settings['zalo_bot_token'] ?? '';
             $zaloAdminGroup = $settings['zalo_admin_group_chat_id'] ?? '';
@@ -1674,7 +1656,7 @@ class CooperationController {
                       "• <b>Dự án:</b> " . htmlspecialchars($slip['project_name'] ?? 'Dự án khác') . "\n" .
                       "• <b>Căn/Lô:</b> " . htmlspecialchars($slip['unit_code'] ?? '—') . "\n" .
                       "• <b>Lý do yêu cầu:</b> <i>" . htmlspecialchars($reason) . "</i>\n\n" .
-                      "👉 Vui lòng đăng nhập IDEAS CRM để xem xét và xử lý.";
+                      "👉 Vui lòng đăng nhập " . htmlspecialchars($brandCoopAdj) . " để xem xét và xử lý.";
 
             $zaloText = "⚠️ [ YÊU CẦU CHỈNH SỬA TỶ LỆ HOA HỒNG ] ⚠️\n" .
                         "━━━━━━━━━━━━━━━━━━━━━\n" .
@@ -1684,7 +1666,7 @@ class CooperationController {
                         "• Dự án: " . ($slip['project_name'] ?? 'Dự án khác') . "\n" .
                         "• Căn/Lô: " . ($slip['unit_code'] ?? '—') . "\n" .
                         "• Lý do yêu cầu: " . $reason . "\n\n" .
-                        "👉 Vui lòng đăng nhập IDEAS CRM để xem xét và xử lý.";
+                        "👉 Vui lòng đăng nhập {$brandCoopAdj} để xem xét và xử lý.";
 
             // Send Zalo Notification
             if (!empty($zaloBotToken) && !empty($zaloAdminGroup)) {
@@ -1707,7 +1689,10 @@ class CooperationController {
     }
 
     public function handleAdjustment(array $auth, int $id): void {
-        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director']);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'cooperations', 'approve')) {
+            respond(403, null, 'Bạn không có quyền xử lý điều chỉnh phiếu hợp tác', false);
+        }
         
         $input = getBody();
         $action = trim($input['action'] ?? ''); // 'approve' or 'reject'
@@ -1790,7 +1775,7 @@ class CooperationController {
                 // Notify all shareholders of the new slip
                 $shares = json_decode($sharesJson, true) ?: [];
                 $actorName = !empty($auth['full_name']) ? $auth['full_name'] : (!empty($auth['name']) ? $auth['name'] : 'Người quản lý');
-                $emailSubject = "[IDEAS] Duyệt yêu cầu chỉnh sửa & Yêu cầu ký xác nhận Phiếu điều chỉnh #" . $newSlipId;
+                $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Duyệt yêu cầu chỉnh sửa & Yêu cầu ký xác nhận Phiếu điều chỉnh #" . $newSlipId;
                 $emailTitle = "KÝ XÁC NHẬN PHIẾU ĐIỀU CHỈNH HOA HỒNG";
                 $emailContent = "Chào các thành viên,<br/><br/>" .
                                 "<strong>" . htmlspecialchars($actorName) . "</strong> đã <strong>phê duyệt</strong> yêu cầu chỉnh sửa tỷ lệ hoa hồng cho khách hàng <strong>" . htmlspecialchars($slip['customer_name']) . "</strong>.<br/>" .
@@ -1824,7 +1809,7 @@ class CooperationController {
 
                 if ($requester) {
                     $actorName = !empty($auth['full_name']) ? $auth['full_name'] : (!empty($auth['name']) ? $auth['name'] : 'Người quản lý');
-                    $notifySubject = "[IDEAS] Từ chối yêu cầu chỉnh sửa tỷ lệ hoa hồng - Khách: " . $slip['customer_name'];
+                    $notifySubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Từ chối yêu cầu chỉnh sửa tỷ lệ hoa hồng - Khách: " . $slip['customer_name'];
                     $notifyTitle = "TỪ CHỐI YÊU CẦU CHỈNH SỬA TỶ LỆ";
                     $notifyContent = "Chào <strong>" . htmlspecialchars($requester['full_name']) . "</strong>,<br/><br/>" .
                                      "Yêu cầu chỉnh sửa tỷ lệ hoa hồng của bạn cho khách hàng <strong>" . htmlspecialchars($slip['customer_name']) . "</strong> (Phiếu hợp tác #" . $id . ") đã bị <strong>" . htmlspecialchars($actorName) . "</strong> từ chối.<br/>" .

@@ -8,21 +8,76 @@ require_once 'db_connect.php';
 require_once 'zalo_helpers.php';
 require_once 'zalo_scoring_helper.php';
 
-$url = $_GET['u'] ?? '';
+/**
+ * Strict Redirect URL Sanitizer & Protocol Whitelist Guard
+ */
+if (!function_exists('sanitize_redirect_url')) {
+    function sanitize_redirect_url(?string $rawUrl, ?string $fallbackUrl = null): string {
+        $fallback = $fallbackUrl ?: (rtrim(function_exists('resolve_automation_app_base_url') ? resolve_automation_app_base_url() : (getenv('APP_BASE_URL') ?: 'http://localhost'), '/') . '/');
+        if ($rawUrl === null || trim($rawUrl) === '') {
+            return $fallback;
+        }
+
+        // 1. HTML entity decode and strip control characters / CRLF
+        $url = html_entity_decode(trim($rawUrl), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $url = preg_replace('/[\x00-\x1F\x7F]+/', '', $url);
+        if (trim($url) === '') {
+            return $fallback;
+        }
+
+        // 2. Reject dangerous schemes
+        if (preg_match('/^(?:javascript|data|vbscript|file|about|blob):/i', $url)) {
+            return $fallback;
+        }
+
+        // 3. Protocol-relative normalization
+        if (strpos($url, '//') === 0) {
+            $url = 'https:' . $url;
+        } elseif (!preg_match('/^[a-z][a-z0-9+\-.]*:\/\//i', $url)) {
+            $url = 'https://' . ltrim($url, '/');
+        }
+
+        // 4. Encode non-ASCII for validation
+        $encodedUrl = preg_replace_callback('/[^\x21-\x7E]/', function ($m) {
+            return rawurlencode($m[0]);
+        }, $url);
+
+        $parsed = @parse_url($encodedUrl);
+        if (!$parsed || !is_array($parsed)) {
+            return $fallback;
+        }
+
+        $scheme = strtolower($parsed['scheme'] ?? '');
+        $host   = $parsed['host'] ?? '';
+
+        if (!in_array($scheme, ['http', 'https'], true) || empty($host)) {
+            return $fallback;
+        }
+
+        if (!filter_var($encodedUrl, FILTER_VALIDATE_URL)) {
+            return $fallback;
+        }
+
+        return str_replace(["\r", "\n"], '', $encodedUrl);
+    }
+}
+
+$rawUrl = $_GET['u'] ?? '';
 $scenarioId = $_GET['sid'] ?? '';
 $zaloUserId = $_GET['uid'] ?? '';
 $label = $_GET['lbl'] ?? '';
 
-if (empty($url)) {
-    die("Invalid URL");
+if (empty($rawUrl)) {
+    header("Location: " . sanitize_redirect_url(''));
+    exit;
 }
 
 // Decode URL (It will be urlencoded/base64 encoded)
-// We will use base64 for cleaner URLs in helper
-$targetUrl = base64_decode($url, true);
-if ($targetUrl === false) {
-    $targetUrl = $url; // Fallback
+$decodedUrl = base64_decode($rawUrl, true);
+if ($decodedUrl === false) {
+    $decodedUrl = $rawUrl; // Fallback
 }
+$targetUrl = sanitize_redirect_url($decodedUrl);
 
 // Log Click
 if ($zaloUserId) {
@@ -33,7 +88,7 @@ if ($zaloUserId) {
         $subId = $stmtS->fetchColumn();
 
         if ($subId) {
-            // [SYNCED] Use processTrackingEvent to handle activity logging, scoring, AND stats updates (Campaigns/Flows)
+            // Use processTrackingEvent to handle activity logging, scoring, AND stats updates (Campaigns/Flows)
             require_once 'tracking_processor.php';
 
             // Find Main Subscriber ID from zalo_subscribers record
@@ -84,12 +139,17 @@ if ($zaloUserId) {
                 updateZaloLeadScore($pdo, $zaloUserId, 'click', $scenarioId);
             }
         }
-    } catch (Exception $e) {
+    } catch (\Throwable $e) {
         // Silent fail for logging, prioritize redirect
         error_log("Zalo Track Error: " . $e->getMessage());
     }
 }
 
 // Redirect
-header("Location: " . $targetUrl);
+$targetUrl = str_replace(["\r", "\n"], '', $targetUrl);
+header("Location: " . $targetUrl, true, 302);
+header("Connection: close");
+if (function_exists('fastcgi_finish_request')) {
+    fastcgi_finish_request();
+}
 exit;

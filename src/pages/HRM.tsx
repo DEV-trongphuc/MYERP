@@ -22,7 +22,8 @@ import {
 , LabelList } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ApprovalDetailDrawer } from './Approvals';
-import { isHR } from '../utils/roleUtils';
+import { isHR, isExecutive } from '../utils/roleUtils';
+import { getCachedTenantBootstrap, isExcludedSystemEmail } from '../contexts/TenantConfigContext';
 import type { ApprovalItem } from './Approvals';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useUIStore } from '../store/uiStore';
@@ -910,7 +911,7 @@ export default function HRM() {
         const profCheck = profilesMap.get(Number(uid));
         const emailStr = String(profCheck?.email || c.email || c.user_email || '').trim().toLowerCase();
         const nameStr = String(profCheck?.full_name || profCheck?.name || c.user_name || '').trim().toLowerCase();
-        if (emailStr === 'phucht@ideas.edu.vn' || emailStr.startsWith('phucht@') || nameStr === 'huỳnh trọng phúc') {
+        if (isExecutive(profCheck) || (getCachedTenantBootstrap()?.organization?.excluded_system_emails || []).includes(emailStr)) {
           return;
         }
         const cDate = c.check_in_date ? String(c.check_in_date).slice(0, 10) : '';
@@ -977,7 +978,7 @@ export default function HRM() {
         const prof = profilesMap.get(Number(p.user_id));
         const emailStr = String(prof?.email || p.email || '').trim().toLowerCase();
         const nameStr = String(prof?.full_name || p.employee_name || '').trim().toLowerCase();
-        if (emailStr === 'phucht@ideas.edu.vn' || emailStr.startsWith('phucht@') || nameStr === 'huỳnh trọng phúc') return false;
+        if (isExecutive(prof) || (getCachedTenantBootstrap()?.organization?.excluded_system_emails || []).includes(emailStr)) return false;
         return true;
       })
       .map(p => {
@@ -1129,7 +1130,7 @@ export default function HRM() {
       const role = String(item?.role || '').toLowerCase();
       const email = String(item?.email || '').toLowerCase();
       if (role === 'superadmin' || role === 'super_admin') return false;
-      if (email === 'info@ideas.edu.vn') return false;
+      if (isExcludedSystemEmail(email)) return false;
       return true;
     });
   }, []);
@@ -1228,7 +1229,7 @@ export default function HRM() {
       const filtered = Array.isArray(raw) ? raw.filter((item: any) => {
         const r = String(item?.role || '').toLowerCase();
         const em = String(item?.email || '').toLowerCase();
-        return r !== 'superadmin' && r !== 'super_admin' && em !== 'info@ideas.edu.vn';
+        return r !== 'superadmin' && r !== 'super_admin' && !isExcludedSystemEmail(em);
       }) : [];
       setAllPayslips(filtered);
       hrmGlobalCache.allPayslips = filtered;
@@ -1251,7 +1252,7 @@ export default function HRM() {
       const filtered = Array.isArray(raw) ? raw.filter((item: any) => {
         const r = String(item?.role || '').toLowerCase();
         const em = String(item?.email || '').toLowerCase();
-        return r !== 'superadmin' && r !== 'super_admin' && em !== 'info@ideas.edu.vn';
+        return r !== 'superadmin' && r !== 'super_admin' && !isExcludedSystemEmail(em);
       }) : [];
       setPayslips(filtered);
       hrmPayslipsByMonthCache.set(payrollMonth, { data: filtered, timestamp: Date.now() });

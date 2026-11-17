@@ -32,7 +32,7 @@ $NUM_WORKERS = 2;
 
 // URL gốc trỏ tới worker campaign
 // Tự động nhận diện http hay https và domain đang chạy
-$domain = $_SERVER['HTTP_HOST'] ?? 'automation.ideas.edu.vn';
+$domain = $_SERVER['HTTP_HOST'] ?? (parse_url(resolve_automation_app_base_url($pdo), PHP_URL_HOST) ?: 'localhost');
 $path = $_SERVER['REQUEST_URI'] ?? '/mail_api/orchestrator_campaign.php';
 
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || ($_SERVER['SERVER_PORT'] ?? 80) == 443) ? "https://" : "http://";

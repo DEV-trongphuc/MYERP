@@ -42,29 +42,51 @@ require_once __DIR__ . '/config/JWT.php';
 $origin  = $_SERVER['HTTP_ORIGIN'] ?? '';
 $allowed = array_map('trim', explode(',', ALLOWED_ORIGINS));
 
-// Dynamically fetch and allow frontend_url from system_settings with 300s cache
-$feUrlCacheFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . "ideas_fe_url.txt";
-$feUrl = '';
+// Dynamically fetch and allow all tenant frontend_url & domain origins with 300s cache
+$feUrlCacheFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . "myerp_tenant_origins_v2.json";
+$dynamicOrigins = [];
 if (file_exists($feUrlCacheFile) && (time() - filemtime($feUrlCacheFile) < 300)) {
-    $feUrl = trim(@file_get_contents($feUrlCacheFile));
+    $cachedOrigins = json_decode((string)@file_get_contents($feUrlCacheFile), true);
+    if (is_array($cachedOrigins)) {
+        $dynamicOrigins = $cachedOrigins;
+    }
 } else {
     try {
         $db = Database::getInstance();
-        $stmtSetting = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
+        $stmtSetting = $db->query("SELECT DISTINCT setting_value FROM system_settings WHERE setting_key IN ('frontend_url', 'public_base_url') AND setting_value IS NOT NULL AND setting_value != ''");
         if ($stmtSetting) {
-            $feUrl = $stmtSetting->fetchColumn() ?: '';
-            @file_put_contents($feUrlCacheFile, $feUrl);
+            foreach ($stmtSetting->fetchAll(PDO::FETCH_COLUMN) as $uVal) {
+                $parsed = parse_url(trim((string)$uVal));
+                if (isset($parsed['scheme']) && isset($parsed['host'])) {
+                    $dynamicOrigins[] = $parsed['scheme'] . '://' . $parsed['host'] . (isset($parsed['port']) ? ':' . $parsed['port'] : '');
+                }
+            }
         }
+        $stmtDomains = $db->query("SELECT DISTINCT domain FROM tenants WHERE domain IS NOT NULL AND domain != ''");
+        if ($stmtDomains) {
+            foreach ($stmtDomains->fetchAll(PDO::FETCH_COLUMN) as $domVal) {
+                $cleanDom = preg_replace('#^https?://#i', '', trim((string)$domVal));
+                $cleanDom = trim(explode('/', $cleanDom)[0]);
+                if ($cleanDom !== '') {
+                    $dynamicOrigins[] = 'https://' . $cleanDom;
+                    $dynamicOrigins[] = 'http://' . $cleanDom;
+                }
+            }
+        }
+        $dynamicOrigins = array_values(array_unique($dynamicOrigins));
+        @file_put_contents($feUrlCacheFile, json_encode($dynamicOrigins));
     } catch (Throwable $e) {
         // Avoid crashing on DB issues during CORS phase
     }
 }
-if (!empty($feUrl)) {
-    $parsed = parse_url($feUrl);
-    if (isset($parsed['scheme']) && isset($parsed['host'])) {
-        $allowed[] = $parsed['scheme'] . '://' . $parsed['host'] . (isset($parsed['port']) ? ':' . $parsed['port'] : '');
-    }
+foreach ($dynamicOrigins as $dynOrigin) {
+    $allowed[] = $dynOrigin;
 }
+if (!empty($_SERVER['HTTP_HOST'])) {
+    $allowed[] = 'https://' . $_SERVER['HTTP_HOST'];
+    $allowed[] = 'http://' . $_SERVER['HTTP_HOST'];
+}
+$allowed = array_values(array_unique(array_filter($allowed)));
 
 // Also allow any localhost origin (any port) for local dev, and zalo.me for browser console sync
 $isLocalhost = (bool) preg_match('#^https?://localhost(:\d+)?$#', $origin);
@@ -246,6 +268,7 @@ function requireAuth(): array {
     if (!isset($payload['tenant_id']) || empty($payload['tenant_id'])) {
         $payload['tenant_id'] = 1;
     }
+    $GLOBALS['current_tenant_id'] = (int)$payload['tenant_id'];
 
     // Verify user actually exists and is active in the database (with 60s file cache to eliminate per-request DB lookup overhead)
     try {
@@ -261,7 +284,7 @@ function requireAuth(): array {
         }
         if (!$dbUser) {
             $db = Database::getInstance();
-            $stmt = $db->prepare("SELECT id, role, full_name, email, permissions_json FROM users WHERE id = ? AND tenant_id = ? AND is_active = 1 LIMIT 1");
+            $stmt = $db->prepare("SELECT id, role, full_name, email, team_id, department, permissions_json FROM users WHERE id = ? AND tenant_id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1");
             $stmt->execute([$uid, $tid]);
             $dbUser = $stmt->fetch(PDO::FETCH_ASSOC);
             if (!$dbUser) {
@@ -272,6 +295,8 @@ function requireAuth(): array {
         $payload['role'] = $dbUser['role'] === 'sale' ? 'sales' : $dbUser['role'];
         $payload['full_name'] = $dbUser['full_name'];
         $payload['email'] = $dbUser['email'];
+        $payload['team_id'] = isset($dbUser['team_id']) ? (int)$dbUser['team_id'] : null;
+        $payload['department'] = $dbUser['department'] ?? '';
         $payload['permissions'] = null;
         if (!empty($dbUser['permissions_json'])) {
             $payload['permissions'] = is_array($dbUser['permissions_json'])
@@ -279,6 +304,9 @@ function requireAuth(): array {
                 : json_decode($dbUser['permissions_json'], true);
         }
     } catch (Throwable $e) {
+        if (class_exists('RespondException') && $e instanceof RespondException) {
+            throw $e;
+        }
         // Fallback in case Database connection is not ready or has temporary issues during requireAuth
     }
 
@@ -292,10 +320,20 @@ function requireAuth(): array {
     return $payload;
 }
 
-function requireRole(array $payload, array $roles): void {
-    if (!in_array($payload['role'], $roles, true)) {
+function requireRole(array $payload, array $roles, ?string $module = null, string $action = 'read'): void {
+    global $db;
+    if (isset($db) && $db instanceof PDO) {
+        require_once __DIR__ . '/config/TenantConfigService.php';
+        $reqScopes = ($module !== null && $module !== '') ? ['all', 'team', 'own'] : null;
+        if (TenantConfigService::doesUserSatisfyRoles($db, $payload, $roles, $module, $action, $reqScopes)) {
+            return;
+        }
         respond(403, null, 'Bạn không có quyền thực hiện thao tác này', false);
     }
+    if (in_array($payload['role'] ?? '', $roles, true)) {
+        return;
+    }
+    respond(403, null, 'Bạn không có quyền thực hiện thao tác này', false);
 }
 
 function logActivity(PDO $db, $tid, $uid, string $action, ?string $resource = null, $resourceId = null, ?string $data = null): void {
@@ -516,6 +554,10 @@ spl_autoload_register(function ($class) {
         require_once __DIR__ . '/NotificationService.php';
         return;
     }
+    if ($class === 'TenantConfigService') {
+        require_once __DIR__ . '/config/TenantConfigService.php';
+        return;
+    }
     $file = __DIR__ . '/controllers/' . $class . '.php';
     if (file_exists($file)) {
         require_once $file;
@@ -690,9 +732,11 @@ if (!file_exists($dailyMaintLock)) {
                 if (!$nguyenThuThaoId) $nguyenThuThaoId = 1004;
                 if (!$trinhDinhThanhId) $trinhDinhThanhId = 1002;
 
-                $expNotes = "[Hồ sơ chi phí]: Danh mục: Chi phí nghiệp vụ khác - Chứng từ: Hóa đơn điện tử VAT 10%\nPhòng ban: Marketing\nĐối tượng: Đối tác\nThụ hưởng (Đối tác / Vendor): CÔNG TY TNHH THIẾT KẾ IN ẤN QUẢNG CÁO XUÂN PHƯỚC THỊNH (MST: 0313195766)\nChi tiết: Thanh toán tiền in ấn, thi công Lễ tốt nghiệp\n\n[Thông tin chuyển khoản]: Ngân hàng TMCP Ngoại Thương Việt Nam - STK: 0441000684888 - Chủ TK: CÔNG TY TNHH THIẾT KẾ IN ẤN QUẢNG CÁO XUÂN PHƯỚC THỊNH - Chi nhánh: Tân Bình\n[Tài liệu đính kèm (1 tệp)]:\n• img_6aa3590f3ef572.83332019.pdf (https://myerp.ideas.edu.vn/backend/uploads/tenant_1/img_6aa3590f3ef572.83332019.pdf)";
+                require_once __DIR__ . '/config/TenantConfigService.php';
+                $t1BaseUrl = rtrim(TenantConfigService::getFrontendUrl($db, 1), '/');
+                $expNotes = "[Hồ sơ chi phí]: Danh mục: Chi phí nghiệp vụ khác - Chứng từ: Hóa đơn điện tử VAT 10%\nPhòng ban: Marketing\nĐối tượng: Đối tác\nThụ hưởng (Đối tác / Vendor): CÔNG TY TNHH THIẾT KẾ IN ẤN QUẢNG CÁO XUÂN PHƯỚC THỊNH (MST: 0313195766)\nChi tiết: Thanh toán tiền in ấn, thi công Lễ tốt nghiệp\n\n[Thông tin chuyển khoản]: Ngân hàng TMCP Ngoại Thương Việt Nam - STK: 0441000684888 - Chủ TK: CÔNG TY TNHH THIẾT KẾ IN ẤN QUẢNG CÁO XUÂN PHƯỚC THỊNH - Chi nhánh: Tân Bình\n[Tài liệu đính kèm (1 tệp)]:\n• img_6aa3590f3ef572.83332019.pdf ({$t1BaseUrl}/backend/uploads/tenant_1/img_6aa3590f3ef572.83332019.pdf)";
 
-                $chkExp = $db->query("SELECT id FROM expenses WHERE id = 19")->fetch();
+                $chkExp = $db->query("SELECT id FROM expenses WHERE id = 19 AND tenant_id = 1")->fetch();
                 if ($chkExp) {
                     $updStmt = $db->prepare("
                         UPDATE expenses SET
@@ -718,13 +762,13 @@ if (!file_exists($dailyMaintLock)) {
                             notes = ?,
                             image_url = 'uploads/tenant_1/img_6aa3590f3ef572.83332019.pdf',
                             deleted_at = NULL
-                        WHERE id = 19
+                        WHERE id = 19 AND tenant_id = 1
                     ");
                     $updStmt->execute([$maiThiNuId, $nguyenThuThaoId, $trinhDinhThanhId, $maiThiNuId, $expNotes]);
                 }
 
                 // Restore any accidental soft delete on 247 express
-                $db->exec("UPDATE expenses SET deleted_at = NULL WHERE title LIKE '%247 express%' AND deleted_at IS NOT NULL");
+                $db->exec("UPDATE expenses SET deleted_at = NULL WHERE tenant_id = 1 AND title LIKE '%247 express%' AND deleted_at IS NOT NULL");
 
                 $db->prepare("INSERT INTO schema_migrations (migration) VALUES ('restore_exp_19_and_audit_cleanup_v3')")->execute();
             } catch (\Throwable $ex) {
@@ -732,18 +776,22 @@ if (!file_exists($dailyMaintLock)) {
             }
         }
 
+        if (!in_array('migration_337_enterprise_multitenant_saas', $applied, true)) {
+            require_once __DIR__ . '/migrations/337_enterprise_multitenant_saas_architecture.php';
+            run_migration_337_enterprise_multitenant_saas($db);
+            $db->prepare("INSERT INTO schema_migrations (migration) VALUES ('migration_337_enterprise_multitenant_saas')")->execute();
+        }
+
+        if (!in_array('migration_338_schema_parity_and_soft_delete', $applied, true)) {
+            require_once __DIR__ . '/migrations/338_schema_parity_and_soft_delete_complete.php';
+            run_migration_338_schema_parity_and_soft_delete($db);
+            $db->prepare("INSERT INTO schema_migrations (migration) VALUES ('migration_338_schema_parity_and_soft_delete')")->execute();
+        }
+
         // Migration: clear_test_approvals_6_7_8_21
         if (!in_array('clear_test_approvals_6_7_8_21', $applied, true)) {
             try {
-                // 1. Delete test requests from hrm_leave_requests (including #21, #8, #7, #6)
-                $db->exec("DELETE FROM hrm_leave_requests WHERE id IN (6, 7, 8, 21)");
-
-                // 2. Clean audit_logs and notifications for these test requests
-                try {
-                    $db->exec("DELETE FROM audit_logs WHERE resource IN ('hrm_leave_requests', 'leave', 'leave_request', 'workflow_requests', 'workflow') AND resource_id IN (6, 7, 8, 21)");
-                    $db->exec("DELETE FROM notifications WHERE (link LIKE '%leave%' OR link LIKE '%approval%') AND (link LIKE '%/21' OR link LIKE '%/8' OR link LIKE '%/7' OR link LIKE '%/6')");
-                } catch (\Throwable $e) {}
-
+                $db->exec("UPDATE hrm_leave_requests SET deleted_at = CURRENT_TIMESTAMP WHERE id IN (6, 7, 8, 21) AND tenant_id = 1");
                 $db->prepare("INSERT INTO schema_migrations (migration) VALUES ('clear_test_approvals_6_7_8_21')")->execute();
             } catch (\Throwable $ex) {
                 error_log("Clear Test Approvals Migration Error: " . $ex->getMessage());
@@ -910,18 +958,18 @@ switch ($resource) {
         elseif ($resourceId  && $subResource === 'redeem-voucher' && $method === 'POST') { require_once __DIR__ . '/controllers/DomationOmnichannelController.php'; (new DomationOmnichannelController($db))->redeemContactVoucher($auth, $resourceId); }
         elseif ($resourceId  && $subResource === 'clone' && $method === 'POST') $ctrl->cloneContact($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'linked-profiles' && $method === 'GET') $ctrl->getLinkedProfiles($auth, (int)$resourceId);
-        elseif ($resourceId  && in_array($subResource, ['stage', 'move', 'move-stage'], true) && in_array($method, ['PATCH', 'POST', 'PUT'], true)) $ctrl->moveStage($auth, (int)$resourceId);
+        elseif ($resourceId  && in_array($subResource, ['stage', 'move', 'move-stage'], true) && in_array($method, ['PATCH', 'POST', 'PUT'], true)) $ctrl->moveStage($auth, $resourceId);
         elseif ($resourceId  && $subResource === 'release-databank' && $method === 'POST') $ctrl->releaseDatabank($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'collaborators' && $method === 'GET') $ctrl->getCollaborators($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'send-academic-email' && $method === 'POST') $ctrl->sendAcademicEmail($auth, (int)$resourceId);
-        elseif ($resourceId  && $subResource === 'assign' && $method === 'POST') $ctrl->assignContact($auth, (int)$resourceId);
-        elseif ($resourceId  && $subResource === 'notes' && $method === 'POST') $ctrl->addNote($auth, (int)$resourceId);
+        elseif ($resourceId  && $subResource === 'assign' && $method === 'POST') $ctrl->assignContact($auth, $resourceId);
+        elseif ($resourceId  && $subResource === 'notes' && $method === 'POST') $ctrl->addNote($auth, $resourceId);
         elseif ($resourceId  && $subResource === 'study-status' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->updateStudyStatus($auth, (int)$resourceId);
-        elseif ($resourceId  && $subResource === 'tags' && in_array($method, ['POST', 'PUT', 'DELETE'], true)) $ctrl->manageContactTags($auth, (int)$resourceId, $method);
+        elseif ($resourceId  && $subResource === 'tags' && in_array($method, ['POST', 'PUT', 'DELETE'], true)) $ctrl->manageContactTags($auth, $resourceId, $method);
         elseif ($resourceId  && in_array($subResource, ['presence-ping', 'ping'], true) && in_array($method, ['POST', 'GET'], true)) $ctrl->presencePing($auth, (int)$resourceId);
         elseif ($resourceId  && in_array($subResource, ['presence-leave', 'leave'], true) && in_array($method, ['POST', 'GET'], true)) $ctrl->presenceLeave($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, $resourceId);
-        elseif ($resourceId  && ($method === 'PUT' || $method === 'PATCH')) $ctrl->update($auth, (int)$resourceId);
+        elseif ($resourceId  && ($method === 'PUT' || $method === 'PATCH')) $ctrl->update($auth, $resourceId);
         elseif ($resourceId  && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);
         else respond(404, null, 'Route không tồn tại', false);
         break;
@@ -1109,14 +1157,53 @@ switch ($resource) {
         else respond(404, null, 'Route không tồn tại', false);
         break;
 
+    // TENANT SAAS CONFIGURATION & DYNAMIC RBAC / WORKFLOWS / TEMPLATES
+    case 'tenant-config':
+        $auth = requireAuth();
+        $ctrl = new TenantConfigController($db);
+        $seg3 = $segments[3] ?? null;
+        if ((!$resourceId || $resourceId === 'bootstrap') && $method === 'GET') $ctrl->bootstrap($auth);
+        elseif ($resourceId === 'organization' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->saveOrganization($auth);
+        elseif ($resourceId === 'roles') {
+            if (!$subResource && $method === 'GET') $ctrl->listRoles($auth);
+            elseif (!$subResource && $method === 'POST') $ctrl->saveRole($auth, null);
+            elseif (is_numeric($subResource) && in_array($method, ['PUT', 'PATCH', 'POST'], true)) $ctrl->saveRole($auth, (int)$subResource);
+            elseif (is_numeric($subResource) && $method === 'DELETE') $ctrl->deleteRole($auth, (int)$subResource);
+            else respond(404, null, 'Route phân quyền không tồn tại', false);
+        }
+        elseif ($resourceId === 'approval-workflows' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->saveApprovalWorkflows($auth);
+        elseif ($resourceId === 'notification-rules' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->saveNotificationRules($auth);
+        elseif ($resourceId === 'student-tabs') {
+            if (!$subResource && $method === 'POST') $ctrl->saveStudentTab($auth, null);
+            elseif (is_numeric($subResource) && in_array($method, ['PUT', 'PATCH', 'POST'], true)) $ctrl->saveStudentTab($auth, (int)$subResource);
+            elseif (is_numeric($subResource) && $method === 'DELETE') $ctrl->deleteStudentTab($auth, (int)$subResource);
+            else respond(404, null, 'Route student-tabs không tồn tại', false);
+        }
+        elseif ($resourceId === 'academic-programs') {
+            if (!$subResource && $method === 'POST') $ctrl->saveAcademicProgram($auth, null);
+            elseif (is_numeric($subResource) && in_array($method, ['PUT', 'PATCH', 'POST'], true)) $ctrl->saveAcademicProgram($auth, (int)$subResource);
+            elseif (is_numeric($subResource) && $method === 'DELETE') $ctrl->deleteAcademicProgram($auth, (int)$subResource);
+            else respond(404, null, 'Route academic-programs không tồn tại', false);
+        }
+        elseif ($resourceId === 'email-templates') {
+            if (!$subResource && $method === 'POST') $ctrl->saveEmailTemplate($auth, null);
+            elseif (is_numeric($subResource) && in_array($method, ['PUT', 'PATCH', 'POST'], true)) $ctrl->saveEmailTemplate($auth, (int)$subResource);
+            elseif (is_numeric($subResource) && $method === 'DELETE') $ctrl->deleteEmailTemplate($auth, (int)$subResource);
+            else respond(404, null, 'Route email-templates không tồn tại', false);
+        }
+        elseif ($resourceId === 'pipeline-stages' && $subResource === 'reorder' && in_array($method, ['POST', 'PUT'], true)) $ctrl->reorderPipelineStages($auth);
+        else respond(404, null, 'Route cấu hình Tenant không tồn tại', false);
+        break;
+
     // PIPELINE STAGES
     case 'pipeline-stages':
         $auth = requireAuth();
         $ctrl = new DealController($db);
         if ($method === 'GET') $ctrl->stages($auth);
-        elseif (!$resourceId && $method === 'POST') { requireRole($auth, ['admin','manager','director']); $ctrl->storeStage($auth); }
-        elseif ($resourceId  && $method === 'PUT')  { requireRole($auth, ['admin','manager','director']); $ctrl->updateStage($auth, (int)$resourceId); }
-        elseif ($resourceId  && $method === 'DELETE') { requireRole($auth, ['admin', 'director']); $ctrl->destroyStage($auth, (int)$resourceId); }
+        elseif ($resourceId === 'reorder' && in_array($method, ['POST', 'PUT'], true)) { (new TenantConfigController($db))->reorderPipelineStages($auth); }
+        elseif (!$resourceId && $method === 'POST') { requireRole($auth, ['admin','superadmin','super_admin','manager','director']); $ctrl->storeStage($auth); }
+        elseif ($resourceId  && $method === 'PUT')  { requireRole($auth, ['admin','superadmin','super_admin','manager','director']); $ctrl->updateStage($auth, (int)$resourceId); }
+        elseif ($resourceId  && $method === 'DELETE') { requireRole($auth, ['admin','superadmin','super_admin','director']); $ctrl->destroyStage($auth, (int)$resourceId); }
         else respond(404, null, 'Route không tồn tại', false);
         break;
 
@@ -1405,9 +1492,25 @@ switch ($resource) {
         break;
 
     // TEAMS
-    // FINANCE GENERAL & ACCOUNTING A-Z
+    // FINANCE GENERAL, ACCOUNTS & ACCOUNTING A-Z
     case 'finance':
         $auth = requireAuth();
+        if ($resourceId === 'accounts' && $method === 'GET') {
+            $accs = [];
+            try {
+                $stmt = $db->prepare("
+                    SELECT id, name, 'bank' as type, COALESCE(bank_name, 'Ngân hàng') as bank_name,
+                           COALESCE(bank_account, '') as account_number, 0 as balance,
+                           IF(is_active = 1, 'active', 'inactive') as status
+                    FROM accounts
+                    WHERE tenant_id = ? AND bank_name IS NOT NULL AND bank_name != ''
+                    LIMIT 50
+                ");
+                $stmt->execute([$auth['tenant_id']]);
+                $accs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } catch (\Throwable $e) {}
+            respond(200, $accs, 'Lấy danh sách tài khoản quỹ thành công');
+        }
         $ctrl = new FinanceController($db);
         if ($resourceId === 'accounting-az' && in_array($subResource, ['summary', 'financial-summary', 'pnl'], true) && $method === 'GET') {
             $ctrl->getAccountingFinancialSummary($auth);
@@ -1912,7 +2015,18 @@ switch ($resource) {
         elseif ($resourceId === 'settings' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) $ctrl->saveSettings($auth);
         elseif ($resourceId === 'logs' && $method === 'GET') $ctrl->getLogs($auth);
         elseif ($resourceId === 'events' && $method === 'POST') $ctrl->sendEvent($auth);
+        elseif ($resourceId === 'test' && $method === 'POST') $ctrl->testPixel($auth);
         elseif ($resourceId === 'retry' && $subResource && $method === 'POST') $ctrl->retry($auth, (int)$subResource);
+        elseif ($resourceId === 'backfill' && $subResource === 'preview' && $method === 'GET') $ctrl->previewBackfill($auth);
+        elseif ($resourceId === 'backfill' && $subResource === 'run' && $method === 'POST') $ctrl->runBackfill($auth);
+        elseif ($resourceId === 'audiences' && $subResource === 'preview' && $method === 'GET') $ctrl->previewAudiences($auth);
+        elseif ($resourceId === 'audiences' && $subResource === 'sync' && $method === 'POST') $ctrl->syncAudiences($auth);
+        elseif ($resourceId === 'phone-farm' && $subResource === 'stats' && $method === 'GET') $ctrl->getPhoneFarmStats($auth);
+        elseif ($resourceId === 'phone-farm' && $subResource === 'import' && $method === 'POST') $ctrl->importPhoneFarm($auth);
+        elseif ($resourceId === 'phone-farm' && $subResource === 'sync-meta' && $method === 'POST') $ctrl->syncPhoneFarmToMeta($auth);
+        elseif ($resourceId === 'adsets' && !$subResource && $method === 'GET') $ctrl->listTargetAdSets($auth);
+        elseif ($resourceId === 'adsets' && $subResource && ($segments[3] ?? null) === 'optimize' && $method === 'POST') $ctrl->optimizeAdSet($auth, (string)$subResource);
+        elseif ($resourceId === 'adsets' && $subResource && ($segments[3] ?? null) === 'exclude-phone-farm' && $method === 'POST') $ctrl->excludePhoneFarmOnAdSet($auth, (string)$subResource);
         else respond(404, null, 'Route không tồn tại', false);
         break;
 
@@ -1992,30 +2106,6 @@ switch ($resource) {
             elseif ($resourceId  && in_array($method, ['PUT', 'PATCH'], true)) $ctrl->update($auth, (int)$resourceId);
             elseif ($resourceId  && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);
             else respond(404, null, 'Route không tồn tại', false);
-        }
-        break;
-
-    // FINANCE / ACCOUNTS
-    case 'finance':
-        $auth = requireAuth();
-        if ($resourceId === 'accounts' && $method === 'GET') {
-            $accs = [];
-            try {
-                $stmt = $db->prepare("
-                    SELECT id, name, 'bank' as type, COALESCE(bank_name, 'Ngân hàng') as bank_name,
-                           COALESCE(bank_account, '') as account_number, 0 as balance,
-                           IF(is_active = 1, 'active', 'inactive') as status
-                    FROM accounts
-                    WHERE tenant_id = ? AND bank_name IS NOT NULL AND bank_name != ''
-                    LIMIT 50
-                ");
-                $stmt->execute([$auth['tenant_id']]);
-                $accs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-            } catch (\Throwable $e) {}
-
-            respond(200, $accs, 'Lấy danh sách tài khoản quỹ thành công');
-        } else {
-            respond(404, null, 'Route không tồn tại', false);
         }
         break;
 

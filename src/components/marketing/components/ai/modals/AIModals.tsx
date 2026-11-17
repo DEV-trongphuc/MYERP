@@ -662,7 +662,7 @@ const AIModals: React.FC<AIModalsProps> = (props) => {
 
                         <div className={`ml-11 border rounded-[14px] p-4 space-y-3 ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                             <div className={`p-3 rounded-xl border border-dashed text-[10px] font-mono italic ${isDarkTheme ? 'bg-slate-950 border-slate-800 text-slate-500' : 'bg-white border-slate-300 text-slate-400'}`}>
-                                "Xem thêm tại: https://ideas.edu.vn/kho-hang"
+                                "Xem thêm tại: https://your-domain.com/san-pham"
                             </div>
                             <div className={`p-4 rounded-[14px] rounded-tl-none shadow-xl ${isDarkTheme ? 'bg-slate-800' : 'bg-slate-900'}`}>
                                 <div className={`backdrop-blur-md rounded-xl p-3 flex items-center justify-between border ${isDarkTheme ? 'bg-white/5 border-white/10' : 'bg-white/10 border-white/20'}`}>

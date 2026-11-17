@@ -873,7 +873,7 @@ function processMetaAIMessage($pdo, $pageId, $senderId, $text, $chatbotId)
     // [FIX P16-B2] Build AI URL from hardcoded API_BASE_URL constant instead of
     // $_SERVER['HTTP_HOST'] (SSRF risk: spoofable Host header in proxied environments).
     // API_BASE_URL is defined in db_connect.php from ENV_API_URL or auto-detected at startup.
-    $apiUrl = (defined('API_BASE_URL') ? API_BASE_URL : 'https://automation.ideas.edu.vn/mail_api') . "/ai_chatbot.php";
+    $apiUrl = resolve_automation_api_base_url($pdo) . "/ai_chatbot.php";
 
     writeLog("Calling AI Endpoint: " . $apiUrl);
 

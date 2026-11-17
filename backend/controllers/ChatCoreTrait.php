@@ -169,7 +169,7 @@ trait ChatCoreTrait {
             try {
                 $this->db->exec("
                     INSERT INTO users (id, username, email, full_name, role, job_title, avatar_url, is_active, status)
-                    VALUES (9000001, 'si_ideas', 'ai@ideas.edu.vn', 'SI IDEAS', 'bot', 'Smart Multi Agent', '/stickers/ideas/ideas_3.webp', 1, 'active')
+                    VALUES (9000001, 'si_ideas', 'ai@system.local', 'SI IDEAS', 'bot', 'Smart Multi Agent', '/stickers/ideas/ideas_3.webp', 1, 'active')
                     ON DUPLICATE KEY UPDATE 
                         full_name = 'SI IDEAS',
                         job_title = 'Smart Multi Agent',
@@ -277,7 +277,7 @@ trait ChatCoreTrait {
                     $other['id'] = $pUid;
                     if ($pUid === 9000001) {
                         $other['full_name'] = !empty($other['full_name']) ? $other['full_name'] : 'SI IDEAS';
-                        $other['email'] = !empty($other['email']) ? $other['email'] : 'ai@ideas.edu.vn';
+                        $other['email'] = !empty($other['email']) ? $other['email'] : 'ai@system.local';
                         $other['avatar_url'] = !empty($other['avatar_url']) ? $other['avatar_url'] : '/stickers/ideas/ideas_3.webp';
                         $other['job_title'] = !empty($other['job_title']) ? $other['job_title'] : 'Smart Multi Agent';
                         $other['is_active'] = true;
@@ -306,7 +306,7 @@ trait ChatCoreTrait {
                         $aiBotUser = [
                             'id' => 9000001,
                             'full_name' => 'SI IDEAS',
-                            'email' => 'ai@ideas.edu.vn',
+                            'email' => 'ai@system.local',
                             'avatar_url' => '/stickers/ideas/ideas_3.webp',
                             'job_title' => 'Smart Multi Agent',
                             'role' => 'bot',
@@ -530,7 +530,7 @@ trait ChatCoreTrait {
                 $p['user_id'] = (int)$p['user_id'];
                 if ($p['user_id'] === 9000001) {
                     $p['full_name'] = !empty($p['full_name']) ? $p['full_name'] : 'SI IDEAS';
-                    $p['email'] = !empty($p['email']) ? $p['email'] : 'ai@ideas.edu.vn';
+                    $p['email'] = !empty($p['email']) ? $p['email'] : 'ai@system.local';
                     $p['avatar_url'] = !empty($p['avatar_url']) ? $p['avatar_url'] : '/stickers/ideas/ideas_3.webp';
                     $p['job_title'] = !empty($p['job_title']) ? $p['job_title'] : 'Smart Multi Agent';
                     $p['system_role'] = 'bot';

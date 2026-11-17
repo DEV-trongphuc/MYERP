@@ -2165,6 +2165,111 @@ class DomationContactMatcher
         }
     }
 
+    /**
+     * Normalize `jobTitle`/`job_title` and `customAttributes`/`custom_attributes` from subscriber import/API payloads.
+     * - Strips empty keys/values so blank import cells never overwrite existing custom_attributes.
+     * - Ignores placeholder 'Chưa cập nhật' for job_title.
+     * - Promotes salutation/title keys (e.g. 'Danh xưng', 'danh_xung', 'salutation', 'Xưng hô')
+     *   to `job_title` when `job_title` is empty.
+     * - Encodes JSON with JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES.
+     */
+    public static function normalizeSubscriberCustomImportFields(array $data): array
+    {
+        $rawAttrs = $data['customAttributes'] ?? $data['custom_attributes'] ?? [];
+        if (is_string($rawAttrs)) {
+            $decoded = json_decode($rawAttrs, true);
+            $rawAttrs = is_array($decoded) ? $decoded : [];
+        }
+        if (!is_array($rawAttrs)) {
+            $rawAttrs = [];
+        }
+
+        $cleanAttrs = [];
+        foreach ($rawAttrs as $k => $v) {
+            $keyStr = trim((string) $k);
+            if ($keyStr === '' || $v === null || is_object($v)) {
+                continue;
+            }
+            if (is_string($v)) {
+                $v = trim($v);
+                if ($v === '') {
+                    continue;
+                }
+            } elseif (is_array($v) && empty($v)) {
+                continue;
+            }
+            $cleanAttrs[$keyStr] = $v;
+        }
+
+        $job = trim((string) ($data['jobTitle'] ?? $data['job_title'] ?? ''));
+        if ($job !== '' && mb_strtolower($job, 'UTF-8') === 'chưa cập nhật') {
+            $job = '';
+        }
+
+        if ($job === '' && !empty($cleanAttrs)) {
+            $titlePriorityKeys = [
+                'Danh xưng', 'danh xưng', 'danh_xung', 'danh xung', 'danhXung',
+                'Xưng hô', 'xưng hô', 'xung_ho', 'xung ho',
+                'salutation', 'Salutation', 'honorific', 'Honorific',
+                'Học hàm', 'học hàm', 'hoc_ham', 'Học vị', 'học vị', 'hoc_vi',
+                'Chức danh', 'chức danh', 'chuc_danh', 'Chức vụ', 'chức vụ', 'chuc_vu',
+                'job_title', 'jobTitle', 'jobtitle', 'title'
+            ];
+            foreach ($titlePriorityKeys as $tk) {
+                if (isset($cleanAttrs[$tk]) && is_scalar($cleanAttrs[$tk])) {
+                    $cand = trim((string) $cleanAttrs[$tk]);
+                    if ($cand !== '' && mb_strtolower($cand, 'UTF-8') !== 'chưa cập nhật') {
+                        $job = $cand;
+                        break;
+                    }
+                }
+            }
+            if ($job === '') {
+                $normTargets = ['danhxung', 'xungho', 'salutation', 'honorific', 'hocham', 'hocvi', 'chucdanh', 'chucvu', 'jobtitle'];
+                foreach ($cleanAttrs as $ak => $av) {
+                    if (!is_scalar($av)) {
+                        continue;
+                    }
+                    $lowerAk = mb_strtolower((string) $ak, 'UTF-8');
+                    $asciiAk = strtr($lowerAk, [
+                        'ă'=>'a','ằ'=>'a','ắ'=>'a','ẳ'=>'a','ẵ'=>'a','ặ'=>'a',
+                        'â'=>'a','ầ'=>'a','ấ'=>'a','ẩ'=>'a','ẫ'=>'a','ậ'=>'a',
+                        'à'=>'a','á'=>'a','ả'=>'a','ã'=>'a','ạ'=>'a',
+                        'đ'=>'d','ê'=>'e','ề'=>'e','ế'=>'e','ể'=>'e','ễ'=>'e','ệ'=>'e',
+                        'è'=>'e','é'=>'e','ẻ'=>'e','ẽ'=>'e','ẹ'=>'e',
+                        'ì'=>'i','í'=>'i','ỉ'=>'i','ĩ'=>'i','ị'=>'i',
+                        'ô'=>'o','ồ'=>'o','ố'=>'o','ổ'=>'o','ỗ'=>'o','ộ'=>'o',
+                        'ơ'=>'o','ờ'=>'o','ớ'=>'o','ở'=>'o','ỡ'=>'o','ợ'=>'o',
+                        'ò'=>'o','ó'=>'o','ỏ'=>'o','õ'=>'o','ọ'=>'o',
+                        'ư'=>'u','ừ'=>'u','ứ'=>'u','ử'=>'u','ữ'=>'u','ự'=>'u',
+                        'ù'=>'u','ú'=>'u','ủ'=>'u','ũ'=>'u','ụ'=>'u',
+                        'ỳ'=>'y','ý'=>'y','ỷ'=>'y','ỹ'=>'y','ỵ'=>'y',
+                    ]);
+                    $normAk = preg_replace('/[^a-z0-9]/', '', $asciiAk);
+                    if (in_array($normAk, $normTargets, true)) {
+                        $cand = trim((string) $av);
+                        if ($cand !== '' && mb_strtolower($cand, 'UTF-8') !== 'chưa cập nhật') {
+                            $job = $cand;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+        $json = !empty($cleanAttrs) ? json_encode($cleanAttrs, $jsonFlags) : '{}';
+        if ($json === false) {
+            $json = '{}';
+        }
+
+        return [
+            'job_title' => $job,
+            'custom_attributes_array' => $cleanAttrs,
+            'custom_attributes_json' => $json,
+        ];
+    }
+
     private static function tableHasColumn(PDO $db, string $table, string $column): bool
     {
         static $colCache = [];

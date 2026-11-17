@@ -411,7 +411,7 @@ export const SignaturePadModal: React.FC<SignaturePadModalProps> = ({
                 backgroundSize: '12px 12px'
               }}>
                 <img 
-                  src={initialSignatureUrl.startsWith('http') || initialSignatureUrl.startsWith('data:') ? initialSignatureUrl : `https://myerp.ideas.edu.vn/backend/${initialSignatureUrl.replace(/^\/+/, '')}`} 
+                  src={initialSignatureUrl.startsWith('http') || initialSignatureUrl.startsWith('data:') ? initialSignatureUrl : `/backend/${initialSignatureUrl.replace(/^\/+/, '')}`} 
                   alt="Chữ ký mẫu đã lưu" 
                   style={{ maxHeight: '160px', objectFit: 'contain' }} 
                 />

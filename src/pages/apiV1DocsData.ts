@@ -80,7 +80,7 @@ export const apiV1Categories: ApiV1Category[] = [
             "name": "username",
             "type": "string",
             "required": true,
-            "desc": "Tên đăng nhập hoặc email doanh nghiệp (@ideas.edu.vn)"
+            "desc": "Tên đăng nhập hoặc email doanh nghiệp (@company.com)"
           },
           {
             "name": "password",
@@ -97,7 +97,7 @@ export const apiV1Categories: ApiV1Category[] = [
           }
         ],
         "sampleBody": {
-          "username": "sale.leader@ideas.edu.vn",
+          "username": "sale.leader@company.com",
           "password": "Password#2026@Secure",
           "remember_me": true
         },
@@ -113,7 +113,7 @@ export const apiV1Categories: ApiV1Category[] = [
             "user": {
               "id": 1,
               "full_name": "Quản Trị Viên",
-              "email": "admin@ideas.edu.vn",
+              "email": "admin@company.com",
               "role": "admin",
               "tenant_id": 1
             }
@@ -232,7 +232,7 @@ export const apiV1Categories: ApiV1Category[] = [
           "data": {
             "id": 1042,
             "full_name": "Nguyễn Thị Lan",
-            "email": "sale.leader@ideas.edu.vn",
+            "email": "sale.leader@company.com",
             "phone": "0901234567",
             "role": "sale",
             "branch_id": 2,
@@ -313,7 +313,7 @@ export const apiV1Categories: ApiV1Category[] = [
         ],
         "sampleBody": {
           "phone": "0909888999",
-          "avatar_url": "https://myerp.ideas.edu.vn/uploads/avatars/user_1042_new.jpg",
+          "avatar_url": "https://erp.company.com/uploads/avatars/user_1042_new.jpg",
           "bio": "Trưởng nhóm tư vấn tuyển sinh cơ sở Tân Bình"
         },
         "sampleResponse": {
@@ -4743,7 +4743,7 @@ export const apiV1Categories: ApiV1Category[] = [
           "data": {
             "id": 401,
             "amount": 5000000,
-            "unc_image_url": "https://myerp.ideas.edu.vn/uploads/unc/unc_401.jpg",
+            "unc_image_url": "https://erp.company.com/uploads/unc/unc_401.jpg",
             "bank_account": "Techcombank - 1903..."
           },
           "message": "Truy vấn chi tiết phiếu cọc thành công"
@@ -4855,7 +4855,7 @@ export const apiV1Categories: ApiV1Category[] = [
           "project_id": 2,
           "price": 10000000,
           "payment_method": "bank_transfer",
-          "receipt_url": "https://myerp.ideas.edu.vn/backend/uploads/tenant_1/unc_1025.jpg",
+          "receipt_url": "https://erp.company.com/backend/uploads/tenant_1/unc_1025.jpg",
           "deposit_date": "2026-10-16",
           "notes": "Đặt cọc giữ suất học bổng MBA đợt 1"
         },
@@ -4955,7 +4955,7 @@ export const apiV1Categories: ApiV1Category[] = [
         "sampleBody": {
           "project_id": 2,
           "price": 15000000,
-          "receipt_url": "https://myerp.ideas.edu.vn/backend/uploads/tenant_1/unc_1025_updated.jpg",
+          "receipt_url": "https://erp.company.com/backend/uploads/tenant_1/unc_1025_updated.jpg",
           "notes": "Khách đóng bổ sung thêm 5.000.000đ tiền cọc"
         },
         "sampleResponse": {
@@ -6709,7 +6709,7 @@ export const apiV1Categories: ApiV1Category[] = [
           }
         ],
         "sampleBody": {
-          "selfie_url": "https://myerp.ideas.edu.vn/backend/uploads/tenant_1/checkin_selfie_20261016.jpg",
+          "selfie_url": "https://erp.company.com/backend/uploads/tenant_1/checkin_selfie_20261016.jpg",
           "latitude": 10.776889,
           "longitude": 106.687312,
           "branch_id": 1,

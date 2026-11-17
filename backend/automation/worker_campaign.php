@@ -37,7 +37,7 @@ if (!function_exists('writeWorkerLog')) {
 }
 
 if (!function_exists('runWorkerCampaign')) {
-    function runWorkerCampaign($pdo, $campaignId = null)
+    function runWorkerCampaign($pdo, $campaignId = null, $shardArg = null, $shardsArg = null, $retryArg = null)
     {
 
         $now = date('Y-m-d H:i:s');
@@ -52,10 +52,8 @@ if (!function_exists('runWorkerCampaign')) {
         }
 
         // Initialize shared resources inside function scope
-        $apiUrl = API_BASE_URL;
+        $apiUrl = resolve_automation_api_base_url($pdo);
         // [FIX P38-WC] Only load the 2 settings keys this worker actually needs.
-        // Old SELECT * loaded 50+ key/value pairs (SMTP passwords, API keys, etc.)
-        // into memory on every single worker boot  a significant security and memory footprint.
         $stmt = $pdo->query("SELECT `key`, `value` FROM mkt_system_settings WHERE workspace_id = 0 AND `key` IN ('smtp_user','max_messages_per_day')");
         $settings = [];
         foreach ($stmt->fetchAll() as $row) {
@@ -64,62 +62,67 @@ if (!function_exists('runWorkerCampaign')) {
         $defaultSender = !empty($settings['smtp_user']) ? $settings['smtp_user'] : "marketing@ka-en.com.vn";
         $mailer = new Mailer($pdo, $apiUrl, $defaultSender, 0);
 
-        // [FIX P9-C1] MySQL version guard for FOR UPDATE SKIP LOCKED.
-        // SKIP LOCKED requires MySQL = 8.0  identical to fix in worker_queue.php (P7-C3).
-        // On MySQL 5.7: hardcoded SKIP LOCKED ? SQLState[42000] Syntax Error ? campaign batch crash.
         $skipLockedClause = isDatabaseSkipLockedSupported($pdo) ? 'SKIP LOCKED' : '';
 
-        // Check for valid request (from Cron or Direct Trigger)
-        $cliCampaignId = isset($argv[1]) ? $argv[1] : null;
-        $manualCampaignId = $campaignId ?? $_GET['campaign_id'] ?? $cliCampaignId;
-        // [INFINITE LOOP GUARD] Track how many consecutive "continuous mode" retries have been made.
-        // Passed via ?retry_count=N in the async trigger URL. If count exceeds MAX, auto-pause.
-        // [SECURITY FIX] Cap retry_count to MAX_RETRIES+1 to prevent circuit-breaker bypass
-        // via crafted URL (e.g. ?retry_count=999999 would skip the guard entirely).
-        // [FIX CB-1] Increased MAX_RETRIES 8 → 15.
-        // Old value caused false-positive Circuit Breaker pauses on campaigns with 2k+ recipients:
-        // each async batch re-trigger increments retry_count even when sending is healthy.
-        // At 200 recipients/batch and 14/s, a 2k campaign needs ~10 retries minimum — the old
-        // limit of 8 would auto-pause campaigns that still had recipients left to send.
-        $MAX_RETRIES = 15;
-        $retryCount = min((int) ($_GET['retry_count'] ?? 0), $MAX_RETRIES + 1);
+        // Parse Campaign + Shard arguments from explicit args, HTTP query, or CLI $argv
+        global $argv;
+        $cliCampaignId = isset($argv[1]) && $argv[1] !== '' ? $argv[1] : null;
+        $cliRetry      = isset($argv[2]) && is_numeric($argv[2]) ? (int)$argv[2] : null;
+        $cliShard      = isset($argv[3]) && is_numeric($argv[3]) ? (int)$argv[3] : null;
+        $cliShards     = isset($argv[4]) && is_numeric($argv[4]) ? (int)$argv[4] : null;
+
+        $manualCampaignId = $campaignId ?? ($_GET['campaign_id'] ?? $cliCampaignId);
+        $rawShard  = $shardArg  ?? ($_GET['shard'] ?? $cliShard);
+        $rawShards = $shardsArg ?? ($_GET['shards'] ?? $cliShards);
+        $explicitShardMode = ($rawShard !== null && $rawShards !== null);
+        $shardId   = $explicitShardMode ? max(0, (int)$rawShard) : 0;
+        $numShards = $explicitShardMode ? max(1, min(8, (int)$rawShards)) : 1;
+        if ($shardId >= $numShards) {
+            $shardId = $shardId % $numShards;
+        }
+
+        if (php_sapi_name() === 'cli') {
+            @set_time_limit(0);
+        }
+
+        $MAX_RETRIES = 12;
+        $rawRetry = $retryArg ?? ($_GET['retry_count'] ?? ($cliRetry ?? 0));
+        $retryCount = min(max(0, (int)$rawRetry), $MAX_RETRIES + 1);
         if ($manualCampaignId) {
-            $logs[] = "-> Direct trigger received for Campaign ID: $manualCampaignId (retry #$retryCount)";
-            writeWorkerLog("Direct trigger for Campaign ID: $manualCampaignId (retry #$retryCount)");
+            $shardLabel = $explicitShardMode ? " shard {$shardId}/{$numShards}" : " (coordinator)";
+            $logs[] = "-> Direct trigger received for Campaign ID: $manualCampaignId{$shardLabel} (retry #$retryCount)";
+            writeWorkerLog("Direct trigger for Campaign ID: $manualCampaignId{$shardLabel} (retry #$retryCount)");
         }
 
         // =================================================================================
-// HELPERS (Imported from shared module)
-// =================================================================================
-// Functions used from flow_helpers.php:
-// - parseLoopingContent
-// - resolveEmailContent
-// - replaceMergeTags
-// - logActivity
+        // HELPERS (Imported from shared module)
+        // =================================================================================
 
         // =================================================================================
-// CAMPAIGN DISPATCHER
-// =================================================================================
+        // CAMPAIGN DISPATCHER
+        // =================================================================================
         $campaign = null;
 
         if ($manualCampaignId) {
-            // Priority: Fetch specifically requested campaign - Allow more statuses for direct trigger
-            $stmtCamp = $pdo->prepare("SELECT * FROM campaigns WHERE id = ? AND status IN ('scheduled', 'sending', 'paused', 'draft') LIMIT 1");
+            // Priority: Strictly ONLY pick active sending/scheduled campaigns — NEVER auto-resume 'paused'!
+            $stmtCamp = $pdo->prepare("SELECT * FROM campaigns WHERE id = ? AND status IN ('scheduled', 'sending') LIMIT 1");
             $stmtCamp->execute([$manualCampaignId]);
             $campaign = $stmtCamp->fetch();
-            if (!$campaign)
-                $logs[] = "[Target Campaign] Campaign ID $manualCampaignId not found or not in valid state.";
+            if (!$campaign) {
+                $logs[] = "[Target Campaign] Campaign ID $manualCampaignId is paused, finished, or not active — skipping.";
+                writeWorkerLog("[Target Campaign] Campaign ID $manualCampaignId skipped (paused/inactive).");
+            }
         }
 
-        if (!$campaign) {
-            // Fallback: Pick next scheduled campaign that is NOT currently locked by an active worker
+        if (!$campaign && !$manualCampaignId) {
+            // Fallback (Cron): Pick next scheduled or sending campaign needing work
             $stmtCamp = $pdo->prepare("SELECT * FROM campaigns WHERE status IN ('scheduled', 'sending') AND (scheduled_at <= ? OR scheduled_at IS NULL) ORDER BY scheduled_at ASC LIMIT 10");
             $stmtCamp->execute([$now]);
             $candidates = $stmtCamp->fetchAll();
             foreach ($candidates as $cand) {
-                $testLockKey = "campaign_worker_" . $cand['id'];
+                $coordLock = "campaign_coordinator_" . $cand['id'];
                 $stmtCheck = $pdo->prepare("SELECT IS_USED_LOCK(?)");
-                $stmtCheck->execute([$testLockKey]);
+                $stmtCheck->execute([$coordLock]);
                 if (!$stmtCheck->fetchColumn()) {
                     $campaign = $cand;
                     break;
@@ -130,19 +133,142 @@ if (!function_exists('runWorkerCampaign')) {
         if ($campaign) {
             $cid = $campaign['id'];
             $cName = $campaign['name'];
-            // [FIX BUG-WC-1] Extract workspace_id to scope all subscriber queries
             $workspace_id = (int)($campaign['workspace_id'] ?? 0);
+            $campaignType = strtolower((string)($campaign['type'] ?? 'email'));
 
-            // [CONCURRENCY GUARD] Acquire exclusive MySQL Advisory Lock per Campaign
-            // Prevents cron runs, concurrent triggers, or double clicks from sending duplicate emails
-            $lockKey = "campaign_worker_" . $cid;
-            $lockTimeout = $manualCampaignId ? 3 : 0;
+            // Ensure claims table exists & backfill sent logs safely if Coordinator or direct run
+            $claimsTableAvailable = false;
+            try {
+                $pdo->query("SELECT 1 FROM campaign_send_claims LIMIT 1");
+                $claimsTableAvailable = true;
+            } catch (Throwable $eNoClaims) {
+                $claimsTableAvailable = false;
+            }
+
+            // If Coordinator mode (cron or default un-sharded dispatch) AND multi-shard CLI is possible:
+            // initialize snapshot once, backfill claims, spawn bounded parallel CLI shards, and yield cleanly.
+            if (!$explicitShardMode && $campaignType !== 'zalo_zns' && function_exists('exec') && ($phpBin = findAutomationPhpCli()) !== null) {
+                $coordLockKey = "campaign_coordinator_" . $cid;
+                $stmtCL = $pdo->prepare("SELECT GET_LOCK(?, 2)");
+                $stmtCL->execute([$coordLockKey]);
+                if ((int)$stmtCL->fetchColumn() !== 1) {
+                    writeWorkerLog("Campaign $cid coordinator already active. Skipping.");
+                    return ['status' => 'locked', 'campaign_id' => $cid];
+                }
+
+                // Re-read fresh status under coordinator lock
+                $stmtFresh = $pdo->prepare("SELECT * FROM campaigns WHERE id = ? LIMIT 1");
+                $stmtFresh->execute([$cid]);
+                $freshCamp = $stmtFresh->fetch(PDO::FETCH_ASSOC);
+                if (!$freshCamp || !in_array(strtolower((string)$freshCamp['status']), ['scheduled', 'sending'], true)) {
+                    $pdo->prepare("SELECT RELEASE_LOCK(?)")->execute([$coordLockKey]);
+                    writeWorkerLog("Campaign $cid status is not scheduled/sending after coordinator lock. Aborting.");
+                    return ['status' => 'aborted_paused', 'campaign_id' => $cid];
+                }
+
+                if ($claimsTableAvailable) {
+                    // Clean stale claims > 10 min and sync already-sent delivery logs so nothing ever duplicates
+                    $pdo->prepare("DELETE FROM campaign_send_claims WHERE campaign_id = ? AND status = 'processing' AND claimed_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)")
+                        ->execute([$cid]);
+                    $pdo->prepare("
+                        INSERT IGNORE INTO campaign_send_claims
+                            (campaign_id, workspace_id, recipient_key, channel, subscriber_id, status, claimed_at)
+                        SELECT l.campaign_id, COALESCE(l.workspace_id, ?), LOWER(TRIM(l.recipient)), 'email', l.subscriber_id, 'sent', COALESCE(l.sent_at, NOW())
+                        FROM mail_delivery_logs l
+                        WHERE l.campaign_id = ? AND l.deleted_at IS NULL AND l.status = 'success'
+                          AND l.recipient IS NOT NULL AND TRIM(l.recipient) != ''
+                    ")->execute([$workspace_id, $cid]);
+                }
+
+                // Transition 'scheduled' -> 'sending' cleanly & count unique email audience once if unset
+                $totalAud = (int)($freshCamp['total_target_audience'] ?? 0);
+                if (strtolower((string)$freshCamp['status']) === 'scheduled' || empty($freshCamp['sent_at']) || $totalAud === 0) {
+                    $targetConfCoord = json_decode($freshCamp['target_config'] ?? '{}', true) ?: [];
+                    $cWheresCoord = [];
+                    $cParamsCoord = [$workspace_id];
+                    if (!empty($targetConfCoord['listIds'])) {
+                        $ph = implode(',', array_fill(0, count($targetConfCoord['listIds']), '?'));
+                        $cWheresCoord[] = "s.id IN (SELECT subscriber_id FROM subscriber_lists WHERE workspace_id = ? AND list_id IN ($ph))";
+                        $cParamsCoord = array_merge([$workspace_id], $cParamsCoord, $targetConfCoord['listIds']);
+                    }
+                    if (!empty($targetConfCoord['tagIds'])) {
+                        $tc = [];
+                        foreach ($targetConfCoord['tagIds'] as $tg) {
+                            $tc[] = "s.id IN (SELECT st.subscriber_id FROM subscriber_tags st JOIN domation_tags t_sub ON st.tag_id = t_sub.id WHERE st.workspace_id = ? AND t_sub.workspace_id = ? AND t_sub.name = ?)";
+                            $cParamsCoord[] = $workspace_id;
+                            $cParamsCoord[] = $workspace_id;
+                            $cParamsCoord[] = $tg;
+                        }
+                        if (!empty($tc)) $cWheresCoord[] = "(" . implode(' OR ', $tc) . ")";
+                    }
+                    if (!empty($targetConfCoord['segmentIds'])) {
+                        $ph = implode(',', array_fill(0, count($targetConfCoord['segmentIds']), '?'));
+                        $stSeg = $pdo->prepare("SELECT criteria FROM segments WHERE id IN ($ph) AND workspace_id = ?");
+                        $stSeg->execute(array_merge($targetConfCoord['segmentIds'], [$workspace_id]));
+                        foreach ($stSeg->fetchAll() as $seg) {
+                            $resSeg = buildSegmentWhereClause($seg['criteria'], $workspace_id);
+                            if ($resSeg['sql'] !== '1=1') {
+                                $cWheresCoord[] = $resSeg['sql'];
+                                foreach ($resSeg['params'] as $p) $cParamsCoord[] = $p;
+                            }
+                        }
+                    }
+                    if (!empty($targetConfCoord['individualIds'])) {
+                        $ph = implode(',', array_fill(0, count($targetConfCoord['individualIds']), '?'));
+                        $cWheresCoord[] = "s.id IN ($ph)";
+                        $cParamsCoord = array_merge($cParamsCoord, $targetConfCoord['individualIds']);
+                    }
+                    if (!empty($cWheresCoord)) {
+                        $cSql = "SELECT COUNT(DISTINCT LOWER(TRIM(s.email))) FROM subscribers s WHERE s.workspace_id = ? AND s.deleted_at IS NULL AND s.status IN ('active', 'lead', 'customer') AND s.email IS NOT NULL AND TRIM(s.email) != '' AND (" . implode(' OR ', $cWheresCoord) . ")";
+                        $stCnt = $pdo->prepare($cSql);
+                        $stCnt->execute($cParamsCoord);
+                        $totalAud = (int)$stCnt->fetchColumn();
+                    }
+                    $pdo->prepare("UPDATE campaigns SET status = 'sending', sent_at = COALESCE(sent_at, NOW()), total_target_audience = ?, updated_at = NOW() WHERE id = ? AND status IN ('scheduled','sending')")
+                        ->execute([$totalAud, $cid]);
+                }
+
+                // Estimate remaining unsent audience to decide parallel shards vs inline single run
+                $sentSoFar = (int)($freshCamp['count_sent'] ?? 0);
+                $estRemaining = max(0, $totalAud - $sentSoFar);
+                if ($totalAud === 0 || $estRemaining >= 80) {
+                    $spawnCount = 6;
+                    $spawned = 0;
+                    for ($s = 0; $s < $spawnCount; $s++) {
+                        $stFree = $pdo->prepare("SELECT IS_FREE_LOCK(?)");
+                        $stFree->execute(["campaign_worker_{$cid}_s{$s}"]);
+                        if ((int)$stFree->fetchColumn() === 1) {
+                            $cmd = sprintf(
+                                'nohup %s %s %s 0 %d %d >/dev/null 2>&1 &',
+                                escapeshellarg($phpBin),
+                                escapeshellarg(__FILE__),
+                                escapeshellarg($cid),
+                                $s,
+                                $spawnCount
+                            );
+                            @exec($cmd);
+                            $spawned++;
+                        }
+                    }
+                    $pdo->prepare("SELECT RELEASE_LOCK(?)")->execute([$coordLockKey]);
+                    writeWorkerLog("Campaign $cid coordinator checked shards: spawned $spawned/$spawnCount parallel shards (estRemaining=$estRemaining).");
+                    echo json_encode(['status' => 'dispatched_shards', 'campaign_id' => $cid, 'spawned' => $spawned, 'shards' => $spawnCount]);
+                    return ['status' => 'dispatched_shards', 'campaign_id' => $cid, 'spawned' => $spawned];
+                }
+
+                // Small campaign (<80 remaining): release coordinator lock and run inline directly as shard 0/1
+                $pdo->prepare("SELECT RELEASE_LOCK(?)")->execute([$coordLockKey]);
+            }
+
+            // [CONCURRENCY GUARD] Acquire exclusive MySQL Advisory Lock per Campaign Shard
+            $lockKey = ($numShards > 1) ? "campaign_worker_{$cid}_s{$shardId}" : "campaign_worker_{$cid}_s0";
+            $lockTimeout = $manualCampaignId ? 2 : 0;
             $stmtLock = $pdo->prepare("SELECT GET_LOCK(?, ?)");
             $stmtLock->execute([$lockKey, $lockTimeout]);
             $lockAcquired = ((int)$stmtLock->fetchColumn() === 1);
 
             if (!$lockAcquired) {
-                $msg = "[LOCK GUARD] Campaign $cid is currently being processed by another active worker. Skipping to prevent duplicate emails.";
+                $msg = "[LOCK GUARD] Campaign $cid ({$lockKey}) is already processed by another active worker. Skipping.";
                 $logs[] = $msg;
                 writeWorkerLog($msg);
                 return ['status' => 'locked', 'campaign_id' => $cid];
@@ -155,42 +281,48 @@ if (!function_exists('runWorkerCampaign')) {
                 } catch (Throwable $e) {}
             });
 
-            // [STALE LOCK CLEANUP] Clean up ONLY stale temporary processing locks (>15 minutes old) from crashed processes
-            // CRITICAL: NEVER delete active locks, as that allows concurrent workers to re-pick in-flight subscribers!
-            $pdo->prepare("DELETE FROM subscriber_activity WHERE campaign_id = ? AND type = 'processing_campaign' AND created_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE)")->execute([$cid]);
+            // Clean up ONLY stale temporary processing locks (>15 minutes old) from crashed processes
+            if ($shardId === 0) {
+                $pdo->prepare("UPDATE subscriber_activity SET type = 'released_campaign' WHERE campaign_id = ? AND workspace_id = ? AND type = 'processing_campaign' AND created_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE)")->execute([$cid, $workspace_id]);
+                if ($claimsTableAvailable) {
+                    $pdo->prepare("DELETE FROM campaign_send_claims WHERE campaign_id = ? AND status = 'processing' AND claimed_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)")->execute([$cid]);
+                }
+            }
 
-            // Start a transaction for the campaign processing
+            // Double-check fresh live status after acquiring shard lock (prevents race with user Pause click!)
+            $stmtReCheck = $pdo->prepare("SELECT * FROM campaigns WHERE id = ? LIMIT 1");
+            $stmtReCheck->execute([$cid]);
+            $campaign = $stmtReCheck->fetch(PDO::FETCH_ASSOC);
+            if (!$campaign || !in_array(strtolower((string)$campaign['status']), ['scheduled', 'sending'], true)) {
+                writeWorkerLog("Campaign $cid ({$lockKey}): Status became '" . ($campaign['status'] ?? 'unknown') . "' before start. Aborting.");
+                $pdo->prepare("SELECT RELEASE_LOCK(?)")->execute([$lockKey]);
+                return ['status' => 'aborted_paused', 'campaign_id' => $cid];
+            }
+
+            // Start transaction for initialization
             $pdo->beginTransaction();
             try {
-                // [FIX PROG-1] On resume from 'paused' status, always re-sync count_sent from real
-                // delivery logs so the progress bar reflects actual sends (not a stale counter).
-                // This fixes the mismatch where history tab shows 1,904 but progress shows 1,071.
-                $wasResumedFromPause = ($campaign['status'] === 'paused');
-
-                // Initialize if NOT already sending, or if sent_at is missing (manual trigger case)
+                // Initialize if NOT already sending, or if sent_at is missing (first trigger from scheduled)
                 if ($campaign['status'] !== 'sending' || empty($campaign['sent_at'])) {
-                    // Calculate Audience Size (Snapshot)
-                    // [FIX BUG-WC-1] Scope subscribers to campaign workspace
-                    $countSql = "SELECT COUNT(DISTINCT s.id) FROM subscribers s WHERE s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ?";
-                    $countParams = [$workspace_id];
-
-                    // ZNS Requirement: Must have phone number
-                    if (($campaign['type'] ?? 'email') === 'zalo_zns') {
-                        $countSql .= " AND (s.phone_number IS NOT NULL AND s.phone_number != '')";
+                    // Calculate Unique Audience Size (Snapshot) — deduplicated by email or phone + soft-delete safe
+                    if ($campaignType === 'zalo_zns') {
+                        $countSql = "SELECT COUNT(DISTINCT COALESCE(NULLIF(s.phone_norm9, ''), s.phone_number)) FROM subscribers s WHERE s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ? AND s.deleted_at IS NULL AND (s.phone_number IS NOT NULL AND s.phone_number != '')";
+                    } else {
+                        $countSql = "SELECT COUNT(DISTINCT LOWER(TRIM(s.email))) FROM subscribers s WHERE s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ? AND s.deleted_at IS NULL AND s.email IS NOT NULL AND TRIM(s.email) != ''";
                     }
+                    $countParams = [$workspace_id];
 
                     $countWheres = [];
                     $targetConf = json_decode($campaign['target_config'], true);
 
                     // A. LISTS
                     if (!empty($targetConf['listIds'])) {
-                        // [BUG-M1 FIX] Use parameterized query to prevent SQL injection
                         $listPlaceholders = implode(',', array_fill(0, count($targetConf['listIds']), '?'));
                         $countWheres[] = "s.id IN (SELECT subscriber_id FROM subscriber_lists WHERE workspace_id = ? AND list_id IN ($listPlaceholders))";
-                        $countParams = array_merge([$workspace_id], $countParams); // Prepended for subquery
+                        $countParams = array_merge([$workspace_id], $countParams);
                         $countParams = array_merge($countParams, $targetConf['listIds']);
                     }
-                    // B. TAGS (10M UPGRADE: Relational Join)
+                    // B. TAGS
                     if (!empty($targetConf['tagIds'])) {
                         $tagConditions = [];
                         foreach ($targetConf['tagIds'] as $tag) {
@@ -205,7 +337,6 @@ if (!function_exists('runWorkerCampaign')) {
                     }
                     // C. SEGMENTS
                     if (!empty($targetConf['segmentIds'])) {
-                        // [BUG-M1 FIX] Use parameterized query to prevent SQL injection
                         $segPlaceholders = implode(',', array_fill(0, count($targetConf['segmentIds']), '?'));
                         $stmtSegs = $pdo->prepare("SELECT criteria FROM segments WHERE id IN ($segPlaceholders) AND workspace_id = ?");
                         $stmtSegs->execute(array_merge($targetConf['segmentIds'], [$workspace_id]));
@@ -220,7 +351,7 @@ if (!function_exists('runWorkerCampaign')) {
                             }
                         }
                     }
-                    // D. INDIVIDUAL IDs (hand-picked subscribers)
+                    // D. INDIVIDUAL IDs
                     if (!empty($targetConf['individualIds'])) {
                         $indPlaceholders = implode(',', array_fill(0, count($targetConf['individualIds']), '?'));
                         $countWheres[] = "s.id IN ($indPlaceholders)";
@@ -228,26 +359,17 @@ if (!function_exists('runWorkerCampaign')) {
                     }
 
                     $totalAudience = (int) ($campaign['total_target_audience'] ?? 0);
-                    // [FIX PROG-1] Force re-count when: no audience set, manual trigger, OR resuming from pause
-                    if (!empty($countWheres) && ($totalAudience === 0 || $manualCampaignId || $wasResumedFromPause)) {
+                    if (!empty($countWheres) && ($totalAudience === 0 || $campaign['status'] !== 'sending')) {
                         $countSql .= " AND (" . implode(' OR ', $countWheres) . ")";
                         $stmtCount = $pdo->prepare($countSql);
                         $stmtCount->execute($countParams);
                         $totalAudience = (int) $stmtCount->fetchColumn();
                     }
 
-                    // [FIX PROG-1] On resume from paused: atomically re-sync count_sent from delivery
-                    // logs AND update status + audience in ONE UPDATE to avoid double row-lock on the
-                    // campaigns table within the same transaction.
-                    if ($wasResumedFromPause) {
-                        $pdo->prepare("UPDATE campaigns SET status = 'sending', sent_at = IFNULL(sent_at, NOW()), total_target_audience = ?, count_sent = (SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_activity WHERE campaign_id = ? AND type IN ('receive_email', 'zalo_sent', 'meta_sent', 'zns_sent')) WHERE id = ? AND workspace_id = ?")->execute([$totalAudience, $cid, $cid, $workspace_id]);
-                        writeWorkerLog("Campaign $cid: Resumed from paused — status=sending, count_sent synced from activity logs, audience=$totalAudience.");
-                    } else {
-                        // Change status to 'sending' and ensure sent_at is marked
-                        $pdo->prepare("UPDATE campaigns SET status = 'sending', sent_at = IFNULL(sent_at, NOW()), total_target_audience = ? WHERE id = ?")->execute([$totalAudience, $cid]);
-                    }
-                    $logs[] = "[Campaign {$cid}] Initialized. Status: sending. Total Audience: $totalAudience";
-                    writeWorkerLog("Campaign $cid Initialized. Audience: $totalAudience");
+                    // Transition only 'scheduled'/'sending' (never overwrite paused!)
+                    $pdo->prepare("UPDATE campaigns SET status = 'sending', sent_at = COALESCE(sent_at, NOW()), total_target_audience = ? WHERE id = ? AND status IN ('scheduled', 'sending')")->execute([$totalAudience, $cid]);
+                    $logs[] = "[Campaign {$cid}] Initialized ({$lockKey}). Status: sending. Total Unique Audience: $totalAudience";
+                    writeWorkerLog("Campaign $cid Initialized ({$lockKey}). Unique Audience: $totalAudience");
 
                     // Re-fetch to get updated sent_at for resolveEmailContent if needed
                     $stmtCamp = $pdo->prepare("SELECT * FROM campaigns WHERE id = ?");
@@ -365,48 +487,82 @@ if (!function_exists('runWorkerCampaign')) {
                 }
 
                 // 2. Micro-Batch Processing Loop
-                $BATCH_SIZE = 200;   // [PERF] Increased from 50 ? 200 to boost throughput per batch
-                $MAX_BATCHES = 90;  // [PERF] Increased from 60 ? 90  max 18,000 emails per worker run
-                                    // 450s time guard still protects against FPM exhaustion
+                $BATCH_SIZE = 50;   // Frequent commits (every ~4-5s across 6 shards) -> smooth live progress & fast Pause response
+                $MAX_BATCHES = 200; // Up to 10,000 unique emails per shard (~60,000 across 6 shards) per worker run
                 $batchCount = 0;
                 $hasMore = true;
                 $totalProcessed = 0;
+                $sentThisRun = 0;
+                $abortedExternally = false;
                 $startTimeRun = microtime(true);
 
-                // [DYNAMIC TIME LIMIT] Read php max_execution_time to avoid brutal FPM/CGI termination.
-                // Leave a 5s safety buffer for the final status check & next-worker spawn.
+                // [DYNAMIC TIME LIMIT] CLI PHP returns max_execution_time=0 (unlimited). Give CLI shards 1800s; cap FPM/HTTP safely.
                 $maxExecutionTime = (int) ini_get('max_execution_time');
-                $timeLimit = ($maxExecutionTime > 0) ? ($maxExecutionTime - 5) : 30; // standard default is 30s
-                $timeLimit = max(10, min($timeLimit, 450)); // clamp between 10s and 450s
+                $timeLimit = ($maxExecutionTime > 0) ? max(10, min($maxExecutionTime - 5, 450)) : 1800;
 
-                // [PERF B2] Pre-decode linked flow JSON once  avoids 200x json_decode per batch.
-                // linkedFlow config/steps are the same for every subscriber in the batch.
+                // [PERF B2] Pre-decode linked flow JSON once
                 $linkedFlowConfig = $linkedFlow ? (json_decode($linkedFlow['config'], true) ?: []) : null;
                 $linkedFlowSteps  = $linkedFlow ? (json_decode($linkedFlow['steps'], true) ?: []) : null;
 
-                // [PERF B3] Pre-decode ZNS campaign config once per worker run (same for every subscriber).
+                // [PERF B3] Pre-decode ZNS campaign config once per worker run
                 $znsConfigPreloaded = null;
                 if (($campaign['type'] ?? 'email') === 'zalo_zns' && !empty($campaign['config'])) {
                     $znsConfigPreloaded = json_decode($campaign['config'], true) ?: [];
                 }
 
+                // Backfill sent claims once if single-shard path skipped Coordinator
+                $campChannelType = ($campaignType === 'zalo_zns') ? 'zns' : 'email';
+                if ($claimsTableAvailable && $campChannelType === 'email') {
+                    $pdo->prepare("
+                        INSERT IGNORE INTO campaign_send_claims
+                            (campaign_id, workspace_id, recipient_key, channel, subscriber_id, status, claimed_at)
+                        SELECT l.campaign_id, COALESCE(l.workspace_id, ?), LOWER(TRIM(l.recipient)), 'email', l.subscriber_id, 'sent', COALESCE(l.sent_at, NOW())
+                        FROM mail_delivery_logs l
+                        WHERE l.campaign_id = ? AND l.deleted_at IS NULL AND l.status = 'success'
+                          AND l.recipient IS NOT NULL AND TRIM(l.recipient) != ''
+                    ")->execute([$workspace_id, $cid]);
+                }
+
                 // Commit the initialization transaction
                 $pdo->commit();
 
-                // [OPTIMIZATION] Pre-build the Recipient Fetch SQL to compile ONCE before the loop
-                $sqlFetch = "SELECT s.id, s.contact_id, s.email, s.first_name, s.last_name, s.phone_number, s.company_name, s.job_title, s.city, s.district, s.ward, s.country, s.address, s.gender, s.date_of_birth, s.anniversary_date, s.joined_at, s.custom_attributes, s.program, s.stage_id, s.owner_id, s.salesperson FROM subscribers s WHERE s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ?";
-                $execParams = array_merge([$workspace_id], $queryBaseParams);
-                if (($campaign['type'] ?? 'email') === 'zalo_zns') {
-                    $sqlFetch .= " AND (s.phone_number IS NOT NULL AND s.phone_number != '')";
+                // [OPTIMIZATION + 100% EMAIL DEDUP] Pre-build Recipient Fetch SQL before batch loop
+                $innerParams = [$workspace_id];
+                $innerWhere = "s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ? AND s.deleted_at IS NULL";
+                if ($campaignType === 'zalo_zns') {
+                    $innerWhere .= " AND (s.phone_number IS NOT NULL AND s.phone_number != '')";
+                } else {
+                    $innerWhere .= " AND (s.email IS NOT NULL AND TRIM(s.email) != '')";
                 }
                 if (!empty($wheres)) {
-                    $sqlFetch .= " AND (" . implode(' OR ', $wheres) . ")";
+                    $innerWhere .= " AND (" . implode(' OR ', $wheres) . ")";
+                    $innerParams = array_merge($innerParams, $queryBaseParams);
                 }
-                // [FIX STUCK-1] Added 'skipped_email' to NOT EXISTS exclusion.
-                // Virtual emails are logged as 'skipped_email' (not 'failed_email'), so without this
-                // they were never excluded from the fetch query and got re-fetched every batch →
-                // worker runs N batches of all-skipped, sees remaining>0, retries until circuit breaker.
-                $sqlFetch .= " AND NOT EXISTS (
+                if ($campaignType !== 'zalo_zns' && $numShards > 1) {
+                    $innerWhere .= " AND MOD(CRC32(LOWER(TRIM(s.email))), ?) = ?";
+                    $innerParams[] = $numShards;
+                    $innerParams[] = $shardId;
+                }
+                if ($claimsTableAvailable && $campaignType !== 'zalo_zns') {
+                    $innerWhere .= " AND NOT EXISTS (
+                        SELECT 1 FROM campaign_send_claims csc
+                        WHERE csc.campaign_id = ? AND csc.channel = 'email'
+                          AND csc.recipient_key = LOWER(TRIM(s.email))
+                          AND (csc.status IN ('sent', 'failed', 'skipped')
+                               OR (csc.status = 'processing' AND csc.claimed_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)))
+                    )";
+                    $innerParams[] = $cid;
+                }
+                if ($campaignType !== 'zalo_zns') {
+                    $innerWhere .= " AND NOT EXISTS (
+                        SELECT 1 FROM mail_delivery_logs mdl
+                        WHERE mdl.campaign_id = ? AND mdl.deleted_at IS NULL
+                          AND mdl.status = 'success'
+                          AND mdl.recipient = s.email
+                    )";
+                    $innerParams[] = $cid;
+                }
+                $innerWhere .= " AND NOT EXISTS (
                     SELECT 1 FROM subscriber_activity sa
                     WHERE sa.workspace_id = ?
                     AND sa.subscriber_id = s.id
@@ -416,10 +572,53 @@ if (!function_exists('runWorkerCampaign')) {
                         OR (sa.type = 'processing_campaign' AND sa.created_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE))
                     )
                 )";
-                $execParams[] = $workspace_id;
-                $execParams[] = $cid;
-                $sqlFetch .= " ORDER BY s.id ASC LIMIT " . (int)$BATCH_SIZE . " FOR UPDATE " . $skipLockedClause;
+                $innerParams[] = $workspace_id;
+                $innerParams[] = $cid;
+
+                $execParams = array_values($innerParams);
+                $groupKeyExpr = ($campaignType === 'zalo_zns')
+                    ? "COALESCE(NULLIF(s.phone_norm9, ''), s.phone_number)"
+                    : "LOWER(TRIM(s.email))";
+
+                // Derived dedup table picks strictly 1 subscriber per unique normalized email/phone per batch
+                $sqlFetch = "SELECT s_pick.id, s_pick.contact_id, s_pick.email, s_pick.first_name, s_pick.last_name,
+                        s_pick.phone_number, s_pick.phone_norm9, s_pick.company_name, s_pick.job_title,
+                        s_pick.city, s_pick.district, s_pick.ward, s_pick.country, s_pick.address,
+                        s_pick.gender, s_pick.date_of_birth, s_pick.anniversary_date, s_pick.joined_at,
+                        s_pick.custom_attributes, s_pick.program, s_pick.stage_id, s_pick.owner_id, s_pick.salesperson
+                    FROM subscribers s_pick
+                    INNER JOIN (
+                        SELECT MIN(s.id) AS picked_id
+                        FROM subscribers s
+                        WHERE {$innerWhere}
+                        GROUP BY {$groupKeyExpr}
+                        ORDER BY picked_id ASC
+                        LIMIT " . (int)$BATCH_SIZE . "
+                    ) dedup ON dedup.picked_id = s_pick.id";
                 $stmtSubs = $pdo->prepare($sqlFetch);
+
+                // Prepare atomic per-recipient claim statement (prevents any duplicate even across crashed/re-queued workers)
+                $stmtClaimInsert = $claimsTableAvailable ? $pdo->prepare("
+                    INSERT IGNORE INTO campaign_send_claims
+                        (campaign_id, workspace_id, recipient_key, channel, subscriber_id, status, claimed_at)
+                    VALUES (?, ?, ?, ?, ?, 'processing', NOW())
+                ") : null;
+                $stmtClaimUpdate = $claimsTableAvailable ? $pdo->prepare("
+                    UPDATE campaign_send_claims SET status = ?, updated_at = NOW()
+                    WHERE campaign_id = ? AND channel = ? AND recipient_key = ?
+                ") : null;
+
+                // Claim 1 QA sample per entire campaign (not per email or per shard!)
+                $qaAllowedOnce = false;
+                if ($shardId === 0 && $retryCount === 0 && $campaignType !== 'zalo_zns') {
+                    if ($claimsTableAvailable) {
+                        $stmtQa = $pdo->prepare("INSERT IGNORE INTO campaign_send_claims (campaign_id, workspace_id, recipient_key, channel, status) VALUES (?, ?, '__qa_sample__', 'qa', 'sent')");
+                        $stmtQa->execute([$cid, $workspace_id]);
+                        $qaAllowedOnce = ($stmtQa->rowCount() === 1);
+                    } else {
+                        $qaAllowedOnce = true;
+                    }
+                }
 
                 // [OPTIMIZATION] Pre-compile UPDATE queries
                 $stmtUpdateFlowEnrolled = $pdo->prepare("UPDATE flows SET stat_enrolled = stat_enrolled + ? WHERE id = ?");
@@ -436,16 +635,17 @@ if (!function_exists('runWorkerCampaign')) {
                     // Check if campaign was paused or cancelled by user
                     $stmtStatusLive = $pdo->prepare("SELECT status FROM campaigns WHERE id = ?");
                     $stmtStatusLive->execute([$cid]);
-                    $liveCampStatus = $stmtStatusLive->fetchColumn();
+                    $liveCampStatus = strtolower((string)$stmtStatusLive->fetchColumn());
                     if ($liveCampStatus !== 'sending') {
-                        writeWorkerLog("Campaign $cid: Status is no longer 'sending' (currently '$liveCampStatus'). Stopping worker loop immediately.");
+                        $abortedExternally = true;
+                        $hasMore = false;
+                        writeWorkerLog("Campaign $cid ({$lockKey}): Status is no longer 'sending' (currently '$liveCampStatus'). Stopping worker loop immediately.");
                         break;
                     }
 
-                    // [TIME GUARD] Stop if we've been running for more than $timeLimit seconds
-                    // limit is 600s, but we want to leave room for final updates and cleanup.
+                    // [TIME GUARD] Leave room for clean wrap-up before FPM/CLI soft limit
                     if (microtime(true) - $startTimeRun > $timeLimit) {
-                        writeWorkerLog("Campaign $cid: Execution time limit ($timeLimit s) reached. Stopping batch loop.");
+                        writeWorkerLog("Campaign $cid ({$lockKey}): Execution time limit ($timeLimit s) reached. Stopping batch loop.");
                         break;
                     }
                     $pdo->beginTransaction();
@@ -572,13 +772,62 @@ if (!function_exists('runWorkerCampaign')) {
 
                         $recipientIndexInBatch = 0;
                         $bouncedIds = [];
+                        $seenKeysInBatch = [];
+                        $claimedBatchKeys = [];
+                        $sentClaimKeys = [];
+                        $failClaimKeys = [];
+                        $skipClaimKeys = [];
 
-                        // [RATE LIMITER] Uses sesAcquireRateSlot() — shared file-lock across ALL
-                        // PHP workers (campaign + flow). Guarantees combined total = 10/s regardless
-                        // of how many workers are active. Defined in flow_helpers.php.
+                        // [RATE LIMITER] Uses sesAcquireRateSlot() — shared file-lock across ALL PHP workers.
 
                         foreach ($recipients as $sub) {
+                            $currentIdx = $recipientIndexInBatch++;
                             $subId = $sub['id'];
+
+                            // Check pause/stop every 5 recipients (stops all shards within <1s when user clicks Pause)
+                            if ($currentIdx % 5 === 0) {
+                                if (function_exists('ensure_pdo_alive')) {
+                                    ensure_pdo_alive($pdo);
+                                }
+                                try {
+                                    $stmtLiveSt = $pdo->prepare("SELECT status FROM campaigns WHERE id = ?");
+                                    $stmtLiveSt->execute([$cid]);
+                                    $curLiveStatus = strtolower((string)$stmtLiveSt->fetchColumn());
+                                    if ($curLiveStatus && in_array($curLiveStatus, ['paused', 'cancelled', 'draft', 'sent'], true)) {
+                                        writeWorkerLog("Campaign $cid ({$lockKey}): Explicitly paused/stopped mid-batch (status: '$curLiveStatus'). Aborting recipient loop.");
+                                        $abortedExternally = true;
+                                        $hasMore = false;
+                                        break;
+                                    }
+                                } catch (Throwable $ignoreLiveCheck) {}
+                            }
+
+                            // Atomic email/phone dedup check (in-memory + campaign_send_claims UNIQUE index)
+                            $normRecipientKey = ($campChannelType === 'zns')
+                                ? (!empty($sub['phone_norm9']) ? (string)$sub['phone_norm9'] : trim((string)($sub['phone_number'] ?? '')))
+                                : strtolower(trim((string)($sub['email'] ?? '')));
+
+                            if ($normRecipientKey === '' || isset($seenKeysInBatch[$normRecipientKey])) {
+                                continue;
+                            }
+                            $seenKeysInBatch[$normRecipientKey] = true;
+
+                            if ($stmtClaimInsert) {
+                                $stmtClaimInsert->execute([$cid, $workspace_id, $normRecipientKey, $campChannelType, $subId]);
+                                if ($stmtClaimInsert->rowCount() === 0) {
+                                    $logs[] = "  -> Dedup lock skip: {$normRecipientKey} already claimed/sent for Campaign $cid.";
+                                    continue;
+                                }
+                                $claimedBatchKeys[] = $normRecipientKey;
+                            } else {
+                                // Fallback when claims table unavailable
+                                $stmtCheckSent = $pdo->prepare("SELECT 1 FROM subscriber_activity WHERE workspace_id = ? AND subscriber_id = ? AND campaign_id = ? AND type IN ('receive_email', 'zns_sent') LIMIT 1");
+                                $stmtCheckSent->execute([$workspace_id, $subId, $cid]);
+                                if ($stmtCheckSent->fetchColumn()) {
+                                    continue;
+                                }
+                            }
+
                             $attachments = Mailer::filterAttachments($campaignAttachments, $sub['email']);
 
                             $currentSubject = $campaign['subject'];
@@ -586,10 +835,6 @@ if (!function_exists('runWorkerCampaign')) {
                             $variationLabel = "A";
 
                             if ($isABTest && $hasVariantB) {
-                                // [BUG FIX] hexdec() on 8-char hex = up to 0xFFFFFFFF = 4294967295.
-                                // On 32-bit PHP, values > 2^31-1 wrap to negative int.
-                                // Negative % 100 is negative in PHP ? subscriber always lands in variant A.
-                                // Fix: abs() guarantees a non-negative value before modulo.
                                 $hash = abs(hexdec(substr(md5($subId . $cid), 0, 8))) % 100;
                                 $ratioA = (int) ($abConfig['ratio_a'] ?? 50);
                                 if ($hash >= $ratioA) {
@@ -610,27 +855,8 @@ if (!function_exists('runWorkerCampaign')) {
                             $personalHtml = replaceMergeTags($currentHtml, $sub, $context, $pdo);
                             $personalSubject = replaceMergeTags($currentSubject, $sub, $context, $pdo);
 
-                            // Periodically check if campaign was explicitly paused/stopped mid-batch
-                            if ($recipientIndexInBatch % 20 === 0) {
-                                if (function_exists('ensure_pdo_alive')) {
-                                    ensure_pdo_alive($pdo);
-                                }
-                                try {
-                                    $stmtLiveSt = $pdo->prepare("SELECT status FROM campaigns WHERE id = ?");
-                                    $stmtLiveSt->execute([$cid]);
-                                    $curLiveStatus = $stmtLiveSt->fetchColumn();
-                                    if ($curLiveStatus && in_array(strtolower($curLiveStatus), ['paused', 'cancelled', 'draft'])) {
-                                        writeWorkerLog("Campaign $cid: Explicitly paused/stopped mid-batch (status: '$curLiveStatus'). Aborting recipient loop.");
-                                        $hasMore = false;
-                                        break;
-                                    }
-                                } catch (Throwable $ignoreLiveCheck) {
-                                    // Transient query error: continue processing
-                                }
-                            }
-
-                            // [TURBO] Send QA only for the first subscriber of the campaign run to avoid exponential slowdown
-                            $skipQA = ($totalProcessed > 0 || $recipientIndexInBatch > 1);
+                            // QA copy sent ONCE per campaign (never on every email or reconnect SMTP connection!)
+                            $skipQA = !$qaAllowedOnce;
 
                             // [OPTIMIZED] Frequency Cap Check (Per Channel)
                             if ($maxPerDay > 0) {
@@ -639,24 +865,12 @@ if (!function_exists('runWorkerCampaign')) {
                                 $totalToday = $subCapData[$campChannel] ?? 0;
                                 if ($totalToday >= $maxPerDay) {
                                     $logs[] = "  -> Skipping {$sub['email']}: Frequency cap reached ($totalToday/$maxPerDay) for channel $campChannel";
-                                    // [FIX STUCK-2] Log a 'skipped_email' activity so this subscriber is EXCLUDED
-                                    // from future batches. Without this, frequency-capped subscribers are hit with
-                                    // bare `continue` and NO activity is logged → they keep getting re-fetched
-                                    // every batch retry until the circuit breaker fires.
                                     $failActivities[] = [$subId, 'skipped_email', $cid, $cName, "Skipped: Frequency cap ($totalToday/$maxPerDay per day)", $cid, null, $isABTest ? $variationLabel : null];
+                                    $skipClaimKeys[] = $normRecipientKey;
                                     continue;
                                 }
-                                // Increment local cache for this batch
                                 if (!isset($capCache[$subId])) $capCache[$subId] = ['email' => 0, 'zalo' => 0, 'meta' => 0];
                                 $capCache[$subId][$campChannel]++;
-                            }
-
-                            // [DEFENSE-IN-DEPTH DEDUP GUARD] Guarantee subscriber has not already received this campaign
-                            $stmtCheckSent = $pdo->prepare("SELECT 1 FROM subscriber_activity WHERE workspace_id = ? AND subscriber_id = ? AND campaign_id = ? AND type IN ('receive_email', 'zns_sent') LIMIT 1");
-                            $stmtCheckSent->execute([$workspace_id, $subId, $cid]);
-                            if ($stmtCheckSent->fetchColumn()) {
-                                $logs[] = "  -> Dedup guard: Subscriber {$sub['email']} already received Campaign $cid. Skipping duplicate.";
-                                continue;
                             }
 
                             if (($campaign['type'] ?? 'email') === 'zalo_zns') {
@@ -717,18 +931,18 @@ if (!function_exists('runWorkerCampaign')) {
                                         $mailer->setDynamicSender($campaign['sender_email']);
                                     }
 
-                                    // [SES SHARED RATE LIMITER] Acquire slot from cross-process file-lock.
-                                    // [FIX SPEED-1] Interval 100ms → 70ms = 14/s shared total.
-                                    // At 10/s, 2k emails take ~200s (3.3 min) minimum.
-                                    // At 14/s, same 2k emails take ~143s (2.4 min), ~30% faster.
-                                    // 14/s remains well within Amazon SES 14/s sending quota.
-                                    sesAcquireRateSlot(70000); // 70ms interval = ~14/s shared total
+                                    // [SES SHARED RATE LIMITER] 78ms interval = ~12.8/s safe cap across all shards (AWS SES quota: 14/s)
+                                    sesAcquireRateSlot(78000);
 
                                     $res = $mailer->send($sub['email'], $personalSubject, $personalHtml, $sub['id'], $cid, null, null, $attachments, null, null, $cName, false, $skipQA, $variationLabel, null, $workspace_id, $ccEmails, $bccEmails);
+                                    if ($qaAllowedOnce) {
+                                        $qaAllowedOnce = false; // QA copy sent at most once per campaign
+                                    }
                                 }
                             }
 
                             if ($res === true) {
+                                $sentClaimKeys[] = $normRecipientKey;
                                 $successIds[] = $subId;
                                 $activityType = (($campaign['type'] ?? 'email') === 'zalo_zns') ? 'zns_sent' : 'receive_email';
                                 $currentVar = $isABTest ? $variationLabel : null;
@@ -767,50 +981,26 @@ if (!function_exists('runWorkerCampaign')) {
                                         // [SMART SCHEDULE] Check if first step is WAIT
                                         // [PERF B2] Use pre-decoded steps hoisted before subscriber loop
                                         $fSteps = $linkedFlowSteps ?? [];
-                                        foreach ($fSteps as $fs) {
-                                            if ($fs['id'] === $flowTriggerNextStepId && $fs['type'] === 'wait') {
-                                                $fsWaitConfig = $fs['config'] ?? [];
-                                                $fsWaitMode = $fsWaitConfig['mode'] ?? 'duration';
-                                                if ($fsWaitMode === 'duration') {
-                                                    $dur = (int) ($fsWaitConfig['duration'] ?? 0);
-                                                    $unit = $fsWaitConfig['unit'] ?? 'minutes';
-                                                    // [BUG-C2 FIX] Support weeks in addition to days/hours/minutes
-                                                    $unitSeconds = match ($unit) {
-                                                        'weeks' => 604800,
-                                                        'days' => 86400,
-                                                        'hours' => 3600,
-                                                        default => 60,
-                                                    };
-                                                    $delay = $unitSeconds * $dur;
-                                                    if ($delay > 0)
-                                                        $initialSchedule = date('Y-m-d H:i:s', time() + $delay);
-                                                // else: dura=0 ? keep $initialSchedule = $now ? immediate
-                                                } elseif ($fsWaitMode === 'until_date') {
-                                                    // [BUG-2 FIX] SMART SCHEDULE for until_date:
-                                                    // Without this: scheduled_at=NOW ? priority worker sees NOW<=NOW ? is_resumed_wait=TRUE ? wait SKIPPED!
-                                                    $specDate   = $fsWaitConfig['specificDate'] ?? '';
-                                                    $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                                                    if ($specDate) {
-                                                        $targetTs = strtotime("$specDate $targetTime:00");
-                                                        if ($targetTs > time()) {
-                                                            $initialSchedule = date('Y-m-d H:i:s', $targetTs);
-                                                        }
-                                                        // If date already past: keep $initialSchedule=$now ? FlowExecutor isWaitOver=TRUE ? skip correctly
-                                                    }
-                                                } elseif ($fsWaitMode === 'until') {
-                                                    // [BUG-2 FIX] SMART SCHEDULE for until (time-of-day):
-                                                    $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                                                    $dt = new DateTime();
-                                                    $parts2 = explode(':', $targetTime);
-                                                    $dt->setTime((int)$parts2[0], (int)($parts2[1] ?? 0), 0);
-                                                    if ($dt->getTimestamp() <= time()) $dt->modify('+1 day');
-                                                    $initialSchedule = $dt->format('Y-m-d H:i:s');
-                                                }
-                                                break;
-                                            }
+                                        $firstMeta = extractFlowStepMeta($fSteps, $flowTriggerNextStepId);
+                                        $flowTriggerNextStepType = $firstMeta['type'] ?? 'unknown';
+                                        if ($firstMeta['step'] && strtolower((string) $flowTriggerNextStepType) === 'wait') {
+                                            $waitCalc = calculateWaitStepScheduledAt($firstMeta['step'], null, [
+                                                'for_enrollment' => true,
+                                                'past_fallback' => $now,
+                                                'duration_default' => 0,
+                                                'unit_default' => 'minutes',
+                                            ]);
+                                            $initialSchedule = $waitCalc['scheduled_at'];
                                         }
 
-                                        $flowEnrollments[] = ['sid' => $subId, 'cid' => $sub['contact_id'] ?? null, 'fid' => $fid, 'step' => $flowTriggerNextStepId, 'schedule' => $initialSchedule];
+                                        $flowEnrollments[] = [
+                                            'sid' => $subId,
+                                            'cid' => $sub['contact_id'] ?? null,
+                                            'fid' => $fid,
+                                            'step' => $flowTriggerNextStepId,
+                                            'step_type' => $flowTriggerNextStepType,
+                                            'schedule' => $initialSchedule
+                                        ];
                                         $successActivities[] = [$subId, 'enter_flow', $fid, $linkedFlow['name'], "Enrolled from Campaign '{$cName}'", $cid, $fid];
 
                                         // Update local cache to prevent duplicate enrollment in same batch if loop continues?
@@ -824,10 +1014,10 @@ if (!function_exists('runWorkerCampaign')) {
                                 $errMsg = is_string($res) ? $res : 'Unknown Error';
                                 
                                 if ($res === "Skipped: Virtual email") {
-                                    // [VẬN HÀNH] Log as skipped_email instead of failed_email
-                                    // This prevents it being retried but also avoids incrementing stat_total_failed
+                                    $skipClaimKeys[] = $normRecipientKey;
                                     $failActivities[] = [$subId, 'skipped_email', $cid, $cName, "Skipped: Virtual email", $cid, null, $isABTest ? $variationLabel : null];
                                 } else {
+                                    $failClaimKeys[] = $normRecipientKey;
                                     // Local string check to avoid sequential DB Updates
                                     $isHardBounce = false;
                                     $errMsgLower = strtolower($errMsg);
@@ -867,11 +1057,34 @@ if (!function_exists('runWorkerCampaign')) {
                             $pdo->prepare("UPDATE subscribers SET status = 'bounced' WHERE id IN ($idPlaceholdersBounce) AND workspace_id = ?")->execute(array_merge($bouncedIds, [$workspace_id]));
                         }
 
-                        // Cleanup temporary 'processing_campaign' locks for this specific batch
+                        // Sync atomic claims table statuses for this batch
+                        if ($claimsTableAvailable && !empty($claimedBatchKeys)) {
+                            $updateClaimGroup = function (array $keys, string $newStatus) use ($pdo, $cid, $campChannelType) {
+                                $keys = array_values(array_unique(array_filter($keys)));
+                                if (empty($keys)) return;
+                                $ph = implode(',', array_fill(0, count($keys), '?'));
+                                $pdo->prepare("UPDATE campaign_send_claims SET status = ?, updated_at = NOW() WHERE campaign_id = ? AND channel = ? AND recipient_key IN ($ph)")
+                                    ->execute(array_values(array_merge([$newStatus, $cid, $campChannelType], $keys)));
+                            };
+                            $updateClaimGroup($sentClaimKeys, 'sent');
+                            $updateClaimGroup($failClaimKeys, 'failed');
+                            $updateClaimGroup($skipClaimKeys, 'skipped');
+
+                            // Release any claimed rows in this batch that were NOT processed (e.g., mid-batch Pause abort)
+                            $unprocessedKeys = array_values(array_diff($claimedBatchKeys, $sentClaimKeys, $failClaimKeys, $skipClaimKeys));
+                            if (!empty($unprocessedKeys)) {
+                                $ph = implode(',', array_fill(0, count($unprocessedKeys), '?'));
+                                $pdo->prepare("DELETE FROM campaign_send_claims WHERE campaign_id = ? AND channel = ? AND status = 'processing' AND recipient_key IN ($ph)")
+                                    ->execute(array_values(array_merge([$cid, $campChannelType], $unprocessedKeys)));
+                            }
+                        }
+
+                        // Cleanup temporary 'processing_campaign' locks for this specific batch (soft-transition to released_campaign)
                         if (!empty($recipients)) {
-                            $subIdListForClean = array_column($recipients, 'id');
+                            $subIdListForClean = array_values(array_column($recipients, 'id'));
                             $idPlaceholdersClean = implode(',', array_fill(0, count($subIdListForClean), '?'));
-                            $pdo->prepare("DELETE FROM subscriber_activity WHERE campaign_id = ? AND type = 'processing_campaign' AND subscriber_id IN ($idPlaceholdersClean)")->execute(array_merge([$cid], $subIdListForClean));
+                            $pdo->prepare("UPDATE subscriber_activity SET type = 'released_campaign' WHERE campaign_id = ? AND workspace_id = ? AND type = 'processing_campaign' AND subscriber_id IN ($idPlaceholdersClean)")
+                                ->execute(array_values(array_merge([$cid, $workspace_id], $subIdListForClean)));
                         }
 
                         // 1. Log Activities
@@ -908,8 +1121,8 @@ if (!function_exists('runWorkerCampaign')) {
                             $binds = [];
                             $fidStats = [];
                             foreach ($flowEnrollments as $en) {
-                                $binds[] = "(?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW())";
-                                $vals = array_merge($vals, [$workspace_id, $en['sid'], $en['cid'] ?? null, $en['fid'], $en['step'], $en['schedule']]);
+                                $binds[] = "(?, ?, ?, ?, ?, ?, ?, 'waiting', NOW(), NOW(), NOW())";
+                                $vals = array_merge($vals, [$workspace_id, $en['sid'], $en['cid'] ?? null, $en['fid'], $en['step'], $en['step_type'] ?? 'unknown', $en['schedule']]);
                                 $fidStats[$en['fid']] = ($fidStats[$en['fid']] ?? 0) + 1;
 
                                 $jobDispatches[] = [
@@ -923,10 +1136,11 @@ if (!function_exists('runWorkerCampaign')) {
                             // ON DUPLICATE KEY UPDATE re-enrolls only if status is NOT active (waiting/processing).
                             // This allows recurring campaigns to correctly re-enroll completed subscribers.
                             $sqlFlow = "INSERT INTO subscriber_flow_states 
-                                (workspace_id, subscriber_id, contact_id, flow_id, step_id, scheduled_at, status, created_at, updated_at, last_step_at) 
+                                (workspace_id, subscriber_id, contact_id, flow_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at) 
                                 VALUES " . implode(',', $binds) . "
                                 ON DUPLICATE KEY UPDATE
                                     step_id      = IF(status NOT IN ('waiting','processing'), VALUES(step_id), step_id),
+                                    step_type    = IF(status NOT IN ('waiting','processing'), VALUES(step_type), step_type),
                                     scheduled_at = IF(status NOT IN ('waiting','processing'), VALUES(scheduled_at), scheduled_at),
                                     status       = IF(status NOT IN ('waiting','processing'), 'waiting', status),
                                     last_step_at = IF(status NOT IN ('waiting','processing'), NOW(), last_step_at),
@@ -978,23 +1192,25 @@ if (!function_exists('runWorkerCampaign')) {
                             }
                         }
 
-                        $totalProcessed += count($recipients);
-                        if (count($recipients) < $BATCH_SIZE) {
+                        $batchAttempts = count($sentClaimKeys) + count($failClaimKeys) + count($skipClaimKeys);
+                        if ($batchAttempts === 0) {
+                            $batchAttempts = count($successIds) + count($failActivities);
+                        }
+                        $sentThisRun += count($successIds);
+                        $totalProcessed += $batchAttempts;
+                        if ($abortedExternally || count($recipients) < $BATCH_SIZE) {
                             $hasMore = false;
                         }
 
-                        // Keep-alive output
-                        if ($totalProcessed % 50 === 0) {
+                        // Keep-alive / progress log
+                        if ($totalProcessed > 0 && ($batchCount % 1 === 0)) {
                             $elapsed = microtime(true) - $startTimeRun;
-                            $speed = round($totalProcessed / ($elapsed ?: 1), 1);
-                            echo "Processed $totalProcessed (Speed: $speed mails/s)... ";
-                            writeWorkerLog("Campaign $cid: Processed $totalProcessed. Current Speed: $speed m/s");
-                            flush();
+                            $speed = round($totalProcessed / max(0.01, $elapsed), 1);
+                            writeWorkerLog("Campaign $cid ({$lockKey}): Batch #{$batchCount} committed (runProcessed={$totalProcessed}, runSent={$sentThisRun}, speed={$speed} m/s).");
                         }
 
                         // [OPTIMIZATION] Explicit Garbage Collection (Zero-Leak Memory Profile)
-                        unset($recipients, $successIds, $failActivities, $successActivities, $flowEnrollments, $jobDispatches, $capCache, $enrollmentCache, $lockBinds, $lockVals, $allActivitiesGrouped, $binds, $vals, $subIdList, $placeholdersSub);
-                        // [PHASE 9 MEMORY FIX] Force PHP Engine to clean up circular references immediately after each batch
+                        unset($recipients, $successIds, $failActivities, $successActivities, $flowEnrollments, $jobDispatches, $capCache, $enrollmentCache, $lockBinds, $lockVals, $allActivitiesGrouped, $binds, $vals, $subIdList, $placeholdersSub, $claimedBatchKeys, $sentClaimKeys, $failClaimKeys, $skipClaimKeys);
                         gc_collect_cycles();
                         
                     } catch (Throwable $e) {
@@ -1002,7 +1218,7 @@ if (!function_exists('runWorkerCampaign')) {
                             $pdo->rollBack();
                         }
                         $logs[] = "[ERROR] Batch failed: " . $e->getMessage();
-                        writeWorkerLog("[ERROR] Campaign $cid Batch failed: " . $e->getMessage());
+                        writeWorkerLog("[ERROR] Campaign $cid ({$lockKey}) Batch failed: " . $e->getMessage());
                         break;
                     }
                 }
@@ -1011,69 +1227,169 @@ if (!function_exists('runWorkerCampaign')) {
                 if (function_exists('ensure_pdo_alive')) {
                     ensure_pdo_alive($pdo);
                 }
-                // Clean up any remaining temporary locks so follow-up workers/cron can immediately process
-                $pdo->prepare("DELETE FROM subscriber_activity WHERE campaign_id = ? AND type = 'processing_campaign'")->execute([$cid]);
-                $pdo->beginTransaction(); // New transaction for final status
 
-                // Final Status Check - Double check if actually finished
-                // [BUG FIX] We must check if there are subscribers who have NOT been sent/failed/skipped yet.
-                // We should NOT exclude 'processing_campaign' here, because if they are locked but not sent,
-                // the campaign is NOT finished (the worker might have crashed, leaving them locked).
-                $sqlLeft = "SELECT COUNT(*) FROM subscribers s WHERE s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ?";
-                $execFinal = array_merge([$workspace_id], $queryBaseParams);
-
-                if (!empty($wheres))
-                    $sqlLeft .= " AND (" . implode(' OR ', $wheres) . ")";
-
-                $sqlLeft .= " AND NOT EXISTS (
-            SELECT 1 FROM subscriber_activity sa 
-            WHERE sa.workspace_id = ? AND sa.subscriber_id = s.id 
-            AND sa.campaign_id = ?
-            AND sa.type IN ('receive_email', 'failed_email', 'skipped_email', 'zalo_sent', 'meta_sent', 'zns_sent', 'zns_failed', 'enter_flow')
-        )";
-                $execFinal[] = $workspace_id;
-                $execFinal[] = $cid;
-
-                $stmtLeft = $pdo->prepare($sqlLeft);
-                $stmtLeft->execute($execFinal);
-                $remaining = (int) $stmtLeft->fetchColumn();
-
-                $shouldTriggerFollowUp = false;
-                $nextRetry = 0;
-
-                if ($remaining === 0) {
-                    $pdo->prepare("UPDATE campaigns SET status = 'sent', count_sent = (SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_activity WHERE campaign_id = ? AND type IN ('receive_email', 'zalo_sent', 'meta_sent', 'zns_sent')) WHERE id = ? AND workspace_id = ?")->execute([$cid, $cid, $workspace_id]);
-                    $logs[] = "[Campaign {$cid}] Finished. Status set to 'sent'.";
-                    writeWorkerLog("Campaign $cid: Finished. Status set to 'sent'.");
-                } else {
-                    // [CONCURRENCY GUARD] If remaining > 0 but we processed 0 rows, 
-                    // it means other workers are currently holding the locks, or they are crashed locks.
-                    // Instead of rapid-fire retrying (which causes infinite loops and circuit breaker tripping),
-                    // we gracefully exit and let the minute Cron Job handle the leftovers.
-                    if ($totalProcessed > 0) {
-                        if ($retryCount >= $MAX_RETRIES) {
-                            // [FIX CB-2] Sync count_sent before pausing so UI shows accurate progress.
-                            $pdo->prepare("UPDATE campaigns SET count_sent = (SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_activity WHERE campaign_id = ? AND type IN ('receive_email', 'zalo_sent', 'meta_sent', 'zns_sent')), status = 'paused' WHERE id = ? AND workspace_id = ?")->execute([$cid, $cid, $workspace_id]);
-                            $errMsg = "[CIRCUIT BREAKER] Campaign $cid auto-paused after $MAX_RETRIES consecutive retries with $remaining unsent recipients. Manual review required.";
-                            $logs[] = $errMsg;
-                            writeWorkerLog($errMsg);
-                        } else {
-                            $nextRetry = $retryCount + 1;
-                            $shouldTriggerFollowUp = true;
-                            $logs[] = "[Campaign {$cid}] Continuous mode: $remaining remaining. Follow-up staged (retry #$nextRetry).";
-                            writeWorkerLog("Campaign $cid: Continuous mode: $remaining remaining. Follow-up staged (retry #$nextRetry/$MAX_RETRIES).");
-                        }
-                    } else {
-                        $logs[] = "[Campaign {$cid}] Remaining $remaining are currently locked by other workers or pending recovery. Safely yielding to Cron.";
-                        writeWorkerLog("Campaign $cid: Remaining $remaining are locked. Yielding to Cron Job.");
-                    }
+                // Only sweep campaign-wide stale processing locks in single-worker mode (multi-shard already cleaned its batch!)
+                if ($numShards <= 1) {
+                    $pdo->prepare("UPDATE subscriber_activity SET type = 'released_campaign' WHERE campaign_id = ? AND workspace_id = ? AND type = 'processing_campaign'")->execute([$cid, $workspace_id]);
                 }
-                $pdo->commit();
 
-                // [RACE CONDITION PREVENTER] Spawn follow-up only AFTER transaction is successfully committed!
-                if ($shouldTriggerFollowUp) {
-                    triggerAsyncWorker('/worker_campaign.php?campaign_id=' . $cid . '&retry_count=' . $nextRetry);
-                    writeWorkerLog("Campaign $cid: Spawned async follow-up worker (retry #$nextRetry).");
+                // CRITICAL PAUSE GUARD: Re-read live status BEFORE checking remaining or spawning follow-ups!
+                $stmtCurStatusEnd = $pdo->prepare("SELECT status FROM campaigns WHERE id = ? LIMIT 1");
+                $stmtCurStatusEnd->execute([$cid]);
+                $liveStatusEnd = strtolower((string)$stmtCurStatusEnd->fetchColumn());
+
+                if ($abortedExternally || $liveStatusEnd !== 'sending') {
+                    $logs[] = "[Campaign {$cid}] ({$lockKey}) Stopped cleanly (external status: '{$liveStatusEnd}'). Skipping completion check and follow-up spawn.";
+                    writeWorkerLog("Campaign $cid ({$lockKey}): Aborted/paused cleanly (live status='{$liveStatusEnd}'). NO follow-up spawned.");
+                } else {
+                    $pdo->beginTransaction();
+
+                    // Build accurate deduplicated remaining query
+                    $remWhere = "s.status IN ('active', 'lead', 'customer') AND s.workspace_id = ? AND s.deleted_at IS NULL";
+                    $remParams = [$workspace_id];
+                    if ($campaignType === 'zalo_zns') {
+                        $remWhere .= " AND (s.phone_number IS NOT NULL AND s.phone_number != '')";
+                    } else {
+                        $remWhere .= " AND (s.email IS NOT NULL AND TRIM(s.email) != '')";
+                    }
+                    if (!empty($wheres)) {
+                        $remWhere .= " AND (" . implode(' OR ', $wheres) . ")";
+                        $remParams = array_merge($remParams, $queryBaseParams);
+                    }
+                    if ($claimsTableAvailable && $campaignType !== 'zalo_zns') {
+                        $remWhere .= " AND NOT EXISTS (
+                            SELECT 1 FROM campaign_send_claims csc
+                            WHERE csc.campaign_id = ? AND csc.channel = 'email'
+                              AND csc.recipient_key = LOWER(TRIM(s.email))
+                              AND csc.status IN ('sent', 'failed', 'skipped')
+                        )";
+                        $remParams[] = $cid;
+                    }
+                    if ($campaignType !== 'zalo_zns') {
+                        $remWhere .= " AND NOT EXISTS (
+                            SELECT 1 FROM mail_delivery_logs mdl
+                            WHERE mdl.campaign_id = ? AND mdl.deleted_at IS NULL
+                              AND mdl.status = 'success'
+                              AND mdl.recipient = s.email
+                        )";
+                        $remParams[] = $cid;
+                    }
+                    $remWhere .= " AND NOT EXISTS (
+                        SELECT 1 FROM subscriber_activity sa
+                        WHERE sa.workspace_id = ? AND sa.subscriber_id = s.id AND sa.campaign_id = ?
+                        AND sa.type IN ('receive_email', 'failed_email', 'skipped_email', 'zalo_sent', 'meta_sent', 'zns_sent', 'zns_failed', 'enter_flow')
+                    )";
+                    $remParams[] = $workspace_id;
+                    $remParams[] = $cid;
+
+                    $countDistinctExpr = ($campaignType === 'zalo_zns')
+                        ? "COUNT(DISTINCT COALESCE(NULLIF(s.phone_norm9, ''), s.phone_number))"
+                        : "COUNT(DISTINCT LOWER(TRIM(s.email)))";
+
+                    $sqlLeft = "SELECT {$countDistinctExpr} FROM subscribers s WHERE {$remWhere}";
+                    $stmtLeft = $pdo->prepare($sqlLeft);
+                    $stmtLeft->execute(array_values($remParams));
+                    $remaining = (int) $stmtLeft->fetchColumn();
+
+                    // Also check remaining specifically in THIS shard (when multi-shard)
+                    $shardRemaining = $remaining;
+                    if ($remaining > 0 && $campaignType !== 'zalo_zns' && $numShards > 1) {
+                        $shardWhere = $remWhere . " AND MOD(CRC32(LOWER(TRIM(s.email))), ?) = ?";
+                        $shardParams = array_merge($remParams, [$numShards, $shardId]);
+                        $stmtShardLeft = $pdo->prepare("SELECT {$countDistinctExpr} FROM subscribers s WHERE {$shardWhere}");
+                        $stmtShardLeft->execute(array_values($shardParams));
+                        $shardRemaining = (int) $stmtShardLeft->fetchColumn();
+                    }
+
+                    $shouldTriggerFollowUp = false;
+                    $nextRetry = 0;
+
+                    if ($remaining === 0) {
+                        // Coordinate completion update cleanly — re-verify status is still 'sending'
+                        $pdo->commit();
+                        $stmtFinLock = $pdo->prepare("SELECT GET_LOCK(?, 2)");
+                        $stmtFinLock->execute(["campaign_coordinator_" . $cid]);
+                        $pdo->beginTransaction();
+
+                        // Sync accurate unique count_sent before marking sent (wait briefly for any sibling shard finalizing its final commit)
+                        if ($campaignType === 'zalo_zns') {
+                            $pdo->prepare("UPDATE campaigns SET status = 'sent', count_sent = (SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_activity WHERE workspace_id = ? AND campaign_id = ? AND type IN ('zalo_sent', 'meta_sent', 'zns_sent')), updated_at = NOW() WHERE id = ? AND workspace_id = ? AND status = 'sending'")
+                                ->execute([$workspace_id, $cid, $cid, $workspace_id]);
+                        } else {
+                            if ($hasClaimsTable) {
+                                for ($w = 0; $w < 6; $w++) {
+                                    $stProc = $pdo->prepare("SELECT COUNT(*) FROM campaign_send_claims WHERE campaign_id = ? AND channel = ? AND status = 'processing'");
+                                    $stProc->execute([$cid, $campChannelType]);
+                                    if ((int)$stProc->fetchColumn() === 0) break;
+                                    usleep(300000);
+                                }
+                            }
+                            $stmtUniqSent = $pdo->prepare("SELECT COUNT(DISTINCT LOWER(TRIM(recipient))) FROM mail_delivery_logs WHERE campaign_id = ? AND deleted_at IS NULL AND status = 'success' AND recipient IS NOT NULL AND TRIM(recipient) != ''");
+                            $stmtUniqSent->execute([$cid]);
+                            $finalUniqueSent = (int)$stmtUniqSent->fetchColumn();
+                            if ($hasClaimsTable) {
+                                $stmtClaimSent = $pdo->prepare("SELECT COUNT(*) FROM campaign_send_claims WHERE campaign_id = ? AND channel = ? AND status = 'sent' AND recipient_key != '__qa_sample__'");
+                                $stmtClaimSent->execute([$cid, $campChannelType]);
+                                $finalUniqueSent = max($finalUniqueSent, (int)$stmtClaimSent->fetchColumn());
+                            }
+                            $pdo->prepare("UPDATE campaigns SET status = 'sent', count_sent = ?, updated_at = NOW() WHERE id = ? AND workspace_id = ? AND status = 'sending'")
+                                ->execute([$finalUniqueSent, $cid, $workspace_id]);
+                        }
+                        $pdo->commit();
+                        $pdo->prepare("SELECT RELEASE_LOCK(?)")->execute(["campaign_coordinator_" . $cid]);
+
+                        $logs[] = "[Campaign {$cid}] Finished. Status set to 'sent'.";
+                        writeWorkerLog("Campaign $cid ({$lockKey}): Finished 100%. Status set to 'sent'.");
+                    } else {
+                        if ($shardRemaining > 0 && ($totalProcessed > 0 || $sentThisRun > 0)) {
+                            // Forward progress resets retry counter so healthy large campaigns NEVER hit Circuit Breaker!
+                            $nextRetry = ($sentThisRun > 0) ? 0 : ($retryCount + 1);
+                            if ($sentThisRun === 0 && $nextRetry > $MAX_RETRIES) {
+                                $curCfg = json_decode($campaign['config'] ?? '{}', true) ?: [];
+                                $curCfg['pause_reason'] = 'circuit_breaker';
+                                $curCfg['paused_at'] = date('Y-m-d H:i:s');
+                                $pdo->prepare("UPDATE campaigns SET status = 'paused', config = ?, updated_at = NOW() WHERE id = ? AND workspace_id = ? AND status = 'sending'")
+                                    ->execute([json_encode($curCfg, JSON_UNESCAPED_UNICODE), $cid, $workspace_id]);
+                                $errMsg = "[CIRCUIT BREAKER] Campaign $cid auto-paused after $MAX_RETRIES consecutive zero-progress retries with $remaining unsent recipients.";
+                                $logs[] = $errMsg;
+                                writeWorkerLog($errMsg);
+                            } else {
+                                $shouldTriggerFollowUp = true;
+                                $logs[] = "[Campaign {$cid}] ({$lockKey}) Continuous mode: shardRemaining=$shardRemaining, totalRemaining=$remaining. Follow-up staged (retry #$nextRetry).";
+                                writeWorkerLog("Campaign $cid ({$lockKey}): shardRemaining=$shardRemaining, totalRemaining=$remaining. Follow-up staged (retry #$nextRetry/$MAX_RETRIES).");
+                            }
+                        } else {
+                            $logs[] = "[Campaign {$cid}] ({$lockKey}) Shard finished or yielding (shardRemaining=$shardRemaining, totalRemaining=$remaining).";
+                            writeWorkerLog("Campaign $cid ({$lockKey}) finished/yielding (shardRemaining=$shardRemaining, totalRemaining=$remaining).");
+                        }
+                        $pdo->commit();
+                    }
+
+                    // Spawn follow-up ONLY AFTER transaction commit AND ONLY if campaign is STILL 'sending'!
+                    if ($shouldTriggerFollowUp) {
+                        $stmtReverify = $pdo->prepare("SELECT status FROM campaigns WHERE id = ? LIMIT 1");
+                        $stmtReverify->execute([$cid]);
+                        if (strtolower((string)$stmtReverify->fetchColumn()) === 'sending') {
+                            $phpBinFollow = function_exists('exec') ? findAutomationPhpCli() : null;
+                            if ($phpBinFollow) {
+                                $cmdFollow = sprintf(
+                                    'nohup %s %s %s %d %d %d >/dev/null 2>&1 &',
+                                    escapeshellarg($phpBinFollow),
+                                    escapeshellarg(__FILE__),
+                                    escapeshellarg($cid),
+                                    $nextRetry,
+                                    $shardId,
+                                    $numShards
+                                );
+                                @exec($cmdFollow);
+                            } else {
+                                triggerAsyncWorker("/worker_campaign.php?campaign_id={$cid}&retry_count={$nextRetry}&shard={$shardId}&shards={$numShards}");
+                            }
+                            writeWorkerLog("Campaign $cid ({$lockKey}): Spawned follow-up worker (retry #$nextRetry).");
+                        } else {
+                            writeWorkerLog("Campaign $cid ({$lockKey}): Suppressed follow-up spawn because status changed from 'sending'.");
+                        }
+                    }
                 }
             } catch (Throwable $e) {
                 if (function_exists('ensure_pdo_alive')) {
@@ -1083,10 +1399,16 @@ if (!function_exists('runWorkerCampaign')) {
                     try { $pdo->rollBack(); } catch (Throwable $rbEx) {}
                 }
                 $logs[] = "[ERROR] Campaign {$cid} failed: " . $e->getMessage();
-                writeWorkerLog("[FATAL ERROR] Campaign $cid failed: " . $e->getMessage());
-                try {
-                    $pdo->prepare("UPDATE campaigns SET status = 'paused' WHERE id = ?")->execute([$cid]);
-                } catch (Throwable $upEx) {}
+                writeWorkerLog("[FATAL ERROR] Campaign $cid ({$lockKey}) failed: " . $e->getMessage());
+                if ($numShards <= 1) {
+                    try {
+                        $errCfg = json_decode($campaign['config'] ?? '{}', true) ?: [];
+                        $errCfg['pause_reason'] = 'circuit_breaker';
+                        $errCfg['paused_at'] = date('Y-m-d H:i:s');
+                        $pdo->prepare("UPDATE campaigns SET status = 'paused', config = ? WHERE id = ? AND status = 'sending'")
+                            ->execute([json_encode($errCfg, JSON_UNESCAPED_UNICODE), $cid]);
+                    } catch (Throwable $upEx) {}
+                }
             }
         } else {
             $logs[] = "[Campaign] No campaigns ready to process.";
@@ -1116,8 +1438,17 @@ if (!function_exists('runWorkerCampaign')) {
     } // end runWorkerCampaign()
 } // end if (!function_exists)
 
-// When run as standalone script (cron/direct), execute immediately
+// When run as standalone script (cron/CLI/direct HTTP), execute immediately
 if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'] ?? '')) {
-    $cliCampaignId = isset($argv[1]) ? $argv[1] : null;
-    runWorkerCampaign($pdo, $_GET['campaign_id'] ?? $cliCampaignId);
+    $cliCampaignId = isset($argv[1]) && $argv[1] !== '' ? $argv[1] : null;
+    $cliRetry      = isset($argv[2]) && is_numeric($argv[2]) ? (int)$argv[2] : null;
+    $cliShard      = isset($argv[3]) && is_numeric($argv[3]) ? (int)$argv[3] : null;
+    $cliShards     = isset($argv[4]) && is_numeric($argv[4]) ? (int)$argv[4] : null;
+    runWorkerCampaign(
+        $pdo,
+        $_GET['campaign_id'] ?? $cliCampaignId,
+        $_GET['shard'] ?? $cliShard,
+        $_GET['shards'] ?? $cliShards,
+        $_GET['retry_count'] ?? $cliRetry
+    );
 }

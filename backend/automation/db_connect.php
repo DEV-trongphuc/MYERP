@@ -26,6 +26,9 @@ if (!class_exists('Database')) {
 if (!class_exists('JWT')) {
     require_once __DIR__ . '/../config/JWT.php';
 }
+if (!class_exists('TenantConfigService') && file_exists(__DIR__ . '/../config/TenantConfigService.php')) {
+    require_once __DIR__ . '/../config/TenantConfigService.php';
+}
 if (file_exists(__DIR__ . '/../utils/DomationContactMatcher.php')) {
     require_once __DIR__ . '/../utils/DomationContactMatcher.php';
 }
@@ -83,19 +86,6 @@ $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $scriptPath = $_SERVER['SCRIPT_NAME'] ?? '';
 $scriptDir = rtrim(str_replace('\\', '/', dirname($scriptPath)), '/');
 
-if (!defined('API_BASE_URL')) {
-    if (defined('ENV_API_URL')) {
-        define('API_BASE_URL', ENV_API_URL);
-    } elseif (!empty($_SERVER['HTTP_HOST'])) {
-        $apiDir = (basename($scriptDir) === 'automation' || basename($scriptDir) === 'api' || basename($scriptDir) === 'mail_api')
-            ? $scriptDir
-            : $scriptDir . '/backend/automation';
-        define('API_BASE_URL', rtrim("$protocol://$httpHost$apiDir", '/'));
-    } else {
-        define('API_BASE_URL', 'https://myerp.ideas.edu.vn/backend/automation');
-    }
-}
-
 // ─── UNIFIED DATABASE INSTANCE (MYERP Database::getInstance()) ───────────────
 try {
     $pdo = Database::getInstance();
@@ -113,6 +103,53 @@ try {
         'message' => 'Database connection failed'
     ], JSON_UNESCAPED_UNICODE);
     exit;
+}
+
+if (!function_exists('resolve_automation_app_base_url')) {
+    function resolve_automation_app_base_url(?PDO $db = null, int $workspaceId = 1): string {
+        $pdoRef = $db ?? ($GLOBALS['pdo'] ?? $GLOBALS['db'] ?? null);
+        if ($pdoRef instanceof PDO && class_exists('TenantConfigService')) {
+            $fe = TenantConfigService::getFrontendUrl($pdoRef, $workspaceId > 0 ? $workspaceId : 1);
+            if ($fe !== '') {
+                return rtrim($fe, '/');
+            }
+        }
+        $envUrl = rtrim(trim((string)(getenv('APP_BASE_URL') ?: ($_ENV['APP_BASE_URL'] ?? ''))), '/');
+        if ($envUrl !== '') {
+            return $envUrl;
+        }
+        if (!empty($_SERVER['HTTP_HOST'])) {
+            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            return $scheme . '://' . $_SERVER['HTTP_HOST'];
+        }
+        return 'http://localhost';
+    }
+}
+
+if (!function_exists('resolve_automation_api_base_url')) {
+    function resolve_automation_api_base_url(?PDO $db = null, int $workspaceId = 1): string {
+        if (defined('API_BASE_URL') && strpos((string)API_BASE_URL, 'http') === 0) {
+            return rtrim((string)API_BASE_URL, '/');
+        }
+        $envApi = rtrim(trim((string)(getenv('API_BASE_URL') ?: ($_ENV['API_BASE_URL'] ?? ''))), '/');
+        if ($envApi !== '' && strpos($envApi, 'http') === 0) {
+            return $envApi;
+        }
+        return rtrim(resolve_automation_app_base_url($db, $workspaceId), '/') . '/backend/automation';
+    }
+}
+
+if (!defined('API_BASE_URL')) {
+    if (defined('ENV_API_URL')) {
+        define('API_BASE_URL', ENV_API_URL);
+    } elseif (!empty($_SERVER['HTTP_HOST'])) {
+        $apiDir = (basename($scriptDir) === 'automation' || basename($scriptDir) === 'api' || basename($scriptDir) === 'mail_api')
+            ? $scriptDir
+            : $scriptDir . '/backend/automation';
+        define('API_BASE_URL', rtrim("$protocol://$httpHost$apiDir", '/'));
+    } else {
+        define('API_BASE_URL', rtrim(resolve_automation_app_base_url($pdo, 1), '/') . '/backend/automation');
+    }
 }
 
 if (!function_exists('domationEnsureSchemaOnce')) {
@@ -242,9 +279,8 @@ if (!function_exists('dispatchQueueJob')) {
     function dispatchQueueJob($pdo, $queue, $payload, $delaySeconds = 0) {
         $now = date('Y-m-d H:i:s');
         $availableAt = date('Y-m-d H:i:s', time() + $delaySeconds);
-        $jobId = bin2hex(random_bytes(16));
-        $stmt = $pdo->prepare("INSERT INTO queue_jobs (id, queue, payload, status, available_at, created_at) VALUES (?, ?, ?, 'pending', ?, ?)");
-        $res = $stmt->execute([$jobId, $queue, json_encode($payload), $availableAt, $now]);
+        $stmt = $pdo->prepare("INSERT INTO queue_jobs (queue, payload, status, available_at, created_at) VALUES (?, ?, 'pending', ?, ?)");
+        $res = $stmt->execute([$queue, json_encode($payload), $availableAt, $now]);
         if ($res) {
             triggerAsyncWorker();
         }
@@ -599,6 +635,7 @@ if (!function_exists('domationIsPublicOrInternalEndpoint')) {
             'zalo_webhook.php',
             'zalo_oauth_callback.php',
             'zalo_track.php',
+            'manage_subscription.php',
         ];
         if (in_array($script, $publicScripts, true) || preg_match('/^webhook.*\.php$/i', $script)) {
             return true;

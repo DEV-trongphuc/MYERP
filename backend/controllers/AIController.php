@@ -497,9 +497,11 @@ class AIController {
                   "  \"next_best_actions\": [\"Hành động đề xuất 1 cho Sale\", \"Hành động đề xuất 2\"]\n" .
                   "}";
 
-        // 6. Invoke Ideas AI Partner Gateway
-        $partnerUrl = 'https://api-ai-staging.ideas.edu.vn/api/partner/invoke';
-        $partnerKey = 'sk_f4f35f7b9db0c07311e94ce2c725f54a5d6c73ffdc4bd1d6f14a6a300b7000b2';
+        // 6. Invoke AI Partner Gateway (tenant/env configurable)
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $tidGw = (int)($auth['tenant_id'] ?? 1);
+        $partnerUrl = trim((string)TenantConfigService::getSetting($this->db, $tidGw, 'ai_partner_gateway_url', getenv('AI_PARTNER_GATEWAY_URL') ?: ''));
+        $partnerKey = trim((string)TenantConfigService::getSetting($this->db, $tidGw, 'ai_partner_gateway_key', getenv('AI_PARTNER_GATEWAY_KEY') ?: 'sk_f4f35f7b9db0c07311e94ce2c725f54a5d6c73ffdc4bd1d6f14a6a300b7000b2'));
 
         $payload = [
             'content' => [

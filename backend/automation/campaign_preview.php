@@ -105,11 +105,16 @@ try {
         }
     }
 
-    // If still not found, fetch the latest active subscriber in the current workspace
+    // If still not found, fetch an active subscriber with a real name first in the current workspace
     if (!$fetchedSub) {
-        $stmtAud2 = $pdo->prepare("SELECT * FROM subscribers WHERE workspace_id = ? ORDER BY id DESC LIMIT 1");
+        $stmtAud2 = $pdo->prepare("SELECT * FROM subscribers WHERE workspace_id = ? AND status = 'active' AND first_name IS NOT NULL AND first_name != '' ORDER BY updated_at DESC, id DESC LIMIT 1");
         $stmtAud2->execute([$workspace_id]);
         $fetchedSub = $stmtAud2->fetch(PDO::FETCH_ASSOC);
+        if (!$fetchedSub) {
+            $stmtAud3 = $pdo->prepare("SELECT * FROM subscribers WHERE workspace_id = ? ORDER BY id DESC LIMIT 1");
+            $stmtAud3->execute([$workspace_id]);
+            $fetchedSub = $stmtAud3->fetch(PDO::FETCH_ASSOC);
+        }
     }
 
     if ($fetchedSub) {
@@ -191,9 +196,16 @@ try {
     $finalSubject = replaceMergeTags($subject, $subscriber, $context);
     $finalHtml = replaceMergeTags($htmlContent, $subscriber, $context);
 
+    $decodedSubAttrs = json_decode($subscriber['custom_attributes'] ?? '{}');
+    if (!is_object($decodedSubAttrs)) {
+        $decodedSubAttrs = (object) [];
+    }
+
     jsonResponse(true, [
         'subject' => $finalSubject,
         'html' => $finalHtml,
+        'raw_subject' => $subject,
+        'raw_html' => $htmlContent,
         'subscriber' => [
             'id' => $subscriber['id'] ?? null,
             'firstName' => $subscriber['first_name'] ?? '',
@@ -202,7 +214,8 @@ try {
             'email' => $subscriber['email'] ?? '',
             'phone' => $subscriber['phone_number'] ?? ($subscriber['phone'] ?? ''),
             'companyName' => $subscriber['company_name'] ?? '',
-            'jobTitle' => $subscriber['job_title'] ?? ''
+            'jobTitle' => $subscriber['job_title'] ?? '',
+            'customAttributes' => $decodedSubAttrs
         ]
     ]);
 

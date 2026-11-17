@@ -1188,14 +1188,10 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 
   const defaultAccountant = useMemo(() => {
     const businessUsers = users.filter((u: any) => 
-      !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) && 
-      u.email !== 'turniodev@gmail.com'
+      !['superadmin', 'super_admin', 'bot', 'system'].includes(String(u.role).toLowerCase())
     );
-    return businessUsers.find((u: any) => String(u.role).toLowerCase() === 'accountant')
-      || businessUsers.find((u: any) => {
-        const fn = String(u.full_name || u.name || '').toLowerCase();
-        return fn.includes('thu thảo') || u.username === 'thaont';
-      })
+    return businessUsers.find((u: any) => ['accountant', 'ke_toan', 'finance'].includes(String(u.role).toLowerCase()))
+      || businessUsers.find((u: any) => String(u.department || '').toLowerCase().includes('kế toán'))
       || null;
   }, [users]);
 

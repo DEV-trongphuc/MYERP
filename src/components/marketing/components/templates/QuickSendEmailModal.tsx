@@ -426,7 +426,7 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                                 type="email"
                                 value={fromEmail}
                                 onChange={e => setFromEmail(e.target.value)}
-                                placeholder={senderEmails[0] || 'marketing@ideas.edu.vn'}
+                                placeholder={senderEmails[0] || 'marketing@your-domain.com'}
                                 className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500/15 focus:border-[var(--color-primary)] text-xs font-semibold transition-all bg-white"
                             />
                         )}
@@ -441,7 +441,7 @@ const QuickSendEmailModal: React.FC<QuickSendEmailModalProps> = ({
                             type="text"
                             value={fromName}
                             onChange={e => setFromName(e.target.value)}
-                            placeholder="Ví dụ: Viện Quốc tế IDEAS"
+                            placeholder="Ví dụ: Ban Tuyển Sinh / Tên Tổ Chức"
                             className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500/15 focus:border-[var(--color-primary)] text-xs font-semibold transition-all bg-white"
                         />
                     </div>

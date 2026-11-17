@@ -13,6 +13,18 @@ if ($method === 'GET' && $action === '') {
     $action = 'list';
 }
 
+// --- Schema Ensure ---
+if (function_exists('domationEnsureSchemaOnce')) {
+    domationEnsureSchemaOnce('web_properties_soft_delete_schema', function () use ($pdo) {
+        try {
+            $pdo->exec("ALTER TABLE web_properties ADD COLUMN is_deleted TINYINT(1) DEFAULT 0 AFTER status");
+        } catch (\Throwable $e) {}
+        try {
+            $pdo->exec("ALTER TABLE web_properties ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL AFTER is_deleted");
+        } catch (\Throwable $e) {}
+    });
+}
+
 // --- Helpers ---
 function sendResponse($success, $data = [], $message = '')
 {
@@ -208,6 +220,8 @@ if ($method === 'GET' && $action === 'list') {
                 GROUP BY property_id
             ) cs ON cs.property_id = p.id
             WHERE (p.workspace_id = ? OR (? = 1 AND p.workspace_id IS NULL))
+              AND (p.deleted_at IS NULL AND (p.is_deleted = 0 OR p.is_deleted IS NULL))
+              AND (p.status IS NULL OR p.status NOT IN ('archived', 'deleted'))
             ORDER BY p.created_at DESC
         ");
         $stmt->execute([$workspace_id, $workspace_id]);
@@ -265,13 +279,9 @@ if ($method === 'DELETE') {
         if (!$id)
             sendResponse(false, [], 'Missing ID');
 
-        // Start transaction for atomic delete
         $pdo->beginTransaction();
 
-        // Count records before deletion (for logging)
-        // [FIX P34-A4] Added workspace_id guard to DELETE — previously missing, allowing
-        // any authenticated user to delete another workspace's property and ALL its tracking data.
-        $stmt = $pdo->prepare("SELECT name FROM web_properties WHERE id = ? AND workspace_id = ?");
+        $stmt = $pdo->prepare("SELECT name FROM web_properties WHERE id = ? AND workspace_id = ? AND (deleted_at IS NULL AND (is_deleted = 0 OR is_deleted IS NULL))");
         $stmt->execute([$id, $workspace_id]);
         $property = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -280,35 +290,18 @@ if ($method === 'DELETE') {
             sendResponse(false, [], 'Property not found or access denied');
         }
 
-        // Count total records to be deleted
-        $counts = [];
-        $tables = ['web_visitors', 'web_sessions', 'web_page_views', 'web_events', 'web_daily_stats'];
-        foreach ($tables as $table) {
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM $table WHERE property_id = ?");
-            $stmt->execute([$id]);
-            $counts[$table] = $stmt->fetchColumn();
-        }
+        // 100% Soft-Delete Mandate: PRESERVE ALL tracking tables (web_daily_stats, web_events,
+        // web_page_views, web_sessions, web_visitors) for historical traffic & analytics!
+        $pdo->prepare("UPDATE web_properties SET status = 'archived', is_deleted = 1, deleted_at = NOW() WHERE id = ? AND workspace_id = ?")->execute([$id, $workspace_id]);
 
-        // Cascade delete (order matters: children first, then parent)
-        $pdo->prepare("DELETE FROM web_daily_stats WHERE property_id = ?")->execute([$id]);
-        $pdo->prepare("DELETE FROM web_events WHERE property_id = ?")->execute([$id]);
-        $pdo->prepare("DELETE FROM web_page_views WHERE property_id = ?")->execute([$id]);
-        $pdo->prepare("DELETE FROM web_sessions WHERE property_id = ?")->execute([$id]);
-        $pdo->prepare("DELETE FROM web_visitors WHERE property_id = ?")->execute([$id]);
-        $pdo->prepare("DELETE FROM web_properties WHERE id = ?")->execute([$id]);
-
-        // Commit transaction
         $pdo->commit();
 
-        // Log deletion
-        $totalDeleted = array_sum($counts);
-        error_log("Web Property Deleted: {$property['name']} (ID: $id) - Total records: $totalDeleted");
+        error_log("Web Property Soft-Deleted: {$property['name']} (ID: $id)");
 
         sendResponse(true, [
             'deleted_property' => $property['name'],
-            'deleted_records' => $counts,
-            'total_records' => $totalDeleted
-        ], 'Property and all associated data deleted successfully');
+            'soft_deleted' => true
+        ], 'Property archived successfully (100% Soft-Delete Mandate)');
 
     } catch (Exception $e) {
         if ($pdo->inTransaction()) {
@@ -631,6 +624,37 @@ if ($method === 'GET' && $action === 'stats') {
             $growth = 100;
         }
 
+        // Calendar Date Gap Filling for chartData
+        $startDateStr = min($start, $end);
+        $endDateStr = max($start, $end);
+        $calendar = [];
+        $currTime = strtotime($startDateStr);
+        $endTime = strtotime($endDateStr);
+        $maxDays = 370;
+        $dayCount = 0;
+        while ($currTime <= $endTime && $dayCount < $maxDays) {
+            $d = date('Y-m-d', $currTime);
+            $calendar[$d] = [
+                'date' => $d,
+                'sessions' => 0,
+                'pageViews' => 0
+            ];
+            $currTime = strtotime('+1 day', $currTime);
+            $dayCount++;
+        }
+
+        // Merge actual SQL chartData
+        if (!empty($chartData) && is_array($chartData)) {
+            foreach ($chartData as $row) {
+                $d = $row['date'] ?? '';
+                if (isset($calendar[$d])) {
+                    $calendar[$d]['sessions'] = (int) ($row['sessions'] ?? 0);
+                    $calendar[$d]['pageViews'] = (int) ($row['pageViews'] ?? 0);
+                }
+            }
+        }
+        $normalizedChart = array_values($calendar);
+
         sendResponse(true, [
             'overview' => [
                 'visitors' => (int) ($overview['visitors'] ?? 0), // Active Users
@@ -642,7 +666,7 @@ if ($method === 'GET' && $action === 'stats') {
                 'bounces' => (int) ($overview['bounces'] ?? 0),
                 'growth' => round($growth, 1)
             ],
-            'chart' => $chartData ?? [],
+            'chart' => $normalizedChart,
             'topPages' => $topPages ?? [],
             'topEvents' => $topEvents ?? [],
             'trafficSources' => $trafficSources ?? [], // Session Source (Traffic Acquisition)

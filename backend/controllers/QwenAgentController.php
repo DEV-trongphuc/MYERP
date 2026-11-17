@@ -45,15 +45,13 @@ class QwenAgentController {
     /**
      * Resolve Gemini API Key securely from environment (.env.local / .env) or system_settings table.
      */
-    private function getGeminiApiKey(): string {
+    private function getGeminiApiKey(int $tenantId = 0): string {
+        $tid = $tenantId > 0 ? $tenantId : (int)($GLOBALS['current_tenant_id'] ?? 1);
         $dbKey = '';
         try {
-            $stmt = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'gemini_api_key' LIMIT 1");
-            $stmt->execute();
-            $dbKey = trim((string)($stmt->fetchColumn() ?: ''));
-        } catch (\Throwable $e) {
-            // Ignore DB read error
-        }
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $dbKey = trim((string)TenantConfigService::getSetting($this->db, $tid, 'gemini_api_key', ''));
+        } catch (\Throwable $e) {}
         if ($dbKey !== '') {
             return $dbKey;
         }
@@ -99,15 +97,13 @@ class QwenAgentController {
             return $requestedModel;
         }
         try {
-            $stmt = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'gemini_model' LIMIT 1");
-            $stmt->execute();
-            $saved = trim((string)($stmt->fetchColumn() ?: ''));
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $tidM = (int)($GLOBALS['current_tenant_id'] ?? 1);
+            $saved = trim((string)TenantConfigService::getSetting($this->db, $tidM, 'gemini_model', ''));
             if ($saved !== '' && in_array($saved, $allowedModels, true)) {
                 return $saved;
             }
-        } catch (\Throwable $e) {
-            // Ignore
-        }
+        } catch (\Throwable $e) {}
         $envModel = trim((string)($_ENV['GEMINI_MODEL'] ?? getenv('GEMINI_MODEL') ?: ''));
         if ($envModel !== '' && in_array($envModel, $allowedModels, true)) {
             return $envModel;
@@ -175,28 +171,27 @@ class QwenAgentController {
      * POST /qwen-agent/settings
      */
     public function updateSettings(array $auth): void {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'director'], 'settings', 'write')) {
+            respond(403, null, 'Bạn không có quyền thay đổi cấu hình AI Engine của Tenant', false);
+        }
         $body = getBody();
         $newKey = isset($body['gemini_api_key']) ? trim((string)$body['gemini_api_key']) : (isset($body['groq_api_key']) ? trim((string)$body['groq_api_key']) : null);
         $newModel = isset($body['gemini_model']) ? trim((string)$body['gemini_model']) : (isset($body['groq_model']) ? trim((string)$body['groq_model']) : null);
 
         try {
-            if ($newKey !== null && $newKey !== '') {
-                $stmt = $this->db->prepare("
-                    INSERT INTO system_settings (setting_key, setting_value)
-                    VALUES ('gemini_api_key', ?)
-                    ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
-                ");
-                $stmt->execute([$newKey]);
+            $kv = [];
+            if ($newKey !== null && $newKey !== '' && strpos($newKey, '••••') === false) {
+                $kv['gemini_api_key'] = $newKey;
             }
             if ($newModel !== null && $newModel !== '') {
-                $stmt = $this->db->prepare("
-                    INSERT INTO system_settings (setting_key, setting_value)
-                    VALUES ('gemini_model', ?)
-                    ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
-                ");
-                $stmt->execute([$newModel]);
+                $kv['gemini_model'] = $newModel;
             }
-            $currentKey = $this->getGeminiApiKey();
+            if (!empty($kv)) {
+                TenantConfigService::saveSettings($this->db, $tid, $kv);
+            }
+            $currentKey = $this->getGeminiApiKey($tid);
             respond(200, [
                 'has_key' => $currentKey !== '',
                 'masked_key' => $this->maskApiKey($currentKey),

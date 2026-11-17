@@ -2,6 +2,10 @@
 // backend/controllers/ai_training_handler.php
 // IDEAS DATA CRM - AI Training and Settings controller handler
 
+if (!class_exists('TenantConfigService') && file_exists(__DIR__ . '/../config/TenantConfigService.php')) {
+    require_once __DIR__ . '/../config/TenantConfigService.php';
+}
+
 try {
     $createdBy = $decodedUser['name'] ?? 'Admin';
     $actionType = '';
@@ -17,7 +21,16 @@ try {
     }
 
     $userRole = strtolower($decodedUser['role'] ?? '');
-    $canManageAI = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director'], true);
+    $aiWriteScope = function_exists('getModulePermissionScope')
+        ? getModulePermissionScope($conn, $decodedUser, 'ai', 'write')
+        : 'none';
+    $settingsWriteScope = function_exists('getModulePermissionScope')
+        ? getModulePermissionScope($conn, $decodedUser, 'settings', 'write')
+        : 'none';
+    $canManageAI = (function_exists('apiDoesUserSatisfyRoles') && apiDoesUserSatisfyRoles($conn, $decodedUser, ['admin', 'superadmin', 'super_admin', 'director'], 'settings', 'write'))
+        || in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director'], true)
+        || $aiWriteScope === 'all'
+        || $settingsWriteScope === 'all';
 
     // Public / Read actions: list_docs can be accessed by all authenticated users.
     // Admin-only actions: get_settings, update_settings, create_folder, add_manual, update_doc, delete_doc, delete_batch, toggle_batch, train_docs, upload_training_file
@@ -43,20 +56,18 @@ try {
         exit;
     }
 
+    $tidRag = (int)($decodedUser['tenant_id'] ?? 1);
     if ($actionType === 'get_settings') {
-        $stmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'rag_settings' LIMIT 1");
-        $stmt->execute();
-        $res = $stmt->get_result()->fetch_assoc();
-        $stmt->close();
-
+        $rawRag = get_system_setting($conn, 'rag_settings', $tidRag);
         $settings = [];
-        if ($res && !empty($res['setting_value'])) {
-            $settings = json_decode($res['setting_value'], true);
+        if (!empty($rawRag)) {
+            $settings = json_decode((string)$rawRag, true) ?: [];
         }
 
         // Fill defaults
+        $defaultBotName = 'AI ' . (trim((string)get_system_setting($conn, 'company_name', $tidRag)) ?: 'ERP');
         $settings['is_enabled'] = isset($settings['is_enabled']) ? (int)$settings['is_enabled'] : 1;
-        $settings['bot_name'] = $settings['bot_name'] ?? 'AI IDEAS';
+        $settings['bot_name'] = $settings['bot_name'] ?? $defaultBotName;
         $settings['welcome_msg'] = $settings['welcome_msg'] ?? 'Chào bạn! Tôi có thể giúp gì cho bạn hôm nay?';
         $settings['persona_prompt'] = $settings['persona_prompt'] ?? 'Bạn là trợ lý ảo chuyên nghiệp.';
         $settings['similarity_threshold'] = isset($settings['similarity_threshold']) ? (float)$settings['similarity_threshold'] : 0.45;
@@ -71,9 +82,10 @@ try {
         echo json_encode(['success' => true, 'data' => $settings]);
     }
     elseif ($actionType === 'update_settings') {
+        $defaultBotName = 'AI ' . (trim((string)get_system_setting($conn, 'company_name', $tidRag)) ?: 'ERP');
         $settings = [
             'is_enabled' => (int)($input['is_enabled'] ?? 1),
-            'bot_name' => trim($input['bot_name'] ?? 'AI IDEAS'),
+            'bot_name' => trim($input['bot_name'] ?? $defaultBotName),
             'welcome_msg' => trim($input['welcome_msg'] ?? 'Chào bạn! Tôi có thể giúp gì cho bạn hôm nay?'),
             'persona_prompt' => trim($input['persona_prompt'] ?? 'Bạn là trợ lý ảo chuyên nghiệp.'),
             'similarity_threshold' => (float)($input['similarity_threshold'] ?? 0.45),
@@ -87,20 +99,34 @@ try {
         ];
 
         $valJson = json_encode($settings, JSON_UNESCAPED_UNICODE);
-        $stmt = $conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('rag_settings', ?) ON DUPLICATE KEY UPDATE setting_value = ?");
-        $stmt->bind_param("ss", $valJson, $valJson);
-        $stmt->execute();
-        $stmt->close();
+        try {
+            $stmt = $conn->prepare("INSERT INTO system_settings (tenant_id, setting_key, setting_value) VALUES (?, 'rag_settings', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+            $stmt->bind_param("is", $tidRag, $valJson);
+            $stmt->execute();
+            $stmt->close();
+        } catch (\Throwable $eRag) {
+            if ($tidRag === 1) {
+                $stmt = $conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('rag_settings', ?) ON DUPLICATE KEY UPDATE setting_value = ?");
+                $stmt->bind_param("ss", $valJson, $valJson);
+                $stmt->execute();
+                $stmt->close();
+            }
+        }
+        if (class_exists('TenantConfigService')) {
+            TenantConfigService::invalidateCache($tidRag);
+        }
 
         echo json_encode(['success' => true, 'message' => 'Cập nhật cấu hình RAG thành công']);
     }
     elseif ($actionType === 'list_docs') {
-        // Auto-seed CRM & Financial Slang Dictionary if not existing
-        $checkDoc = $conn->prepare("SELECT id FROM ai_training_docs WHERE name = 'Từ điển Thuật ngữ Kinh doanh & Tài chính CRM' AND tenant_id = 1 LIMIT 1");
+        $orgBrandLabel = strtoupper(trim((string)get_system_setting($conn, 'company_name', $tidRag)) ?: 'CRM');
+        // Auto-seed CRM & Financial Slang Dictionary if not existing for this tenant
+        $checkDoc = $conn->prepare("SELECT id FROM ai_training_docs WHERE name = 'Từ điển Thuật ngữ Kinh doanh & Tài chính CRM' AND tenant_id = ? LIMIT 1");
         if ($checkDoc) {
+            $checkDoc->bind_param("i", $tidRag);
             $checkDoc->execute();
             if (!$checkDoc->get_result()->fetch_assoc()) {
-                $slangContent = "BỘ TỪ ĐIỂN THUẬT NGỮ KINH DOANH & TÀI CHÍNH CRM (IDEAS SLANG & BUSINESS DICTIONARY)\n\n"
+                $slangContent = "BỘ TỪ ĐIỂN THUẬT NGỮ KINH DOANH & TÀI CHÍNH CRM ({$orgBrandLabel} SLANG & BUSINESS DICTIONARY)\n\n"
                     . "1. ĐƠN VỊ TIỀN TỆ THƯỜNG DÙNG:\n"
                     . "- 'củ', 'chai': Triệu đồng VNĐ. Ví dụ: '5 củ' = 5.000.000 VNĐ; '10 chai' = 10.000.000 VNĐ; '50 củ' = 50.000.000 VNĐ.\n\n"
                     . "2. CHĂM SÓC KHÁCH HÀNG & CRM:\n"
@@ -116,9 +142,9 @@ try {
                 $src = 'manual';
                 $status = 'trained';
                 $cBy = 'Hệ thống';
-                $ins = $conn->prepare("INSERT INTO ai_training_docs (name, content, tags, source_type, parent_id, created_by, status, is_active, tenant_id) VALUES (?, ?, ?, ?, 0, ?, ?, 1, 1)");
+                $ins = $conn->prepare("INSERT INTO ai_training_docs (name, content, tags, source_type, parent_id, created_by, status, is_active, tenant_id) VALUES (?, ?, ?, ?, 0, ?, ?, 1, ?)");
                 if ($ins) {
-                    $ins->bind_param("ssssss", $docName, $slangContent, $tags, $src, $cBy, $status);
+                    $ins->bind_param("ssssssi", $docName, $slangContent, $tags, $src, $cBy, $status, $tidRag);
                     $ins->execute();
                     $ins->close();
                 }
@@ -126,7 +152,8 @@ try {
             $checkDoc->close();
         }
 
-        $stmt = $conn->prepare("SELECT id, name, content, tags, source_type, parent_id, is_active, status, file_path, file_size, created_at, updated_at, created_by, version FROM ai_training_docs WHERE tenant_id = 1 ORDER BY id DESC");
+        $stmt = $conn->prepare("SELECT id, name, content, tags, source_type, parent_id, is_active, status, file_path, file_size, created_at, updated_at, created_by, version FROM ai_training_docs WHERE tenant_id = ? ORDER BY id DESC");
+        $stmt->bind_param("i", $tidRag);
         $stmt->execute();
         $res = $stmt->get_result();
         $docs = [];
@@ -144,8 +171,8 @@ try {
             exit;
         }
         $source_type = 'folder';
-        $stmt = $conn->prepare("INSERT INTO ai_training_docs (name, source_type, parent_id, created_by) VALUES (?, ?, 0, ?)");
-        $stmt->bind_param("sss", $name, $source_type, $createdBy);
+        $stmt = $conn->prepare("INSERT INTO ai_training_docs (tenant_id, name, source_type, parent_id, created_by) VALUES (?, ?, ?, 0, ?)");
+        $stmt->bind_param("isss", $tidRag, $name, $source_type, $createdBy);
         $stmt->execute();
         $stmt->close();
         echo json_encode(['success' => true, 'message' => 'Đã tạo thư mục thành công']);
@@ -163,8 +190,8 @@ try {
         
         $source_type = (strpos($content, 'URL_TO_CRAWL:') === 0) ? 'web' : 'manual';
         
-        $stmt = $conn->prepare("INSERT INTO ai_training_docs (name, content, tags, source_type, parent_id, created_by) VALUES (?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("ssssis", $name, $content, $tags, $source_type, $parentId, $createdBy);
+        $stmt = $conn->prepare("INSERT INTO ai_training_docs (tenant_id, name, content, tags, source_type, parent_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("issssis", $tidRag, $name, $content, $tags, $source_type, $parentId, $createdBy);
         $stmt->execute();
         $stmt->close();
         echo json_encode(['success' => true, 'message' => 'Đã thêm tài liệu thành công']);
@@ -179,8 +206,8 @@ try {
 
         if (isset($input['is_active'])) {
             $isActive = (int)$input['is_active'];
-            $stmt = $conn->prepare("UPDATE ai_training_docs SET is_active = ? WHERE id = ?");
-            $stmt->bind_param("ii", $isActive, $id);
+            $stmt = $conn->prepare("UPDATE ai_training_docs SET is_active = ? WHERE id = ? AND tenant_id = ?");
+            $stmt->bind_param("iii", $isActive, $id, $tidRag);
             $stmt->execute();
             $stmt->close();
             echo json_encode(['success' => true, 'message' => 'Đã cập nhật trạng thái tài liệu']);
@@ -195,8 +222,8 @@ try {
                 exit;
             }
 
-            $stmt = $conn->prepare("UPDATE ai_training_docs SET name = ?, content = ?, tags = ?, parent_id = ?, version = COALESCE(version, 1) + 1, status = 'pending' WHERE id = ?");
-            $stmt->bind_param("sssii", $name, $content, $tags, $parentId, $id);
+            $stmt = $conn->prepare("UPDATE ai_training_docs SET name = ?, content = ?, tags = ?, parent_id = ?, version = COALESCE(version, 1) + 1, status = 'pending' WHERE id = ? AND tenant_id = ?");
+            $stmt->bind_param("sssiii", $name, $content, $tags, $parentId, $id, $tidRag);
             $stmt->execute();
             $stmt->close();
             echo json_encode(['success' => true, 'message' => 'Đã cập nhật tài liệu thành công']);
@@ -209,13 +236,20 @@ try {
             exit;
         }
         
-        $stmt = $conn->prepare("UPDATE ai_training_docs SET parent_id = 0 WHERE parent_id = ?");
-        $stmt->bind_param("i", $id);
+        $stmt = $conn->prepare("UPDATE ai_training_docs SET parent_id = 0 WHERE parent_id = ? AND tenant_id = ?");
+        $stmt->bind_param("ii", $id, $tidRag);
         $stmt->execute();
         $stmt->close();
 
-        $stmt = $conn->prepare("DELETE FROM ai_training_docs WHERE id = ?");
-        $stmt->bind_param("i", $id);
+        $delChunks = $conn->prepare("DELETE FROM ai_training_chunks WHERE doc_id = ? AND tenant_id = ?");
+        if ($delChunks) {
+            $delChunks->bind_param("ii", $id, $tidRag);
+            $delChunks->execute();
+            $delChunks->close();
+        }
+
+        $stmt = $conn->prepare("DELETE FROM ai_training_docs WHERE id = ? AND tenant_id = ?");
+        $stmt->bind_param("ii", $id, $tidRag);
         $stmt->execute();
         $stmt->close();
         echo json_encode(['success' => true, 'message' => 'Đã xóa tài liệu thành công']);
@@ -227,15 +261,22 @@ try {
             exit;
         }
         
-        // Delete children
-        $stmt = $conn->prepare("DELETE FROM ai_training_docs WHERE parent_id = ?");
-        $stmt->bind_param("i", $id);
+        // Delete child chunks & children scoped to tenant
+        $delChildChunks = $conn->prepare("DELETE FROM ai_training_chunks WHERE tenant_id = ? AND doc_id IN (SELECT id FROM ai_training_docs WHERE parent_id = ? AND tenant_id = ?)");
+        if ($delChildChunks) {
+            $delChildChunks->bind_param("iii", $tidRag, $id, $tidRag);
+            $delChildChunks->execute();
+            $delChildChunks->close();
+        }
+
+        $stmt = $conn->prepare("DELETE FROM ai_training_docs WHERE parent_id = ? AND tenant_id = ?");
+        $stmt->bind_param("ii", $id, $tidRag);
         $stmt->execute();
         $stmt->close();
 
         // Delete the folder itself
-        $stmt = $conn->prepare("DELETE FROM ai_training_docs WHERE id = ?");
-        $stmt->bind_param("i", $id);
+        $stmt = $conn->prepare("DELETE FROM ai_training_docs WHERE id = ? AND tenant_id = ?");
+        $stmt->bind_param("ii", $id, $tidRag);
         $stmt->execute();
         $stmt->close();
         echo json_encode(['success' => true, 'message' => 'Đã xóa thư mục và tất cả tài liệu con thành công']);
@@ -249,14 +290,14 @@ try {
         }
 
         // Toggle children
-        $stmt = $conn->prepare("UPDATE ai_training_docs SET is_active = ? WHERE parent_id = ?");
-        $stmt->bind_param("ii", $isActive, $id);
+        $stmt = $conn->prepare("UPDATE ai_training_docs SET is_active = ? WHERE parent_id = ? AND tenant_id = ?");
+        $stmt->bind_param("iii", $isActive, $id, $tidRag);
         $stmt->execute();
         $stmt->close();
 
         // Toggle folder itself
-        $stmt = $conn->prepare("UPDATE ai_training_docs SET is_active = ? WHERE id = ?");
-        $stmt->bind_param("ii", $isActive, $id);
+        $stmt = $conn->prepare("UPDATE ai_training_docs SET is_active = ? WHERE id = ? AND tenant_id = ?");
+        $stmt->bind_param("iii", $isActive, $id, $tidRag);
         $stmt->execute();
         $stmt->close();
         echo json_encode(['success' => true, 'message' => 'Đã cập nhật trạng thái thư mục']);
@@ -268,7 +309,10 @@ try {
             exit;
         }
 
-        $apiKey = get_system_setting($conn, 'gemini_api_key');
+        $apiKey = get_system_setting($conn, 'gemini_api_key', $tidRag);
+        if (empty($apiKey) && $tidRag !== 1) {
+            $apiKey = get_system_setting($conn, 'gemini_api_key', 1);
+        }
         if (empty($apiKey)) {
             echo json_encode(['success' => false, 'message' => 'Vui lòng cấu hình Gemini API Key trước khi huấn luyện']);
             exit;
@@ -277,29 +321,26 @@ try {
         // Load RAG settings for chunk_size and chunk_overlap
         $chunkSize = 700;
         $chunkOverlap = 150;
-        $rStmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'rag_settings' LIMIT 1");
-        if ($rStmt) {
-            $rStmt->execute();
-            $rRes = $rStmt->get_result()->fetch_assoc();
-            $rStmt->close();
-            if ($rRes && !empty($rRes['setting_value'])) {
-                $ragSettings = json_decode($rRes['setting_value'], true);
-                $chunkSize = isset($ragSettings['chunk_size']) ? (int)$ragSettings['chunk_size'] : 700;
-                $chunkOverlap = isset($ragSettings['chunk_overlap']) ? (int)$ragSettings['chunk_overlap'] : 150;
-            }
+        $rawRagCfg = get_system_setting($conn, 'rag_settings', $tidRag);
+        if (!empty($rawRagCfg)) {
+            $ragSettings = json_decode((string)$rawRagCfg, true);
+            $chunkSize = isset($ragSettings['chunk_size']) ? (int)$ragSettings['chunk_size'] : 700;
+            $chunkOverlap = isset($ragSettings['chunk_overlap']) ? (int)$ragSettings['chunk_overlap'] : 150;
         }
 
         $successCount = 0;
         $errorMsg = '';
+
+        $markStatusStmt = $conn->prepare("UPDATE ai_training_docs SET status = ? WHERE id = ? AND tenant_id = ?");
 
         foreach ($docIds as $idVal) {
             $id = (int)$idVal;
             if ($id <= 0) continue;
 
             // Query the document details
-            $stmt = $conn->prepare("SELECT name, content, source_type, file_path FROM ai_training_docs WHERE id = ? AND tenant_id = 1");
+            $stmt = $conn->prepare("SELECT name, content, source_type, file_path FROM ai_training_docs WHERE id = ? AND tenant_id = ?");
             if (!$stmt) continue;
-            $stmt->bind_param("i", $id);
+            $stmt->bind_param("ii", $id, $tidRag);
             $stmt->execute();
             $doc = $stmt->get_result()->fetch_assoc();
             $stmt->close();
@@ -330,7 +371,11 @@ try {
                     $rawText = extract_pdf_text_via_gemini($filePath, $apiKey);
                     if (strpos($rawText, 'Lỗi:') === 0 || empty($rawText)) {
                         $errorMsg = "Không thể đọc văn bản từ PDF. Vui lòng kiểm tra API Key.";
-                        $conn->query("UPDATE ai_training_docs SET status = 'error' WHERE id = $id");
+                        if ($markStatusStmt) {
+                            $errSt = 'error';
+                            $markStatusStmt->bind_param("sii", $errSt, $id, $tidRag);
+                            $markStatusStmt->execute();
+                        }
                         continue;
                     }
                 } else {
@@ -344,7 +389,11 @@ try {
                     $rawText = fetch_web_content($urlToFetch);
                     if (empty($rawText)) {
                         $errorMsg = "Không thể lấy nội dung từ đường dẫn website: " . $urlToFetch;
-                        $conn->query("UPDATE ai_training_docs SET status = 'error' WHERE id = $id");
+                        if ($markStatusStmt) {
+                            $errSt = 'error';
+                            $markStatusStmt->bind_param("sii", $errSt, $id, $tidRag);
+                            $markStatusStmt->execute();
+                        }
                         continue;
                     }
                 } else {
@@ -357,14 +406,18 @@ try {
 
             if (empty($rawText)) {
                 $errorMsg = "Nội dung tài liệu trống";
-                $conn->query("UPDATE ai_training_docs SET status = 'error' WHERE id = $id");
+                if ($markStatusStmt) {
+                    $errSt = 'error';
+                    $markStatusStmt->bind_param("sii", $errSt, $id, $tidRag);
+                    $markStatusStmt->execute();
+                }
                 continue;
             }
 
             // Save the extracted text back into `content` in the database to display in preview mode
-            $upStmt = $conn->prepare("UPDATE ai_training_docs SET content = ? WHERE id = ?");
+            $upStmt = $conn->prepare("UPDATE ai_training_docs SET content = ? WHERE id = ? AND tenant_id = ?");
             if ($upStmt) {
-                $upStmt->bind_param("si", $rawText, $id);
+                $upStmt->bind_param("sii", $rawText, $id, $tidRag);
                 $upStmt->execute();
                 $upStmt->close();
             }
@@ -468,25 +521,44 @@ try {
 
             // Save all chunks to training chunks table
             if (!$hasError) {
-                // Delete existing chunks for this doc first to prevent duplication
-                $conn->query("DELETE FROM ai_training_chunks WHERE doc_id = $id");
-
-                foreach ($processedChunks as $chunkIndex => $pChunk) {
-                    $vectorJson = json_encode($pChunk['vector']);
-                    $cStmt = $conn->prepare("INSERT INTO ai_training_chunks (tenant_id, doc_id, chunk_index, content, vector, vector_norm) VALUES (1, ?, ?, ?, ?, ?)");
-                    if ($cStmt) {
-                        $cStmt->bind_param("iissd", $id, $chunkIndex, $pChunk['content'], $vectorJson, $pChunk['norm']);
-                        $cStmt->execute();
-                        $cStmt->close();
-                    }
+                // Delete existing chunks for this doc first to prevent duplication (prepared & tenant-scoped)
+                $delOldChunks = $conn->prepare("DELETE FROM ai_training_chunks WHERE doc_id = ? AND tenant_id = ?");
+                if ($delOldChunks) {
+                    $delOldChunks->bind_param("ii", $id, $tidRag);
+                    $delOldChunks->execute();
+                    $delOldChunks->close();
                 }
 
-                $conn->query("UPDATE ai_training_docs SET status = 'trained' WHERE id = $id");
+                $cStmt = $conn->prepare("INSERT INTO ai_training_chunks (tenant_id, doc_id, chunk_index, content, vector, vector_norm) VALUES (?, ?, ?, ?, ?, ?)");
+                if ($cStmt) {
+                    foreach ($processedChunks as $chunkIndex => $pChunk) {
+                        $vectorJson = json_encode($pChunk['vector']);
+                        $cIdxInt = (int)$chunkIndex;
+                        $cContent = (string)$pChunk['content'];
+                        $cNorm = (float)$pChunk['norm'];
+                        $cStmt->bind_param("iiissd", $tidRag, $id, $cIdxInt, $cContent, $vectorJson, $cNorm);
+                        $cStmt->execute();
+                    }
+                    $cStmt->close();
+                }
+
+                if ($markStatusStmt) {
+                    $trainedSt = 'trained';
+                    $markStatusStmt->bind_param("sii", $trainedSt, $id, $tidRag);
+                    $markStatusStmt->execute();
+                }
                 $successCount++;
             } else {
                 $errorMsg = "Lỗi khi gọi API tạo Vector Embedding của Google Gemini.";
-                $conn->query("UPDATE ai_training_docs SET status = 'error' WHERE id = $id");
+                if ($markStatusStmt) {
+                    $errSt = 'error';
+                    $markStatusStmt->bind_param("sii", $errSt, $id, $tidRag);
+                    $markStatusStmt->execute();
+                }
             }
+        }
+        if ($markStatusStmt) {
+            $markStatusStmt->close();
         }
 
         if ($successCount > 0) {
@@ -506,21 +578,26 @@ try {
             exit;
         }
 
-        $uploadDir = __DIR__ . '/../uploads/tenant_1/';
+        $uploadDir = __DIR__ . "/../uploads/tenant_{$tidRag}/";
         if (!is_dir($uploadDir)) {
             mkdir($uploadDir, 0755, true);
         }
 
-        $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        $allowedTrainExts = ['txt', 'pdf', 'md', 'csv', 'json', 'doc', 'docx'];
+        if (!in_array($ext, $allowedTrainExts, true)) {
+            echo json_encode(['success' => false, 'message' => "Định dạng file .{$ext} không được hỗ trợ cho huấn luyện AI"]);
+            exit;
+        }
         $cleanName = preg_replace('/[^a-zA-Z0-9_\.-]/', '_', $file['name']);
         $filename = time() . '_' . uniqid() . '_' . $cleanName;
         $targetPath = $uploadDir . $filename;
 
         if (move_uploaded_file($file['tmp_name'], $targetPath)) {
-            $relativeUrl = '/backend/uploads/tenant_1/' . $filename;
+            $relativeUrl = "/backend/uploads/tenant_{$tidRag}/" . $filename;
             
             $content = '';
-            if (strtolower($ext) === 'txt') {
+            if ($ext === 'txt' || $ext === 'md' || $ext === 'csv' || $ext === 'json') {
                 $content = file_get_contents($targetPath);
             } else {
                 $content = "Tài liệu đính kèm: " . $file['name'];
@@ -531,8 +608,8 @@ try {
             $source_type = 'file';
             $file_size = $file['size'];
 
-            $stmt = $conn->prepare("INSERT INTO ai_training_docs (name, content, source_type, parent_id, file_path, file_size) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("sssisd", $name, $content, $source_type, $parentId, $relativeUrl, $file_size);
+            $stmt = $conn->prepare("INSERT INTO ai_training_docs (tenant_id, name, content, source_type, parent_id, file_path, file_size, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("isssisds", $tidRag, $name, $content, $source_type, $parentId, $relativeUrl, $file_size, $createdBy);
             $stmt->execute();
             $stmt->close();
 

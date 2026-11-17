@@ -927,7 +927,14 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                 editorMode={editorMode} setEditorMode={handleSetEditorMode}
                 viewMode={viewMode} setViewMode={setViewMode} canUndo={historyIndex > 0} canRedo={historyIndex < history.length - 1}
                 onUndo={handleUndo} onRedo={handleRedo} onSave={handleSaveData} onCancel={onCancel}
-                onPreview={() => { const win = window.open(); win?.document.write(editorMode === 'code' ? customHtml : compileHTML(blocks, bodyStyle, name, { isPreview: true })); }}
+                onPreview={() => {
+                    const win = window.open();
+                    if (win) {
+                        win.document.open();
+                        win.document.write(editorMode === 'code' ? customHtml : compileHTML(blocks, bodyStyle, name, { isPreview: true }));
+                        win.document.close();
+                    }
+                }}
                 onSendTest={(email) => handleSendTest(email)}
                 onOpenTestModal={() => setIsTestModalOpen(true)}
                 onOpenAIModal={() => setShowAIModal(true)}

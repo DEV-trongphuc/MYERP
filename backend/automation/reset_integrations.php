@@ -31,7 +31,8 @@ try {
         $stmtCount->execute(array_values($sources));
         $count = $stmtCount->fetchColumn();
 
-        $stmtDel = $pdo->prepare("DELETE FROM subscribers WHERE source IN ($placeholders)");
+        // Axiom 4: Soft-delete subscribers
+        $stmtDel = $pdo->prepare("UPDATE subscribers SET deleted_at = NOW(), status = 'archived', updated_at = NOW() WHERE source IN ($placeholders) AND deleted_at IS NULL");
         $stmtDel->execute(array_values($sources));
         $deletedSubs = $stmtDel->rowCount();
 

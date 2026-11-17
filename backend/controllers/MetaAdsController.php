@@ -135,71 +135,50 @@ class MetaAdsController
      * 2. MYERP system_settings ('meta_access_token', 'meta_ad_account_id')
      * 3. Verified IDEAS fallback token & ad_account_id (1852318231510577)
      */
-    private static ?array $credentialsCache = null;
+    private static array $credentialsCache = [];
 
-    public static function resolveMetaCredentials(PDO $db, string $overrideToken = ''): array
+    public static function resolveMetaCredentials(PDO $db, string $overrideToken = '', ?int $tenantId = null): array
     {
-        if ($overrideToken === '' && self::$credentialsCache !== null) {
-            return self::$credentialsCache;
+        $tidMeta = $tenantId ?? (int)($GLOBALS['current_tenant_id'] ?? 1);
+        if ($tidMeta <= 0) {
+            $tidMeta = 1;
         }
-        $credCacheFile = rtrim(sys_get_temp_dir(), '/\\') . '/myerp_meta_creds_v2.json';
+        if ($overrideToken === '' && isset(self::$credentialsCache[$tidMeta])) {
+            return self::$credentialsCache[$tidMeta];
+        }
+        $credCacheFile = rtrim(sys_get_temp_dir(), '/\\') . "/myerp_meta_creds_v3_t{$tidMeta}.json";
         if ($overrideToken === '' && @is_file($credCacheFile) && (time() - (int)@filemtime($credCacheFile)) < 300) {
             $cached = @json_decode((string)@file_get_contents($credCacheFile), true);
-            if (is_array($cached) && !empty($cached['account_id'])) {
-                self::$credentialsCache = $cached;
+            if (is_array($cached) && array_key_exists('account_id', $cached)) {
+                self::$credentialsCache[$tidMeta] = $cached;
                 return $cached;
             }
         }
 
         $tokens = [];
-        $accountId = '1852318231510577';
-        $accountName = 'MBA 577';
+        $accountId = ($tidMeta === 1) ? '1852318231510577' : '';
+        $accountName = ($tidMeta === 1) ? 'MBA 577' : '';
         $hasMetaTenantAccount = false;
 
         if ($overrideToken !== '' && strlen(trim($overrideToken)) > 30) {
             $tokens[] = trim($overrideToken);
         }
 
-        // 1. Check DOMATION_META database (`vhvxoigh_meta.saas_tenants`)
+        // 1. Check MYERP tenant-scoped system_settings first (primary multi-tenant source)
         try {
-            $metaPdo = new PDO(
-                'mysql:host=127.0.0.1;dbname=vhvxoigh_meta;charset=utf8mb4',
-                'vhvxoigh_mail_auto',
-                'Ideas@812',
-                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 2]
-            );
-            $stmtT = $metaPdo->query("
-                SELECT name, meta_token, ad_account_id
-                FROM saas_tenants
-                WHERE status = 'active' AND meta_token IS NOT NULL AND LENGTH(meta_token) > 30
-                ORDER BY CASE WHEN slug = 'ideas' THEN 0 ELSE 1 END, id ASC
-                LIMIT 3
-            ");
-            foreach (($stmtT ? $stmtT->fetchAll(PDO::FETCH_ASSOC) : []) as $row) {
-                $t = trim((string)($row['meta_token'] ?? ''));
-                if ($t !== '') {
-                    $tokens[] = $t;
-                }
-                $acc = preg_replace('/[^0-9]/', '', (string)($row['ad_account_id'] ?? ''));
-                if ($acc !== '' && !$hasMetaTenantAccount) {
-                    $accountId = $acc;
-                    $hasMetaTenantAccount = true;
-                }
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $metaSettings = TenantConfigService::getSettings($db, $tidMeta);
+            if (!empty($metaSettings['meta_ad_account_name'])) {
+                $accountName = trim((string)$metaSettings['meta_ad_account_name']);
             }
-        } catch (\Throwable $e) {
-            // Ignore if local dev without vhvxoigh_meta
-        }
-
-        // 2. Check MYERP system_settings
-        try {
-            $stmtTok = $db->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('meta_access_token', 'facebook_ads_token', 'meta_ad_account_id')");
-            foreach (($stmtTok ? $stmtTok->fetchAll(PDO::FETCH_ASSOC) : []) as $sRow) {
-                $k = (string)($sRow['setting_key'] ?? '');
-                $v = trim((string)($sRow['setting_value'] ?? ''));
+            foreach (['meta_access_token', 'facebook_ads_token', 'meta_ad_account_id'] as $k) {
+                $v = trim((string)($metaSettings[$k] ?? ''));
+                if ($v === '') continue;
                 if ($k === 'meta_ad_account_id') {
                     $cleanAcc = preg_replace('/[^0-9]/', '', $v);
-                    if ($cleanAcc !== '' && $cleanAcc !== '2263916290803530' && !$hasMetaTenantAccount) {
+                    if ($cleanAcc !== '' && $cleanAcc !== '2263916290803530') {
                         $accountId = $cleanAcc;
+                        $hasMetaTenantAccount = true;
                     }
                 } elseif (strlen($v) > 30 && strpos($v, '***') === false) {
                     $tokens[] = $v;
@@ -207,8 +186,53 @@ class MetaAdsController
             }
         } catch (\Throwable $e) {}
 
-        // 3. Verified IDEAS MBA 577 Token fallback
-        $tokens[] = 'EAAUZCMBsoUygBSteDpzZBVVgR7KZA45pYIexVjVdZAYulIycwiIIMY8OdHZCWf3g5efpZBOIS4yPE5ngkTmOuLZBEWaC0r4tmUzgGD6bagCp5B4PdgFhwmcE8frtAR672e4TnFBorRfQp876imahcT3Y8CAEbFWRYRKpoNlftAKlMTU6YtSGZCPmrbuiOKGHrhTTyQBqJQ1h';
+        // 2. Optional external Meta sync DB fallback (strictly isolated to legacy Tenant 1 or matching tenant slug)
+        $extMetaDb = trim((string)(getenv('META_SYNC_DB_NAME') ?: ($_ENV['META_SYNC_DB_NAME'] ?? ($tidMeta === 1 ? 'vhvxoigh_meta' : ''))));
+        if ($extMetaDb !== '' && defined('DB_USER') && defined('DB_PASS')) {
+            try {
+                $extHost = defined('DB_HOST') ? DB_HOST : '127.0.0.1';
+                $metaPdo = new PDO(
+                    "mysql:host={$extHost};dbname={$extMetaDb};charset=utf8mb4",
+                    DB_USER,
+                    DB_PASS,
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 2]
+                );
+                $orgProfile = class_exists('TenantConfigService') ? TenantConfigService::getOrganizationProfile($db, $tidMeta) : [];
+                $tSlug = strtolower(trim((string)($orgProfile['slug'] ?? ($tidMeta === 1 ? 'ideas' : ''))));
+                $extTbl = 'saas_tenants';
+                $stmtT = $metaPdo->prepare("
+                    SELECT name, meta_token, ad_account_id
+                    FROM {$extTbl}
+                    WHERE status = 'active' AND meta_token IS NOT NULL AND LENGTH(meta_token) > 30
+                      AND (? = 1 OR LOWER(slug) = ?)
+                    ORDER BY CASE WHEN LOWER(slug) = ? THEN 0 ELSE 1 END, id ASC
+                    LIMIT 3
+                ");
+                $stmtT->execute([$tidMeta, $tSlug, $tSlug ?: 'ideas']);
+                foreach (($stmtT->fetchAll(PDO::FETCH_ASSOC) ?: []) as $row) {
+                    $t = trim((string)($row['meta_token'] ?? ''));
+                    if ($t !== '') {
+                        $tokens[] = $t;
+                    }
+                    $acc = preg_replace('/[^0-9]/', '', (string)($row['ad_account_id'] ?? ''));
+                    if ($acc !== '' && !$hasMetaTenantAccount) {
+                        $accountId = $acc;
+                        $accountName = trim((string)($row['name'] ?? $accountName));
+                        $hasMetaTenantAccount = true;
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Ignore if local dev without external Meta DB
+            }
+        }
+
+        // 3. Legacy fallback token only for primary tenant 1 when env/DB token not set
+        $envFallbackToken = trim((string)(getenv('META_FALLBACK_TOKEN') ?: ($_ENV['META_FALLBACK_TOKEN'] ?? '')));
+        if ($envFallbackToken !== '') {
+            $tokens[] = $envFallbackToken;
+        } elseif ($tidMeta === 1 && empty($tokens)) {
+            $tokens[] = 'EAAUZCMBsoUygBSteDpzZBVVgR7KZA45pYIexVjVdZAYulIycwiIIMY8OdHZCWf3g5efpZBOIS4yPE5ngkTmOuLZBEWaC0r4tmUzgGD6bagCp5B4PdgFhwmcE8frtAR672e4TnFBorRfQp876imahcT3Y8CAEbFWRYRKpoNlftAKlMTU6YtSGZCPmrbuiOKGHrhTTyQBqJQ1h';
+        }
         $tokens = array_values(array_unique(array_filter($tokens)));
 
         $res = [
@@ -216,10 +240,10 @@ class MetaAdsController
             'tokens' => $tokens,
             'account_id' => $accountId,
             'account_name' => $accountName,
-            'act_id' => 'act_' . $accountId,
+            'act_id' => $accountId !== '' ? ('act_' . $accountId) : '',
         ];
         if ($overrideToken === '') {
-            self::$credentialsCache = $res;
+            self::$credentialsCache[$tidMeta] = $res;
             @file_put_contents($credCacheFile, json_encode($res, JSON_UNESCAPED_UNICODE));
         }
         return $res;
@@ -3202,12 +3226,9 @@ class MetaAdsController
         }
 
         try {
-            $stmt = $this->db->prepare("
-                INSERT INTO system_settings (setting_key, setting_value)
-                VALUES ('meta_access_token', ?)
-                ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
-            ");
-            $stmt->execute([$token]);
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $tidMeta = (int)($auth['tenant_id'] ?? 1);
+            TenantConfigService::saveSettings($this->db, $tidMeta, ['meta_access_token' => $token]);
             self::$cachedMetaCreds = null;
             @unlink(sys_get_temp_dir() . '/myerp_meta_creds_v2.json');
         } catch (\Throwable $e) {}

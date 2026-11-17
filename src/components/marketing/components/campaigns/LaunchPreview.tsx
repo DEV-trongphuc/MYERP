@@ -15,7 +15,7 @@ import ConfirmModal from '../common/ConfirmModal';
 import { MultiFileUploadModal } from './MultiFileUploadModal';
 import FileLibraryModal from '../common/FileLibraryModal';
 import { API_BASE_URL } from '../../utils/config';
-import { interpolateMergeTags } from '../../utils/formatters';
+import { interpolateMergeTags, parseSubscriberCustomAttrs } from '../../utils/formatters';
 
 
 
@@ -293,17 +293,17 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
         let isMounted = true;
         const fetchTargetSubscriber = async () => {
             try {
-                const targetListId = formData.target?.listIds?.[0] || (formData as any).target_list_ids?.[0];
-                const targetSegmentId = formData.target?.segmentIds?.[0];
-                const targetTagId = formData.target?.tagIds?.[0];
+                const targetListIds = (formData.target?.listIds || (formData as any).target_list_ids || []).filter(Boolean);
+                const targetSegmentIds = (formData.target?.segmentIds || []).filter(Boolean);
+                const targetTagIds = (formData.target?.tagIds || []).filter(Boolean);
 
                 let url = 'subscribers?limit=5';
-                if (targetListId) {
-                    url = `subscribers?list_id=${targetListId}&limit=5`;
-                } else if (targetSegmentId) {
-                    url = `subscribers?segment_id=${targetSegmentId}&limit=5`;
-                } else if (targetTagId) {
-                    url = `subscribers?tag=${targetTagId}&limit=5`;
+                if (targetListIds.length > 0) {
+                    url = `subscribers?list_id=${encodeURIComponent(targetListIds.join(','))}&limit=5`;
+                } else if (targetSegmentIds.length > 0) {
+                    url = `subscribers?segment_id=${encodeURIComponent(targetSegmentIds[0])}&limit=5`;
+                } else if (targetTagIds.length > 0) {
+                    url = `subscribers?tag=${encodeURIComponent(targetTagIds.join(','))}&limit=5`;
                 }
 
                 const res = await api.get<any>(url);
@@ -328,9 +328,12 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
                     const fName = sub.firstName || sub.first_name || (sub.name ? sub.name.split(' ').slice(-1)[0] : '');
                     const lName = sub.lastName || sub.last_name || (sub.name ? sub.name.split(' ').slice(0, -1).join(' ') : '');
                     const full = sub.name || sub.fullName || [lName, fName].filter(Boolean).join(' ').trim() || sub.email?.split('@')[0] || 'Khách hàng';
-                    const cAttrs = typeof sub.customAttributes === 'object' && sub.customAttributes 
-                        ? sub.customAttributes 
-                        : (typeof sub.custom_attributes === 'object' && sub.custom_attributes ? sub.custom_attributes : {});
+                    const cAttrs = {
+                        ...parseSubscriberCustomAttrs(sub.custom_fields || sub.customFields),
+                        ...parseSubscriberCustomAttrs(sub.custom_attributes || sub.customAttributes),
+                    };
+                    const rawJobTitle = String(sub.jobTitle || sub.job_title || '').trim();
+                    const cleanJobTitle = rawJobTitle && rawJobTitle.toLowerCase() !== 'chưa cập nhật' ? rawJobTitle : '';
 
                     setSampledSubscriber({
                         id: sub.id,
@@ -348,10 +351,11 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
                         company: sub.companyName || sub.company_name || sub.company || '',
                         companyName: sub.companyName || sub.company_name || sub.company || '',
                         company_name: sub.companyName || sub.company_name || sub.company || '',
-                        jobTitle: sub.jobTitle || sub.job_title || '',
-                        job_title: sub.jobTitle || sub.job_title || '',
+                        jobTitle: cleanJobTitle,
+                        job_title: cleanJobTitle,
                         city: sub.city || '',
                         address: sub.address || sub.city || '',
+                        customAttributes: cAttrs,
                         ...cAttrs
                     });
                 }
@@ -370,7 +374,7 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
         let isMounted = true;
         const tid = formData.templateId;
         if (!isZns && tid && tid !== 'custom-html') {
-            const cached = templatePreviews?.[tid] || selectedTemplate?.htmlContent || (selectedTemplate as any)?.html_content || '';
+            const cached = selectedTemplate?.htmlContent || (selectedTemplate as any)?.html_content || templatePreviews?.[tid] || '';
             if (cached) {
                 setFetchedTemplateHtml(cached);
             } else {
@@ -386,7 +390,7 @@ const LaunchPreview: React.FC<LaunchPreviewProps> = ({
 
     const contentToRender = formData.templateId === 'custom-html'
         ? (formData.contentBody || '')
-        : (templatePreviews?.[formData.templateId] || selectedTemplate?.htmlContent || (selectedTemplate as any)?.html_content || fetchedTemplateHtml || formData.contentBody || '');
+        : (selectedTemplate?.htmlContent || (selectedTemplate as any)?.html_content || templatePreviews?.[formData.templateId] || fetchedTemplateHtml || formData.contentBody || '');
 
     const interpolatedPreviewHtml = useMemo(() => {
         if (!contentToRender) return '';

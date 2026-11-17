@@ -25,10 +25,12 @@ class SearchController {
         $tid = (int)($auth['tenant_id'] ?? 0);
         $userFullName = trim(mb_strtolower($auth['full_name'] ?? $auth['name'] ?? ''));
 
-        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
-        $isManager = $role === 'manager';
-        $isSale = $role === 'sales' || $role === 'sale';
-        $isAcademic = in_array($role, ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $cSearchScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'contacts', 'read');
+        $isGlobalAdmin = ($cSearchScope === 'all');
+        $isManager = ($cSearchScope === 'team');
+        $isSale = ($cSearchScope === 'own');
+        $isAcademic = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], 'students', 'read');
 
         // Check if query is looking for a numeric ID (#123, 123, task 123, don 123)
         $cleanDigits = preg_replace('/[^0-9]/', '', $rawQ);
@@ -50,7 +52,7 @@ class SearchController {
 
         // 1. 👤 Contacts / Students Search
         try {
-            $searchRes = buildContactSearchClause($cleanQuery, '');
+            $searchRes = buildContactSearchClause($cleanQuery, 'c.');
             $cWhere = !empty($searchRes['clause']) ? $searchRes['clause'] : '(c.full_name LIKE ? OR c.email LIKE ? OR c.phone LIKE ?)';
             $cParams = !empty($searchRes['clause']) ? $searchRes['params'] : [$like, $like, $like];
 

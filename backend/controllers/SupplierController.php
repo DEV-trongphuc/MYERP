@@ -51,20 +51,24 @@ class SupplierController {
     }
 
     private function canManageSuppliers(array $auth): bool {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
         $allowedRoles = ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'accountant', 'ke_toan', 'finance', 'tai_chinh', 'assistant', 'tro_ly'];
-        $userRole = strtolower(trim((string)($auth['role'] ?? '')));
-        if (in_array($userRole, $allowedRoles, true)) return true;
-        
-        $uid = (int)($auth['user_id'] ?? 0);
-        if ($uid === 100064) return true; // Nguyễn Thu Thảo - Kế toán
+        if (TenantConfigService::doesUserSatisfyRoles($this->db, $auth, $allowedRoles, 'suppliers', 'write')) {
+            return true;
+        }
+        $scope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'suppliers', 'write');
+        if ($scope === 'none') {
+            return false;
+        }
 
-        // Check user team or job title / department from users table
+        $uid = (int)($auth['user_id'] ?? 0);
+        $tid = (int)($auth['tenant_id'] ?? 1);
         try {
-            $stmt = $this->db->prepare("SELECT team_id, job_title, department FROM users WHERE id = ? LIMIT 1");
-            $stmt->execute([$uid]);
-            $u = $stmt->fetch();
+            $stmt = $this->db->prepare("SELECT u.job_title, u.department, t.department_code FROM users u LEFT JOIN teams t ON u.team_id = t.id AND t.tenant_id = u.tenant_id WHERE u.id = ? AND u.tenant_id = ? LIMIT 1");
+            $stmt->execute([$uid, $tid]);
+            $u = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($u) {
-                if ((int)($u['team_id'] ?? 0) === 2) return true;
+                if (strtolower((string)($u['department_code'] ?? '')) === 'finance') return true;
                 $jt = mb_strtolower((string)($u['job_title'] ?? ''), 'UTF-8');
                 $dept = mb_strtolower((string)($u['department'] ?? ''), 'UTF-8');
                 if (strpos($jt, 'kế toán') !== false || strpos($jt, 'ke toan') !== false || strpos($jt, 'tài chính') !== false) return true;

@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import api from '../api/axios';
 import { parseDateToIso } from '../components/ui/VietnameseDateInput';
+import { getTenantInternalDomain } from '../contexts/TenantConfigContext';
 
 export interface ExtractedMilestone {
   name: string;
@@ -200,7 +201,8 @@ export async function parseDocxContract(file: File): Promise<ExtractedContractDa
       const matchEmail = line.match(/([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)/i);
       if (matchEmail) {
         const em = matchEmail[1].trim();
-        if (!em.includes('ideas.edu.vn') && !em.includes('estiam.education')) {
+        const orgDomain = getTenantInternalDomain();
+        if ((!orgDomain || !em.toLowerCase().endsWith(`@${orgDomain.toLowerCase()}`)) && !em.includes('estiam.education')) {
           studentEmail = em;
         }
       }

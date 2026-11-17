@@ -9,11 +9,20 @@ require_once __DIR__ . '/PHPMailer/src/SMTP.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-function _getBaseHtml($title, $subtitle, $contentHtml, $isCustomer = false)
+function _getBaseHtml($title, $subtitle, $contentHtml, $isCustomer = false, $brandName = null, $logoUrl = null, $frontendUrl = null)
 {
     $headerSub = !empty($title) ? mb_strtoupper($title, 'UTF-8') : ($isCustomer ? 'THÔNG BÁO' : 'THÔNG BÁO HỆ THỐNG');
-    $brandTitle = $isCustomer ? 'IDEAS' : 'MYERP';
-    $footerBrand = $isCustomer ? 'IDEAS' : 'MYERP';
+    $resolvedBrand = trim((string)($brandName ?? ''));
+    if ($resolvedBrand === '') {
+        $resolvedBrand = function_exists('get_tenant_brand_name') ? get_tenant_brand_name() : 'MYERP';
+    }
+    $brandTitle = $isCustomer ? $resolvedBrand : 'MYERP';
+    $footerBrand = $isCustomer ? $resolvedBrand : 'MYERP';
+    $resolvedFe = rtrim(trim((string)($frontendUrl ?? (function_exists('get_tenant_frontend_url') ? get_tenant_frontend_url() : ''))), '/');
+    $resolvedLogo = trim((string)($logoUrl ?? ''));
+    if ($resolvedLogo !== '' && !preg_match('#^https?://#i', $resolvedLogo) && $resolvedFe !== '') {
+        $resolvedLogo = $resolvedFe . '/' . ltrim($resolvedLogo, '/');
+    }
 
     return '
     <div style="background-color: #f8fafc; padding: 40px 10px; font-family: \'Inter\', -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif;">
@@ -21,9 +30,9 @@ function _getBaseHtml($title, $subtitle, $contentHtml, $isCustomer = false)
             
             <!-- Header -->
             <div style="background: linear-gradient(135deg, #BD1D2D, #8C111E); padding: 25px 20px; text-align: center;">
-                ' . ($isCustomer
-                    ? '<div style="display: block; text-align: center; margin-bottom: 8px;"><img src="https://myerp.ideas.edu.vn/Logo_IDEAS_white.png" alt="IDEAS" style="height: 38px; width: auto; max-width: 180px; display: inline-block;" /></div>'
-                    : '<h1 style="color: #ffffff; font-size: 26px; margin: 0; font-weight: 900; letter-spacing: 2px;">' . $brandTitle . '</h1>'
+                ' . (($isCustomer && $resolvedLogo !== '' && preg_match('#^https?://#i', $resolvedLogo))
+                    ? '<div style="display: block; text-align: center; margin-bottom: 8px;"><img src="' . htmlspecialchars($resolvedLogo) . '" alt="' . htmlspecialchars($brandTitle) . '" style="height: 38px; width: auto; max-width: 180px; display: inline-block;" /></div>'
+                    : '<h1 style="color: #ffffff; font-size: 26px; margin: 0; font-weight: 900; letter-spacing: 2px;">' . htmlspecialchars($brandTitle) . '</h1>'
                 ) . '
                 <p style="color: rgba(255,255,255,0.95); font-size: 12px; margin: 4px 0 0; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">' . $headerSub . '</p>
             </div>
@@ -35,7 +44,7 @@ function _getBaseHtml($title, $subtitle, $contentHtml, $isCustomer = false)
             
             <!-- Footer -->
             <div style="background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px;">
-                © ' . date("Y") . ' ' . $footerBrand . '. All rights reserved.
+                © ' . date("Y") . ' ' . htmlspecialchars($footerBrand) . '. All rights reserved.
             </div>
         </div>
     </div>
@@ -77,23 +86,32 @@ function sendEmailNotification($to, $subject, $title, $content, $ccEmailString =
         return false;
     }
 
-    static $internalEmailsMap = null;
-    if ($internalEmailsMap === null) {
-        $internalEmailsMap = [];
+    $activeTid = (int)($GLOBALS['current_tenant_id'] ?? 1);
+    if ($activeTid <= 0) {
+        $activeTid = 1;
+    }
+
+    static $internalEmailsMap = [];
+    if (!isset($internalEmailsMap[$activeTid])) {
+        $internalEmailsMap[$activeTid] = [];
         try {
             if ($db instanceof \PDO) {
-                $stmt = $db->query("SELECT LOWER(TRIM(email)) as em FROM users WHERE email IS NOT NULL AND email != ''");
-                if ($stmt) {
+                $stmt = $db->prepare("SELECT LOWER(TRIM(email)) as em FROM users WHERE tenant_id = ? AND deleted_at IS NULL AND email IS NOT NULL AND email != ''");
+                if ($stmt && $stmt->execute([$activeTid])) {
                     while ($r = $stmt->fetch(\PDO::FETCH_ASSOC)) {
-                        if (!empty($r['em'])) $internalEmailsMap[$r['em']] = true;
+                        if (!empty($r['em'])) $internalEmailsMap[$activeTid][$r['em']] = true;
                     }
                 }
             } elseif ($db instanceof \mysqli) {
-                $res = $db->query("SELECT LOWER(TRIM(email)) as em FROM users WHERE email IS NOT NULL AND email != ''");
-                if ($res) {
-                    while ($r = $res->fetch_assoc()) {
-                        if (!empty($r['em'])) $internalEmailsMap[$r['em']] = true;
+                $stmt = $db->prepare("SELECT LOWER(TRIM(email)) as em FROM users WHERE tenant_id = ? AND deleted_at IS NULL AND email IS NOT NULL AND email != ''");
+                if ($stmt) {
+                    $stmt->bind_param("i", $activeTid);
+                    $stmt->execute();
+                    $res = $stmt->get_result();
+                    while ($res && ($r = $res->fetch_assoc())) {
+                        if (!empty($r['em'])) $internalEmailsMap[$activeTid][$r['em']] = true;
                     }
+                    $stmt->close();
                 }
             }
         } catch (\Throwable $ex) {
@@ -101,7 +119,8 @@ function sendEmailNotification($to, $subject, $title, $content, $ccEmailString =
         }
     }
 
-    $isInternalRecipient = isset($internalEmailsMap[$cleanTo]) || (substr($cleanTo, -13) === '@ideas.edu.vn');
+    $internalDomainCfg = strtolower(ltrim(trim((string)(get_system_setting($db, 'internal_email_domain', $activeTid) ?: get_system_setting($db, 'organization_internal_domain', $activeTid))), '@'));
+    $isInternalRecipient = isset($internalEmailsMap[$activeTid][$cleanTo]) || ($internalDomainCfg !== '' && str_ends_with($cleanTo, '@' . $internalDomainCfg));
     if ($isCustomer === null) {
         $isCustomer = !$isInternalRecipient;
     }
@@ -113,22 +132,26 @@ function sendEmailNotification($to, $subject, $title, $content, $ccEmailString =
         $subject .= " [{$timeStr}]";
     }
 
+    $brandLabel = trim((string)(get_system_setting($db, 'company_name', $activeTid) ?: get_system_setting($db, 'organization_name', $activeTid))) ?: 'ERP';
+    $brandBracket = function_exists('get_tenant_brand_prefix')
+        ? get_tenant_brand_prefix($db, $activeTid)
+        : ('[' . (trim((string)get_system_setting($db, 'organization_short_name', $activeTid)) ?: $brandLabel) . ']');
     if ($isCustomer) {
-        // Mail gửi cho khách hàng / học viên: chuẩn hóa thương hiệu là [IDEAS] (không dùng MYERP)
-        $subject = str_ireplace(['[Rich Land]', '[Richland]', '[IDEAS ERP]', '[MYERP]'], '[IDEAS]', $subject);
-        if (strpos($subject, '[IDEAS]') === false) {
-            $subject = '[IDEAS] ' . $subject;
+        $subject = str_ireplace(['[Rich Land]', '[Richland]', '[MYERP]'], $brandBracket, $subject);
+        if (stripos($subject, $brandBracket) === false && !preg_match('/^\[[^\]]+\]/', $subject)) {
+            $subject = $brandBracket . ' ' . $subject;
         }
     } else {
-        // Mail nội bộ: chuẩn hóa thương hiệu sang [MYERP]
-        $subject = str_ireplace(['[Rich Land]', '[Richland]', '[IDEAS]', '[IDEAS ERP]'], '[MYERP]', $subject);
-        if (strpos($subject, '[MYERP]') === false) {
+        // Mail nội bộ: chuẩn hóa thương hiệu sang [MYERP] hoặc tên tổ chức
+        $subject = preg_replace('/^\[(Rich Land|Richland)\]\s*/i', '[MYERP] ', $subject);
+        if (!preg_match('/^\[[^\]]+\]/', $subject)) {
             $subject = '[MYERP] ' . $subject;
         }
     }
 
     // Tự động format khung chuẩn
-    $frontendUrl = get_system_setting($db, 'frontend_url') ?: 'https://myerp.ideas.edu.vn';
+    $frontendUrl = function_exists('get_tenant_frontend_url') ? get_tenant_frontend_url($db, $activeTid) : (string)get_system_setting($db, 'frontend_url', $activeTid);
+    $logoUrlCfg = trim((string)get_system_setting($db, 'company_logo_url', $activeTid));
     if (strpos($content, 'border-left:') === false && strpos($content, 'background: #f1f5f9;') === false && strpos($content, 'background: #f8fafc;') === false) {
         if ($isCustomer) {
             // Mail gửi khách hàng: BỎ NÚT "ĐĂNG NHẬP HỆ THỐNG", để câu thông báo tự động theo hợp đồng
@@ -141,19 +164,19 @@ function sendEmailNotification($to, $subject, $title, $content, $ccEmailString =
                 Đây là tin tự động theo lịch thanh toán trên hợp đồng, vui lòng bỏ qua nếu bạn đã thanh toán.
             </p>';
         } else {
-            // Mail nội bộ: Có nút ĐĂNG NHẬP HỆ THỐNG
+            // Mail nội bộ: Có nút ĐĂNG NHẬP HỆ THỐNG (nếu có frontendUrl)
+            $loginBtnHtml = $frontendUrl !== ''
+                ? '<p style="margin-top: 30px; text-align: center;"><a href="' . htmlspecialchars($frontendUrl) . '" target="_blank" style="display: inline-block; background-color: #BD1D2D; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px; text-transform: uppercase;">ĐĂNG NHẬP HỆ THỐNG</a></p>'
+                : '';
             $content = '
             <div style="background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;">
                 <h3 style="color: #0f172a; margin: 0 0 10px; font-size: 16px;">' . htmlspecialchars($title) . '</h3>
                 <div style="margin: 0; color: #334155; line-height: 1.6;">' . $content . '</div>
-            </div>
-            <p style="margin-top: 30px; text-align: center;">
-                <a href="' . htmlspecialchars($frontendUrl) . '" target="_blank" style="display: inline-block; background-color: #BD1D2D; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px; text-transform: uppercase;">ĐĂNG NHẬP HỆ THỐNG</a>
-            </p>';
+            </div>' . $loginBtnHtml;
         }
     }
 
-    $htmlBody = _getBaseHtml($title, "", $content, $isCustomer);
+    $htmlBody = _getBaseHtml($title, "", $content, $isCustomer, $brandLabel, $logoUrlCfg, $frontendUrl);
 
     if (!$sync) {
         // Xóa tính năng gửi đồng bộ để chống kẹt tiến trình (Bottleneck)
@@ -261,10 +284,10 @@ function sendEmailNotification($to, $subject, $title, $content, $ccEmailString =
 
             $senderEmail = (!empty($GLOBALS['override_sender_email']) && filter_var($GLOBALS['override_sender_email'], FILTER_VALIDATE_EMAIL))
                 ? $GLOBALS['override_sender_email']
-                : ($settings['ses_sender_email'] ?? 'systemnoti@ideas.edu.vn');
+                : (!empty($settings['ses_sender_email']) ? $settings['ses_sender_email'] : (function_exists('get_tenant_sender_email') ? get_tenant_sender_email($db, $activeTid) : 'noreply@myerp.local'));
             $senderName = !empty($GLOBALS['override_sender_name'])
                 ? $GLOBALS['override_sender_name']
-                : ($settings['ses_sender_name'] ?? 'IDEAS TEAM');
+                : (!empty($settings['ses_sender_name']) ? $settings['ses_sender_name'] : ($brandLabel . ' NOTIFICATION'));
 
             $mail->setFrom($senderEmail, $senderName);
             $mail->addAddress($to);

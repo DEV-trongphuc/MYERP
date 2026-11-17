@@ -258,7 +258,8 @@ class ActivityController {
         }
 
         // Management roles have company-wide access for non-personal activities
-        if (in_array($role, ['super_admin', 'superadmin', 'admin', 'director', 'manager', 'sale_admin', 'saleadmin'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['super_admin', 'superadmin', 'admin', 'director', 'manager', 'sale_admin', 'saleadmin'], 'workspace', 'write', ['all', 'team'])) {
             return true;
         }
 
@@ -2549,11 +2550,11 @@ class ActivityController {
 
                 if (!empty($u['email'])) {
                     require_once __DIR__ . '/../mailer.php';
-                    $stmtFe = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
-                    $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                    require_once __DIR__ . '/../config/TenantConfigService.php';
+                    $frontendUrl = TenantConfigService::getFrontendUrl($this->db, (int)$tenantId);
                     $fullDirectLink = rtrim($frontendUrl, '/') . '/' . ltrim($link, '/');
 
-                    $emailSubject = "[MYERP] " . $title;
+                    $emailSubject = TenantConfigService::getBrandPrefix($this->db, (int)$tenantId) . " " . $title;
                     $emailTitle = "THÔNG BÁO CÔNG VIỆC";
                     $emailContent = "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                                     "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">" . htmlspecialchars($title) . "</h3>" .

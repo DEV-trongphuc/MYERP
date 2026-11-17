@@ -22,7 +22,11 @@ class AuthController {
             }
         }
         if (strtolower($email) === 'info') {
-            $email = 'info@ideas.edu.vn';
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $orgDom = TenantConfigService::getOrganizationProfile($this->db, 1)['internal_email_domain'] ?? '';
+            if ($orgDom !== '') {
+                $email = 'info@' . ltrim($orgDom, '@');
+            }
         }
 
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';

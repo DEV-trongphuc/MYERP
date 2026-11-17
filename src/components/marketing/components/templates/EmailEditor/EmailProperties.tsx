@@ -412,7 +412,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                 {/(?:{{\s*([^{}%]+?)\s*}}|%7B%7B\s*([^{}%]+?)\s*%7D%7D)/i.test(selectedBlock.url || '') && (
                                     <Input 
                                         label="Đường dẫn dự phòng (Fallback Link URL)" 
-                                        placeholder="VD: https://ideas.edu.vn hoặc https://yoursite.com"
+                                        placeholder="VD: https://yoursite.com"
                                         value={selectedBlock.fallbackUrl || ''} 
                                         onChange={(e) => onUpdateBlock(selectedBlock.id, { fallbackUrl: e.target.value })} 
                                         icon={LucideIcons.ShieldCheck} 
@@ -552,7 +552,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                 {/(?:{{\s*([^{}%]+?)\s*}}|%7B%7B\s*([^{}%]+?)\s*%7D%7D)/i.test(selectedBlock.url || '') && (
                                     <Input 
                                         label="Đường dẫn dự phòng (Fallback Link URL)" 
-                                        placeholder="VD: https://ideas.edu.vn hoặc https://yoursite.com"
+                                        placeholder="VD: https://yoursite.com"
                                         value={selectedBlock.fallbackUrl || ''} 
                                         onChange={(e) => onUpdateBlock(selectedBlock.id, { fallbackUrl: e.target.value })} 
                                         icon={LucideIcons.ShieldCheck} 

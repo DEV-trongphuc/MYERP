@@ -40,8 +40,34 @@ function verifyFlowOwnership($pdo, $flowId, $workspaceId) {
  */
 
 /**
+ * Idempotently ensures flows table schema has deleted_at column and appropriate indexes
+ */
+function ensureFlowsTableSchema(PDO $pdo): void {
+    static $checked = false;
+    if ($checked) return;
+    $checked = true;
+
+    try {
+        $cols = [];
+        $stmt = $pdo->query("SHOW COLUMNS FROM `flows`");
+        if ($stmt) {
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                if (!empty($r['Field'])) $cols[$r['Field']] = true;
+            }
+        }
+        if (empty($cols) || $pdo->inTransaction()) return;
+
+        if (!isset($cols['deleted_at'])) {
+            $pdo->exec("ALTER TABLE `flows` ADD COLUMN `deleted_at` DATETIME NULL DEFAULT NULL AFTER `archived_at`, ADD INDEX `idx_flows_ws_deleted` (`workspace_id`, `deleted_at`)");
+        }
+    } catch (Throwable $e) {
+        error_log("ensureFlowsTableSchema warning: " . $e->getMessage());
+    }
+}
+
+/**
  * [SECURITY HARDENING] Centralized Flow Permanent Deletion
- * Properly cleans up subscriber flow states, queue jobs, events, logs, snapshots, and activity records.
+ * Properly cleans up subscriber flow states, queue jobs, events, and soft-deletes flow records.
  */
 function deleteFlowPermanently($pdo, $flowId, $workspaceId) {
     // Fetch flow metadata for logging BEFORE deletion
@@ -56,13 +82,16 @@ function deleteFlowPermanently($pdo, $flowId, $workspaceId) {
     $flowName = $flowMeta['name'];
     logSystemActivity($pdo, 'flows', 'delete', $flowId, $flowName);
 
+    // Ensure deleted_at column exists in flows table (outside transaction to avoid implicit commit)
+    ensureFlowsTableSchema($pdo);
+
     $pdo->beginTransaction();
     try {
-        // 1. Clean up Subscribers State
-        $pdo->prepare("DELETE FROM subscriber_flow_states WHERE flow_id = ?")->execute([$flowId]);
+        // 1. Clean up transient execution queues (halt active workers for this flow)
+        $pdo->prepare("UPDATE subscriber_flow_states SET status = 'cancelled', updated_at = NOW() WHERE flow_id = ?")->execute([$flowId]);
         $pdo->prepare("DELETE FROM flow_enrollments WHERE flow_id = ?")->execute([$flowId]);
 
-        // 2. Clean up Queue Jobs
+        // 2. Clean up in-flight background queue jobs
         $pdo->prepare("DELETE FROM queue_jobs WHERE (payload LIKE ? OR payload LIKE ?) AND status IN ('pending', 'processing')")
             ->execute(['%"flow_id":"' . $flowId . '"%', '%"priority_flow_id":"' . $flowId . '"%']);
 
@@ -72,24 +101,19 @@ function deleteFlowPermanently($pdo, $flowId, $workspaceId) {
             $pdo->prepare("DELETE FROM flow_event_queue WHERE flow_id = ?")->execute([$flowId]);
         }
 
-        // 4. Clean up delivery logs
-        try {
-            $pdo->prepare("DELETE FROM mail_delivery_logs WHERE flow_id = ?")->execute([$flowId]);
-        } catch (Exception $ignored) {}
-        try {
-            $pdo->prepare("DELETE FROM zalo_delivery_logs WHERE flow_id = ?")->execute([$flowId]);
-        } catch (Exception $ignored) {}
+        // 4. [100% SOFT-DELETE MANDATE & AUDIT TRAIL PRESERVATION]
+        // DO NOT delete mail_delivery_logs or zalo_delivery_logs!
+        // These logs contain legal dispatch receipts, bounce history, and telecom billing evidence.
 
-        // 5. Delete Flow + its snapshots
-        $pdo->prepare("DELETE FROM flows WHERE id = ? AND workspace_id = ?")->execute([$flowId, $workspaceId]);
-        try {
-            $pdo->prepare("DELETE FROM flow_snapshots WHERE flow_id = ?")->execute([$flowId]);
-        } catch (Exception $ignored) {}
+        // 5. 100% Soft-Delete the Flow record itself instead of hard deletion
+        $stmtDel = $pdo->prepare("UPDATE flows SET deleted_at = NOW(), status = 'archived', updated_at = NOW() WHERE id = ? AND workspace_id = ?");
+        $stmtDel->execute([$flowId, $workspaceId]);
 
-        // 6. Clean up subscriber_activity
-        try {
-            $pdo->prepare("DELETE FROM subscriber_activity WHERE flow_id = ?")->execute([$flowId]);
-        } catch (Exception $ignored) {}
+        // Keep flow_snapshots for version audit recovery
+
+        // 6. [CUSTOMER 360 JOURNEY PRESERVATION]
+        // DO NOT delete subscriber_activity!
+        // Preserves customer interaction touchpoints on the CRM profile timeline.
 
         $pdo->commit();
         return true;
@@ -1410,47 +1434,15 @@ if ($method === 'POST' && isset($_GET['route']) && $_GET['route'] === 'manual-ad
         $baseNow = date('Y-m-d H:i:s');
         $resolvedScheduledAt = date('Y-m-d H:i:s', strtotime('+5 minutes')); // Default for "immediate"
 
-        if ($timingMode === 'native' && $targetStepData && ($targetStepData['type'] ?? '') === 'wait') {
-            // Calculate native wait time
-            $mode = trim($targetStepData['config']['mode'] ?? 'duration');
-            if ($mode === 'until') {
-                $targetTime = $targetStepData['config']['untilTime'] ?? '09:00';
-                $targetDay = $targetStepData['config']['untilDay'] ?? null;
-                $dt = new DateTime($baseNow);
-                $targetTimeParts = explode(':', $targetTime);
-                $dt->setTime((int) $targetTimeParts[0], (int) ($targetTimeParts[1] ?? 0), 0);
-                if ($targetDay !== null && $targetDay !== '') {
-                    $currentDay = (int) date('w', strtotime($baseNow));
-                    $daysToWait = ((int) $targetDay - $currentDay + 7) % 7;
-                    if ($daysToWait === 0 && $dt->getTimestamp() <= time())
-                        $daysToWait = 7;
-                    if ($daysToWait > 0)
-                        $dt->modify("+$daysToWait days");
-                } else {
-                    if ($dt->getTimestamp() <= time())
-                        $dt->modify("+1 day");
-                }
-                $resolvedScheduledAt = $dt->format('Y-m-d H:i:s');
-            } elseif ($mode === 'until_date') {
-                $specDate = $targetStepData['config']['specificDate'] ?? '';
-                $targetTime = $targetStepData['config']['untilTime'] ?? '09:00';
-                if ($specDate) {
-                    $dt = new DateTime("$specDate $targetTime:00");
-                    if ($dt->getTimestamp() <= time()) {
-                        // Passed, wait 5 mins
-                        $resolvedScheduledAt = date('Y-m-d H:i:s', strtotime('+5 minutes'));
-                    } else {
-                        $resolvedScheduledAt = $dt->format('Y-m-d H:i:s');
-                    }
-                }
-            } else { // duration
-                $dur = (int) ($targetStepData['config']['duration'] ?? 1);
-                $unit = $targetStepData['config']['unit'] ?? 'hours';
-                $modVal = "+$dur " . ($unit === 'mins' ? 'minutes' : $unit);
-                $dt = new DateTime($baseNow);
-                $dt->modify($modVal);
-                $resolvedScheduledAt = $dt->format('Y-m-d H:i:s');
-            }
+        if ($timingMode === 'native' && $targetStepData && strtolower($targetStepData['type'] ?? '') === 'wait') {
+            $waitCalc = calculateWaitStepScheduledAt($targetStepData, strtotime($baseNow) ?: time(), [
+                'for_enrollment' => true,
+                'now_string' => $baseNow,
+                'past_fallback' => date('Y-m-d H:i:s', strtotime('+5 minutes')),
+                'duration_default' => 1,
+                'unit_default' => 'hours',
+            ]);
+            $resolvedScheduledAt = $waitCalc['scheduled_at'];
         } elseif ($timingMode === 'native') {
             // Native timing for a non-wait step means execute immediately (status = waiting, scheduled = now)
             $resolvedScheduledAt = date('Y-m-d H:i:s');
@@ -1465,12 +1457,18 @@ if ($method === 'POST' && isset($_GET['route']) && $_GET['route'] === 'manual-ad
                     (flow_id, subscriber_id, workspace_id, step_id, step_type, status, created_at, updated_at, last_step_at, scheduled_at)
                     VALUES (?, ?, ?, ?, ?, 'waiting', ?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE
+                        id = LAST_INSERT_ID(id),
+                        contact_id = COALESCE(VALUES(contact_id), contact_id),
                         step_id = VALUES(step_id),
                         step_type = VALUES(step_type),
+                        scheduled_at = VALUES(scheduled_at),
+                        waiting_until = NULL,
+                        branch_taken = NULL,
+                        last_error = NULL,
                         status = 'waiting',
-                        updated_at = VALUES(updated_at),
-                        last_step_at = VALUES(last_step_at),
-                        scheduled_at = VALUES(scheduled_at)";
+                        created_at = NOW(),
+                        updated_at = NOW(),
+                        last_step_at = NOW()";
                 $stmt = $pdo->prepare($sqlState);
                 foreach ($finalStatesToInsert as $subId) {
                     $stmt->execute([$flowId, $subId, $workspace_id, $stepId, $targetStepType, $nowStr, $nowStr, $nowStr, $resolvedScheduledAt]);
@@ -1606,8 +1604,8 @@ if (isset($_GET['route']) && $_GET['route'] === 'active-count') {
         $stmtCnt->execute([$flowId]);
         $activeCount = (int) $stmtCnt->fetchColumn();
         jsonResponse(true, ['count' => $activeCount]);
-    } catch (Exception $e) {
-        jsonResponse(true, ['count' => 0]);
+    } catch (\Throwable $e) {
+        jsonResponse(false, null, 'Error fetching active count: ' . $e->getMessage(), [], 500);
     }
 }
 
@@ -1723,36 +1721,16 @@ if (isset($_GET['route']) && $_GET['route'] === 'migrate-users') {
                 $s = $stepMap[$currentId];
                 $mode = $s['config']['mode'] ?? 'duration';
 
-                if ($mode === 'duration') {
-                    $dur = (int) ($s['config']['duration'] ?? 1);
-                    $unit = $s['config']['unit'] ?? 'hours';
-                    $seconds = $dur;
-                    if ($unit === 'minutes' || $unit === 'mins')
-                        $seconds *= 60;
-                    elseif ($unit === 'hours')
-                        $seconds *= 3600;
-                    elseif ($unit === 'days')
-                        $seconds *= 86400;
-                    elseif ($unit === 'weeks')
-                        $seconds *= 604800;
-                    $totalDurationSeconds += $seconds;
-                } elseif ($mode === 'until_date') {
-                    $specDate = $s['config']['specificDate'] ?? '';
-                    $targetTime = $s['config']['untilTime'] ?? '09:00';
-                    if ($specDate) {
-                        $targetTs = strtotime("$specDate $targetTime:00");
-                        if ($targetTs > time()) {
-                            $totalDurationSeconds += ($targetTs - time());
-                        }
+                $nowRefTs = time();
+                $waitCalc = calculateWaitStepScheduledAt($s, $nowRefTs, [
+                    'duration_default' => 1,
+                    'unit_default' => 'hours',
+                ]);
+                if (!empty($waitCalc['scheduled_at'])) {
+                    $delta = strtotime($waitCalc['scheduled_at']) - $nowRefTs;
+                    if ($delta > 0) {
+                        $totalDurationSeconds += $delta;
                     }
-                } elseif ($mode === 'until') {
-                    $targetTime = $s['config']['untilTime'] ?? '09:00';
-                    $dt = new DateTime();
-                    $parts2 = explode(':', $targetTime);
-                    $dt->setTime((int) $parts2[0], (int) ($parts2[1] ?? 0), 0);
-                    if ($dt->getTimestamp() <= time())
-                        $dt->modify('+1 day');
-                    $totalDurationSeconds += ($dt->getTimestamp() - time());
                 }
 
                 // Jump to next
@@ -1764,12 +1742,14 @@ if (isset($_GET['route']) && $_GET['route'] === 'migrate-users') {
             }
 
             $scheduledAt = date('Y-m-d H:i:s', time() + $totalDurationSeconds);
+            $finalTargetStepMeta = extractFlowStepMeta($steps, $finalTargetStepId);
+            $finalTargetStepType = $finalTargetStepMeta['type'] ?? null;
 
-            $sql = "UPDATE subscriber_flow_states SET status = 'waiting', step_id = ?, scheduled_at = ?, updated_at = NOW() WHERE flow_id = ? AND status = 'completed'";
-            $params = [$finalTargetStepId, $scheduledAt, $flowId];
+            $sql = "UPDATE subscriber_flow_states SET status = 'waiting', step_id = ?, step_type = ?, scheduled_at = ?, updated_at = NOW() WHERE flow_id = ? AND status = 'completed'";
+            $params = [$finalTargetStepId, $finalTargetStepType, $scheduledAt, $flowId];
 
             if (empty($input['continueAll']) && !empty($input['branches'])) {
-                $branchList = $input['branches'];
+                $branchList = array_values($input['branches']);
                 if (!empty($branchList)) {
                     $placeholders = implode(',', array_fill(0, count($branchList), '?'));
                     $sql .= " AND step_id IN ($placeholders)";
@@ -1778,7 +1758,7 @@ if (isset($_GET['route']) && $_GET['route'] === 'migrate-users') {
             }
 
             $stmt = $pdo->prepare($sql);
-            $stmt->execute($params);
+            $stmt->execute(array_values($params));
             $count = $stmt->rowCount();
 
             $stmtUpdateStats = $pdo->prepare("UPDATE flows SET stat_completed = (SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_flow_states WHERE flow_id = ? AND status = 'completed') WHERE id = ? AND workspace_id = ?");
@@ -1856,7 +1836,7 @@ if (isset($_GET['route']) && $_GET['route'] === 'export-history') {
             } elseif ($filter_type === 'unsubscribe') {
                 $whereClauses[] = "sa.type IN ('unsubscribe', 'unsubscribed_from_flow')";
             } elseif ($filter_type === 'failed') {
-                $whereClauses[] = "sa.type IN ('failed_email', 'zns_failed')";
+                $whereClauses[] = "sa.type IN ('failed_email', 'zns_failed', 'zns_skipped')";
             } elseif ($filter_type === 'sent') {
                 $whereClauses[] = "sa.type IN ('sent_email', 'zns_sent', 'sent_zns')";
             } else {
@@ -1960,7 +1940,7 @@ if (isset($_GET['route']) && $_GET['route'] === 'history') {
             } elseif ($filter_type === 'unsubscribe') {
                 $whereClauses[] = "sa.type IN ('unsubscribe', 'unsubscribed_from_flow')";
             } elseif ($filter_type === 'failed') {
-                $whereClauses[] = "sa.type IN ('failed_email', 'zns_failed')";
+                $whereClauses[] = "sa.type IN ('failed_email', 'zns_failed', 'zns_skipped')";
             } elseif ($filter_type === 'sent') {
                 $whereClauses[] = "sa.type IN ('sent_email', 'zns_sent', 'sent_zns')";
             } else {
@@ -2196,8 +2176,12 @@ if (isset($_GET['route']) && $_GET['route'] === 'resolve-step-error') {
         } else if ($action === 'move') {
             if (!$targetStepId)
                 jsonResponse(false, null, 'Target step ID required');
-            $stmt = $pdo->prepare("UPDATE subscriber_flow_states SET step_id = ?, status = 'waiting', scheduled_at = NOW(), updated_at = NOW(), last_error = NULL WHERE flow_id = ? AND step_id = ? AND subscriber_id IN ($placeholders) AND status = 'failed'");
-            $stmt->execute(array_merge([$targetStepId, $flowId, $stepId], $subscriberIds));
+            $stmtF = $pdo->prepare("SELECT steps FROM flows WHERE id = ? AND workspace_id = ?");
+            $stmtF->execute([$flowId, $workspace_id]);
+            $fSteps = json_decode($stmtF->fetchColumn() ?: '[]', true) ?: [];
+            $targetStepType = extractFlowStepMeta($fSteps, $targetStepId)['type'] ?? null;
+            $stmt = $pdo->prepare("UPDATE subscriber_flow_states SET step_id = ?, step_type = ?, status = 'waiting', scheduled_at = NOW(), updated_at = NOW(), last_error = NULL WHERE flow_id = ? AND step_id = ? AND subscriber_id IN ($placeholders) AND status = 'failed'");
+            $stmt->execute(array_values(array_merge([$targetStepId, $targetStepType, $flowId, $stepId], $subscriberIds)));
             jsonResponse(true, ['message' => 'ÄÃ£ chuyá»ƒn ' . count($subscriberIds) . ' ngÆ°á»i dÃ¹ng sang bÆ°á»›c má»›i']);
         } else if ($action === 'cleanup') {
             $stmt = $pdo->prepare("UPDATE subscriber_flow_states SET status = 'completed', updated_at = NOW() WHERE flow_id = ? AND step_id = ? AND subscriber_id IN ($placeholders)");
@@ -2325,10 +2309,12 @@ function autoMigrateStuckUsers($pdo, $flowId, $newSteps, $oldSteps = [])
             }
 
             if ($targetStepId) {
+                $targetMeta = extractFlowStepMeta($newSteps, $targetStepId);
+                $targetStepType = $targetMeta['type'] ?? null;
                 $stmtMigrate = $pdo->prepare("UPDATE subscriber_flow_states 
-                                             SET step_id = ?, status = 'waiting', scheduled_at = NOW(), updated_at = NOW() 
+                                             SET step_id = ?, step_type = ?, status = 'waiting', scheduled_at = NOW(), updated_at = NOW() 
                                              WHERE flow_id = ? AND step_id = ? AND status IN ('waiting', 'processing')");
-                $stmtMigrate->execute([$targetStepId, $flowId, $oldSid]);
+                $stmtMigrate->execute([$targetStepId, $targetStepType, $flowId, $oldSid]);
                 $totalMigrated += $stmtMigrate->rowCount();
             } else {
                 // If NO steps left at all in the flow
@@ -2645,10 +2631,12 @@ if (isset($_GET['route']) && $_GET['route'] === 'bulk-next-step') {
             // 2. Update database SECOND
             $newStatus = $isLastStep ? 'completed' : 'waiting';
             $finalNextStepId = $isLastStep ? $currentStepId : $nextStepId;
+            $finalNextStepType = $isLastStep ? null : (extractFlowStepMeta($steps, $finalNextStepId)['type'] ?? null);
 
             if ($selectAll) {
                 $sql = "UPDATE subscriber_flow_states 
                         SET step_id = ?, 
+                            step_type = ?,
                             status = ?, 
                             scheduled_at = NOW(), 
                             updated_at = NOW(),
@@ -2657,11 +2645,13 @@ if (isset($_GET['route']) && $_GET['route'] === 'bulk-next-step') {
                         WHERE flow_id = ? 
                         AND step_id IN ($stepPlaceholders)
                         AND status IN ('waiting', 'processing', 'failed')";
-                $params = array_merge([$finalNextStepId, $newStatus, $flowId], $expandedStepIds);
+                $params = array_values(array_merge([$finalNextStepId, $finalNextStepType, $newStatus, $flowId], $expandedStepIds));
             } else {
+                $subscriberIds = array_values($subscriberIds);
                 $placeholders = implode(',', array_fill(0, count($subscriberIds), '?'));
                 $sql = "UPDATE subscriber_flow_states 
                         SET step_id = ?, 
+                            step_type = ?,
                             status = ?, 
                             scheduled_at = NOW(), 
                             updated_at = NOW(),
@@ -2670,7 +2660,7 @@ if (isset($_GET['route']) && $_GET['route'] === 'bulk-next-step') {
                         WHERE flow_id = ? 
                         AND subscriber_id IN ($placeholders) 
                         AND status IN ('waiting', 'processing', 'failed')";
-                $params = array_merge([$finalNextStepId, $newStatus, $flowId], $subscriberIds);
+                $params = array_values(array_merge([$finalNextStepId, $finalNextStepType, $newStatus, $flowId], $subscriberIds));
             }
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
@@ -2744,15 +2734,17 @@ if (isset($_GET['route']) && $_GET['route'] === 'bulk-remove') {
         $stepPlaceholders = implode(',', array_fill(0, count($expandedStepIds), '?'));
 
         if ($selectAll) {
-            // Remove ALL subscribers in this step
-            $sql = "DELETE FROM subscriber_flow_states 
+            // Cancel ALL subscribers in this step
+            $sql = "UPDATE subscriber_flow_states 
+                    SET status = 'cancelled', updated_at = NOW()
                     WHERE flow_id = ? 
                     AND step_id IN ($stepPlaceholders)";
             $params = array_merge([$flowId], $expandedStepIds);
         } else {
-            // Remove only selected subscribers (regardless of status)
+            // Cancel only selected subscribers (regardless of status)
             $placeholders = implode(',', array_fill(0, count($subscriberIds), '?'));
-            $sql = "DELETE FROM subscriber_flow_states 
+            $sql = "UPDATE subscriber_flow_states 
+                    SET status = 'cancelled', updated_at = NOW()
                     WHERE flow_id = ? 
                     AND subscriber_id IN ($placeholders)";
             $params = array_merge([$flowId], $subscriberIds);
@@ -2762,24 +2754,7 @@ if (isset($_GET['route']) && $_GET['route'] === 'bulk-remove') {
         $stmt->execute($params);
         $count = $stmt->rowCount();
 
-        // [FIX] Also remove failed activity logs so subscriber disappears from "Gá»­i lá»—i" tab
-        // The failed tab reads from subscriber_activity (type=failed_email/zns_failed/zns_skipped)
-        if ($selectAll) {
-            // For select_all: delete all failed activities in this step
-            $sqlAct = "DELETE FROM subscriber_activity 
-                       WHERE flow_id = ? 
-                       AND reference_id IN ($stepPlaceholders)
-                       AND type IN ('failed_email', 'zns_failed', 'zns_skipped')";
-            $pdo->prepare($sqlAct)->execute(array_merge([$flowId], $expandedStepIds));
-        } else {
-            // For specific subscribers: delete their failed activities in this step/flow
-            $placeholders2 = implode(',', array_fill(0, count($subscriberIds), '?'));
-            $sqlAct = "DELETE FROM subscriber_activity 
-                       WHERE flow_id = ? 
-                       AND subscriber_id IN ($placeholders2)
-                       AND type IN ('failed_email', 'zns_failed', 'zns_skipped')";
-            $pdo->prepare($sqlAct)->execute(array_merge([$flowId], $subscriberIds));
-        }
+        // [100% Soft-Delete Mandate] Preserve audit history in subscriber_activity (no hard DELETE FROM)
 
         // Update flow stats
         $stmtUpdateStats = $pdo->prepare("UPDATE flows SET 
@@ -3000,11 +2975,12 @@ switch ($method) {
             session_write_close();
         try {
             if ($path) {
+                ensureFlowsTableSchema($pdo);
                 $stmt = $pdo->prepare("SELECT f.id, f.workspace_id, f.name, f.status, f.trigger_type, f.steps, f.config, f.stat_enrolled, f.stat_completed, f.created_at, f.updated_at, f.created_by, f.updated_by,
                     u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email, u_creator.avatar_url AS creator_avatar, u_creator.role AS creator_role
                     FROM flows f
                     LEFT JOIN users u_creator ON u_creator.id = f.created_by
-                    WHERE f.id = ? AND f.workspace_id = ?");
+                    WHERE f.id = ? AND f.workspace_id = ? AND f.deleted_at IS NULL");
                 $stmt->execute([$path, $workspace_id]);
                 $flow = $stmt->fetch();
 
@@ -3208,8 +3184,10 @@ switch ($method) {
                 $search = isset($_GET['search']) ? trim((string) $_GET['search']) : '';
                 $filterStatus = isset($_GET['status']) ? trim((string) $_GET['status']) : '';
 
+                ensureFlowsTableSchema($pdo);
+
                 $wsClause = ($workspace_id === 1) ? "(workspace_id = ? OR workspace_id IS NULL)" : "workspace_id = ?";
-                $whereFlow = [$wsClause];
+                $whereFlow = [$wsClause, "(deleted_at IS NULL)"];
                 $paramsFlow = [$workspace_id];
                 if (!empty($filterStatus) && $filterStatus !== 'all') {
                     $whereFlow[] = "status = ?";
@@ -3224,15 +3202,15 @@ switch ($method) {
                 // [PERF-F0] Aggregate summary across all flows in workspace so StatCards & status tabs are 100% accurate
                 $stmtSummary = $pdo->prepare("
                     SELECT
-                        COALESCE(SUM(CASE WHEN status != 'archived' OR status IS NULL THEN 1 ELSE 0 END), 0) AS total,
-                        COALESCE(SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END), 0) AS active,
-                        COALESCE(SUM(CASE WHEN status = 'paused' THEN 1 ELSE 0 END), 0) AS paused,
-                        COALESCE(SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END), 0) AS draft,
-                        COALESCE(SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END), 0) AS archived,
-                        COALESCE(SUM(CASE WHEN status = 'active' THEN COALESCE(stat_enrolled, 0) ELSE 0 END), 0) AS active_participants,
-                        COALESCE(SUM(CASE WHEN status != 'archived' OR status IS NULL THEN COALESCE(stat_completed, 0) ELSE 0 END), 0) AS completed_participants
+                        COALESCE(SUM(CASE WHEN (status != 'archived' OR status IS NULL) AND deleted_at IS NULL THEN 1 ELSE 0 END), 0) AS total,
+                        COALESCE(SUM(CASE WHEN status = 'active' AND deleted_at IS NULL THEN 1 ELSE 0 END), 0) AS active,
+                        COALESCE(SUM(CASE WHEN status = 'paused' AND deleted_at IS NULL THEN 1 ELSE 0 END), 0) AS paused,
+                        COALESCE(SUM(CASE WHEN status = 'draft' AND deleted_at IS NULL THEN 1 ELSE 0 END), 0) AS draft,
+                        COALESCE(SUM(CASE WHEN status = 'archived' AND deleted_at IS NULL THEN 1 ELSE 0 END), 0) AS archived,
+                        COALESCE(SUM(CASE WHEN status = 'active' AND deleted_at IS NULL THEN COALESCE(stat_enrolled, 0) ELSE 0 END), 0) AS active_participants,
+                        COALESCE(SUM(CASE WHEN (status != 'archived' OR status IS NULL) AND deleted_at IS NULL THEN COALESCE(stat_completed, 0) ELSE 0 END), 0) AS completed_participants
                     FROM flows
-                    WHERE {$wsClause}
+                    WHERE {$wsClause} AND (deleted_at IS NULL)
                 ");
                 $stmtSummary->execute([$workspace_id]);
                 $sumRow = $stmtSummary->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -3391,58 +3369,8 @@ switch ($method) {
             $stmtOld->execute([$path, $workspace_id]);
             $oldStepsJson = $stmtOld->fetchColumn();
             $oldSteps = json_decode($oldStepsJson, true) ?: [];
-            $oldWaitConfigs = [];
-            foreach ($oldSteps as $os) {
-                if (($os['type'] ?? '') === 'wait') {
-                    $oldWaitConfigs[trim($os['id'])] = $os['config'] ?? [];
-                }
-            }
-
             $currentSteps = $data['steps'] ?? [];
-            $rescheduledCount = 0;
-            foreach ($currentSteps as $ns) {
-                $nsId = trim($ns['id'] ?? '');
-                if (($ns['type'] ?? '') === 'wait' && isset($oldWaitConfigs[$nsId])) {
-                    $newConf = $ns['config'] ?? [];
-                    $oldConf = $oldWaitConfigs[$nsId];
-
-                    // [FIX] Also trigger on mode/waitType change (e.g. duration â†’ until_date),
-                    // not just duration/unit. Previously missed mode changes on paused-flow saves
-                    // (second pass only runs for active saves; first pass must cover all saves).
-                    $waitConfigChanged =
-                        ($newConf['duration'] ?? '') != ($oldConf['duration'] ?? '') ||
-                        ($newConf['unit'] ?? '') != ($oldConf['unit'] ?? '') ||
-                        ($newConf['mode'] ?? '') != ($oldConf['mode'] ?? '') ||
-                        ($newConf['waitType'] ?? '') != ($oldConf['waitType'] ?? '');
-
-                    if ($waitConfigChanged && ($newConf['mode'] ?? $newConf['waitType'] ?? 'duration') === 'duration') {
-                        // Only reschedule via SQL-bulk when it's still a duration-mode wait.
-                        // until/until_date waits have subscriber-specific dates â€” handled per-item in second pass.
-                        $dur = (int) ($newConf['duration'] ?? 1);
-                        $unit = $newConf['unit'] ?? 'hours';
-                        $seconds = $dur;
-                        if ($unit === 'minutes')
-                            $seconds *= 60;
-                        elseif ($unit === 'hours')
-                            $seconds *= 3600;
-                        elseif ($unit === 'days')
-                            $seconds *= 86400;
-                        elseif ($unit === 'weeks')
-                            $seconds *= 604800;
-
-                        // [FIX] We must update scheduled_at relative to last_step_at to ensure 
-                        // subscribers don't restart their wait from NOW(). last_step_at accurately 
-                        // reflects when they entered the wait step.
-                        $stmtUpdateWait = $pdo->prepare("
-                            UPDATE subscriber_flow_states 
-                            SET scheduled_at = DATE_ADD(IFNULL(last_step_at, created_at), INTERVAL ? SECOND) 
-                            WHERE flow_id = ? AND step_id = ? AND status IN ('waiting', 'processing')
-                        ");
-                        $stmtUpdateWait->execute([$seconds, $path, $nsId]);
-                        $rescheduledCount += $stmtUpdateWait->rowCount();
-                    }
-                }
-            }
+            $rescheduledCount = syncWaitingSubscribersOnFlowSave($pdo, $path, (int) $workspace_id, $oldSteps, $currentSteps);
             if ($rescheduledCount > 0) {
                 error_log("[Wait Sync] Rescheduled $rescheduledCount subscribers for flow $path due to wait time config change.");
             }
@@ -3604,45 +3532,20 @@ switch ($method) {
 
                                     // [SMART SCHEDULE FIX] Predict wait-time for step 1
                                     $initialSchedule = $pastTime;
-                                    foreach ($stepsArr as $fs) {
-                                        if (($fs['id'] ?? '') === $trigger['nextStepId'] && strtolower($fs['type'] ?? '') === 'wait') {
-                                            $fsWaitConfig = $fs['config'] ?? [];
-                                            $fsWaitMode = $fsWaitConfig['mode'] ?? 'duration';
-                                            if ($fsWaitMode === 'duration') {
-                                                $dur = (int) ($fsWaitConfig['duration'] ?? 0);
-                                                $unit = $fsWaitConfig['unit'] ?? 'minutes';
-                                                $unitSeconds = match ($unit) {
-                                                    'weeks' => 604800,
-                                                    'days' => 86400,
-                                                    'hours' => 3600,
-                                                    default => 60,
-                                                };
-                                                if (($unitSeconds * $dur) > 0) {
-                                                    $initialSchedule = date('Y-m-d H:i:s', time() + ($unitSeconds * $dur));
-                                                }
-                                            } elseif ($fsWaitMode === 'until_date') {
-                                                $specDate = $fsWaitConfig['specificDate'] ?? '';
-                                                $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                                                if ($specDate) {
-                                                    $targetTs = strtotime("$specDate $targetTime:00");
-                                                    if ($targetTs > time()) {
-                                                        $initialSchedule = date('Y-m-d H:i:s', $targetTs);
-                                                    }
-                                                }
-                                            } elseif ($fsWaitMode === 'until') {
-                                                $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                                                $dt = new DateTime();
-                                                $parts2 = explode(':', $targetTime);
-                                                $dt->setTime((int) $parts2[0], (int) ($parts2[1] ?? 0), 0);
-                                                if ($dt->getTimestamp() <= time())
-                                                    $dt->modify('+1 day');
-                                                $initialSchedule = $dt->format('Y-m-d H:i:s');
-                                            }
-                                            break;
-                                        }
+                                    $firstStepMeta = extractFlowStepMeta($stepsArr, $trigger['nextStepId']);
+                                    $firstStepType = $firstStepMeta['type'] ?? 'unknown';
+                                    if ($firstStepMeta['step'] && strtolower((string) $firstStepType) === 'wait') {
+                                        $waitCalc = calculateWaitStepScheduledAt($firstStepMeta['step'], null, [
+                                            'for_enrollment' => true,
+                                            'past_fallback' => $initialSchedule,
+                                            'duration_default' => 0,
+                                            'unit_default' => 'minutes',
+                                        ]);
+                                        $initialSchedule = $waitCalc['scheduled_at'];
                                     }
 
                                     foreach ($chunks as $chunk) {
+                                        $chunk = array_values($chunk);
                                         $placeholders = implode(',', array_fill(0, count($chunk), '?'));
 
                                         $existsCheckSql = "";
@@ -3664,12 +3567,25 @@ switch ($method) {
                                             $existsCheckSql = "AND " . implode(" AND ", $checks);
                                         }
 
-                                        $sqlIns = "INSERT INTO subscriber_flow_states (flow_id, subscriber_id, workspace_id, step_id, scheduled_at, status, created_at, updated_at, last_step_at)
-                                                   SELECT ?, s.id, ?, ?, ?, ?, NOW(), NOW(), NOW()
+                                        $sqlIns = "INSERT INTO subscriber_flow_states (flow_id, subscriber_id, workspace_id, step_id, step_type, scheduled_at, status, created_at, updated_at, last_step_at)
+                                                   SELECT ?, s.id, ?, ?, ?, ?, ?, NOW(), NOW(), NOW()
                                                    FROM subscribers s
                                                    WHERE s.id IN ($placeholders)
                                                    AND s.workspace_id = ?
-                                                   $existsCheckSql";
+                                                   $existsCheckSql
+                                                   ON DUPLICATE KEY UPDATE
+                                                       id = LAST_INSERT_ID(id),
+                                                       contact_id = COALESCE(VALUES(contact_id), contact_id),
+                                                       step_id = VALUES(step_id),
+                                                       step_type = VALUES(step_type),
+                                                       scheduled_at = VALUES(scheduled_at),
+                                                       waiting_until = NULL,
+                                                       branch_taken = NULL,
+                                                       last_error = NULL,
+                                                       status = VALUES(status),
+                                                       created_at = NOW(),
+                                                       updated_at = NOW(),
+                                                       last_step_at = NOW()";
 
                                         $checkParams = [];
                                         if ($frequency === 'one-time') {
@@ -3683,8 +3599,8 @@ switch ($method) {
                                             $checkParams[] = $path;
                                         }
 
-                                        // Params: [flowId, workspaceId, stepId, time, targetStatus] + [sub IDs] + [workspaceId] + [checkParams]
-                                        $params = array_merge([$path, $workspace_id, $trigger['nextStepId'], $initialSchedule, $targetStatus], $chunk, [$workspace_id], $checkParams);
+                                        // Params: [flowId, workspaceId, stepId, stepType, time, targetStatus] + [sub IDs] + [workspaceId] + [checkParams]
+                                        $params = array_values(array_merge([$path, $workspace_id, $trigger['nextStepId'], $firstStepType, $initialSchedule, $targetStatus], $chunk, [$workspace_id], $checkParams));
 
                                         $stmtIns = $pdo->prepare($sqlIns);
                                         $stmtIns->execute($params);
@@ -3709,136 +3625,8 @@ switch ($method) {
                     error_log("[Flow Save] Auto-migrated $migratedCount orphaned users for flow $path (active)");
                 }
 
-                // [ISSUE #4 FIX] Update wait times for subscribers when wait step config changes
-                // [BUG-FIX] Bug #4: The original code fetched old steps AGAIN after the UPDATE,
-                // meaning it read back the NEW steps â€” not the old ones. The wait-time comparison
-                // old vs new was therefore always new vs new, so reschedule never triggered.
-                // Fix: Reuse $oldWaitConfigs built BEFORE the UPDATE above (line ~2218).
-                // Build old steps map from the already-fetched $oldSteps (pre-UPDATE)
-                $oldStepsMap = [];
-                foreach ($oldSteps as $os) {
-                    $oldStepsMap[$os['id']] = $os;
-                }
-
-                // Check for wait step changes
-                foreach ($stepsArr as $newStep) {
-                    if ($newStep['type'] === 'wait' && isset($oldStepsMap[$newStep['id']])) {
-                        $oldStep = $oldStepsMap[$newStep['id']];
-                        $configChanged = false;
-
-                        // Check if wait configuration changed
-                        $oldConfig = $oldStep['config'] ?? [];
-                        $newConfig = $newStep['config'] ?? [];
-
-                        // Compare relevant wait config fields
-                        // [FIX] Frontend sends 'mode' (not 'waitType') and 'untilTime' (not 'specificTime').
-                        // Must compare both old and new using normalized keys to reliably detect changes.
-                        $oldMode = $oldConfig['mode'] ?? $oldConfig['waitType'] ?? 'duration';
-                        $newMode = $newConfig['mode'] ?? $newConfig['waitType'] ?? 'duration';
-                        $oldTime = $oldConfig['untilTime'] ?? $oldConfig['specificTime'] ?? '';
-                        $newTime = $newConfig['untilTime'] ?? $newConfig['specificTime'] ?? '';
-                        if (
-                            $oldMode !== $newMode ||
-                            ($oldConfig['duration'] ?? '') !== ($newConfig['duration'] ?? '') ||
-                            ($oldConfig['unit'] ?? '') !== ($newConfig['unit'] ?? '') ||
-                            ($oldConfig['specificDate'] ?? '') !== ($newConfig['specificDate'] ?? '') ||
-                            $oldTime !== $newTime
-                        ) {
-                            $configChanged = true;
-                        }
-
-                        if ($configChanged) {
-                            // Recalculate scheduled_at for waiting subscribers at this step
-                            // [FIX] Use last_step_at (when subscriber ENTERED this wait step) as base time.
-                            // updated_at CANNOT be trusted here: it changes on every DB update
-                            // (including ON UPDATE CURRENT_TIMESTAMP), so using it as basetime
-                            // would re-anchor the wait duration to the moment of the admin edit
-                            // rather than when the subscriber originally arrived at this step.
-                            // [FIX] Fetch created_at as a reliable anchor fallback when last_step_at is NULL.
-                            // updated_at becomes unreliable because ON UPDATE CURRENT_TIMESTAMP rewrites it
-                            // on every DB change â€” using it as base time for wait duration anchors all
-                            // subscribers to the moment the admin saved the flow, not their entry time.
-                            // created_at is immutable after INSERT and maps correctly to enrollment time.
-                            $stmtWaiting = $pdo->prepare("SELECT id, last_step_at, created_at FROM subscriber_flow_states WHERE flow_id = ? AND step_id = ? AND status = 'waiting'");
-                            $stmtWaiting->execute([$path, $newStep['id']]);
-                            $waitingItems = $stmtWaiting->fetchAll();
-
-                            foreach ($waitingItems as $wi) {
-                                $newScheduledAt = null;
-                                $waitType = $newConfig['waitType'] ?? $newConfig['mode'] ?? 'duration';
-
-                                if ($waitType === 'duration') {
-                                    $duration = (int) ($newConfig['duration'] ?? 1);
-                                    $unit = $newConfig['unit'] ?? 'hours';
-                                    $baseTimeStr = !empty($wi['last_step_at']) ? $wi['last_step_at'] : $wi['created_at'];
-                                    $baseTime = strtotime($baseTimeStr);
-
-                                    switch ($unit) {
-                                        case 'minutes':
-                                            $newScheduledAt = date('Y-m-d H:i:s', $baseTime + ($duration * 60));
-                                            break;
-                                        case 'hours':
-                                            $newScheduledAt = date('Y-m-d H:i:s', $baseTime + ($duration * 3600));
-                                            break;
-                                        case 'days':
-                                            $newScheduledAt = date('Y-m-d H:i:s', $baseTime + ($duration * 86400));
-                                            break;
-                                        case 'weeks':
-                                            $newScheduledAt = date('Y-m-d H:i:s', $baseTime + ($duration * 604800));
-                                            break;
-                                    }
-                                } elseif ($waitType === 'until_date') {
-                                    // [FIX] Frontend field is 'untilTime'; fallback 'specificTime' for legacy
-                                    $specificDate = $newConfig['specificDate'] ?? '';
-                                    $specificTime = $newConfig['untilTime'] ?? $newConfig['specificTime'] ?? '09:00';
-                                    if ($specificDate) {
-                                        $newScheduledAt = $specificDate . ' ' . $specificTime . ':00';
-                                    }
-                                } elseif ($waitType === 'until') {
-                                    // Day-of-week wait: recalculate next occurrence of the configured day+time.
-                                    // Without this, changing any 'until' step config would leave $newScheduledAt=null
-                                    // and subscribers would keep their old (stale) scheduled_at unchanged.
-                                    $targetTime = $newConfig['untilTime'] ?? $newConfig['specificTime'] ?? '09:00';
-                                    $targetDay = $newConfig['untilDay'] ?? null; // 0=Sun..6=Sat
-                                    $dt = new DateTime();
-                                    $timeParts = explode(':', $targetTime);
-                                    $dt->setTime((int) $timeParts[0], (int) ($timeParts[1] ?? 0), 0);
-                                    if ($targetDay !== null && $targetDay !== '') {
-                                        $currentDay = (int) date('w');
-                                        $daysAhead = ((int) $targetDay - $currentDay + 7) % 7;
-                                        // If same day but time already passed â†’ next week
-                                        if ($daysAhead === 0 && $dt->getTimestamp() <= time()) {
-                                            $daysAhead = 7;
-                                        }
-                                        if ($daysAhead > 0) {
-                                            $dt->modify("+$daysAhead days");
-                                        }
-                                    } else {
-                                        // No specific day â€” just a daily time
-                                        if ($dt->getTimestamp() <= time()) {
-                                            $dt->modify('+1 day');
-                                        }
-                                    }
-                                    $newScheduledAt = $dt->format('Y-m-d H:i:s');
-                                } elseif ($waitType === 'until_attribute') {
-                                    // Attribute-based waits are subscriber-specific (birthday, anniversary, etc.)
-                                    // We cannot recalculate correctly here without querying each subscriber's
-                                    // attribute value. Skip reschedule â€” the executor will handle correctly
-                                    // on next wake-up cycle.
-                                    error_log("[Flow Save] 'until_attribute' wait config changed at step {$newStep['id']} â€” subscribers will be re-evaluated on next execution cycle.");
-                                }
-
-                                if ($newScheduledAt) {
-                                    $pdo->prepare("UPDATE subscriber_flow_states SET scheduled_at = ? WHERE id = ?")->execute([$newScheduledAt, $wi['id']]);
-                                }
-                            }
-
-                            if (count($waitingItems) > 0) {
-                                error_log("[Flow Save] Updated scheduled times for " . count($waitingItems) . " waiting subscribers at step {$newStep['id']}");
-                            }
-                        }
-                    }
-                }
+                // Wait config rescheduling for all wait modes (duration, until, until_date) is handled
+                // uniformly for both paused and active saves via syncWaitingSubscribersOnFlowSave() above.
 
                 if ($trigger && isset($trigger['config']['type']) && $trigger['config']['type'] === 'campaign') {
                     $campaignId = $trigger['config']['targetId'];

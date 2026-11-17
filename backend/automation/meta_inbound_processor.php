@@ -621,7 +621,7 @@ function processMetaAIMessage($pdo, $pageId, $senderId, $userMsg, $scenario)
     logMetaDebug("AI Step 5: Calling AI Chatbot Orchestrator via cURL...");
     $botMsg = '';
     try {
-        $chatUrl = (defined('API_BASE_URL') ? API_BASE_URL : "https://automation.ideas.edu.vn/mail_api") . "/ai_chatbot.php";
+        $chatUrl = resolve_automation_api_base_url($pdo) . "/ai_chatbot.php";
 
         $postFields = [
             'message' => $userMsg,

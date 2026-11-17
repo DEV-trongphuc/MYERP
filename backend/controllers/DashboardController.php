@@ -421,7 +421,8 @@ class DashboardController {
             LEFT JOIN users u ON a.user_id = u.id
             WHERE a.tenant_id=? AND a.deleted_at IS NULL";
         $p = [$tid];
-        if (!in_array($auth['role'] ?? '', ['super_admin', 'superadmin', 'admin'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::hasGlobalScope($this->db, $auth, 'workspace', 'read')) {
             $sql .= " AND (a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, a.participant_ids))";
             $p[] = $uid;
             $p[] = $uid;
@@ -644,12 +645,14 @@ class DashboardController {
                 return;
             }
         }
-        $isAdminOrDirector = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
-        $isManager = ($role === 'manager');
-        $isAccountant = ($role === 'accountant');
-        $isHr = ($role === 'hr');
-        $isSaleAdmin = in_array($role, ['sale_admin', 'saleadmin'], true);
-        $isSale = in_array($role, ['sale', 'sales'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $dashContactScope = TenantConfigService::resolvePermissionScope($this->db, $auth, 'contacts', 'read');
+        $isAdminOrDirector = ($dashContactScope === 'all' && TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'director'], 'reports', 'read', ['all']));
+        $isManager = ($dashContactScope === 'team' || $role === 'manager');
+        $isHr = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['hr'], 'hrm', 'read', ['all']);
+        $isAccountant = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['accountant'], 'invoices', 'read', ['all']);
+        $isSaleAdmin = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['sale_admin', 'saleadmin'], 'contacts', 'read', ['all']) && !$isAdminOrDirector;
+        $isSale = ($dashContactScope === 'own');
 
         // Load managed team users if manager
         $managedUserIds = [$uid];
@@ -836,28 +839,32 @@ class DashboardController {
             }
         } catch (\Throwable $e) { $coopCount = 0; }
 
-        // 9. Student Counts (Nộp hồ sơ & Lệ phí)
+        // 9. Dynamic Student Tab Counts (from tenant_student_tabs)
         $nopHoSoCount = 0;
         $lePhiCount = 0;
+        $dynamicTabBadges = [];
         try {
             if ($isAccountant || $isSaleAdmin || $isAdminOrDirector) {
-                $stmtStd = $this->db->prepare("
-                    SELECT 
-                        SUM(CASE WHEN (c.pipeline_status IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so') OR c.stage_id IN (9,10,11,12)) THEN 1 ELSE 0 END) as nop_ho_so,
-                        SUM(CASE WHEN (c.pipeline_status IN ('deposit_tuition_payment', 'dong_le_phi_ho_so') OR c.stage_id IN (13)) THEN 1 ELSE 0 END) as le_phi
-                    FROM contacts c
-                    WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND (c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)
-                ");
-                $stmtStd->execute([$tid]);
-                $stdRow = $stmtStd->fetch(PDO::FETCH_ASSOC);
-                if ($stdRow) {
-                    $nopHoSoCount = (int)($stdRow['nop_ho_so'] ?? 0);
-                    $lePhiCount = (int)($stdRow['le_phi'] ?? 0);
+                require_once __DIR__ . '/../config/TenantConfigService.php';
+                $tabs = TenantConfigService::getStudentTabs($this->db, (int)$tid);
+                foreach ($tabs as $tabDef) {
+                    $tKey = (string)($tabDef['tab_key'] ?? '');
+                    if ($tKey === '') continue;
+                    $clause = TenantConfigService::buildStudentSubTabClause($this->db, (int)$tid, $tKey, 'c');
+                    if ($clause !== null) {
+                        $stmtStd = $this->db->prepare("SELECT COUNT(*) FROM contacts c WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND (c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL) AND {$clause}");
+                        $stmtStd->execute([$tid]);
+                        $cnt = (int)$stmtStd->fetchColumn();
+                        $bKey = !empty($tabDef['badge_key']) ? (string)$tabDef['badge_key'] : $tKey;
+                        $dynamicTabBadges[$bKey] = $cnt;
+                        if ($tKey === 'nop_ho_so' || $bKey === 'nopHoSo') $nopHoSoCount = $cnt;
+                        if ($tKey === 'le_phi' || $bKey === 'lePhi') $lePhiCount = $cnt;
+                    }
                 }
             }
         } catch (\Throwable $e) { }
 
-        $badgePayload = [
+        $badgePayload = array_merge($dynamicTabBadges, [
             'workspaceTasks' => $tasksCount,
             'pendingApprovals' => $totalApprovals,
             'pendingExpenses' => $pendingExpensesCount,
@@ -868,7 +875,7 @@ class DashboardController {
             'coopSlips' => $coopCount,
             'nopHoSo' => $nopHoSoCount,
             'lePhi' => $lePhiCount,
-        ];
+        ]);
         @file_put_contents($badgeCacheFile, json_encode($badgePayload, JSON_UNESCAPED_UNICODE));
         respond(200, $badgePayload, 'Lấy danh sách badges thành công');
     }

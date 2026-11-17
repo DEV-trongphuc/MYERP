@@ -690,7 +690,7 @@ const PersonalAccountInner = () => {
                       backgroundSize: '12px 12px'
                     }}>
                       <img 
-                        src={signatureUrl ? (signatureUrl.startsWith('http') || signatureUrl.startsWith('data:') ? signatureUrl : `https://myerp.ideas.edu.vn/backend/${signatureUrl.replace(/^\/+/, '')}`) : ''} 
+                        src={signatureUrl ? (signatureUrl.startsWith('http') || signatureUrl.startsWith('data:') ? signatureUrl : `/backend/${signatureUrl.replace(/^\/+/, '')}`) : ''} 
                         alt="Chữ ký mẫu" 
                         style={{ maxHeight: '110px', objectFit: 'contain' }} 
                       />

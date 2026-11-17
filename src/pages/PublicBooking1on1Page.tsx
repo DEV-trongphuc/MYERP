@@ -22,6 +22,7 @@ import {
   DAY_KEYS,
 } from '../components/academic/LecturerInvitationAnd1on1Modal';
 import { API_BASE } from '../config/env';
+import { getTenantOrganizationName } from '../contexts/TenantConfigContext';
 
 const API_URL = API_BASE;
 
@@ -282,7 +283,7 @@ export const PublicBooking1on1Page: React.FC = () => {
                   color: '#BD1D2D',
                 }}
               >
-                VIỆN QUỐC TẾ IDEAS • ACADEMIC AFFAIRS PORTAL
+                {getTenantOrganizationName().toUpperCase()} • ACADEMIC AFFAIRS PORTAL
               </div>
               <h1
                 style={{

@@ -575,59 +575,14 @@ class QuoteController {
     }
 
     private function getScope(array $auth, string $module, string $action): string {
-        $permissionsJson = null;
-        $stmtQ = $this->db->prepare("SELECT permissions_json FROM users WHERE id = ? LIMIT 1");
-        $stmtQ->execute([$auth['user_id']]);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $stmtQ = $this->db->prepare("SELECT permissions_json FROM users WHERE id = ? AND tenant_id = ? LIMIT 1");
+        $stmtQ->execute([(int)($auth['user_id'] ?? 0), (int)($auth['tenant_id'] ?? 1)]);
         $resQ = $stmtQ->fetch(PDO::FETCH_ASSOC);
         if ($resQ && !empty($resQ['permissions_json'])) {
-            $permissionsJson = json_decode($resQ['permissions_json'], true);
+            $auth['permissions'] = json_decode($resQ['permissions_json'], true);
         }
-
-        if (in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
-            return 'all';
-        }
-
-        if (in_array($auth['role'], ['sale', 'sales'], true) && $module === 'deals') {
-            return $action === 'delete' ? 'none' : 'own';
-        }
-
-        if ($permissionsJson && isset($permissionsJson[$module][$action])) {
-            $val = $permissionsJson[$module][$action];
-            if (in_array($val, ['all', 'team', 'own', 'none'], true)) {
-                if ($action !== 'delete' && $val === 'none' && in_array($auth['role'], ['sale', 'sales', 'manager', 'director', 'assistant'], true)) {
-                    return 'own';
-                }
-                return $val;
-            }
-        }
-
-        // Default fallbacks
-        $role = $auth['role'];
-        if ($role === 'director') {
-            if ($module === 'settings') {
-                return 'none';
-            }
-            return 'all';
-        }
-        if ($role === 'assistant') {
-            return $action === 'delete' ? 'none' : 'all';
-        }
-        if ($role === 'manager') {
-            return $action === 'delete' ? 'none' : 'team';
-        }
-        if (in_array($role, ['sale', 'sales'], true)) {
-            if ($module === 'projects') {
-                return $action === 'read' ? 'all' : 'none';
-            }
-            return $action === 'delete' ? 'none' : 'own';
-        }
-        if ($role === 'viewer') {
-            return $action === 'read' ? 'all' : 'none';
-        }
-        if (in_array($role, ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
-            return $action === 'delete' ? 'own' : 'all';
-        }
-
-        return 'none';
+        $mappedMod = ($module === 'deals') ? 'quotes' : $module;
+        return TenantConfigService::resolvePermissionScope($this->db, $auth, $mappedMod, $action);
     }
 }

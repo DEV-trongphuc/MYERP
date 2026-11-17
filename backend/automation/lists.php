@@ -17,7 +17,7 @@ switch ($method) {
             // NEW: Stats Route
             if (isset($_GET['route']) && $_GET['route'] === 'stats' && $path) {
                 // Verify ownership first
-                $stmtAuth = $pdo->prepare("SELECT id FROM lists WHERE id = ? AND workspace_id = ?");
+                $stmtAuth = $pdo->prepare("SELECT id FROM lists WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL");
                 $stmtAuth->execute([$path, $workspace_id]);
                 if (!$stmtAuth->fetch()) {
                     jsonResponse(false, null, 'Không tìm thấy danh sách');
@@ -80,7 +80,7 @@ switch ($method) {
                     jsonResponse(true, $res, 'Đã cập nhật số lượng cho danh sách.');
                 } else {
                     // Refresh ALL lists in current workspace using a single grouped query instead of N+1
-                    $stmtAll = $pdo->prepare("SELECT id FROM lists WHERE workspace_id = ?");
+                    $stmtAll = $pdo->prepare("SELECT id FROM lists WHERE workspace_id = ? AND deleted_at IS NULL");
                     $stmtAll->execute([$workspace_id]);
                     $ids = $stmtAll->fetchAll(PDO::FETCH_COLUMN);
 
@@ -163,7 +163,7 @@ switch ($method) {
             if (!isset($_GET['page']) && !isset($_GET['limit']) && !isset($_GET['search'])) {
                 // Single-item lookup: ?id=xxx (no pagination params)
                 if ($path) {
-                    $stmt = $pdo->prepare("SELECT {$creatorCols} FROM lists l LEFT JOIN users u_creator ON u_creator.id = l.created_by WHERE l.id = ? AND l.workspace_id = ?");
+                    $stmt = $pdo->prepare("SELECT {$creatorCols} FROM lists l LEFT JOIN users u_creator ON u_creator.id = l.created_by WHERE l.id = ? AND l.workspace_id = ? AND l.deleted_at IS NULL");
                     $stmt->execute([$path, $workspace_id]);
                     $item = $stmt->fetch(PDO::FETCH_ASSOC);
                     if ($item) {
@@ -178,7 +178,7 @@ switch ($method) {
                 $sql = "SELECT {$creatorCols}
                         FROM lists l
                         LEFT JOIN users u_creator ON u_creator.id = l.created_by
-                        WHERE l.workspace_id = ?
+                        WHERE l.workspace_id = ? AND l.deleted_at IS NULL
                         ORDER BY l.created_at DESC";
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute([$workspace_id]);
@@ -198,7 +198,7 @@ switch ($method) {
             $search = $_GET['search'] ?? '';
 
             $params = [$workspace_id];
-            $whereClauses = ["l.workspace_id = ?"];
+            $whereClauses = ["l.workspace_id = ?", "l.deleted_at IS NULL"];
             if ($search) {
                 $whereClauses[] = "(l.name LIKE ? OR l.source LIKE ?)";
                 $params[] = "%$search%";
@@ -258,7 +258,7 @@ switch ($method) {
                 $destinationListId = $data['destinationListId'] ?? null;
 
                 if (!$targetId) {
-                    jsonResponse(false, null, 'Thiếu thông tin đối tượng (Target ID)');
+                    jsonResponse(false, null, 'Thiếu thông tin đối tượng (Target ID)', [], 422);
                     return;
                 }
 
@@ -266,16 +266,16 @@ switch ($method) {
                 $stmtCheckOwn = $pdo->prepare("SELECT id FROM " . ($targetType === 'list' ? 'lists' : 'segments') . " WHERE id = ? AND workspace_id = ?");
                 $stmtCheckOwn->execute([$targetId, $workspace_id]);
                 if (!$stmtCheckOwn->fetch()) {
-                    jsonResponse(false, null, 'Đối tượng không hợp lệ hoặc không thuộc workspace của bạn.');
+                    jsonResponse(false, null, 'Đối tượng không hợp lệ hoặc không thuộc workspace của bạn.', [], 404);
                     return;
                 }
                 
                 // [FIX] Verify Ownership of destinationListId if moving
                 if ($action === 'move' && $destinationListId) {
-                    $stmtDest = $pdo->prepare("SELECT id FROM lists WHERE id = ? AND workspace_id = ?");
+                    $stmtDest = $pdo->prepare("SELECT id FROM lists WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL");
                     $stmtDest->execute([$destinationListId, $workspace_id]);
                     if (!$stmtDest->fetch()) {
-                        jsonResponse(false, null, 'Danh sách đích không hợp lệ hoặc không thuộc workspace của bạn.');
+                        jsonResponse(false, null, 'Danh sách đích không hợp lệ hoặc không thuộc workspace của bạn.', [], 404);
                         return;
                     }
                 }
@@ -285,7 +285,7 @@ switch ($method) {
                 // 1. Identify Target Subscribers
                 if ($cleanupType === 'junk') {
                     if (empty($statuses)) {
-                        jsonResponse(false, null, 'Vui lòng chọn ít nhất một trạng thái để dọn dẹp');
+                        jsonResponse(false, null, 'Vui lòng chọn ít nhất một trạng thái để dọn dẹp', [], 422);
                         return;
                     }
                     if ($targetType === 'list') {
@@ -411,10 +411,10 @@ switch ($method) {
                     foreach (array_chunk($targetIds, 500) as $chunk) {
                         $placeholders = implode(',', array_fill(0, count($chunk), '?'));
                         $pdo->prepare("DELETE FROM subscriber_tags WHERE subscriber_id IN ($placeholders) AND workspace_id = ?")->execute(array_merge($chunk, [$workspace_id]));
-                        $pdo->prepare("DELETE FROM subscriber_activity WHERE subscriber_id IN ($placeholders) AND workspace_id = ?")->execute(array_merge($chunk, [$workspace_id]));
-                        $pdo->prepare("DELETE FROM subscriber_flow_states WHERE subscriber_id IN ($placeholders) AND workspace_id = ?")->execute(array_merge($chunk, [$workspace_id]));
+                        // subscriber_activity preserved for historical analytics
+                        $pdo->prepare("UPDATE subscriber_flow_states SET status = 'cancelled', updated_at = NOW() WHERE subscriber_id IN ($placeholders) AND workspace_id = ? AND status IN ('waiting', 'processing', 'queued')")->execute(array_merge($chunk, [$workspace_id]));
                         $pdo->prepare("DELETE FROM subscriber_lists WHERE subscriber_id IN ($placeholders) AND workspace_id = ?")->execute(array_merge($chunk, [$workspace_id]));
-                        $pdo->prepare("DELETE FROM subscribers WHERE id IN ($placeholders) AND workspace_id = ?")->execute(array_merge($chunk, [$workspace_id]));
+                        $pdo->prepare("UPDATE subscribers SET deleted_at = NOW(), status = 'archived', updated_at = NOW() WHERE id IN ($placeholders) AND workspace_id = ? AND deleted_at IS NULL")->execute(array_merge($chunk, [$workspace_id]));
                     }
                     // Recalculate source list count after deletion
                     if ($targetType === 'list') {
@@ -448,7 +448,7 @@ switch ($method) {
 
                 // Verify Ownership of all lists
                 $placeholders = implode(',', array_fill(0, count($listIds), '?'));
-                $stmtCheckLists = $pdo->prepare("SELECT COUNT(*) FROM lists WHERE id IN ($placeholders) AND workspace_id = ?");
+                $stmtCheckLists = $pdo->prepare("SELECT COUNT(*) FROM lists WHERE id IN ($placeholders) AND workspace_id = ? AND deleted_at IS NULL");
                 $checkParams = $listIds;
                 $checkParams[] = $workspace_id;
                 $stmtCheckLists->execute($checkParams);
@@ -529,13 +529,13 @@ switch ($method) {
                         if (count($sourceListIds) > 0) {
                             $deletePlaceholders = implode(',', array_fill(0, count($sourceListIds), '?'));
                             $pdo->prepare("DELETE FROM subscriber_lists WHERE list_id IN ($deletePlaceholders) AND workspace_id = ?")->execute(array_merge($sourceListIds, [$workspace_id]));
-                            $pdo->prepare("DELETE FROM lists WHERE id IN ($deletePlaceholders) AND workspace_id = ?")->execute(array_merge($sourceListIds, [$workspace_id]));
+                            $pdo->prepare("UPDATE lists SET deleted_at = NOW(), updated_at = NOW() WHERE id IN ($deletePlaceholders) AND workspace_id = ? AND deleted_at IS NULL")->execute(array_merge($sourceListIds, [$workspace_id]));
                             $deletedLists = count($sourceListIds);
                         }
                     }
 
                     // Get target list info
-                    $listStmt = $pdo->prepare("SELECT id, name, source, subscriber_count as count FROM lists WHERE id = ? AND workspace_id = ?");
+                    $listStmt = $pdo->prepare("SELECT id, name, source, subscriber_count as count FROM lists WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL");
                     $listStmt->execute([$targetListId, $workspace_id]);
                     $listInfo = $listStmt->fetch();
 
@@ -585,7 +585,7 @@ switch ($method) {
                     }
 
                     // Get new list info
-                    $listStmt = $pdo->prepare("SELECT id, name, source, subscriber_count as count FROM lists WHERE id = ? AND workspace_id = ?");
+                    $listStmt = $pdo->prepare("SELECT id, name, source, subscriber_count as count FROM lists WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL");
                     $listStmt->execute([$newListId, $workspace_id]);
                     $listInfo = $listStmt->fetch();
 
@@ -864,8 +864,8 @@ switch ($method) {
             $pdo->prepare("DELETE FROM segment_count_update_queue WHERE workspace_id = ? AND segment_id IN (SELECT id FROM segments WHERE workspace_id = ? AND criteria LIKE ?)")
                 ->execute([$workspace_id, $workspace_id, '%"list_id":"' . $path . '"%']);
 
-            // 4. Delete List (Subscribers relation removed via CASCADE)
-            $stmtDel = $pdo->prepare("DELETE FROM lists WHERE id = ? AND workspace_id = ?");
+            // 4. Soft-Delete List (100% Soft-Delete Mandate)
+            $stmtDel = $pdo->prepare("UPDATE lists SET deleted_at = NOW(), updated_at = NOW() WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL");
             $stmtDel->execute([$path, $workspace_id]);
             if ($stmtDel->rowCount() == 0) {
                 throw new Exception("Không tìm thấy danh sách hoặc không có quyền xóa");

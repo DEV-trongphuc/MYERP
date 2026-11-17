@@ -21,6 +21,12 @@ domationEnsureSchemaOnce('campaigns_attribution_v1', function () use ($pdo) {
             if (!in_array('updated_by', $cols, true)) {
                 @$pdo->exec("ALTER TABLE campaigns ADD COLUMN updated_by INT NULL");
             }
+            if (!in_array('is_deleted', $cols, true)) {
+                @$pdo->exec("ALTER TABLE campaigns ADD COLUMN is_deleted TINYINT(1) NOT NULL DEFAULT 0");
+            }
+            if (!in_array('deleted_at', $cols, true)) {
+                @$pdo->exec("ALTER TABLE campaigns ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL");
+            }
         }
     } catch (Throwable $e) {}
 });
@@ -30,7 +36,7 @@ domationEnsureSchemaOnce('campaigns_attribution_v1', function () use ($pdo) {
  */
 function verifyCampaignOwnership($pdo, $campaignId, $workspaceId) {
     if (!$campaignId) return;
-    $stmt = $pdo->prepare("SELECT 1 FROM campaigns WHERE id = ? AND workspace_id = ?");
+    $stmt = $pdo->prepare("SELECT 1 FROM campaigns WHERE id = ? AND workspace_id = ? AND (deleted_at IS NULL AND (is_deleted = 0 OR is_deleted IS NULL))");
     $stmt->execute([$campaignId, $workspaceId]);
     if (!$stmt->fetch()) {
         jsonResponse(false, null, 'Campaign not found or access denied (Multi-tenant guard)');
@@ -127,22 +133,53 @@ if ($method === 'POST' && ($route === 'pause' || $route === 'stop')) {
 
         verifyCampaignOwnership($pdo, $campaignId, $workspace_id);
 
+        $stmtType = $pdo->prepare("SELECT type, config FROM campaigns WHERE id = ? AND workspace_id = ? LIMIT 1");
+        $stmtType->execute([$campaignId, $workspace_id]);
+        $campMeta = $stmtType->fetch(PDO::FETCH_ASSOC) ?: [];
+        $campType = strtolower((string)($campMeta['type'] ?? 'email'));
+        $cfg = !empty($campMeta['config']) ? (json_decode($campMeta['config'], true) ?: []) : [];
+        $cfg['pause_reason'] = 'manual';
+        $cfg['paused_at'] = date('Y-m-d H:i:s');
+        $cfgJson = json_encode($cfg, JSON_UNESCAPED_UNICODE);
+
         $pdo->beginTransaction();
-        $pdo->prepare("UPDATE campaigns SET status = 'paused', updated_at = NOW() WHERE id = ? AND workspace_id = ?")
+        $pdo->prepare("UPDATE campaigns SET status = 'paused', config = ?, updated_at = NOW() WHERE id = ? AND workspace_id = ?")
+            ->execute([$cfgJson, $campaignId, $workspace_id]);
+
+        // Release any temporary in-flight processing locks so resume re-evaluates cleanly
+        $pdo->prepare("UPDATE subscriber_activity SET type = 'released_campaign' WHERE campaign_id = ? AND workspace_id = ? AND type = 'processing_campaign'")
             ->execute([$campaignId, $workspace_id]);
 
-        // Release any temporary in-flight processing locks
-        $pdo->prepare("DELETE FROM subscriber_activity WHERE campaign_id = ? AND type = 'processing_campaign'")
-            ->execute([$campaignId]);
+        try {
+            $pdo->prepare("DELETE FROM campaign_send_claims WHERE campaign_id = ? AND status = 'processing'")
+                ->execute([$campaignId]);
+        } catch (Throwable $eClaim) { /* table might not exist prior to migration 336 */ }
 
-        // Sync count_sent from actual successful activities
-        $pdo->prepare("UPDATE campaigns SET count_sent = (SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_activity WHERE campaign_id = ? AND type IN ('receive_email', 'zalo_sent', 'meta_sent', 'zns_sent')) WHERE id = ? AND workspace_id = ?")
-            ->execute([$campaignId, $campaignId, $workspace_id]);
+        // Sync count_sent accurately (unique email recipients for Email campaigns; distinct subscriber_id for ZNS)
+        if ($campType === 'zalo_zns') {
+            $pdo->prepare("UPDATE campaigns SET count_sent = (SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_activity WHERE campaign_id = ? AND workspace_id = ? AND type IN ('zalo_sent', 'meta_sent', 'zns_sent')) WHERE id = ? AND workspace_id = ?")
+                ->execute([$campaignId, $workspace_id, $campaignId, $workspace_id]);
+        } else {
+            $stmtCount = $pdo->prepare("
+                SELECT COUNT(DISTINCT LOWER(TRIM(recipient)))
+                FROM mail_delivery_logs
+                WHERE campaign_id = ? AND deleted_at IS NULL AND status = 'success' AND recipient IS NOT NULL AND TRIM(recipient) != ''
+            ");
+            $stmtCount->execute([$campaignId]);
+            $cntEmailSent = (int)$stmtCount->fetchColumn();
+            if ($cntEmailSent === 0) {
+                $stmtAct = $pdo->prepare("SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_activity WHERE campaign_id = ? AND workspace_id = ? AND type IN ('receive_email', 'zalo_sent', 'meta_sent', 'zns_sent')");
+                $stmtAct->execute([$campaignId, $workspace_id]);
+                $cntEmailSent = (int)$stmtAct->fetchColumn();
+            }
+            $pdo->prepare("UPDATE campaigns SET count_sent = ? WHERE id = ? AND workspace_id = ?")
+                ->execute([$cntEmailSent, $campaignId, $workspace_id]);
+        }
 
         $pdo->commit();
 
-        logSystemActivity($pdo, 'campaigns', 'pause', $campaignId, "Campaign $campaignId paused");
-        jsonResponse(true, ['id' => $campaignId, 'status' => 'paused'], 'Chiến dịch đã được tạm dừng thành công.');
+        logSystemActivity($pdo, 'campaigns', 'pause', $campaignId, "Campaign $campaignId paused (manual)");
+        jsonResponse(true, ['id' => $campaignId, 'status' => 'paused', 'pause_reason' => 'manual'], 'Chiến dịch đã được tạm dừng thành công.');
         exit;
     } catch (Exception $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
@@ -164,13 +201,46 @@ if ($method === 'POST' && ($route === 'resume' || $route === 'play')) {
 
         verifyCampaignOwnership($pdo, $campaignId, $workspace_id);
 
+        $stmtMeta = $pdo->prepare("SELECT status, type, config, target_config FROM campaigns WHERE id = ? AND workspace_id = ? LIMIT 1");
+        $stmtMeta->execute([$campaignId, $workspace_id]);
+        $campMeta = $stmtMeta->fetch(PDO::FETCH_ASSOC);
+        if (!$campMeta) {
+            jsonResponse(false, null, 'Campaign not found.');
+            exit;
+        }
+        if (strtolower((string)$campMeta['status']) === 'sent') {
+            jsonResponse(false, null, 'Chiến dịch đã hoàn tất gửi, không thể tiếp tục.');
+            exit;
+        }
+
+        $campType = strtolower((string)($campMeta['type'] ?? 'email'));
+        $cfg = !empty($campMeta['config']) ? (json_decode($campMeta['config'], true) ?: []) : [];
+        unset($cfg['pause_reason'], $cfg['paused_at']);
+        $cfgJson = json_encode($cfg, JSON_UNESCAPED_UNICODE);
+
         $pdo->beginTransaction();
-        $pdo->prepare("UPDATE campaigns SET status = 'sending', updated_at = NOW() WHERE id = ? AND workspace_id = ?")
-            ->execute([$campaignId, $workspace_id]);
+        $pdo->prepare("UPDATE campaigns SET status = 'sending', config = ?, sent_at = COALESCE(sent_at, NOW()), updated_at = NOW() WHERE id = ? AND workspace_id = ?")
+            ->execute([$cfgJson, $campaignId, $workspace_id]);
 
         // Release any stale in-flight processing locks
-        $pdo->prepare("DELETE FROM subscriber_activity WHERE campaign_id = ? AND type = 'processing_campaign'")
-            ->execute([$campaignId]);
+        $pdo->prepare("UPDATE subscriber_activity SET type = 'released_campaign' WHERE campaign_id = ? AND workspace_id = ? AND type = 'processing_campaign'")
+            ->execute([$campaignId, $workspace_id]);
+
+        // Backfill & clear stale processing claims so already-sent emails are NEVER re-sent
+        try {
+            $pdo->prepare("DELETE FROM campaign_send_claims WHERE campaign_id = ? AND status = 'processing'")
+                ->execute([$campaignId]);
+            if ($campType !== 'zalo_zns') {
+                $pdo->prepare("
+                    INSERT IGNORE INTO campaign_send_claims
+                        (campaign_id, workspace_id, recipient_key, channel, subscriber_id, status, claimed_at)
+                    SELECT l.campaign_id, COALESCE(l.workspace_id, ?), LOWER(TRIM(l.recipient)), 'email', l.subscriber_id, 'sent', COALESCE(l.sent_at, NOW())
+                    FROM mail_delivery_logs l
+                    WHERE l.campaign_id = ? AND l.deleted_at IS NULL AND l.status = 'success'
+                      AND l.recipient IS NOT NULL AND TRIM(l.recipient) != ''
+                ")->execute([$workspace_id, $campaignId]);
+            }
+        } catch (Throwable $eClaim) { /* migration 336 guard */ }
 
         $pdo->commit();
 
@@ -205,7 +275,7 @@ if ($method === 'POST' && ($route === 'clear_attachments' || $route === 'delete_
         $attachments = json_decode($rawAttachments ?: '[]', true);
 
         $deletedCount = 0;
-        $realUploadDir = realpath(__DIR__ . '/../uploadss/');
+        $realUploadDir = realpath(__DIR__ . '/../uploads/') ?: realpath(__DIR__ . '/../../uploads/');
 
         if (is_array($attachments) && !empty($attachments)) {
             foreach ($attachments as $att) {
@@ -239,12 +309,13 @@ if ($method === 'POST' && ($route === 'clear_attachments' || $route === 'delete_
 // --- NEW ROUTE: Resend Failed Emails ---
 if ($method === 'POST' && $route === 'resend_failed_emails') {
     try {
-        $data = json_decode(file_get_contents("php://input"), true);
-        $campaignId = $data['campaign_id'] ?? null;
+        $data = json_decode(file_get_contents("php://input"), true) ?: [];
+        $cid = $data['campaign_id'] ?? $data['id'] ?? $_GET['campaign_id'] ?? $_GET['id'] ?? null;
+        $campaignId = $cid;
         $logIds = $data['log_ids'] ?? [];
 
         if (!$campaignId || empty($logIds))
-            jsonResponse(false, null, 'Campaign ID and log IDs are required.');
+            jsonResponse(false, null, 'Campaign ID and log IDs are required.', [], 400);
 
         // [FIX] Verify campaign ownership to prevent cross-tenant log deletion
         $checkCamp = $pdo->prepare("SELECT id FROM campaigns WHERE id = ? AND workspace_id = ?");
@@ -263,15 +334,15 @@ if ($method === 'POST' && $route === 'resend_failed_emails') {
 
         $pdo->beginTransaction();
 
-        // Step 2: Remove failed_email activity so worker exclusion query won't skip these subscribers
+        // Step 2: Update failed_email activity so worker exclusion query won't skip these subscribers
         if (!empty($subIdsToRetry)) {
             $subPh = implode(',', array_fill(0, count($subIdsToRetry), '?'));
-            $pdo->prepare("DELETE FROM subscriber_activity WHERE campaign_id = ? AND type = 'failed_email' AND subscriber_id IN ($subPh)")
+            $pdo->prepare("UPDATE subscriber_activity SET type = 'retried_email', details = CONCAT(COALESCE(details,''), ' [Retrying]') WHERE campaign_id = ? AND type = 'failed_email' AND subscriber_id IN ($subPh)")
                 ->execute(array_merge([$campaignId], $subIdsToRetry));
         }
 
-        // Step 3: Delete the failed delivery log entries to clear the exclusion record
-        $pdo->prepare("DELETE FROM mail_delivery_logs WHERE id IN ({$placeholders}) AND campaign_id = ?")
+        // Step 3: Mark mail delivery log entries as retried to clear failed status while preserving audit trail
+        $pdo->prepare("UPDATE mail_delivery_logs SET status = 'retry_pending' WHERE id IN ({$placeholders}) AND campaign_id = ?")
             ->execute(array_merge($logIds, [$campaignId]));
 
         // Step 4: Re-arm campaign status to 'sending' so worker picks it up
@@ -337,11 +408,13 @@ if ($method === 'POST' && $route === 'bulk_update_subscribers') {
             $chunks = array_chunk($validDeleteIds, 500);
             foreach ($chunks as $chunk) {
                 $ph = implode(',', array_fill(0, count($chunk), '?'));
-                $pdo->prepare("DELETE FROM subscriber_activity WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
-                $pdo->prepare("DELETE FROM subscriber_flow_states WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
-                $pdo->prepare("DELETE FROM subscriber_lists WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
+                // 1. Unlink tags & lists
                 $pdo->prepare("DELETE FROM subscriber_tags WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
-                $pdo->prepare("DELETE FROM subscribers WHERE workspace_id = ? AND id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
+                $pdo->prepare("DELETE FROM subscriber_lists WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
+                // 2. Cancel active flow states
+                $pdo->prepare("UPDATE subscriber_flow_states SET status = 'cancelled', updated_at = NOW() WHERE workspace_id = ? AND subscriber_id IN ($ph) AND status IN ('waiting', 'processing', 'queued')")->execute(array_merge([$workspace_id], $chunk));
+                // 3. Soft-delete subscribers (100% Soft-Delete Mandate: PRESERVE subscriber_activity for 360° audit!)
+                $pdo->prepare("UPDATE subscribers SET deleted_at = NOW(), status = 'archived', updated_at = NOW() WHERE workspace_id = ? AND id IN ($ph) AND deleted_at IS NULL")->execute(array_merge([$workspace_id], $chunk));
             }
             $successCount = count($deleteIds);
             $pdo->commit();
@@ -475,7 +548,7 @@ if ($method === 'GET' && $route === 'audience_stats') {
         verifyCampaignOwnership($pdo, $campaignId, $workspace_id);
 
         // [FIX] Verify campaign ownership to prevent cross-tenant stats leakage
-        $stmtCamp = $pdo->prepare("SELECT target_config, count_sent, total_target_audience FROM campaigns WHERE id = ? AND workspace_id = ?");
+        $stmtCamp = $pdo->prepare("SELECT type, target_config, count_sent, total_target_audience FROM campaigns WHERE id = ? AND workspace_id = ?");
         $stmtCamp->execute([$campaignId, $workspace_id]);
         $campaign = $stmtCamp->fetch();
         if (!$campaign)
@@ -484,11 +557,10 @@ if ($method === 'GET' && $route === 'audience_stats') {
         $targetConf = json_decode($campaign['target_config'], true);
         $campaignType = $campaign['type'] ?? 'email';
 
-        $countSql = "SELECT COUNT(DISTINCT s.id) FROM subscribers s WHERE s.workspace_id = ? AND s.status IN ('active', 'lead', 'customer')";
-
-        // ZNS Requirement: Must have phone number
         if ($campaignType === 'zalo_zns') {
-            $countSql .= " AND (s.phone_number IS NOT NULL AND s.phone_number != '')";
+            $countSql = "SELECT COUNT(DISTINCT COALESCE(NULLIF(s.phone_norm9, ''), s.phone_number)) FROM subscribers s WHERE s.workspace_id = ? AND s.deleted_at IS NULL AND s.status IN ('active', 'lead', 'customer') AND (s.phone_number IS NOT NULL AND s.phone_number != '')";
+        } else {
+            $countSql = "SELECT COUNT(DISTINCT LOWER(TRIM(s.email))) FROM subscribers s WHERE s.workspace_id = ? AND s.deleted_at IS NULL AND s.status IN ('active', 'lead', 'customer') AND (s.email IS NOT NULL AND TRIM(s.email) != '')";
         }
 
         $countWheres = [];
@@ -648,7 +720,8 @@ if ($method === 'POST' && $route === 'clear_attachments') {
                 $parsed = parse_url($att['url'], PHP_URL_PATH);
                 if ($parsed) {
                     $baseName = basename($parsed);
-                    $localPath = __DIR__ . '/../uploadss/' . $baseName;
+                    $baseUploads = realpath(__DIR__ . '/../uploads/') ?: realpath(__DIR__ . '/../../uploads/');
+                    $localPath = ($baseUploads ?: (__DIR__ . '/../uploads/')) . DIRECTORY_SEPARATOR . $baseName;
                     if (file_exists($localPath)) {
                         @unlink($localPath);
                         $deletedFiles++;
@@ -705,12 +778,13 @@ if ($method === 'POST' && $route === 'delete_unsubscribed') {
         $deleted = 0;
         foreach ($chunks as $chunk) {
             $ph = implode(',', array_fill(0, count($chunk), '?'));
-            // Cascade cleanup first to avoid FK errors on strict setups
-            $pdo->prepare("DELETE FROM subscriber_activity WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
-            $pdo->prepare("DELETE FROM subscriber_lists WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
+            // 1. Unlink tags & lists
             $pdo->prepare("DELETE FROM subscriber_tags WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
-            $pdo->prepare("DELETE FROM subscriber_flow_states WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
-            $pdo->prepare("DELETE FROM subscribers WHERE workspace_id = ? AND id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
+            $pdo->prepare("DELETE FROM subscriber_lists WHERE workspace_id = ? AND subscriber_id IN ($ph)")->execute(array_merge([$workspace_id], $chunk));
+            // 2. Cancel active flow states
+            $pdo->prepare("UPDATE subscriber_flow_states SET status = 'cancelled', updated_at = NOW() WHERE workspace_id = ? AND subscriber_id IN ($ph) AND status IN ('waiting', 'processing', 'queued')")->execute(array_merge([$workspace_id], $chunk));
+            // 3. Soft-delete subscribers (100% Soft-Delete Mandate: PRESERVE subscriber_activity for 360° audit!)
+            $pdo->prepare("UPDATE subscribers SET deleted_at = NOW(), status = 'archived', updated_at = NOW() WHERE workspace_id = ? AND id IN ($ph) AND deleted_at IS NULL")->execute(array_merge([$workspace_id], $chunk));
             $deleted += count($chunk);
         }
         $pdo->commit();
@@ -797,11 +871,10 @@ if ($method === 'POST' && $route === 'trigger_refresh') {
         $targetConf = json_decode($campaign['target_config'], true);
         $campaignType = $campaign['type'] ?? 'email';
 
-        $countSql = "SELECT COUNT(DISTINCT s.id) FROM subscribers s WHERE s.workspace_id = ? AND s.status IN ('active', 'lead', 'customer')";
-
-        // ZNS Requirement: Must have phone number
         if ($campaignType === 'zalo_zns') {
-            $countSql .= " AND (s.phone_number IS NOT NULL AND s.phone_number != '')";
+            $countSql = "SELECT COUNT(DISTINCT COALESCE(NULLIF(s.phone_norm9, ''), s.phone_number)) FROM subscribers s WHERE s.workspace_id = ? AND s.deleted_at IS NULL AND s.status IN ('active', 'lead', 'customer') AND (s.phone_number IS NOT NULL AND s.phone_number != '')";
+        } else {
+            $countSql = "SELECT COUNT(DISTINCT LOWER(TRIM(s.email))) FROM subscribers s WHERE s.workspace_id = ? AND s.deleted_at IS NULL AND s.status IN ('active', 'lead', 'customer') AND (s.email IS NOT NULL AND TRIM(s.email) != '')";
         }
 
         $countWheres = [];
@@ -856,44 +929,37 @@ WHERE t_sub.name = ? AND t_sub.workspace_id = ?)";
             $totalAudience = (int) $stmtCount->fetchColumn();
         }
 
-        // [SELF-HEALING] Synchronize actual sent stats from activity logs before refreshing.
-        // [FIX P32-C3] Added workspace_id guard to all 3 UPDATE queries here — previously
-        // missing, allowing cross-workspace stat manipulation by supplying a foreign campaign_id.
+        // [SELF-HEALING] Synchronize actual sent stats accurately before refreshing.
         if ($campaignType === 'zalo_zns') {
-            $pdo->prepare("UPDATE campaigns SET count_sent = (SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_activity WHERE campaign_id = ? AND type = 'zns_sent') WHERE id = ? AND workspace_id = ?")->execute([$campaignId, $campaignId, $workspace_id]);
+            $pdo->prepare("UPDATE campaigns SET count_sent = (SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_activity WHERE workspace_id = ? AND campaign_id = ? AND type = 'zns_sent') WHERE id = ? AND workspace_id = ?")
+                ->execute([$workspace_id, $campaignId, $campaignId, $workspace_id]);
         } else {
-            $pdo->prepare("UPDATE campaigns SET count_sent = (SELECT COUNT(*) FROM mail_delivery_logs WHERE campaign_id = ? AND status = 'success') WHERE id = ? AND workspace_id = ?")->execute([$campaignId, $campaignId, $workspace_id]);
-        }
-
-        $stmt = $pdo->prepare("UPDATE campaigns SET status = 'sending', total_target_audience = ? WHERE id = ? AND workspace_id = ? AND
-(LOWER(status) IN ('sent', 'sending', 'scheduled', 'draft', 'paused'))");
-        $stmt->execute([$totalAudience, $campaignId, $workspace_id]);
-
-        if ($stmt->rowCount() > 0 || $currentStatus === 'sending') {
-            // [FIX] Use the central triggerAsyncWorker service to spawn the campaign worker asynchronously in the background.
-            // This prevents the triggering request from blocking for 5s (causing client-timeout process kills)
-            // and guarantees the worker continues running completely detached from the client session.
-            $urlPath = '/worker_campaign.php?campaign_id=' . $campaignId;
-            
-            if (function_exists('writeWorkerLog')) {
-                writeWorkerLog("Triggering worker via campaigns.php asynchronously. Path: $urlPath");
-            } else {
-                file_put_contents(__DIR__ . '/worker_campaign.log', "[" . date('Y-m-d H:i:s') . "] Triggering worker via campaigns.php asynchronously. Path: $urlPath\n", FILE_APPEND);
+            $stmtCnt = $pdo->prepare("SELECT COUNT(DISTINCT LOWER(TRIM(recipient))) FROM mail_delivery_logs WHERE campaign_id = ? AND deleted_at IS NULL AND status = 'success' AND recipient IS NOT NULL AND TRIM(recipient) != ''");
+            $stmtCnt->execute([$campaignId]);
+            $uniqueSent = (int)$stmtCnt->fetchColumn();
+            if ($uniqueSent === 0) {
+                $stmtAct = $pdo->prepare("SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_activity WHERE workspace_id = ? AND campaign_id = ? AND type IN ('receive_email', 'zalo_sent', 'meta_sent', 'zns_sent')");
+                $stmtAct->execute([$workspace_id, $campaignId]);
+                $uniqueSent = (int)$stmtAct->fetchColumn();
             }
-
-            triggerAsyncWorker($urlPath);
-
-            logSystemActivity($pdo, 'campaigns', 'refresh_audience', $campaignId, "Campaign $campaignId", ['audience' => $totalAudience]);
-
-            // [FIX P11-H4] Removed debug block from production response. Internal worker_url and
-            // curl_result were previously surfaced to frontend, leaking server-side implementation
-            // details (internal API paths, HTTP codes) to any user with campaign refresh access.
-            jsonResponse(true, [
-                'total_target_audience' => $totalAudience
-            ], 'Campaign refresh triggered.');
-        } else {
-            jsonResponse(false, null, "Campaign cannot be refreshed (not in 'sent' state).");
+            $pdo->prepare("UPDATE campaigns SET count_sent = ? WHERE id = ? AND workspace_id = ?")
+                ->execute([$uniqueSent, $campaignId, $workspace_id]);
         }
+
+        // Update total_target_audience ONLY — NEVER overwrite 'paused' back to 'sending' during refresh!
+        $pdo->prepare("UPDATE campaigns SET total_target_audience = ?, updated_at = NOW() WHERE id = ? AND workspace_id = ? AND (LOWER(status) IN ('sent', 'sending', 'scheduled', 'draft', 'paused'))")
+            ->execute([$totalAudience, $campaignId, $workspace_id]);
+
+        if ($currentStatus === 'sending') {
+            dispatchCampaignWorker($pdo, $campaignId);
+            logSystemActivity($pdo, 'campaigns', 'refresh_audience', $campaignId, "Campaign $campaignId", ['audience' => $totalAudience]);
+        } else {
+            logSystemActivity($pdo, 'campaigns', 'refresh_audience_only', $campaignId, "Campaign $campaignId (status=$currentStatus)", ['audience' => $totalAudience]);
+        }
+
+        jsonResponse(true, [
+            'total_target_audience' => $totalAudience
+        ], 'Campaign refresh triggered.');
 
     } catch (Exception $e) {
         jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');
@@ -1079,8 +1145,12 @@ $inputData = json_decode(file_get_contents("php://input"), true);
 if ($method === 'POST' && $route === 'send_test') {
     require_once 'flow_helpers.php';
     try {
-        $data = $inputData;
-        $campaignId = $data['campaign_id'];
+        $data = is_array($inputData) ? $inputData : [];
+        $cid = $data['campaign_id'] ?? $data['id'] ?? $_GET['campaign_id'] ?? $_GET['id'] ?? null;
+        $campaignId = $cid;
+        if (!$campaignId) {
+            jsonResponse(false, null, 'Campaign ID is required.');
+        }
         $reminderId = $data['reminder_id'] ?? null;
 
         verifyCampaignOwnership($pdo, $campaignId, $workspace_id);
@@ -1212,7 +1282,7 @@ if ($method === 'POST' && $route === 'send_test') {
             $allAttachments = json_decode($attachmentsRaw ?? '[]', true) ?: [];
             $campConfig = json_decode($campaign['config'] ?? '{}', true) ?: [];
 
-            $mailer = new Mailer($pdo, API_BASE_URL, 'marketing@ideas.edu.vn', $workspace_id);
+            $mailer = new Mailer($pdo, API_BASE_URL, '', $workspace_id);
 
             $requestedSenderEmail = strtolower(trim((string)(
                 $data['sender_email']
@@ -1434,32 +1504,38 @@ switch ($method) {
                         }
 
                     } else {
-                        // EMAIL LOGIC
+                        // EMAIL LOGIC — 1-to-1 join on subscribers.id (prevents 29k-row Cartesian duplicate explosion)
+                        $whereClauses[] = "l.deleted_at IS NULL";
+
                         if ($filterStatus !== 'all') {
                             if ($filterStatus === 'opened') {
-                                $whereClauses[] = "EXISTS (SELECT 1 FROM subscriber_activity a WHERE a.campaign_id = l.campaign_id AND a.subscriber_id = s.id AND a.type = 'open_email')";
+                                $whereClauses[] = "EXISTS (SELECT 1 FROM subscriber_activity a WHERE a.workspace_id = ? AND a.campaign_id = l.campaign_id AND a.subscriber_id = l.subscriber_id AND a.type = 'open_email')";
+                                $params[] = $workspace_id;
                             } elseif ($filterStatus === 'clicked') {
-                                $whereClauses[] = "EXISTS (SELECT 1 FROM subscriber_activity a WHERE a.campaign_id = l.campaign_id AND a.subscriber_id = s.id AND a.type = 'click_link')";
+                                $whereClauses[] = "EXISTS (SELECT 1 FROM subscriber_activity a WHERE a.workspace_id = ? AND a.campaign_id = l.campaign_id AND a.subscriber_id = l.subscriber_id AND a.type = 'click_link')";
+                                $params[] = $workspace_id;
                             } elseif ($filterStatus === 'success') {
                                 $whereClauses[] = "l.status = 'success'";
                             } elseif ($filterStatus === 'failed') {
                                 $whereClauses[] = "l.status = 'failed'";
                             } elseif ($filterStatus === 'unsubscribed') {
-                                $whereClauses[] = "EXISTS (SELECT 1 FROM subscriber_activity a WHERE a.campaign_id = l.campaign_id AND a.subscriber_id = s.id AND a.type = 'unsubscribe')";
+                                $whereClauses[] = "EXISTS (SELECT 1 FROM subscriber_activity a WHERE a.workspace_id = ? AND a.campaign_id = l.campaign_id AND a.subscriber_id = l.subscriber_id AND a.type = 'unsubscribe')";
+                                $params[] = $workspace_id;
                             }
                         }
 
                         // [FILTER] Min Opens / Clicks
                         $minOpens = isset($_GET['min_opens']) ? (int) $_GET['min_opens'] : 0;
                         if ($minOpens > 0) {
-                            // [FIX] Use HAVING on a joined subquery instead of correlated subquery interpolation
-                            $whereClauses[] = "(SELECT COUNT(*) FROM subscriber_activity a WHERE a.campaign_id = l.campaign_id AND a.subscriber_id = s.id AND a.type = 'open_email') >= ?";
+                            $whereClauses[] = "(SELECT COUNT(*) FROM subscriber_activity a WHERE a.workspace_id = ? AND a.campaign_id = l.campaign_id AND a.subscriber_id = l.subscriber_id AND a.type = 'open_email') >= ?";
+                            $params[] = $workspace_id;
                             $params[] = $minOpens;
                         }
 
                         $minClicks = isset($_GET['min_clicks']) ? (int) $_GET['min_clicks'] : 0;
                         if ($minClicks > 0) {
-                            $whereClauses[] = "(SELECT COUNT(*) FROM subscriber_activity a WHERE a.campaign_id = l.campaign_id AND a.subscriber_id = s.id AND a.type = 'click_link') >= ?";
+                            $whereClauses[] = "(SELECT COUNT(*) FROM subscriber_activity a WHERE a.workspace_id = ? AND a.campaign_id = l.campaign_id AND a.subscriber_id = l.subscriber_id AND a.type = 'click_link') >= ?";
+                            $params[] = $workspace_id;
                             $params[] = $minClicks;
                         }
 
@@ -1469,40 +1545,39 @@ switch ($method) {
                         }
 
                         $whereSql = implode(' AND ', $whereClauses);
+                        $execParams = array_values(array_merge([$workspace_id], $params));
 
-                        $sqlCount = "SELECT COUNT(*) FROM mail_delivery_logs l LEFT JOIN subscribers s ON l.recipient = s.email WHERE
-    $whereSql";
+                        $sqlCount = "SELECT COUNT(*) FROM mail_delivery_logs l LEFT JOIN subscribers s ON s.id = l.subscriber_id AND s.workspace_id = ? WHERE $whereSql";
                         $stmtCount = $pdo->prepare($sqlCount);
-                        $stmtCount->execute($params);
+                        $stmtCount->execute($execParams);
                         $total = (int) $stmtCount->fetchColumn();
                         $totalPages = ceil($total / $limit);
 
                         if (isset($_GET['return_ids_only']) && $_GET['return_ids_only'] == 1) {
-                            $sql = "SELECT s.id as subscriber_id FROM mail_delivery_logs l LEFT JOIN subscribers s ON l.recipient = s.email WHERE $whereSql AND s.id IS NOT NULL";
+                            $sql = "SELECT DISTINCT s.id as subscriber_id FROM mail_delivery_logs l LEFT JOIN subscribers s ON s.id = l.subscriber_id AND s.workspace_id = ? WHERE $whereSql AND s.id IS NOT NULL";
                             $stmt = $pdo->prepare($sql);
-                            $stmt->execute($params);
+                            $stmt->execute($execParams);
                             $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
                             jsonResponse(true, ['ids' => $ids]);
                         }
 
-                        $sql = "SELECT l.recipient as email, s.id as subscriber_id, l.status as delivery_status, l.sent_at, l.error_message,
+                        $sql = "SELECT l.id, l.recipient as email, COALESCE(s.id, l.subscriber_id) as subscriber_id, s.contact_id, l.status as delivery_status, l.sent_at, l.error_message,
     l.reminder_id, s.first_name, s.last_name, s.status as subscriber_status
-    FROM mail_delivery_logs l LEFT JOIN subscribers s ON l.recipient = s.email WHERE $whereSql ORDER BY l.sent_at DESC
+    FROM mail_delivery_logs l LEFT JOIN subscribers s ON s.id = l.subscriber_id AND s.workspace_id = ? WHERE $whereSql ORDER BY l.sent_at DESC, l.id DESC
     LIMIT $limit OFFSET $offset";
 
                         $stmt = $pdo->prepare($sql);
-                        $stmt->execute($params);
+                        $stmt->execute($execParams);
                         $recipients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                         // [PERF] Batch Fetch Activity Counts
                         if (!empty($recipients)) {
-                            $subIds = array_filter(array_column($recipients, 'subscriber_id'));
+                            $subIds = array_values(array_unique(array_filter(array_column($recipients, 'subscriber_id'))));
                             $metrics = [];
                             if (!empty($subIds)) {
                                 $placeholders = implode(',', array_fill(0, count($subIds), '?'));
-                                $stmtMet = $pdo->prepare("SELECT subscriber_id, type, COUNT(*) as count FROM subscriber_activity WHERE campaign_id =
-    ? AND subscriber_id IN ($placeholders) AND type IN ('open_email', 'click_link') GROUP BY subscriber_id, type");
-                                $stmtMet->execute(array_merge([$path], $subIds));
+                                $stmtMet = $pdo->prepare("SELECT subscriber_id, type, COUNT(*) as count FROM subscriber_activity WHERE workspace_id = ? AND campaign_id = ? AND subscriber_id IN ($placeholders) AND type IN ('open_email', 'click_link') GROUP BY subscriber_id, type");
+                                $stmtMet->execute(array_values(array_merge([$workspace_id, $path], $subIds)));
                                 $rows = $stmtMet->fetchAll();
                                 foreach ($rows as $r) {
                                     if (!isset($metrics[$r['subscriber_id']]))
@@ -1522,19 +1597,17 @@ switch ($method) {
                             }
                         }
 
-                        // [PERF FIX] Merged 4 separate COUNT queries into 1 GROUP BY.
-                        // Old: 4 round-trips × all concurrent admin users = heavy lock pressure on mail_delivery_logs.
-                        // New: 1 query → PHP aggregation.
+                        // [PERF FIX] Merged COUNT queries into 1 GROUP BY (excluding soft-deleted rows)
                         $stats = ['total' => 0, 'sent' => 0, 'failed' => 0, 'opened' => 0];
-                        $stmtLog = $pdo->prepare("SELECT status, COUNT(*) as cnt FROM mail_delivery_logs WHERE campaign_id = ? GROUP BY status");
+                        $stmtLog = $pdo->prepare("SELECT status, COUNT(*) as cnt FROM mail_delivery_logs WHERE campaign_id = ? AND deleted_at IS NULL GROUP BY status");
                         $stmtLog->execute([$path]);
                         foreach ($stmtLog->fetchAll(PDO::FETCH_KEY_PAIR) as $s => $c) {
                             $stats['total'] += (int)$c;
                             if ($s === 'success') $stats['sent'] = (int)$c;
                             if ($s === 'failed')  $stats['failed'] = (int)$c;
                         }
-                        $stmtO = $pdo->prepare("SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_activity WHERE campaign_id = ? AND type = 'open_email'");
-                        $stmtO->execute([$path]);
+                        $stmtO = $pdo->prepare("SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_activity WHERE workspace_id = ? AND campaign_id = ? AND type = 'open_email'");
+                        $stmtO->execute([$workspace_id, $path]);
                         $stats['opened'] = (int) $stmtO->fetchColumn();
                     }
 
@@ -1551,42 +1624,61 @@ switch ($method) {
                     ]);
                 }
 
-                // [FIX P42-C1] SELECT * loaded full content_body (can be MBs of HTML) for every campaign GET.
-                // Explicit columns only — content_body is fetched indirectly via resolveEmailContent() for sends anyway.
-                $stmt = $pdo->prepare("SELECT c.id, c.workspace_id, c.name, c.subject, c.sender_email, c.status, c.sent_at, c.scheduled_at,
-                    c.template_id, c.content_body, c.target_config, c.count_sent, c.count_opened, c.count_unique_opened,
-                    c.count_clicked, c.count_unique_clicked, c.count_bounced, c.count_spam, c.count_unsubscribed, c.tracking_enabled,
-                    c.created_at, c.updated_at, c.created_by, c.updated_by, c.type, c.config, c.total_target_audience, c.attachments,
-                    c.is_deleted,
-                    u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email,
-                    u_creator.avatar_url AS creator_avatar, u_creator.role AS creator_role
-                    FROM campaigns c
-                    LEFT JOIN users u_creator ON u_creator.id = c.created_by
-                    WHERE c.id = ? AND c.workspace_id = ?");
+                $statsOnly = !empty($_GET['stats_only']);
+                $forceSync = !empty($_GET['force_sync']);
+
+                // Lightweight query during live polling (`&stats_only=1`) skips heavy HTML content_body & reminders
+                if ($statsOnly) {
+                    $stmt = $pdo->prepare("SELECT c.id, c.workspace_id, c.name, c.subject, c.sender_email, c.status, c.sent_at, c.scheduled_at,
+                        c.template_id, NULL AS content_body, NULL AS target_config, c.count_sent, c.count_opened, c.count_unique_opened,
+                        c.count_clicked, c.count_unique_clicked, c.count_bounced, c.count_spam, c.count_unsubscribed, c.tracking_enabled,
+                        c.created_at, c.updated_at, c.created_by, c.updated_by, c.type, c.config, c.total_target_audience, NULL AS attachments,
+                        c.is_deleted,
+                        u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email,
+                        u_creator.avatar_url AS creator_avatar, u_creator.role AS creator_role
+                        FROM campaigns c
+                        LEFT JOIN users u_creator ON u_creator.id = c.created_by
+                        WHERE c.id = ? AND c.workspace_id = ? AND (c.deleted_at IS NULL AND (c.is_deleted = 0 OR c.is_deleted IS NULL))");
+                } else {
+                    $stmt = $pdo->prepare("SELECT c.id, c.workspace_id, c.name, c.subject, c.sender_email, c.status, c.sent_at, c.scheduled_at,
+                        c.template_id, c.content_body, c.target_config, c.count_sent, c.count_opened, c.count_unique_opened,
+                        c.count_clicked, c.count_unique_clicked, c.count_bounced, c.count_spam, c.count_unsubscribed, c.tracking_enabled,
+                        c.created_at, c.updated_at, c.created_by, c.updated_by, c.type, c.config, c.total_target_audience, c.attachments,
+                        c.is_deleted,
+                        u_creator.id AS creator_id, u_creator.full_name AS creator_name, u_creator.email AS creator_email,
+                        u_creator.avatar_url AS creator_avatar, u_creator.role AS creator_role
+                        FROM campaigns c
+                        LEFT JOIN users u_creator ON u_creator.id = c.created_by
+                        WHERE c.id = ? AND c.workspace_id = ? AND (c.deleted_at IS NULL AND (c.is_deleted = 0 OR c.is_deleted IS NULL))");
+                }
                 $stmt->execute([$path, $workspace_id]);
                 $camp = $stmt->fetch();
                 if ($camp) {
-                    // [PERF FIX] Self-healing throttle: only sync once per 60s per campaign.
-                    // Old: every GET fired up to 6 SELECT+UPDATE queries regardless of freshness.
-                    // New: updated_at acts as a TTL — skip sync if data was written < 60s ago.
+                    if ($statsOnly) {
+                        $data = formatCampaign($camp);
+                        $data['statsOnly'] = true;
+                        jsonResponse(true, $data);
+                        exit;
+                    }
+
+                    // [PERF FIX] Enforce 60s self-healing throttle cleanly unless &force_sync=1
                     $lastUpdated = strtotime($camp['updated_at'] ?? '2000-01-01');
-                    $syncNeeded = (time() - $lastUpdated) > 60;
+                    $syncNeeded = $forceSync || ((time() - $lastUpdated) > 60);
+                    $campStatusLower = strtolower($camp['status'] ?? '');
 
                     // [SELF-HEALING] inconsistencies in count_unsubscribed
-                    if (($syncNeeded || in_array(strtolower($camp['status'] ?? ''), ['sent', 'sending'])) && empty($camp['count_unsubscribed'])) {
-                        $stmtUnsub = $pdo->prepare("SELECT COUNT(*) FROM subscriber_activity WHERE campaign_id = ? AND type = 'unsubscribe'");
-                        $stmtUnsub->execute([$path]);
+                    if ($syncNeeded && empty($camp['count_unsubscribed'])) {
+                        $stmtUnsub = $pdo->prepare("SELECT COUNT(*) FROM subscriber_activity WHERE workspace_id = ? AND campaign_id = ? AND type = 'unsubscribe'");
+                        $stmtUnsub->execute([$workspace_id, $path]);
                         $realUnsub = (int) $stmtUnsub->fetchColumn();
                         if ($realUnsub > 0) {
                             $camp['count_unsubscribed'] = $realUnsub;
-                            $pdo->prepare("UPDATE campaigns SET count_unsubscribed = ? WHERE id = ?")->execute([$realUnsub, $path]);
+                            $pdo->prepare("UPDATE campaigns SET count_unsubscribed = ? WHERE id = ? AND workspace_id = ?")->execute([$realUnsub, $path, $workspace_id]);
                         }
                     }
 
-                    // [SELF-HEALING] count_sent and count_bounced sync (throttled)
-                    // Force sync if status is 'sending' or 'sent' to keep stats in sync with logs
-                    $isSending = strtolower($camp['status'] ?? '') === 'sending';
-                    if (in_array(strtolower($camp['status'] ?? ''), ['sent', 'sending'])) {
+                    // [SELF-HEALING] count_sent and count_bounced sync (strictly throttled to >60s unless force_sync)
+                    if ($syncNeeded && in_array($campStatusLower, ['sent', 'sending'])) {
                         $isZns = ($camp['type'] ?? '') === 'zalo_zns';
                         if ($isZns) {
                             $stmtSync = $pdo->prepare("SELECT COUNT(*) FROM zalo_delivery_logs WHERE flow_id = ? AND status IN ('sent', 'seen', 'delivered')");
@@ -1597,16 +1689,17 @@ switch ($method) {
                             $stmtSyncFail->execute([$path]);
                             $realFailed = (int)$stmtSyncFail->fetchColumn();
                         } else {
-                            $stmtSync = $pdo->prepare("SELECT COUNT(*) FROM mail_delivery_logs WHERE campaign_id = ? AND status = 'success'");
+                            $stmtSync = $pdo->prepare("SELECT COUNT(DISTINCT LOWER(TRIM(recipient))) FROM mail_delivery_logs WHERE campaign_id = ? AND deleted_at IS NULL AND status = 'success' AND recipient IS NOT NULL AND TRIM(recipient) != ''");
                             $stmtSync->execute([$path]);
                             $realSent = (int)$stmtSync->fetchColumn();
 
-                            $stmtSyncAct = $pdo->prepare("SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_activity WHERE campaign_id = ? AND type IN ('receive_email', 'zns_sent')");
-                            $stmtSyncAct->execute([$path]);
-                            $actSent = (int)$stmtSyncAct->fetchColumn();
-                            $realSent = max($realSent, $actSent);
+                            if ($realSent === 0) {
+                                $stmtSyncAct = $pdo->prepare("SELECT COUNT(DISTINCT subscriber_id) FROM subscriber_activity WHERE workspace_id = ? AND campaign_id = ? AND type IN ('receive_email', 'zns_sent')");
+                                $stmtSyncAct->execute([$workspace_id, $path]);
+                                $realSent = (int)$stmtSyncAct->fetchColumn();
+                            }
 
-                            $stmtSyncFail = $pdo->prepare("SELECT COUNT(*) FROM mail_delivery_logs WHERE campaign_id = ? AND status = 'failed'");
+                            $stmtSyncFail = $pdo->prepare("SELECT COUNT(*) FROM mail_delivery_logs WHERE campaign_id = ? AND deleted_at IS NULL AND status = 'failed'");
                             $stmtSyncFail->execute([$path]);
                             $realFailed = (int)$stmtSyncFail->fetchColumn();
                         }
@@ -1614,17 +1707,16 @@ switch ($method) {
                         if ($realSent !== (int)$camp['count_sent'] || $realFailed !== (int)$camp['count_bounced']) {
                             $camp['count_sent'] = $realSent;
                             $camp['count_bounced'] = $realFailed;
-                            $pdo->prepare("UPDATE campaigns SET count_sent = ?, count_bounced = ? WHERE id = ?")
-                                ->execute([$realSent, $realFailed, $path]);
+                            $pdo->prepare("UPDATE campaigns SET count_sent = ?, count_bounced = ? WHERE id = ? AND workspace_id = ?")
+                                ->execute([$realSent, $realFailed, $path, $workspace_id]);
                         }
                     }
 
-                    // [SELF-HEALING] Clicks + Opens sync (throttled, 1 query + at most 1 write)
-                    if (in_array(strtolower($camp['status'] ?? ''), ['sent', 'sending'])) {
-                        // [PERF] Merged 2 separate SELECT queries into 1 GROUP BY
+                    // [SELF-HEALING] Clicks + Opens sync (strictly throttled to >60s)
+                    if ($syncNeeded && in_array($campStatusLower, ['sent', 'sending'])) {
                         $stmtAS = $pdo->prepare("SELECT type, COUNT(*) as total, COUNT(DISTINCT subscriber_id) as unique_count
-                            FROM subscriber_activity WHERE campaign_id = ? AND type IN ('click_link','open_email') GROUP BY type");
-                        $stmtAS->execute([$path]);
+                            FROM subscriber_activity WHERE workspace_id = ? AND campaign_id = ? AND type IN ('click_link','open_email') GROUP BY type");
+                        $stmtAS->execute([$workspace_id, $path]);
                         $aStats = [];
                         foreach ($stmtAS->fetchAll() as $r) $aStats[$r['type']] = $r;
 
@@ -1647,10 +1739,9 @@ switch ($method) {
                                 $needsWrite = true;
                             }
                         }
-                        // [PERF] 1 combined UPDATE for all 4 columns instead of 2 separate UPDATEs
                         if ($needsWrite) {
-                            $pdo->prepare("UPDATE campaigns SET count_clicked=?, count_unique_clicked=?, count_opened=?, count_unique_opened=? WHERE id=?")
-                                ->execute([$camp['count_clicked'], $camp['count_unique_clicked'], $camp['count_opened'], $camp['count_unique_opened'], $path]);
+                            $pdo->prepare("UPDATE campaigns SET count_clicked=?, count_unique_clicked=?, count_opened=?, count_unique_opened=? WHERE id=? AND workspace_id=?")
+                                ->execute([$camp['count_clicked'], $camp['count_unique_clicked'], $camp['count_opened'], $camp['count_unique_opened'], $path, $workspace_id]);
                         }
                     }
 
@@ -1688,7 +1779,7 @@ switch ($method) {
                 $typeFilter = strtolower(trim((string) ($_GET['type'] ?? 'all')));
 
                 $wsClause = ($workspace_id === 1) ? "(c.workspace_id = ? OR c.workspace_id IS NULL)" : "c.workspace_id = ?";
-                $baseWhereClauses = ['c.is_deleted = 0', $wsClause];
+                $baseWhereClauses = ['(c.deleted_at IS NULL AND (c.is_deleted = 0 OR c.is_deleted IS NULL))', $wsClause];
                 $baseParams = [$workspace_id];
 
                 if ($search !== '') {
@@ -1850,12 +1941,10 @@ switch ($method) {
                 $segmentIds = $data['segmentIds'] ?? [];
                 $campaignType = $data['campaignType'] ?? 'email';
 
-                $sql = "SELECT COUNT(DISTINCT s.id) FROM subscribers s WHERE s.workspace_id = ? AND s.status IN ('active', 'lead', 'customer')";
-
-
-                // ZNS Requirement: Must have phone number
                 if ($campaignType === 'zalo_zns') {
-                    $sql .= " AND (s.phone_number IS NOT NULL AND s.phone_number != '')";
+                    $sql = "SELECT COUNT(DISTINCT COALESCE(NULLIF(s.phone_norm9, ''), s.phone_number)) FROM subscribers s WHERE s.workspace_id = ? AND s.deleted_at IS NULL AND s.status IN ('active', 'lead', 'customer') AND (s.phone_number IS NOT NULL AND s.phone_number != '')";
+                } else {
+                    $sql = "SELECT COUNT(DISTINCT LOWER(TRIM(s.email))) FROM subscribers s WHERE s.workspace_id = ? AND s.deleted_at IS NULL AND s.status IN ('active', 'lead', 'customer') AND (s.email IS NOT NULL AND TRIM(s.email) != '')";
                 }
 
                 $wheres = [];
@@ -1870,8 +1959,9 @@ switch ($method) {
                 if (!empty($tagIds)) {
                     $tagConditions = [];
                     foreach ($tagIds as $tag) {
-                        $tagConditions[] = "s.id IN (SELECT st.subscriber_id FROM subscriber_tags st JOIN domation_tags t_sub ON st.tag_id = t_sub.id WHERE t_sub.name = ?)";
+                        $tagConditions[] = "s.id IN (SELECT st.subscriber_id FROM subscriber_tags st JOIN domation_tags t_sub ON st.tag_id = t_sub.id WHERE t_sub.name = ? AND t_sub.workspace_id = ?)";
                         $execParams[] = $tag;
+                        $execParams[] = $workspace_id;
                     }
                     if (!empty($tagConditions))
                         $wheres[] = "(" . implode(' OR ', $tagConditions) . ")";
@@ -1974,10 +2064,12 @@ switch ($method) {
 
     case 'PUT':
         try {
-            if (!$path)
+            $data = json_decode(file_get_contents("php://input"), true) ?: [];
+            $path = $path ?: ($data['id'] ?? $data['campaign_id'] ?? $_GET['id'] ?? $_GET['campaign_id'] ?? null);
+            if (!$path) {
                 jsonResponse(false, null, 'ID required');
+            }
             verifyCampaignOwnership($pdo, $path, $workspace_id);
-            $data = json_decode(file_get_contents("php://input"), true);
 
             $pdo->beginTransaction();
 
@@ -2130,15 +2222,10 @@ switch ($method) {
             if (!empty($flowsToDelete)) {
                 foreach ($flowsToDelete as $flowId) {
                     if ($deleteFlows === 1) {
-                        // Xóa hoàn toàn Flow theo yêu cầu
-                        $pdo->prepare("DELETE FROM subscriber_flow_states WHERE flow_id = ?")->execute([$flowId]);
-                        $pdo->prepare("DELETE FROM flow_enrollments WHERE flow_id = ?")->execute([$flowId]);
-                        $pdo->prepare("DELETE FROM flows WHERE id = ? AND workspace_id = ?")->execute([$flowId, $workspace_id]);
-                        $pdo->prepare("DELETE FROM mail_delivery_logs WHERE flow_id = ?")->execute([$flowId]);
-                        try {
-                            $pdo->prepare("DELETE FROM zalo_delivery_logs WHERE flow_id = ?")->execute([$flowId]);
-                        } catch (Exception $ignored) {
-                        }
+                        // Soft-delete Flow per 100% Soft-Delete Mandate
+                        $pdo->prepare("UPDATE flows SET deleted_at = NOW(), archived_at = NOW(), status = 'archived', updated_at = NOW() WHERE id = ? AND workspace_id = ?")->execute([$flowId, $workspace_id]);
+                        $pdo->prepare("UPDATE subscriber_flow_states SET status = 'cancelled', updated_at = NOW() WHERE flow_id = ? AND status IN ('waiting', 'processing', 'queued')")->execute([$flowId]);
+                        // PRESERVE mail_delivery_logs & zalo_delivery_logs for 360° audit trails!
                         // Cleanup Flow Queue Jobs
                         $pdo->prepare("DELETE FROM queue_jobs WHERE (payload LIKE ? OR payload LIKE ?) AND status IN ('pending', 'processing')")
                             ->execute(['%"flow_id":"' . $flowId . '"%', '%"priority_flow_id":"' . $flowId . '"%']);
@@ -2162,34 +2249,20 @@ switch ($method) {
                 }
             }
 
-            // 2. Delete Main Campaign Records
-            logSystemActivity($pdo, 'campaigns', 'delete', $path, "Campaign $path");
-            $pdo->prepare("DELETE FROM campaigns WHERE id = ? AND workspace_id = ?")->execute([$path, $workspace_id]);
-            $pdo->prepare("DELETE FROM campaign_reminders WHERE campaign_id = ?")->execute([$path]);
-            $pdo->prepare("DELETE FROM mail_delivery_logs WHERE campaign_id = ?")->execute([$path]);
+            // 2. Soft-Delete Main Campaign Record (100% Soft-Delete Mandate)
+            logSystemActivity($pdo, 'campaigns', 'delete', $path, "Campaign $path (Soft-deleted)");
+            $pdo->prepare("
+                UPDATE campaigns 
+                SET is_deleted = 1, 
+                    deleted_at = NOW(), 
+                    status = 'archived', 
+                    updated_at = NOW() 
+                WHERE id = ? AND workspace_id = ? AND (deleted_at IS NULL AND (is_deleted = 0 OR is_deleted IS NULL))
+            ")->execute([$path, $workspace_id]);
 
-            // [FIX #16] Cleanup subscriber_activity logged against this campaign
-            try {
-                $pdo->prepare("DELETE FROM subscriber_activity WHERE campaign_id = ?")->execute([$path]);
-            } catch (Exception $ignored) {
-            }
-
-            // [PERF] Cache SHOW COLUMNS result in APCu — DDL queries inside transactions cause
-            // unnecessary metadata lock overhead. Schema changes are rare (max 1x per deploy).
-            $schemaCacheKey = 'schema_zalo_logs_has_campaign_id';
-            $hasCampaignIdCol = function_exists('apcu_fetch') ? apcu_fetch($schemaCacheKey) : false;
-            if ($hasCampaignIdCol === false) {
-                $stmtCheck = $pdo->query("SHOW COLUMNS FROM zalo_delivery_logs LIKE 'campaign_id'");
-                $hasCampaignIdCol = (bool)$stmtCheck->fetch();
-                if (function_exists('apcu_store')) {
-                    apcu_store($schemaCacheKey, $hasCampaignIdCol, 3600); // 1 hour TTL
-                }
-            }
-            if ($hasCampaignIdCol) {
-                $pdo->prepare("DELETE FROM zalo_delivery_logs WHERE campaign_id = ?")->execute([$path]);
-            } else {
-                $pdo->prepare("DELETE FROM zalo_delivery_logs WHERE flow_id = ?")->execute([$path]);
-            }
+            // PRESERVE campaign_reminders, mail_delivery_logs, subscriber_activity, zalo_delivery_logs
+            // for 360° analytics, attribution and audit trails!
+            // DO NOT execute DELETE FROM mail_delivery_logs / subscriber_activity!
 
             // 3. Cleanup Pending Queue Jobs & Buffers
             $pdo->prepare("DELETE FROM queue_jobs WHERE (payload LIKE ? OR payload LIKE ?) AND status IN ('pending', 'processing')")

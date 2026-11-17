@@ -250,11 +250,15 @@ class StudentDocOcrService {
                 return $scoreFile((string)$b['name']) <=> $scoreFile((string)$a['name']);
             });
 
-            $apiKey = trim((string)$db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'gemini_api_key'")->fetchColumn());
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $ocrTid = (int)($contact['tenant_id'] ?? $GLOBALS['current_tenant_id'] ?? 1);
+            $orgOcr = TenantConfigService::getOrganizationProfile($db, $ocrTid);
+            $internalDomainSuffix = !empty($orgOcr['internal_email_domain']) ? '@' . ltrim(strtolower(trim((string)$orgOcr['internal_email_domain'])), '@') : '';
+            $apiKey = trim((string)TenantConfigService::getSetting($db, $ocrTid, 'gemini_api_key', ''));
             if ($apiKey === '') {
                 $apiKey = trim((string)($_ENV['GEMINI_API_KEY'] ?? getenv('GEMINI_API_KEY') ?: ''));
             }
-            $model = trim((string)$db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'gemini_model'")->fetchColumn()) ?: 'gemini-3.5-flash-lite';
+            $model = trim((string)TenantConfigService::getSetting($db, $ocrTid, 'gemini_model', '')) ?: 'gemini-3.5-flash-lite';
             if (strpos($model, 'embedding') !== false) {
                 $model = 'gemini-3.5-flash-lite';
             }
@@ -293,7 +297,16 @@ class StudentDocOcrService {
 
                     $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
                     $nLow = mb_strtolower($fname, 'UTF-8');
-                    $fullPublicUrl = 'https://myerp.ideas.edu.vn/backend/' . (strpos($rel, 'uploads/') === 0 ? $rel : 'uploads/' . $rel);
+                    $ocrTenantId = (int)($contact['tenant_id'] ?? 1);
+                    if (!class_exists('TenantConfigService') && file_exists(__DIR__ . '/../config/TenantConfigService.php')) {
+                        require_once __DIR__ . '/../config/TenantConfigService.php';
+                    }
+                    $ocrOrg = class_exists('TenantConfigService') ? TenantConfigService::getOrganizationProfile($db, $ocrTenantId) : [];
+                    $feBase = rtrim((string)($ocrOrg['frontend_url'] ?? ''), '/');
+                    if ($feBase === '' && !empty($_SERVER['HTTP_HOST'])) {
+                        $feBase = ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'];
+                    }
+                    $fullPublicUrl = ($feBase !== '' ? $feBase : '') . '/backend/' . (strpos($rel, 'uploads/') === 0 ? $rel : 'uploads/' . $rel);
                     $fileUrlMap[$fid] = $fullPublicUrl;
 
                     if (in_array($ext, ['webp', 'jpg', 'jpeg', 'png'], true) && strpos($rel, 'deposits/') === false) {
@@ -370,8 +383,11 @@ class StudentDocOcrService {
                     $batches[] = $curBatch;
                 }
 
+                $ocrOrgTitle = !empty($ocrOrg['name']) ? $ocrOrg['name'] : 'Academy';
+                $ocrInternalDom = !empty($ocrOrg['internal_email_domain']) ? ('never @' . ltrim((string)$ocrOrg['internal_email_domain'], '@')) : 'never internal staff email';
+                $ocrHotlineNote = !empty($ocrOrg['support_hotline']) ? ('never organization hotline ' . $ocrOrg['support_hotline']) : 'never organization hotline';
                 $promptInstructions = <<<EOT
-You are an expert Student Document OCR & Profile Extraction AI for MYERP (IDEAS Academy).
+You are an expert Student Document OCR & Profile Extraction AI for MYERP ({$ocrOrgTitle}).
 Analyze ALL provided documents (Passports, Vietnamese CCCD/CMND ID cards, Admission/Application Forms, Acceptance/Offer Letters, CVs/Resumes, Training Contracts, Degrees) and the current database record of this student, then extract the most complete and accurate profile in strict JSON format:
 {
   "passport": "Passport number (e.g., C1234567, E01881509, P01234567, B1234567). Uppercase alphanumeric, no spaces. Null if not found.",
@@ -381,17 +397,17 @@ Analyze ALL provided documents (Passports, Vietnamese CCCD/CMND ID cards, Admiss
   "gender": "'Nam' (Male/M) or 'Nữ' (Female/F). Null if unknown.",
   "address": "Fullest residential address (street, ward, district, province/city) or place of residence of the student.",
   "city": "Standardized Vietnamese province/city name (e.g., 'Thành phố Hồ Chí Minh', 'Hà Nội', 'Bình Dương', 'Đồng Nai', 'Đà Nẵng', 'Cần Thơ', 'Hải Phòng', 'Bà Rịa - Vũng Tàu', 'Khánh Hòa', 'Lâm Đồng', etc.).",
-  "company": "Current or most recent employer / company / organization where the student works (from Admission Form 'Company name', CV/Resume, or Contract). NEVER put 'IDEAS', 'Swiss UMEF', 'UBIS', 'ESTIAM', 'SBS', 'Ascencia', 'IPAG' unless the student is employed there.",
+  "company": "Current or most recent employer / company / organization where the student works (from Admission Form 'Company name', CV/Resume, or Contract). NEVER put '{$ocrOrgTitle}', 'Swiss UMEF', 'UBIS', 'ESTIAM', 'SBS', 'Ascencia', 'IPAG' unless the student is employed there.",
   "job_title": "Current or most recent job title / position / role of the student (from Admission Form 'Your position' / 'Title', CV/Resume, or Motivation Letter).",
   "industry": "Standardized industry category from: ['Ngân hàng (Banking)', 'Tài chính - Chứng khoán - Đầu tư', 'Bất động sản & Xây dựng', 'Y tế - Dược phẩm - Bệnh viện', 'Công nghệ - Viễn thông - Media', 'Sản xuất - Công nghiệp - Năng lượng', 'Giáo dục & Đào tạo', 'Thương mại - Dịch vụ & Bán lẻ', 'Vận tải - Logistics - XNK', 'F&B - Khách sạn - Du lịch', 'Bảo hiểm (Insurance)', 'Cơ quan Nhà nước / Hành chính công', 'Kế toán - Kiểm toán - Tư vấn Luật', 'Nông nghiệp - Thủy sản - Thực phẩm', 'Marketing - Truyền thông & Quảng cáo'].",
   "program": "Academic program / school code (e.g., 'EMBA', 'MBA', 'MBA HQ', 'DBA', 'MSC-AI', 'UBIS', 'ESTIAM', 'SBS', 'ASCENCIA', 'IPAG', 'TOP UP', 'CESINE', 'HELBUS'). Never output 'BBA' (use 'TOP UP' for Bachelor Top-up). Null if not found.",
   "admission_date": "Enrollment / admission / contract signing date in YYYY-MM-DD format if stated on Admission Form, Acceptance Letter, or Contract. Null if not found.",
-  "email": "Student's personal/work email address if found in documents (never @ideas.edu.vn). Null if not found.",
-  "phone": "Student's phone number if found in documents (never IDEAS hotline 028/0987363935). Null if not found.",
+  "email": "Student's personal/work email address if found in documents ({$ocrInternalDom}). Null if not found.",
+  "phone": "Student's phone number if found in documents ({$ocrHotlineNote}). Null if not found.",
   "portrait_file_id": "If any attached image file is a clean portrait/headshot/4x6 ID photo of the student (not a card or document), return its integer File ID (e.g. 123), otherwise null."
 }
 CRITICAL RULES:
-1. NEVER extract Party A (IDEAS Academy / Viện IDEAS) representative Mr. Phạm Quang Vinh's CCCD (034068027300) or IDEAS office addresses (39B Trường Sơn / B82 Bạch Đằng / 214 Nam Kỳ Khởi Nghĩa) from Contracts! Only extract Party B (the student).
+1. NEVER extract Party A ({$ocrOrgTitle}) representative's CCCD or office addresses from Contracts! Only extract Party B (the student).
 2. Return ONLY valid JSON.
 EOT;
 
@@ -625,7 +641,8 @@ EOT;
                 // Email (if empty on contact and extracted from CV/Admission Form)
                 if (trim((string)($tc['email'] ?? '')) === '' && !empty($mergedExtracted['email'])) {
                     $candEmail = strtolower(trim((string)$mergedExtracted['email']));
-                    if (filter_var($candEmail, FILTER_VALIDATE_EMAIL) && strpos($candEmail, '@ideas.edu.vn') === false) {
+                    $isInternalDomain = ($internalDomainSuffix !== '' && str_ends_with($candEmail, $internalDomainSuffix));
+                    if (filter_var($candEmail, FILTER_VALIDATE_EMAIL) && !$isInternalDomain) {
                         $sets[] = "email = ?";
                         $vals[] = $candEmail;
                         $labels[] = 'Email';
@@ -742,10 +759,10 @@ EOT;
                     $subject = "🤖 AI Tự động quét hồ sơ & điền thông tin";
                     $body = "Hệ thống AI OCR đã tự động phân tích tài liệu đính kèm và cập nhật các trường còn thiếu: {$fieldsStr}.";
                     $stmtAct = $db->prepare("
-                        INSERT INTO activities (tenant_id, user_id, type, subject, body, related_type, related_id, contact_id, status, completed_at, created_at)
-                        VALUES (?, ?, 'note', ?, ?, 'contact', ?, ?, 'completed', NOW(), NOW())
+                        INSERT INTO activities (tenant_id, user_id, created_by, type, subject, body, related_type, related_id, contact_id, status, done_at, created_at)
+                        VALUES (?, ?, ?, 'note', ?, ?, 'contact', ?, ?, 'done', NOW(), NOW())
                     ");
-                    $stmtAct->execute([$tid, $uid, $subject, $body, $contactId, $contactId]);
+                    $stmtAct->execute([$tid, $uid, $uid, $subject, $body, $contactId, $contactId]);
                 } catch (\Throwable $eAct) {}
             }
 
@@ -781,7 +798,7 @@ EOT;
     public static function scanAllSuspectContacts(PDO $db, int $limit = 8): array {
         try {
             $sql = "
-                SELECT c.id, c.full_name
+                SELECT c.id, c.tenant_id, c.owner_id, c.full_name
                 FROM contacts c
                 WHERE c.deleted_at IS NULL
                   AND COALESCE(c.citizen_id, '') = ''
@@ -812,6 +829,8 @@ EOT;
 
             foreach ($rows as $r) {
                 $cid = (int)$r['id'];
+                $rowTid = (int)($r['tenant_id'] ?? 1);
+                $rowUid = (int)($r['owner_id'] ?: 1);
                 $scanned++;
                 $res = self::scanAndEnrichContact($db, $cid, true);
                 if (!empty($res['updated'])) {
@@ -824,10 +843,10 @@ EOT;
                 } else {
                     try {
                         $stmtMark = $db->prepare("
-                            INSERT INTO activities (tenant_id, user_id, type, subject, body, related_type, related_id, contact_id, status, completed_at, created_at)
-                            VALUES (1, 1, 'system', '🤖 AI Tự động quét hồ sơ (Đã kiểm tra)', 'Đã kiểm tra tệp đính kèm hiện tại (chưa phát hiện ảnh CCCD/Passport). Sẽ tự động quét lại khi có tệp mới tải lên.', 'contact', ?, ?, 'completed', NOW(), NOW())
+                            INSERT INTO activities (tenant_id, user_id, created_by, type, subject, body, related_type, related_id, contact_id, status, done_at, created_at)
+                            VALUES (?, ?, ?, 'system', '🤖 AI Tự động quét hồ sơ (Đã kiểm tra)', 'Đã kiểm tra tệp đính kèm hiện tại (chưa phát hiện ảnh CCCD/Passport). Sẽ tự động quét lại khi có tệp mới tải lên.', 'contact', ?, ?, 'done', NOW(), NOW())
                         ");
-                        $stmtMark->execute([$cid, $cid]);
+                        $stmtMark->execute([$rowTid, $rowUid, $rowUid, $cid, $cid]);
                     } catch (\Throwable $eM) {}
                 }
             }
@@ -1151,11 +1170,15 @@ EOT;
 
         // 2. Multimodal AI OCR via Gemini
         try {
-            $apiKey = trim((string)$db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'gemini_api_key'")->fetchColumn());
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            $ocrTid = (int)($contact['tenant_id'] ?? $GLOBALS['current_tenant_id'] ?? 1);
+            $orgOcr = TenantConfigService::getOrganizationProfile($db, $ocrTid);
+            $internalDomainSuffix = !empty($orgOcr['internal_email_domain']) ? '@' . ltrim(strtolower(trim((string)$orgOcr['internal_email_domain'])), '@') : '';
+            $apiKey = trim((string)TenantConfigService::getSetting($db, $ocrTid, 'gemini_api_key', ''));
             if ($apiKey === '') {
                 $apiKey = trim((string)($_ENV['GEMINI_API_KEY'] ?? getenv('GEMINI_API_KEY') ?: ''));
             }
-            $model = trim((string)$db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'gemini_model'")->fetchColumn()) ?: 'gemini-3.5-flash-lite';
+            $model = trim((string)TenantConfigService::getSetting($db, $ocrTid, 'gemini_model', '')) ?: 'gemini-3.5-flash-lite';
             if (strpos($model, 'embedding') !== false) {
                 $model = 'gemini-3.5-flash-lite';
             }

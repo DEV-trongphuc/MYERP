@@ -25,7 +25,8 @@ const EmailEditor = React.lazy(() => import('../templates/EmailEditor/index'));
 import { invalidateEmailTemplatesMemoryCache } from '../../../../pages/marketing/EmailTemplatesPage';
 import PreSendReviewModal from './PreSendReviewModal';
 import ConfirmModal from '../common/ConfirmModal';
-import { interpolateMergeTags } from '../../utils/formatters';
+import { interpolateMergeTags, parseSubscriberCustomAttrs } from '../../utils/formatters';
+import { extractCustomAttributesFromRow } from '../../utils/importMapping';
 import VariableFallbackConfig from './VariableFallbackConfig';
 import { getMktPortalRoot } from '../../utils/portalRoot';
 import { MYERP_MERGE_TAG_GROUPS, MYERP_MERGE_TAGS } from '../../constants/mergeTags';
@@ -301,14 +302,19 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
     const sampleSubscriber = React.useMemo(() => {
         const first = allSubscribers?.[0];
         if (first) {
+            const firstCustomAttrs = {
+                ...parseSubscriberCustomAttrs((first as any).custom_fields || (first as any).customFields),
+                ...parseSubscriberCustomAttrs((first as any).custom_attributes || (first as any).customAttributes),
+            };
             return {
                 ...first,
+                customAttributes: firstCustomAttrs,
                 fullName: `${first.firstName || ''} ${first.lastName || ''}`.trim() || first.fullName || 'Khách hàng mẫu',
                 company: first.companyName || first.company || 'IDEAS Vietnam',
-                jobTitle: first.jobTitle || 'Học viên K2026',
-                cert_no: (first as any).cert_no || (first as any).custom_attributes?.cert_no || (first as any).custom_fields?.cert_no || 'CERT-2026-8899',
-                cert_link: (first as any).cert_link || (first as any).custom_attributes?.cert_link || (first as any).custom_fields?.cert_link || 'https://ideas.edu.vn/tra-cuu/CERT-2026-8899',
-                cert_img: (first as any).cert_img || (first as any).custom_attributes?.cert_img || (first as any).custom_fields?.cert_img || 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=600&auto=format&fit=crop'
+                jobTitle: first.jobTitle || firstCustomAttrs['Danh xưng'] || firstCustomAttrs.danh_xung || firstCustomAttrs.salutation || 'Học viên K2026',
+                cert_no: (first as any).cert_no || firstCustomAttrs.cert_no || 'CERT-2026-8899',
+                cert_link: (first as any).cert_link || firstCustomAttrs.cert_link || `${window.location.origin}/tra-cuu/CERT-2026-8899`,
+                cert_img: (first as any).cert_img || firstCustomAttrs.cert_img || 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=600&auto=format&fit=crop'
             };
         }
         return {
@@ -319,14 +325,14 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
             first_name: 'Phúc',
             lastName: 'Trần Trọng',
             last_name: 'Trần Trọng',
-            email: 'trongphuc@ideas.edu.vn',
+            email: 'customer.sample@example.com',
             phone: '0901234567',
-            company: 'IDEAS Vietnam',
-            companyName: 'IDEAS Vietnam',
+            company: 'Doanh nghiệp Mẫu',
+            companyName: 'Doanh nghiệp Mẫu',
             jobTitle: 'Học viên K2026',
             job_title: 'Học viên K2026',
             cert_no: 'CERT-2026-8899',
-            cert_link: 'https://ideas.edu.vn/tra-cuu/CERT-2026-8899',
+            cert_link: `${window.location.origin}/tra-cuu/CERT-2026-8899`,
             cert_img: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=600&auto=format&fit=crop'
         };
     }, [allSubscribers]);
@@ -735,22 +741,12 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
         }
 
         if (newSubs.length > 0 && finalListId) {
-            const STANDARD_KEYS = [
-                'email', 'firstName', 'lastName', 'fullName', 'phoneNumber', 'jobTitle',
-                'companyName', 'city', 'country', 'gender', 'dateOfBirth',
-                'anniversaryDate', 'tags', 'source', 'salesperson', 'joinedAt'
-            ];
-
             const subsPayload = newSubs.map(s => {
-                const customAttr: Record<string, any> = {};
-                Object.keys(s).forEach(k => {
-                    if (!STANDARD_KEYS.includes(k) && typeof s[k] !== 'function') {
-                        customAttr[k] = s[k];
-                    }
-                });
+                const customAttr = extractCustomAttributesFromRow(s);
 
                 return {
                     ...s,
+                    phoneNumber: s.phoneNumber || s.phone || '',
                     listIds: [finalListId],
                     tags: s.tags ? (typeof s.tags === 'string' ? s.tags.split(',').map((t: string) => t.trim()) : s.tags) : ['Quick Import'],
                     joinedAt: new Date().toISOString(),
@@ -929,6 +925,14 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
         // Skip if already cached
         if (templatePreviews[templateId]) return;
 
+        // If raw HTML is already available in memory from loaded templates, cache it immediately
+        const localTpl = allTemplates.find(t => t.id === templateId);
+        const localHtml = localTpl?.htmlContent || (localTpl as any)?.html_content || '';
+        if (localHtml) {
+            setTemplatePreviews(prev => ({ ...prev, [templateId]: localHtml }));
+            return;
+        }
+
         // [ISOLATION] In DEMO_MODE, never call the production PHP endpoint.
         // Return a realistic static preview so the wizard UI still demonstrates correctly.
         if (DEMO_MODE) {
@@ -961,15 +965,16 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
                 })
             });
             const data = await response.json();
-            if (data.success && data.data?.html) {
-                setTemplatePreviews(prev => ({ ...prev, [templateId]: data.data.html }));
+            const rawOrHtml = data.data?.raw_html || data.data?.html;
+            if (data.success && rawOrHtml) {
+                setTemplatePreviews(prev => ({ ...prev, [templateId]: rawOrHtml }));
             }
         } catch (error) {
             console.error('Failed to fetch template preview:', error);
         } finally {
             setLoadingPreview(false);
         }
-    }, [templatePreviews]);
+    }, [templatePreviews, allTemplates]);
 
     // Fix: Wrap handlers in useCallback to prevent infinite render loops in LaunchPreview
     const handleConnectFlow = useCallback((connected: boolean) => {
@@ -1760,7 +1765,7 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
                                                         ) : (
                                                             <div className="email-canvas-scope w-full h-[560px] bg-white relative overflow-hidden">
                                                                 <iframe
-                                                                    srcDoc={interpolateMergeTags(templatePreviews[formData.templateId] || '', sampleSubscriber, { variable_fallbacks: formData.config?.variable_fallbacks })}
+                                                                    srcDoc={interpolateMergeTags(allTemplates.find(t => t.id === formData.templateId)?.htmlContent || templatePreviews[formData.templateId] || '', sampleSubscriber, { variable_fallbacks: formData.config?.variable_fallbacks })}
                                                                     className="absolute top-0 left-0 w-[150%] h-[150%] border-none origin-top-left"
                                                                     style={{ transform: 'scale(0.666666)' }}
                                                                     title="Template Preview"
@@ -1778,7 +1783,7 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
                                     {(() => {
                                         const activeEmailHtml = formData.templateId === 'custom-html'
                                             ? (formData.contentBody || '')
-                                            : (templatePreviews[formData.templateId] || allTemplates.find(t => t.id === formData.templateId)?.htmlContent || '');
+                                            : (allTemplates.find(t => t.id === formData.templateId)?.htmlContent || templatePreviews[formData.templateId] || '');
                                         return activeEmailHtml ? (
                                             <VariableFallbackConfig
                                                 htmlContent={activeEmailHtml}

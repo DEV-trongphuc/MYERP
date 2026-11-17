@@ -53,6 +53,11 @@ const FIELD_DEFINITIONS: Record<string, { type: FieldType; label: string; group?
     crm_lead_status: { type: 'select', label: 'Trạng thái Lead CRM', group: 'MYERP CRM & Pipeline' },
     crm_temperature: { type: 'select', label: 'Độ ấm Lead (Temperature)', group: 'MYERP CRM & Pipeline' },
     crm_program: { type: 'text', label: 'Chương trình học / Quan tâm', group: 'MYERP CRM & Pipeline' },
+    crm_form_name: { type: 'text', label: 'Tên Form (Form Name / Meta Form)', group: 'MYERP CRM & Pipeline' },
+    crm_adset_name: { type: 'text', label: 'Tên Nhóm Quảng cáo (Adset Name)', group: 'MYERP CRM & Pipeline' },
+    crm_ad_name: { type: 'text', label: 'Tên Quảng cáo (Ad Name)', group: 'MYERP CRM & Pipeline' },
+    crm_campaign_name: { type: 'text', label: 'Tên Chiến dịch QC (Campaign / UTM)', group: 'MYERP CRM & Pipeline' },
+    crm_platform: { type: 'text', label: 'Nền tảng QC (Platform: fb / ig / web)', group: 'MYERP CRM & Pipeline' },
     crm_owner_id: { type: 'owner_select', label: 'Nhân sự Sale phụ trách (CRM Owner)', group: 'MYERP CRM & Pipeline' },
     salesperson: { type: 'owner_select', label: 'Tư vấn viên phụ trách', group: 'MYERP CRM & Pipeline' },
     crm_branch_id: { type: 'select', label: 'Cơ sở / Chi nhánh (Branch)', group: 'MYERP CRM & Pipeline' },
@@ -255,16 +260,20 @@ const CompactSelect = ({
     onChange,
     options,
     placeholder,
-    className = ""
+    className = "",
+    searchable = false
 }: {
     value: string;
     onChange: (val: string) => void;
     options: { value: string; label: string }[];
     placeholder?: string;
     className?: string;
+    searchable?: boolean;
 }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
     const containerRef = useRef<HTMLDivElement>(null);
+    const searchInputRef = useRef<HTMLInputElement>(null);
     const selectedOption = options.find(o => o.value === value);
 
     const [isVisible, setIsVisible] = useState(false);
@@ -276,7 +285,11 @@ const CompactSelect = ({
         };
         if (isOpen) {
             setIsVisible(true);
-            const timer = setTimeout(() => setAnimateIn(true), 10);
+            setSearchQuery('');
+            const timer = setTimeout(() => {
+                setAnimateIn(true);
+                if (searchable) searchInputRef.current?.focus();
+            }, 10);
             document.addEventListener('mousedown', handleClickOutside);
             return () => {
                 clearTimeout(timer);
@@ -287,7 +300,17 @@ const CompactSelect = ({
             const timer = setTimeout(() => setIsVisible(false), 200);
             return () => clearTimeout(timer);
         }
-    }, [isOpen]);
+    }, [isOpen, searchable]);
+
+    const normalizeSearch = (str: string) =>
+        str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+    const filteredOptions = searchable && searchQuery.trim()
+        ? options.filter(o => {
+            const q = normalizeSearch(searchQuery.trim());
+            return normalizeSearch(o.label).includes(q) || normalizeSearch(o.value).includes(q);
+        })
+        : options;
 
     return (
         <div className={`relative ${className}`} ref={containerRef}>
@@ -302,17 +325,37 @@ const CompactSelect = ({
                 <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </div>
             {isVisible && (
-                <div className={`absolute z-50 w-full mt-1 bg-white rounded-[var(--radius-md)] shadow-xl border border-slate-100 py-1 max-h-56 overflow-y-auto custom-scrollbar transform transition-all duration-200 ${animateIn ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2'}`}>
-                    {options.map(opt => (
-                        <div
-                            key={opt.value}
-                            onClick={() => { onChange(opt.value); setIsOpen(false); }}
-                            className={`px-3 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center text-xs group ${value === opt.value ? 'bg-rose-50 text-[var(--color-primary)] font-bold' : 'text-slate-600'}`}
-                        >
-                            <span>{opt.label}</span>
-                            {value === opt.value && <Check className="w-3 h-3 text-[var(--color-primary)]" />}
+                <div className={`absolute z-50 w-full mt-1 bg-white rounded-[var(--radius-md)] shadow-xl border border-slate-100 overflow-hidden transform transition-all duration-200 ${animateIn ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2'}`}>
+                    {searchable && (
+                        <div className="p-1.5 border-b border-slate-100 bg-slate-50/70">
+                            <div className="relative flex items-center">
+                                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
+                                <input
+                                    ref={searchInputRef}
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    placeholder="Tìm trường lọc..."
+                                    className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:border-[var(--color-primary)] text-slate-700"
+                                />
+                            </div>
                         </div>
-                    ))}
+                    )}
+                    <div className="py-1 max-h-56 overflow-y-auto custom-scrollbar">
+                        {filteredOptions.length > 0 ? filteredOptions.map(opt => (
+                            <div
+                                key={opt.value}
+                                onClick={() => { onChange(opt.value); setIsOpen(false); }}
+                                className={`px-3 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center text-xs group ${value === opt.value ? 'bg-rose-50 text-[var(--color-primary)] font-bold' : 'text-slate-600'}`}
+                            >
+                                <span>{opt.label}</span>
+                                {value === opt.value && <Check className="w-3 h-3 text-[var(--color-primary)]" />}
+                            </div>
+                        )) : (
+                            <div className="px-3 py-3 text-center text-xs text-slate-400">Không tìm thấy trường phù hợp</div>
+                        )}
+                    </div>
                 </div>
             )}
         </div>
@@ -1022,6 +1065,7 @@ const SegmentBuilderModal: React.FC<SegmentBuilderModalProps> = ({ isOpen, onClo
                                                 <div className="flex-1 grid grid-cols-10 gap-2 w-full">
                                                     <div className="col-span-4">
                                                         <CompactSelect
+                                                            searchable
                                                             options={Object.entries(FIELD_DEFINITIONS).map(([k, v]) => ({ value: k, label: v.label }))}
                                                             value={cond.field}
                                                             onChange={(v) => updateCondition(group.id, cond.id, 'field', v)}

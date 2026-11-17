@@ -169,6 +169,9 @@ try {
                 $newCustomAttrs[$inKey] = $inVal;
             }
 
+            if (empty($newCustomAttrs['form_name'])) {
+                $newCustomAttrs['form_name'] = !empty($data['form_name']) ? (string)$data['form_name'] : $formName;
+            }
             if ($sub) {
                 $sid = $sub['id'];
 
@@ -218,7 +221,7 @@ try {
 
                 // Merge custom attributes atomically to prevent race condition data loss (Vòng 93)
                 if (!empty($newCustomAttrs)) {
-                    $pdo->prepare("UPDATE subscribers SET custom_attributes = JSON_MERGE_PATCH(COALESCE(custom_attributes, '{}'), ?) WHERE id = ? AND workspace_id = ?")->execute([json_encode($newCustomAttrs, JSON_UNESCAPED_UNICODE), $sid, $form_ws_id]);
+                    $pdo->prepare("UPDATE subscribers SET custom_attributes = JSON_MERGE_PATCH(IF(JSON_VALID(custom_attributes), custom_attributes, '{}'), ?) WHERE id = ? AND workspace_id = ?")->execute([json_encode($newCustomAttrs, JSON_UNESCAPED_UNICODE), $sid, $form_ws_id]);
                 }
 
                 // [FIX] Tag N+1 eliminated: bulk-lookup all submitted tags in ONE query,
@@ -300,7 +303,7 @@ try {
                 if (!empty($newCustomAttrs)) {
                     $upsertFields .= ', custom_attributes';
                     $upsertValues[] = json_encode($newCustomAttrs, JSON_UNESCAPED_UNICODE);
-                    $upsertSet .= ", custom_attributes = JSON_MERGE_PATCH(COALESCE(custom_attributes, '{}'), VALUES(custom_attributes))";
+                    $upsertSet .= ", custom_attributes = JSON_MERGE_PATCH(IF(JSON_VALID(custom_attributes), custom_attributes, '{}'), VALUES(custom_attributes))";
                 }
 
                 $phList = implode(', ', array_fill(0, count($upsertValues), '?'));
@@ -374,36 +377,11 @@ try {
                 }
             }
 
-            if (function_exists('domationSyncSubscriberMatchOnly')) {
-                domationSyncSubscriberMatchOnly($pdo, $sid);
-            }
-
             $addedToTargetList = false;
             if ($targetListId) {
                 $stmtInsList = $pdo->prepare("INSERT IGNORE INTO subscriber_lists (workspace_id, subscriber_id, list_id) VALUES (?, ?, ?)");
                 $stmtInsList->execute([$form_ws_id, $sid, $targetListId]);
                 $addedToTargetList = ($stmtInsList->rowCount() > 0);
-
-                // Immediately recalculate and persist lists.subscriber_count & lists.phone_count
-                $pdo->prepare("
-                    UPDATE lists
-                    SET subscriber_count = (
-                            SELECT COUNT(DISTINCT sl.subscriber_id)
-                            FROM subscriber_lists sl
-                            INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ?
-                            WHERE sl.workspace_id = ? AND sl.list_id = ?
-                        ),
-                        phone_count = (
-                            SELECT COUNT(DISTINCT sl.subscriber_id)
-                            FROM subscriber_lists sl
-                            INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ?
-                            WHERE sl.workspace_id = ? AND sl.list_id = ?
-                              AND s.phone_number IS NOT NULL
-                              AND TRIM(s.phone_number) != ''
-                              AND TRIM(s.phone_number) != '0'
-                        )
-                    WHERE workspace_id = ? AND id = ?
-                ")->execute([$form_ws_id, $form_ws_id, $targetListId, $form_ws_id, $form_ws_id, $targetListId, $form_ws_id, $targetListId]);
             }
 
             // [FIX] IP detection: removed spoofable HTTP_CLIENT_IP and duplicate X_FORWARDED_FOR.
@@ -500,6 +478,32 @@ try {
                 error_log("Form immediate activity flush warning: " . $eFlush->getMessage());
             }
 
+            if ($targetListId) {
+                try {
+                    $pdo->prepare("
+                        UPDATE lists
+                        SET subscriber_count = (
+                                SELECT COUNT(DISTINCT sl.subscriber_id)
+                                FROM subscriber_lists sl
+                                INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ?
+                                WHERE sl.workspace_id = ? AND sl.list_id = ?
+                            ),
+                            phone_count = (
+                                SELECT COUNT(DISTINCT sl.subscriber_id)
+                                FROM subscriber_lists sl
+                                INNER JOIN subscribers s ON s.id = sl.subscriber_id AND s.workspace_id = ?
+                                WHERE sl.workspace_id = ? AND sl.list_id = ?
+                                  AND s.phone_number IS NOT NULL
+                                  AND TRIM(s.phone_number) != ''
+                                  AND TRIM(s.phone_number) != '0'
+                            )
+                        WHERE workspace_id = ? AND id = ?
+                    ")->execute([$form_ws_id, $form_ws_id, $targetListId, $form_ws_id, $form_ws_id, $targetListId, $form_ws_id, $targetListId]);
+                } catch (\Throwable $eListCount) {
+                    error_log("Form list count recalc warning: " . $eListCount->getMessage());
+                }
+            }
+
             if (function_exists('domationSyncSubscriberMatchOnly')) {
                 domationSyncSubscriberMatchOnly($pdo, $sid);
             }
@@ -520,6 +524,7 @@ try {
             }
 
             // --- BACKGROUND EXECUTION --- (Does not block webhook response)
+            ob_start();
 
             // Identify visitor via API
             $visitorId = $_COOKIE['_mf_vid'] ?? null;
@@ -743,8 +748,18 @@ try {
                 }
             }
             
+            if (ob_get_level() > 0) {
+                $bgOutput = ob_get_clean();
+                if (!empty($bgOutput)) {
+                    @file_put_contents(__DIR__ . '/worker_priority.log', $bgOutput, FILE_APPEND);
+                }
+            }
             exit; // Must end here since jsonResponse was bypassed
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
+            error_log("forms.php submit error (form=" . ($formId ?? 'unknown') . "): " . $e->getMessage());
+            if (ob_get_level() > 0) {
+                @ob_end_clean();
+            }
             if (isset($pdo) && $pdo->inTransaction())
                 $pdo->rollBack();
             if (isset($lockName)) {
@@ -760,6 +775,13 @@ try {
     // Sử dụng fire-and-forget qua worker_notify.php
 
     // --- CÁC METHOD KHÁC (GET/PUT/DELETE) GIỮ NGUYÊN ---
+    try {
+        $chkCol = $pdo->query("SHOW COLUMNS FROM forms LIKE 'deleted_at'")->fetch();
+        if (!$chkCol) {
+            $pdo->exec("ALTER TABLE forms ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL AFTER created_at");
+        }
+    } catch (\Throwable $t) {}
+
     switch ($method) {
         case 'GET':
             // [PERF] Release session lock immediately unless we need to write to it.
@@ -769,7 +791,7 @@ try {
 
             try {
                 if (($_GET['action'] ?? '') === 'embed' && $path) {
-                    $stmt = $pdo->prepare("SELECT id, name, status, fields_json FROM forms WHERE id = ? LIMIT 1");
+                    $stmt = $pdo->prepare("SELECT id, name, status, fields_json FROM forms WHERE id = ? AND deleted_at IS NULL LIMIT 1");
                     $stmt->execute([$path]);
                     $form = $stmt->fetch(PDO::FETCH_ASSOC);
                     if ($form && ($form['status'] ?? 'active') === 'active') {
@@ -789,7 +811,7 @@ try {
                                u_creator.role AS creator_role
                         FROM forms f
                         LEFT JOIN users u_creator ON u_creator.id = f.created_by
-                        WHERE f.id = ? AND f.workspace_id = ?
+                        WHERE f.id = ? AND f.workspace_id = ? AND f.deleted_at IS NULL
                     ");
                     $stmt->execute([$path, $admin_workspace_id]);
                     $form = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -817,7 +839,7 @@ try {
                         jsonResponse(false, null, 'Không tìm thấy Form');
                 } elseif (!empty($_GET['list_id'])) {
                     // NEW: Check which forms are linked to this list
-                    $stmt = $pdo->prepare("SELECT id, name FROM forms WHERE target_list_id = ? AND workspace_id = ?");
+                    $stmt = $pdo->prepare("SELECT id, name FROM forms WHERE target_list_id = ? AND workspace_id = ? AND deleted_at IS NULL");
                     $stmt->execute([$_GET['list_id'], $admin_workspace_id]);
                     jsonResponse(true, $stmt->fetchAll(PDO::FETCH_ASSOC));
                 } else {
@@ -843,7 +865,7 @@ try {
                              GROUP BY reference_id
                          ) ab_count ON ab_count.reference_id = f.id
                          LEFT JOIN users u_creator ON u_creator.id = f.created_by
-                         WHERE f.workspace_id = ?
+                         WHERE f.workspace_id = ? AND f.deleted_at IS NULL
                          ORDER BY f.created_at DESC"
                     );
                     $stmt->execute([$admin_workspace_id, $admin_workspace_id, $admin_workspace_id]);
@@ -871,7 +893,7 @@ try {
             try {
                 $data = json_decode(file_get_contents("php://input"), true);
                 $id = $data['id'] ?? bin2hex(random_bytes(16));
-                $fields = json_encode($data['fields'] ?? []);
+                $fields = json_encode($data['fields'] ?? [], JSON_UNESCAPED_UNICODE);
                 $notifEnabled = !empty($data['notificationEnabled']) ? 1 : 0;
                 $notifEmails  = trim($data['notificationEmails'] ?? '');
                 $notifCcEmails = trim($data['notificationCcEmails'] ?? '');
@@ -902,7 +924,7 @@ try {
                     jsonResponse(true, ['id' => $path, 'status' => $newStatus], 'Đã ' . ($newStatus === 'active' ? 'kích hoạt' : 'vô hiệu hoá') . ' biểu mẫu');
                 }
 
-                $fields = json_encode($data['fields'] ?? []);
+                $fields = json_encode($data['fields'] ?? [], JSON_UNESCAPED_UNICODE);
                 $notifEnabled = !empty($data['notificationEnabled']) ? 1 : 0;
                 $notifEmails  = trim($data['notificationEmails'] ?? '');
                 $notifCcEmails = trim($data['notificationCcEmails'] ?? '');
@@ -918,9 +940,7 @@ try {
             try {
                 if (!$path)
                     jsonResponse(false, null, 'ID required');
-                $pdo->prepare("DELETE FROM forms WHERE id = ? AND workspace_id = ?")->execute([$path, $admin_workspace_id]);
-                // Subscriber activity deletion is secondary and safe
-                $pdo->prepare("DELETE FROM subscriber_activity WHERE type = 'form_submit' AND reference_id = ? AND workspace_id = ?")->execute([$path, $admin_workspace_id]);
+                $pdo->prepare("UPDATE forms SET deleted_at = NOW() WHERE id = ? AND workspace_id = ?")->execute([$path, $admin_workspace_id]);
                 jsonResponse(true, ['id' => $path]);
             } catch (Exception $e) {
                 jsonResponse(false, null, 'Lỗi hệ thống, vui lòng thử lại.');

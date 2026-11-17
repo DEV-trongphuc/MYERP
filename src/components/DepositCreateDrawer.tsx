@@ -5,6 +5,7 @@ import { User, Building2, ChevronLeft, Plus, Trash2, Upload, X, AlertCircle, Loa
 import { fetchAPI } from '../utils/api';
 import { compressToWebP } from '../utils/imageCompress';
 import { useAuth } from '../contexts/AuthContext';
+import { resolveDefaultWorkflowParticipants } from '../contexts/TenantConfigContext';
 import { useUIStore } from '../store/uiStore';
 import { CustomSelect } from './ui/CustomSelect';
 import { CurrencyInput } from './ui/CurrencyInput';
@@ -395,27 +396,16 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
             const list = resUsr.data;
             setUsersList(list);
 
-            // 1. Mặc định Người duyệt là Thu Thảo (Nguyễn Thu Thảo - thaont@ideas.edu.vn)
-            const thuThao = list.find((u: any) => 
-              u.full_name?.toLowerCase().includes('thu thảo') || 
-              u.full_name?.toLowerCase().includes('thảo') ||
-              Number(u.id) === 100064
-            );
-            if (thuThao) {
-              setDepositAccountantId(String(thuThao.id));
+            const wfDefaults = resolveDefaultWorkflowParticipants('deposit', list, Number(user?.id || 0));
+            if (wfDefaults.approverId) {
+              setDepositAccountantId(String(wfDefaults.approverId));
             } else if (resDep && resDep.success && Array.isArray(resDep.data) && resDep.data.length > 0) {
               const lastWithAcct = resDep.data.find((d: any) => d.accountant_id);
               if (lastWithAcct) setDepositAccountantId(String(lastWithAcct.accountant_id));
             }
 
-            // 2. Mặc định Người liên quan là Mai Thị Nữ (numt@ideas.edu.vn)
-            const maiThiNu = list.find((u: any) => 
-              u.full_name?.toLowerCase().includes('mai thị nữ') || 
-              u.full_name?.toLowerCase().includes('nữ') ||
-              Number(u.id) === 100062
-            );
-            if (maiThiNu) {
-              setParticipantIds(prev => prev.length > 0 ? prev : [String(maiThiNu.id)]);
+            if (wfDefaults.watcherIds.length > 0) {
+              setParticipantIds(prev => prev.length > 0 ? prev : wfDefaults.watcherIds.map(String));
             }
           }
         })
@@ -430,22 +420,11 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
       setCommissionType('amount');
       setCommissionPercent('');
       
-      // Mặc định Người liên quan là Mai Thị Nữ
-      const maiThiNu = usersList.find((u: any) => 
-        u.full_name?.toLowerCase().includes('mai thị nữ') || 
-        u.full_name?.toLowerCase().includes('nữ') ||
-        Number(u.id) === 100062
-      );
-      setParticipantIds(maiThiNu ? [String(maiThiNu.id)] : []);
+      const wfDefaults = resolveDefaultWorkflowParticipants('deposit', usersList, Number(user?.id || 0));
+      setParticipantIds(wfDefaults.watcherIds.map(String));
 
-      // Đảm bảo mặc định Người duyệt là Thu Thảo
-      if (!depositAccountantId && usersList.length > 0) {
-        const thuThao = usersList.find((u: any) => 
-          u.full_name?.toLowerCase().includes('thu thảo') || 
-          u.full_name?.toLowerCase().includes('thảo') ||
-          Number(u.id) === 100064
-        );
-        if (thuThao) setDepositAccountantId(String(thuThao.id));
+      if (!depositAccountantId && wfDefaults.approverId) {
+        setDepositAccountantId(String(wfDefaults.approverId));
       }
 
       setShowParticipantDropdown(false);

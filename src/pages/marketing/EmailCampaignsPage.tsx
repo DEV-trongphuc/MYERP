@@ -546,6 +546,7 @@ const Campaigns: React.FC = () => {
 
     const handlePauseCampaign = useCallback(async (id: string) => {
         setCampaigns(prev => prev.map(c => c.id === id ? { ...c, status: CampaignStatus.PAUSED } : c));
+        setSelectedDetailCampaign(prev => prev?.id === id ? { ...prev, status: CampaignStatus.PAUSED } : prev);
         try {
             const res = await api.post<any>('campaigns?route=pause', { campaign_id: id });
             if (res.success) {
@@ -564,6 +565,7 @@ const Campaigns: React.FC = () => {
 
     const handleResumeCampaign = useCallback(async (id: string) => {
         setCampaigns(prev => prev.map(c => c.id === id ? { ...c, status: CampaignStatus.SENDING } : c));
+        setSelectedDetailCampaign(prev => prev?.id === id ? { ...prev, status: CampaignStatus.SENDING } : prev);
         try {
             const res = await api.post<any>('campaigns?route=resume', { campaign_id: id });
             if (res.success) {
@@ -842,6 +844,10 @@ const Campaigns: React.FC = () => {
                         allTags={allTags}
                         allFlows={allFlows}
                         onRename={handleRenameCampaign}
+                        onStatusChange={(id, nextStatus, patch) => {
+                            setCampaigns(prev => prev.map(c => c.id === id ? { ...c, status: nextStatus, ...(patch || {}) } : c));
+                            setSelectedDetailCampaign(prev => prev?.id === id ? { ...prev, status: nextStatus, ...(patch || {}) } : prev);
+                        }}
                     />
                 )}
                 {isTipsModalOpen && (

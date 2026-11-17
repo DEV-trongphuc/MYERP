@@ -6,6 +6,7 @@ import { CampaignReminder, Template } from '../../types';
 import Badge from '../common/Badge';
 import TemplateSelector from '../flows/TemplateSelector';
 import toast from 'react-hot-toast';
+import { interpolateMergeTags } from '../../utils/formatters';
 
 interface ReminderManagerProps {
   reminders: CampaignReminder[];
@@ -22,6 +23,18 @@ interface ReminderManagerProps {
 const ReminderManager: React.FC<ReminderManagerProps> = ({ reminders, templates, onChange, mainSubject, isZns = false, mainTemplateId, templatePreviews, onEditTemplate, onFetchPreview }) => {
   const [activeTemplateDrawer, setActiveTemplateDrawer] = useState<string | null>(null);
   const MAX_REMINDERS = 3; // Industry best practice
+  const renderPreviewHtml = (templateId?: string) => {
+    const raw = (templateId && templatePreviews?.[templateId]) || '';
+    if (!raw) return '';
+    return interpolateMergeTags(raw, {
+      firstName: 'Quý khách',
+      lastName: 'Nguyễn',
+      email: 'khachhang@example.com',
+      phoneNumber: '0901234567',
+      companyName: 'Doanh nghiệp Mẫu',
+      jobTitle: 'Thầy/Cô'
+    });
+  };
 
   React.useEffect(() => {
     reminders.forEach(rem => {
@@ -226,7 +239,7 @@ const ReminderManager: React.FC<ReminderManagerProps> = ({ reminders, templates,
                               <img src={selectedTemplate(rem.templateId)!.thumbnail} className="w-full h-full object-cover" />
                           ) : (templatePreviews && templatePreviews[rem.templateId || mainTemplateId || '']) ? (
                               <div className="absolute top-0 left-0 w-[400%] h-[400%] origin-top-left scale-[0.25]">
-                                  <iframe srcDoc={templatePreviews[rem.templateId || mainTemplateId || '']} title="mini-preview" className="w-full h-full border-0 pointer-events-none" tabIndex={-1} />
+                                  <iframe srcDoc={renderPreviewHtml(rem.templateId || mainTemplateId)} title="mini-preview" className="w-full h-full border-0 pointer-events-none" tabIndex={-1} />
                               </div>
                           ) : (
                               <Layout className="w-5 h-5 text-slate-300" />
@@ -281,7 +294,7 @@ const ReminderManager: React.FC<ReminderManagerProps> = ({ reminders, templates,
                     <div className="w-full h-[400px] border border-slate-200 rounded-[20px] overflow-hidden shadow-inner bg-white relative">
                       {templatePreviews && templatePreviews[rem.templateId || mainTemplateId || ''] ? (
                           <iframe
-                              srcDoc={templatePreviews[rem.templateId || mainTemplateId || '']}
+                              srcDoc={renderPreviewHtml(rem.templateId || mainTemplateId)}
                               className="absolute top-0 left-0 w-[150%] h-[150%] border-none origin-top-left"
                               style={{ transform: 'scale(0.666666)' }}
                               title="Preview"

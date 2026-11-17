@@ -202,9 +202,9 @@ try {
     switch ($method) {
         case 'GET':
             if (isset($_GET['route']) && $_GET['route'] === 'cleanup') {
-                // [FIX P43-D3] Cleanup scoped to workspace  old code deleted across all workspaces
-                $pdo->prepare("DELETE FROM lists WHERE name = 'Tổng Data' AND subscriber_count = 0 AND workspace_id = ?")->execute([$workspace_id]);
-                jsonResponse(true, ['deleted' => 'done'], " xóa các danh sách rác.");
+                // [FIX P43-D3] Cleanup scoped to workspace (Axiom 4 100% Soft-Delete Mandate)
+                $pdo->prepare("UPDATE lists SET deleted_at = NOW(), updated_at = NOW() WHERE name = 'Tổng Data' AND subscriber_count = 0 AND workspace_id = ? AND deleted_at IS NULL")->execute([$workspace_id]);
+                jsonResponse(true, ['deleted' => 'done'], "Đã xóa các danh sách rác.");
                 break;
             }
 

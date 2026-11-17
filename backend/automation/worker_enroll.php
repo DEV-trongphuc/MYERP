@@ -234,39 +234,14 @@ foreach ($activeFlows as $flow) {
 
     // [SMART SCHEDULE] Check if first step is WAIT
     foreach ($steps as $fs) {
-        if ($fs['id'] === $nextStepId && $fs['type'] === 'wait') {
-            $fsWaitConfig = $fs['config'] ?? [];
-            $fsWaitMode = $fsWaitConfig['mode'] ?? 'duration';
-            if ($fsWaitMode === 'duration') {
-                $dur = (int) ($fsWaitConfig['duration'] ?? 0);
-                $unit = $fsWaitConfig['unit'] ?? 'minutes';
-                $unitSeconds = match ($unit) {
-                    'weeks' => 604800,
-                    'days' => 86400,
-                    'hours' => 3600,
-                    default => 60,
-                };
-                $delay = $unitSeconds * $dur;
-                if ($delay > 0) {
-                    $initialSchedule = date('Y-m-d H:i:s', time() + $delay);
-                }
-            } elseif ($fsWaitMode === 'until_date') {
-                $specDate   = $fsWaitConfig['specificDate'] ?? '';
-                $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                if ($specDate) {
-                    $targetTs = strtotime("$specDate $targetTime:00");
-                    if ($targetTs > time()) {
-                        $initialSchedule = date('Y-m-d H:i:s', $targetTs);
-                    }
-                }
-            } elseif ($fsWaitMode === 'until') {
-                $targetTime = $fsWaitConfig['untilTime'] ?? '09:00';
-                $dt = new DateTime();
-                $parts2 = explode(':', $targetTime);
-                $dt->setTime((int)$parts2[0], (int)($parts2[1] ?? 0), 0);
-                if ($dt->getTimestamp() <= time()) $dt->modify('+1 day');
-                $initialSchedule = $dt->format('Y-m-d H:i:s');
-            }
+        if ($fs['id'] === $nextStepId && strtolower($fs['type'] ?? '') === 'wait') {
+            $waitCalc = calculateWaitStepScheduledAt($fs, null, [
+                'for_enrollment' => true,
+                'past_fallback' => $initialSchedule,
+                'duration_default' => 0,
+                'unit_default' => 'minutes',
+            ]);
+            $initialSchedule = $waitCalc['scheduled_at'];
             break;
         }
     }

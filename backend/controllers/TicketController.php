@@ -133,6 +133,7 @@ class TicketController {
     public function show(array $auth, int $id): void {
         if (!$this->checkTicketAccess($auth, $id)) {
             respond(403, null, 'Bạn không có quyền truy cập ticket này', false);
+            return;
         }
         $stmt = $this->db->prepare("
             SELECT t.*, u.full_name as assignee_name, u.avatar_url as assignee_avatar,
@@ -152,7 +153,8 @@ class TicketController {
     }
 
     private function checkTicketAccess(array $auth, int $ticketId): bool {
-        if (in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (TenantConfigService::hasGlobalScope($this->db, $auth, 'tickets', 'read')) {
             $chkT = $this->db->prepare("SELECT id FROM tickets WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
             $chkT->execute([$ticketId, $auth['tenant_id']]);
             return (bool)$chkT->fetchColumn();
@@ -243,57 +245,6 @@ class TicketController {
             $data['customer_name'] = $auth['full_name'] ?? 'Khách hàng';
         }
 
-        // Báo lỗi data business rule check
-        $resolvedLeadId = null;
-        $resolvedRoundId = null;
-        $resolvedSaleId = null;
-
-        if ($data['subject'] === 'Báo lỗi data' && !empty($validContacts)) {
-            $contactId = (int)$validContacts[0];
-            $stmtC = $this->db->prepare("SELECT source, owner_id, person_id FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
-            $stmtC->execute([$contactId, $auth['tenant_id']]);
-            $contactRow = $stmtC->fetch(PDO::FETCH_ASSOC);
-            if ($contactRow) {
-                $src = $contactRow['source'];
-                
-                // Retrieve correct lead_id associated with this contact
-                $leadId = null;
-                if (!empty($contactRow['person_id'])) {
-                    $stmtLead = $this->db->prepare("SELECT id FROM leads WHERE person_id = ? ORDER BY id DESC LIMIT 1");
-                    $stmtLead->execute([$contactRow['person_id']]);
-                    $leadId = $stmtLead->fetchColumn();
-                }
-                if (!$leadId) {
-                    $stmtLeadDirect = $this->db->prepare("SELECT id FROM leads WHERE id = ? LIMIT 1");
-                    $stmtLeadDirect->execute([$contactId]);
-                    $leadId = $stmtLeadDirect->fetchColumn();
-                }
-                
-                $lastLogRow = null;
-                if ($leadId) {
-                    $resolvedLeadId = (int)$leadId;
-                    // Databank claimed check: check latest distribution log
-                    $stmtLogs = $this->db->prepare("SELECT round_id, assigned_to, status, received_at FROM distribution_logs WHERE lead_id = ? ORDER BY id DESC LIMIT 1");
-                    $stmtLogs->execute([$leadId]);
-                    $lastLogRow = $stmtLogs->fetch(PDO::FETCH_ASSOC);
-                    
-                    if ($lastLogRow) {
-                        $resolvedRoundId = (int)($lastLogRow['round_id'] ?? 0);
-                        $resolvedSaleId = (int)($lastLogRow['assigned_to'] ?? $contactRow['owner_id'] ?? $auth['user_id']);
-                        $lastLogStatus = $lastLogRow['status'];
-                        if ($lastLogStatus === 'databank_claim') {
-                            respond(400, null, 'Khách hàng tự nhận từ Kho Data không được phép gửi ticket bù data.', false);
-                        }
-                    }
-                }
-
-                // Self-entered sources
-                if (in_array($src, ['ca_nhan', 'cold_call'], true) && empty($lastLogRow)) {
-                    respond(400, null, 'Chỉ duy nhất data được chia mới được báo bù. Khách tự khai thác / tự nhập không được báo bù.', false);
-                }
-            }
-        }
-
         // Verify related_users
         $validUsers = [];
         if (!empty($data['related_users']) && is_array($data['related_users'])) {
@@ -328,34 +279,6 @@ class TicketController {
         ]);
         $id = $this->db->lastInsertId();
 
-        // If data error report, sync into data_reports table & mark contact
-        if ($data['subject'] === 'Báo lỗi data' && $contactId) {
-            try {
-                // Check if is_error_ticket column exists in contacts, otherwise add it safely
-                if (!$this->db->inTransaction()) {
-                    $chkCol = $this->db->query("SHOW COLUMNS FROM contacts LIKE 'is_error_ticket'");
-                    if (!$chkCol || !$chkCol->fetch()) {
-                        $this->db->query("ALTER TABLE contacts ADD COLUMN is_error_ticket TINYINT(1) DEFAULT 0");
-                    }
-                }
-                $this->db->prepare("UPDATE contacts SET is_error_ticket = 1 WHERE id = ?")->execute([$contactId]);
-
-                if ($resolvedLeadId) {
-                    $chkReports = $this->db->query("SHOW TABLES LIKE 'data_reports'");
-                    if ($chkReports && $chkReports->fetch()) {
-                        $sRep = $this->db->prepare("
-                            INSERT INTO data_reports (lead_id, consultant_id, round_id, reason, status, created_at)
-                            VALUES (?, ?, ?, ?, 'pending', NOW())
-                            ON DUPLICATE KEY UPDATE reason = VALUES(reason), status = 'pending'
-                        ");
-                        $sRep->execute([$resolvedLeadId, $resolvedSaleId ?: $auth['user_id'], $resolvedRoundId ?: 0, $data['description'] ?? 'Báo lỗi data']);
-                    }
-                }
-            } catch (\Throwable $e) {
-                error_log("Error syncing data_report for ticket $id: " . $e->getMessage());
-            }
-        }
-
         // Send notifications to all admins & directors using NotificationService
         require_once __DIR__ . '/../NotificationService.php';
         NotificationService::send($this->db, $auth['tenant_id'], 'TICKET_NEW', [
@@ -372,7 +295,7 @@ class TicketController {
         $stmtUser->execute([$assigneeId]);
         $assigneeRow = $stmtUser->fetch();
         if ($assigneeRow && !empty($assigneeRow['email'])) {
-            $emailSubject = "[IDEAS] Bạn được phân công hỗ trợ Ticket #" . $id;
+            $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Bạn được phân công hỗ trợ Ticket #" . $id;
             $emailTitle = "PHÂN CÔNG HỖ TRỢ TICKET";
             $emailContent = "Chào <strong>" . htmlspecialchars($assigneeRow['full_name']) . "</strong>,<br/><br/>" .
                             "Bạn đã được phân công xử lý Ticket mới: <strong>" . htmlspecialchars($data['subject']) . "</strong>.<br/>" .
@@ -388,7 +311,7 @@ class TicketController {
             $relatedRows = $stmtRelated->fetchAll(PDO::FETCH_ASSOC) ?: [];
             foreach ($relatedRows as $rel) {
                 if (!empty($rel['email'])) {
-                    $emailSubject = "[IDEAS] Bạn được thêm là người liên quan Ticket #" . $id;
+                    $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Bạn được thêm là người liên quan Ticket #" . $id;
                     $emailTitle = "NGƯỜI LIÊN QUAN TICKET";
                     $emailContent = "Chào <strong>" . htmlspecialchars($rel['full_name']) . "</strong>,<br/><br/>" .
                                     "Bạn đã được thêm vào làm người liên quan của Ticket: <strong>" . htmlspecialchars($data['subject']) . "</strong>.<br/>" .
@@ -498,7 +421,8 @@ class TicketController {
         $oldTicket = $stmtOld->fetch(PDO::FETCH_ASSOC);
         
         $sql = "UPDATE tickets SET " . implode(',', $sets) . " WHERE id=? AND tenant_id=?";
-        if (!in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::hasGlobalScope($this->db, $auth, 'tickets', 'write')) {
             if ($auth['role'] === 'manager') {
                 $sql .= " AND (created_by = ? OR assignee_id = ? OR created_by IN (
                     SELECT id FROM users WHERE team_id IN (
@@ -535,7 +459,7 @@ class TicketController {
                 $stmtUser->execute([$newAssigneeId]);
                 $assigneeRow = $stmtUser->fetch();
                 if ($assigneeRow && !empty($assigneeRow['email'])) {
-                    $emailSubject = "[IDEAS] Bạn được phân công hỗ trợ Ticket #" . $id;
+                    $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Bạn được phân công hỗ trợ Ticket #" . $id;
                     $emailTitle = "PHÂN CÔNG HỖ TRỢ TICKET";
                     $emailContent = "Chào <strong>" . htmlspecialchars($assigneeRow['full_name']) . "</strong>,<br/><br/>" .
                                     "Bạn đã được phân công xử lý Ticket: <strong>" . htmlspecialchars($oldTicket['subject']) . "</strong>.<br/>" .
@@ -557,7 +481,7 @@ class TicketController {
                     $relatedRows = $stmtRelated->fetchAll(PDO::FETCH_ASSOC) ?: [];
                     foreach ($relatedRows as $rel) {
                         if (!empty($rel['email'])) {
-                            $emailSubject = "[IDEAS] Bạn được thêm là người liên quan Ticket #" . $id;
+                            $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Bạn được thêm là người liên quan Ticket #" . $id;
                             $emailTitle = "NGƯỜI LIÊN QUAN TICKET";
                             $emailContent = "Chào <strong>" . htmlspecialchars($rel['full_name']) . "</strong>,<br/><br/>" .
                                             "Bạn đã được thêm vào làm người liên quan của Ticket: <strong>" . htmlspecialchars($oldTicket['subject']) . "</strong>.<br/>" .
@@ -589,7 +513,7 @@ class TicketController {
                     $stmtUser->execute([$nUid]);
                     $notifRow = $stmtUser->fetch();
                     if ($notifRow && !empty($notifRow['email'])) {
-                        $emailSubject = "[IDEAS] Cập nhật trạng thái Ticket #" . $id;
+                        $emailSubject = (class_exists('TenantConfigService') || (include_once __DIR__ . '/../config/TenantConfigService.php') ? TenantConfigService::getBrandPrefix($this->db, (int)($GLOBALS['current_tenant_id'] ?? 1)) : '[ERP]') . " Cập nhật trạng thái Ticket #" . $id;
                         $emailTitle = "CẬP NHẬT TRẠNG THÁI TICKET";
                         $emailContent = "Chào <strong>" . htmlspecialchars($notifRow['full_name']) . "</strong>,<br/><br/>" .
                                         "Ticket <strong>" . htmlspecialchars($oldTicket['subject']) . "</strong> đã được cập nhật trạng thái mới.<br/>" .
@@ -633,7 +557,8 @@ class TicketController {
         
         $sql = "SELECT id, created_by FROM tickets WHERE id=? AND tenant_id=?";
         $p = [$id, $auth['tenant_id']];
-        if (!in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director'], true)) {
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        if (!TenantConfigService::hasGlobalScope($this->db, $auth, 'tickets', 'write')) {
             if ($auth['role'] === 'manager') {
                 $sql .= " AND (created_by = ? OR assignee_id = ? OR created_by IN (
                     SELECT id FROM users WHERE team_id IN (
@@ -812,8 +737,8 @@ class TicketController {
             respond(404, null, 'Bình luận không tồn tại', false);
         }
 
-        $userRole = strtolower($auth['role'] ?? '');
-        $isAdmin = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isAdmin = TenantConfigService::hasGlobalScope($this->db, $auth, 'tickets', 'delete');
         $isOwner = (int)$comment['user_id'] === (int)$auth['user_id'];
 
         if (!$isAdmin && !$isOwner) {

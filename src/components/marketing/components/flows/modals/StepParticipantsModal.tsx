@@ -1148,7 +1148,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                         </>
                                                     ) : activeTab !== 'opened' ? (
                                                         <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-left whitespace-nowrap">
-                                                            {['failed', 'zns_failed'].includes(activeTab as string) ? 'Chi tiết lỗi' : 'Thời gian'}
+                                                            {['failed', 'zns_failed', 'zns_skipped'].includes(activeTab as string) ? (activeTab === 'zns_skipped' ? 'Lý do bỏ qua' : 'Chi tiết lỗi') : 'Thời gian'}
                                                         </th>
                                                     ) : null}
 
@@ -1394,21 +1394,22 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                             </>
                                                         )}
 
-                                                        {['failed', 'zns_failed'].includes(activeTab as string) && (
+                                                        {['failed', 'zns_failed', 'zns_skipped'].includes(activeTab as string) && (
                                                             <>
                                                                 <td className="px-4 py-2 max-w-[260px]">
                                                                     <div className="flex flex-col gap-1">
                                                                         {(() => {
+                                                                            const isSkippedTab = activeTab === 'zns_skipped';
                                                                             // Priority: errorMessage (step-errors API), lastError (participants API), last_error, error_message, fallback
-                                                                            const error = p.errorMessage || p.lastError || p.last_error || p.error_message || 'Lỗi không xác định';
+                                                                            const error = p.errorMessage || p.lastError || p.last_error || p.error_message || (isSkippedTab ? 'Bỏ qua gửi ZNS (thiếu hoặc sai SĐT)' : 'Lỗi không xác định');
                                                                             // Extract short readable part (before first comma or max 80 chars)
                                                                             const shortError = error.length > 80 ? error.substring(0, 80) + '...' : error;
                                                                             return (
                                                                                 <div
-                                                                                    className="px-2 py-1.5 bg-rose-50 border border-rose-100 rounded-lg text-[10px] text-rose-600 font-semibold flex items-start gap-1.5"
+                                                                                    className={`px-2 py-1.5 rounded-lg text-[10px] font-semibold flex items-start gap-1.5 border ${isSkippedTab ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-rose-50 border-rose-100 text-rose-600'}`}
                                                                                     title={error}
                                                                                 >
-                                                                                    <AlertOctagon className="w-3 h-3 shrink-0 mt-0.5" />
+                                                                                    {isSkippedTab ? <SkipForward className="w-3 h-3 shrink-0 mt-0.5" /> : <AlertOctagon className="w-3 h-3 shrink-0 mt-0.5" />}
                                                                                     <span className="line-clamp-2 leading-tight">{shortError}</span>
                                                                                 </div>
                                                                             );
@@ -1486,7 +1487,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                                     })()}
                                                                 </td>
                                                             </>
-                                                        ) : (activeTab !== 'opened' && !['failed', 'zns_failed'].includes(activeTab as string)) ? (
+                                                        ) : (activeTab !== 'opened' && !['failed', 'zns_failed', 'zns_skipped'].includes(activeTab as string)) ? (
                                                             <td className="px-6 py-3 text-[11px] font-medium text-slate-500">
                                                                 {(activeTab === 'failed' || activeTab === 'unsubscribed' || activeTab === 'all_touched' || activeTab === 'inactive' || p.status === 'completed' || p.status === 'processed' || p.status === 'success' || p.status === 'condition_true' || p.status === 'condition_false' || p.status === 'unsubscribed' || p.status === 'zns_sent' || p.status === 'zns_skipped') ? (
                                                                     <span className="inline-flex items-center gap-1">

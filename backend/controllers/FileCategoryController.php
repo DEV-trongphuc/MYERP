@@ -42,7 +42,8 @@ class FileCategoryController {
         $visibility = trim($b['visibility'] ?? 'shared');
 
         if ($visibility !== 'personal') {
-            if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) {
+            require_once __DIR__ . '/../config/TenantConfigService.php';
+            if (!TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'files', 'write')) {
                 respond(403, null, 'Quyền quản trị là bắt buộc để tạo thư mục dùng chung', false);
             }
         }
@@ -79,7 +80,8 @@ class FileCategoryController {
         if (!$cat) respond(404, null, 'Không tìm thấy danh mục', false);
 
         $isOwner = ((int)($cat['created_by'] ?? 0)) === $uid;
-        $isAdmin = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isAdmin = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'files', 'write');
 
         if ($cat['visibility'] === 'personal') {
             if (!$isOwner && !$isAdmin) respond(403, null, 'Bạn không có quyền chỉnh sửa danh mục cá nhân của người khác', false);
@@ -108,7 +110,8 @@ class FileCategoryController {
         if ($cat['is_default']) respond(403, null, 'Không thể xóa danh mục mặc định', false);
 
         $isOwner = ((int)($cat['created_by'] ?? 0)) === $uid;
-        $isAdmin = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true);
+        require_once __DIR__ . '/../config/TenantConfigService.php';
+        $isAdmin = TenantConfigService::doesUserSatisfyRoles($this->db, $auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director'], 'files', 'write');
 
         if ($cat['visibility'] === 'personal') {
             if (!$isOwner && !$isAdmin) respond(403, null, 'Bạn không có quyền xóa danh mục cá nhân của người khác', false);
