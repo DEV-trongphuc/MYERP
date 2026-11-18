@@ -161,7 +161,8 @@ export const ChatFloatingLauncher: React.FC = () => {
     location.pathname.startsWith('/splash-preview') ||
     location.pathname.startsWith('/docs') ||
     location.pathname.startsWith('/documentation') ||
-    location.pathname.startsWith('/api-docs');
+    location.pathname.startsWith('/api-docs') ||
+    location.pathname.startsWith('/architecture');
 
   if (!token || !user || isPublicPage) return null;
 

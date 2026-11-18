@@ -1,0 +1,387 @@
+/* Architecture Design Portal extensions on top of ApiV1DocumentationPage styles */
+
+.arch-gate-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: radial-gradient(circle at 50% 0%, #eff6ff 0%, #f8fafc 55%, #f1f5f9 100%);
+  overflow-y: auto;
+}
+
+.arch-gate-card {
+  width: 100%;
+  max-width: 440px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 32px 28px;
+  box-shadow: 0 12px 32px -12px rgba(15, 23, 42, 0.12);
+}
+
+.arch-gate-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.arch-gate-title {
+  margin: 0 0 6px 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.3px;
+}
+
+.arch-gate-desc {
+  margin: 0 0 20px 0;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.55;
+}
+
+.arch-gate-meta-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 22px;
+}
+
+.arch-gate-pill {
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 3px 8px;
+  border-radius: 5px;
+}
+
+.arch-pass-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.arch-pass-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.arch-pass-input {
+  width: 100%;
+  height: 42px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 42px 0 14px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #0f172a;
+  background: #ffffff;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.arch-pass-input:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
+}
+
+.arch-pass-input.has-error {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.arch-pass-toggle {
+  position: absolute;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+
+.arch-pass-toggle:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+.arch-pass-error {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #dc2626;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.arch-pass-submit {
+  width: 100%;
+  height: 42px;
+  margin-top: 16px;
+  background: #0f172a;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.15s;
+}
+
+.arch-pass-submit:hover {
+  background: #1e293b;
+}
+
+/* Badges & Section styling inside article */
+.arch-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+}
+
+.arch-badge.slate { background: #f1f5f9; color: #334155; border-color: #e2e8f0; }
+.arch-badge.blue { background: #f0f9ff; color: #0284c7; border-color: #bae6fd; }
+.arch-badge.green { background: #ecfdf5; color: #059669; border-color: #a7f3d0; }
+.arch-badge.amber { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+.arch-badge.red { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+
+.arch-anchor-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.arch-anchor-chip {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11.5px;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.arch-bullet-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.arch-bullet-list li {
+  color: #334155;
+  line-height: 1.65;
+}
+
+.arch-callout {
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  margin-bottom: 16px;
+}
+
+.arch-callout.info {
+  background: #f0f9ff;
+  border-color: #bae6fd;
+}
+
+.arch-callout.success {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.arch-callout.warn {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.arch-callout-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.arch-callout-body {
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.55;
+}
+
+/* Interactive Diagrams */
+.arch-diagram-card {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 12px 0 18px 0;
+}
+
+.arch-diagram-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #475569;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.arch-diagram-chip {
+  font-family: monospace;
+  font-size: 10.5px;
+  background: #ffffff;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: none;
+}
+
+.arch-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.arch-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.arch-flow-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.arch-state-node {
+  flex: 1 1 150px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.arch-node-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.arch-node-sub {
+  font-size: 11px;
+  color: #475569;
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.arch-flow-arrow {
+  display: flex;
+  align-items: center;
+  font-family: monospace;
+  font-weight: 800;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.arch-chapter-pager {
+  margin-top: 36px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.arch-pager-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+  min-width: 200px;
+}
+
+.arch-pager-btn:hover {
+  border-color: #0284c7;
+  background: #f0f9ff;
+}
+
+.arch-pager-btn.next {
+  text-align: right;
+  margin-left: auto;
+}
+
+.arch-pager-kicker {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.arch-pager-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+@media (max-width: 900px) {
+  .arch-grid-3 {
+    grid-template-columns: 1fr;
+  }
+  .arch-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .arch-flow-arrow {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .arch-grid-4 {
+    grid-template-columns: 1fr;
+  }
+}

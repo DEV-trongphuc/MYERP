@@ -77,6 +77,7 @@ const DocumentationPage = lazy(() => import('./pages/DocumentationPage'));
 const AboutErpPage = lazy(() => import('./pages/AboutErpPage'));
 const ApiDocumentationPage = lazy(() => import('./pages/ApiDocumentationPage'));
 const ApiV1DocumentationPage = lazy(() => import('./pages/ApiV1DocumentationPage'));
+import ArchitectureDesignPage from './pages/ArchitectureDesignPage';
 const MarketingDashboardPage = lazy(() => import('./pages/marketing/MarketingDashboardPage'));
 const AutomationFlowsPage = lazy(() => import('./pages/marketing/AutomationFlowsPage'));
 const EmailCampaignsPage = lazy(() => import('./pages/marketing/EmailCampaignsPage'));
@@ -854,6 +855,9 @@ export default function App() {
                     <Route path="/public-schedule/:customerId" element={<PublicSchedulePage />} />
                     <Route path="/docs" element={<DocumentationPage />} />
                     <Route path="/documentation" element={<DocumentationPage />} />
+                    <Route path="/architecture-design" element={<ArchitectureDesignPage />} />
+                    <Route path="/architecture" element={<ArchitectureDesignPage />} />
+                    <Route path="/docs/architecture" element={<ArchitectureDesignPage />} />
                     <Route path="/about-erp" element={<AboutErpPage />} />
                     <Route path="/api-docs" element={<ApiV1DocumentationPage />} />
                     <Route path="/api-v1-docs" element={<ApiV1DocumentationPage />} />

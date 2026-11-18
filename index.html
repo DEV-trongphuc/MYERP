@@ -31,7 +31,7 @@
         try {
           var token = localStorage.getItem('Ideas_token') || localStorage.getItem('access_token');
           var path = window.location.pathname;
-          var isPublic = path === '/login' || path.endsWith('/login') || path === '/download' || path.startsWith('/download') || path.startsWith('/public-schedule') || path.startsWith('/docs') || path.startsWith('/documentation');
+          var isPublic = path === '/login' || path.endsWith('/login') || path === '/download' || path.startsWith('/download') || path.startsWith('/public-schedule') || path.startsWith('/public-booking') || path.startsWith('/docs') || path.startsWith('/documentation') || path.startsWith('/architecture') || path.startsWith('/api-docs') || path.startsWith('/api-v1-docs') || path === '/api/v1/docs';
           if (!token || isPublic) {
             document.documentElement.classList.add('hide-initial-splash');
           }

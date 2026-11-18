@@ -261,6 +261,15 @@ echo $response->getBody();`;
 
         {/* Header Right Actions */}
         <div className="api-header-right">
+          <button
+            onClick={() => navigate('/architecture-design')}
+            className="api-nav-btn api-nav-btn-secondary"
+            title="Xem tài liệu Architecture Design"
+          >
+            <Layers size={14} />
+            <span>Architecture</span>
+          </button>
+
           <a
             href="/openapi.json"
             download="myerp-v1-openapi.json"
