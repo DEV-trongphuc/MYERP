@@ -36,6 +36,9 @@ class TenantConfigService
             foreach (glob($tmpDir . "myerp_auth_u_*_{$tenantId}.json") ?: [] as $f) {
                 @unlink($f);
             }
+            foreach (glob($tmpDir . "myerp_users_list_t{$tenantId}_*.json") ?: [] as $f) {
+                @unlink($f);
+            }
             @unlink($tmpDir . "myerp_meta_creds_v3_t{$tenantId}.json");
             @unlink($tmpDir . "ideas_system_settings_t{$tenantId}.json");
         } else {
@@ -45,6 +48,9 @@ class TenantConfigService
                 @unlink($f);
             }
             foreach (glob($tmpDir . "myerp_auth_u_*.json") ?: [] as $f) {
+                @unlink($f);
+            }
+            foreach (glob($tmpDir . "myerp_users_list_*.json") ?: [] as $f) {
                 @unlink($f);
             }
             foreach (glob($tmpDir . "myerp_meta_creds_v3_t*.json") ?: [] as $f) {
@@ -1672,7 +1678,7 @@ class TenantConfigService
             }
 
             try {
-                $stmtMigFlag = $db->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'legacy_stage_notify_migrated_v1' LIMIT 1");
+                $stmtMigFlag = $db->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'legacy_stage_notify_migrated_v2' LIMIT 1");
                 $stmtMigFlag->execute([$tenantId]);
                 if ((string)$stmtMigFlag->fetchColumn() !== '1') {
                     self::syncLegacyTenantNotificationSettings($db, $tenantId, false);
@@ -1697,17 +1703,52 @@ class TenantConfigService
             'updated_rules' => 0,
             'updated_workflows' => 0,
             'updated_teams' => 0,
+            'deactivated_users' => 0,
             'skipped' => false,
         ];
 
         try {
-            $stmtU = $db->prepare("SELECT id, username, email, full_name, role FROM users WHERE tenant_id = ? AND is_active = 1 AND deleted_at IS NULL");
+            $stmtU = $db->prepare("SELECT id, username, email, full_name, role, is_active, status FROM users WHERE tenant_id = ? AND deleted_at IS NULL");
             $stmtU->execute([$tenantId]);
-            $tenantUsers = $stmtU->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $allTenantUsers = $stmtU->fetchAll(PDO::FETCH_ASSOC) ?: [];
         } catch (\Throwable $e) {
             $summary['skipped'] = true;
             return $summary;
         }
+
+        if (empty($allTenantUsers)) {
+            $summary['skipped'] = true;
+            return $summary;
+        }
+
+        // Deactivate Phan Hiếu Ngân (nganph@ideas.edu.vn / 100076) as resigned staff if present
+        $deactivatedIds = [];
+        foreach ($allTenantUsers as $uRow) {
+            $uid = (int)($uRow['id'] ?? 0);
+            $em = strtolower(trim((string)($uRow['email'] ?? '')));
+            $un = strtolower(trim((string)($uRow['username'] ?? '')));
+            if ($uid === 100076 || $em === 'nganph@ideas.edu.vn' || $un === 'nganph') {
+                $deactivatedIds[] = $uid;
+                $isActive = (int)($uRow['is_active'] ?? 1);
+                $stStr = strtolower(trim((string)($uRow['status'] ?? 'active')));
+                if ($isActive !== 0 || $stStr !== 'inactive') {
+                    try {
+                        $db->prepare("UPDATE users SET is_active = 0, status = 'inactive' WHERE id = ? AND tenant_id = ?")
+                            ->execute([$uid, $tenantId]);
+                        $summary['deactivated_users']++;
+                    } catch (\Throwable $eDeact) {
+                    }
+                }
+            }
+        }
+
+        $tenantUsers = array_values(array_filter($allTenantUsers, static function ($u) use ($deactivatedIds): bool {
+            $uid = (int)($u['id'] ?? 0);
+            if ($uid <= 0 || in_array($uid, $deactivatedIds, true)) {
+                return false;
+            }
+            return (int)($u['is_active'] ?? 1) === 1;
+        }));
 
         if (empty($tenantUsers)) {
             $summary['skipped'] = true;
@@ -1732,16 +1773,16 @@ class TenantConfigService
             return 0;
         };
 
-        $saleAdminId = $resolveUid(100066, ['linhdk@ideas.edu.vn'], ['linhdk']);
-        $maiThiNuId  = $resolveUid(100062, ['numt@ideas.edu.vn'], ['numt']);
-        $huyenTramId = $resolveUid(100073, ['tramlth@ideas.edu.vn'], ['tramlth']);
-        $hieuNganId  = $resolveUid(100076, ['nganph@ideas.edu.vn'], ['nganph']);
-        $thuThaoId   = $resolveUid(100064, ['thaont@ideas.edu.vn'], ['thaont']);
-        $duyPhuongId = $resolveUid(100065, ['phuongntd@ideas.edu.vn'], ['phuongntd']);
+        $saleAdminId  = $resolveUid(100066, ['linhdk@ideas.edu.vn'], ['linhdk']);
+        $maiThiNuId   = $resolveUid(100062, ['numt@ideas.edu.vn'], ['numt']);
+        $huyenTramId  = $resolveUid(100073, ['tramlth@ideas.edu.vn'], ['tramlth']);
+        $hienThuongId = $resolveUid(1000007, ['thuongnh@ideas.edu.vn'], ['thuongnh']);
+        $thuThaoId    = $resolveUid(100064, ['thaont@ideas.edu.vn'], ['thaont']);
+        $duyPhuongId  = $resolveUid(100065, ['phuongntd@ideas.edu.vn'], ['phuongntd']);
 
         if (
             $saleAdminId === 0 && $maiThiNuId === 0 && $huyenTramId === 0 &&
-            $hieuNganId === 0 && $thuThaoId === 0 && $duyPhuongId === 0
+            $hienThuongId === 0 && $thuThaoId === 0 && $duyPhuongId === 0
         ) {
             $summary['skipped'] = true;
             return $summary;
@@ -1764,7 +1805,7 @@ class TenantConfigService
             $stageTargets['dong_le_phi_ho_so'] = $cfg13;
             $stageTargets['dat_coc'] = $cfg13;
         }
-        $s14Ids = array_values(array_unique(array_filter([$maiThiNuId, $huyenTramId, $hieuNganId])));
+        $s14Ids = array_values(array_unique(array_filter([$maiThiNuId, $huyenTramId, $hienThuongId])));
         if (!empty($s14Ids)) {
             $cfg14 = ['user_ids' => $s14Ids, 'roles' => [], 'departments' => []];
             $stageTargets['enrolled'] = $cfg14;
@@ -1781,8 +1822,10 @@ class TenantConfigService
                     continue;
                 }
                 $currDecoded = !empty($stRow['notify_config_json']) ? json_decode((string)$stRow['notify_config_json'], true) : null;
-                $hasCurrUsers = is_array($currDecoded) && !empty($currDecoded['user_ids']);
-                if ($overwriteSeededDefaults || empty($stRow['notify_config_json']) || !$hasCurrUsers) {
+                $currUsers = is_array($currDecoded['user_ids'] ?? null) ? array_map('intval', $currDecoded['user_ids']) : [];
+                $hasCurrUsers = !empty($currUsers);
+                $hasDeactivatedUser = !empty(array_intersect($currUsers, $deactivatedIds));
+                if ($overwriteSeededDefaults || empty($stRow['notify_config_json']) || !$hasCurrUsers || $hasDeactivatedUser) {
                     $newJson = json_encode($stageTargets[$slug], JSON_UNESCAPED_UNICODE);
                     if ((string)($stRow['notify_config_json'] ?? '') !== $newJson) {
                         $updSt->execute([$newJson, (int)$stRow['id'], $tenantId]);
@@ -1817,8 +1860,9 @@ class TenantConfigService
                 if (!isset($ruleTargets[$eKey])) {
                     continue;
                 }
-                $currUids = !empty($nrRow['target_user_ids_json']) ? (json_decode((string)$nrRow['target_user_ids_json'], true) ?: []) : [];
-                if ($overwriteSeededDefaults || empty($currUids)) {
+                $currUids = !empty($nrRow['target_user_ids_json']) ? array_map('intval', json_decode((string)$nrRow['target_user_ids_json'], true) ?: []) : [];
+                $hasDeactivatedUser = !empty(array_intersect($currUids, $deactivatedIds));
+                if ($overwriteSeededDefaults || empty($currUids) || $hasDeactivatedUser) {
                     $newUidsJson = json_encode($ruleTargets[$eKey]['user_ids'], JSON_UNESCAPED_UNICODE);
                     $updNr->execute([$newUidsJson, $ruleTargets[$eKey]['include_owner'], (int)$nrRow['id'], $tenantId]);
                     $summary['updated_rules']++;
@@ -1868,8 +1912,8 @@ class TenantConfigService
         try {
             $isSqlite = self::isSqlite($db);
             $sqlFlag = $isSqlite
-                ? "INSERT INTO system_settings (tenant_id, setting_key, setting_value) VALUES (?, 'legacy_stage_notify_migrated_v1', '1') ON CONFLICT(tenant_id, setting_key) DO UPDATE SET setting_value = '1'"
-                : "INSERT INTO system_settings (tenant_id, setting_key, setting_value) VALUES (?, 'legacy_stage_notify_migrated_v1', '1') ON DUPLICATE KEY UPDATE setting_value = '1'";
+                ? "INSERT INTO system_settings (tenant_id, setting_key, setting_value) VALUES (?, 'legacy_stage_notify_migrated_v2', '1') ON CONFLICT(tenant_id, setting_key) DO UPDATE SET setting_value = '1'"
+                : "INSERT INTO system_settings (tenant_id, setting_key, setting_value) VALUES (?, 'legacy_stage_notify_migrated_v2', '1') ON DUPLICATE KEY UPDATE setting_value = '1'";
             $db->prepare($sqlFlag)->execute([$tenantId]);
         } catch (\Throwable $eFlag) {
         }

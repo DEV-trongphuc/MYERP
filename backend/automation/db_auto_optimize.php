@@ -510,7 +510,7 @@ $totalOrphans = array_sum(array_column($report['orphans_deleted'], 'orphans_dele
 
         <!-- Footer -->
         <div class="text-center text-xs text-slate-600 font-medium">
-            DOMATION Autoflow Database Maintenance Center &bull; Developed by Antigravity
+            DOMATION Autoflow Database Maintenance Center &bull; MYERP Automation Suite
         </div>
     </div>
 </body>

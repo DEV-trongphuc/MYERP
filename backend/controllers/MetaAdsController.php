@@ -5,7 +5,7 @@
  * Real Meta Graph API (`DOMATION_META` Batch Engine) + MYERP CRM Full-Funnel
  * Attribution Controller.
  *
- * Complies 100% with AGENTS.md & DOMATION_META (`D:\GITHUB_SPACE\DOMATION_META`):
+ * Meta Ads Batch & MYERP CRM Attribution Spec:
  *   - 100% Real Facebook Graph API v25.0 Batch data (`act_1852318231510577` + active
  *     token from `vhvxoigh_meta.saas_tenants` / `system_settings`) combined
  *     with 100% real MYERP CRM attribution (`contact_meta_attribution`,

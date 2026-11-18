@@ -104,17 +104,13 @@ Khi bàn giao hoặc sửa đổi code lõi, chạy `node tests/e2e/runner.js` �
 
 ---
 
-## 7. Trạng thái Bảo mật Đã Làm Sạch & Checklist Hậu Bàn Giao
+## 7. Checklist Bảo mật & Cấu hình Sau Bàn giao
 
-Trong đợt chuẩn hóa mã nguồn trước bàn giao, đội phát triển đã hoàn tất:
-- Gỡ `.env`, `.env.production`, `backend/.env` khỏi Git index và bổ sung bộ mẫu [`.env.example`](../.env.example) + [`backend/.env.example`](../backend/.env.example).
-- Gỡ bỏ thông tin mật khẩu DB / `JWT_SECRET` / `DIAG_TOKEN` tĩnh ra khỏi `backend/config.php`, `backend/config/Config.php`, `backend/db_connect.php`, `backend/api.php`, `backend/index.php`, `backend/run_migrations.php`, `backend/api_diagnostic*.php`, `backend/clone_db_to_myerp.php`, `backend/export_students_full.php`, `backend/test_*.php`, `scripts/backup-database.js`, `scripts/restore-database.js`, `scripts/*.py` và `tests/`.
+Các file cấu hình mẫu [`.env.example`](../.env.example) và [`backend/.env.example`](../backend/.env.example) được cung cấp sẵn; thông số nhạy cảm được đọc hoàn toàn từ biến môi trường trên máy chủ thay vì lưu cứng trong mã nguồn. Khi tiếp quản hệ thống, đội ngũ kỹ thuật cần thực hiện:
 
-Dưới đây là **4 việc đội ngũ tiếp quản cần thực hiện ngay khi nhận hệ thống**:
-
-| Mức độ | Hạng mục | Vị trí tham chiếu | Khuyến nghị Hành động cho Team Tiếp nhận |
+| Mức độ | Hạng mục | Vị trí tham chiếu | Khuyến nghị Hành động |
 | :--- | :--- | :--- | :--- |
-| **CRITICAL** | Xoay vòng (Rotate) toàn bộ thông tin bí mật từng có trong lịch sử Git trước ngày bàn giao | `backend/.env` trên Production & Staging, Git history | Đổi mới mật khẩu MySQL `DB_PASS`, tạo mới `JWT_SECRET`, `DIAG_TOKEN` / `MYERP_DIAG_TOKEN`, `CRON_SECRET`, SSH key deploy và kiểm tra API key Gemini/Zalo/Meta. |
-| **HIGH** | Thời hạn `JWT_EXPIRE_ACCESS` và `JWT_EXPIRE_REFRESH` đang để dài (`10` năm) cho PWA mobile | [config.php](../backend/config.php) | Giảm TTL Access Token về `1–24` giờ kèm cơ chế thu hồi phiên từ bảng `refresh_tokens` khi nhân sự nghỉ việc. |
-| **MEDIUM** | Chuẩn hóa `CRON_SECRET` bắt buộc & thu gọn script phụ trợ trên Production | [backend/automation/](../backend/automation/), [backend/test_bootstrap.php](../backend/test_bootstrap.php) | Khai báo `CRON_SECRET` trong `backend/.env` trên server rồi gỡ giá trị fallback trong `backend/automation/*.php`; loại bỏ `backend/test_*.php` và `scripts/*.py` khỏi gói upload Production để thu hẹp bề mặt HTTP. |
-| **LOW** | Đồng bộ snapshot tài liệu schema `database_schema.json` | [database_schema.md](../database_schema.md), [export_db_schema.php](../backend/export_db_schema.php) | Chạy lại `php backend/export_db_schema.php` trên Production DB để cập nhật bộ schema JSON/Markdown phản ánh trọn vẹn `~251` bảng hiện hành (`Migrations` v338). |
+| **CRITICAL** | Xoay vòng (Rotate) toàn bộ thông tin bí mật môi trường | `backend/.env` trên Production & Staging | Đổi mới mật khẩu MySQL `DB_PASS`, tạo mới `JWT_SECRET`, `DIAG_TOKEN` / `MYERP_DIAG_TOKEN`, `CRON_SECRET`, SSH key deploy và kiểm tra API key Gemini/Zalo/Meta. |
+| **HIGH** | Thời hạn `JWT_EXPIRE_ACCESS` và `JWT_EXPIRE_REFRESH` đang cấu hình dài (`10` năm) cho PWA mobile | [config.php](../backend/config.php) | Giảm TTL Access Token về `1–24` giờ kèm cơ chế thu hồi phiên từ bảng `refresh_tokens` khi nhân sự nghỉ việc. |
+| **MEDIUM** | Chuẩn hóa `CRON_SECRET` bắt buộc & thu gọn script phụ trợ trên Production | [backend/automation/](../backend/automation/), [backend/test_bootstrap.php](../backend/test_bootstrap.php) | Khai báo `CRON_SECRET` trong `backend/.env` trên server rồi gỡ giá trị fallback trong `backend/automation/*.php`; loại bỏ `backend/test_*.php` khỏi gói upload Production để thu hẹp bề mặt HTTP. |
+| **LOW** | Đồng bộ snapshot tài liệu schema `database_schema.json` | [database_schema.md](../database_schema.md), [export_db_schema.php](../backend/export_db_schema.php) | Chạy lại `php backend/export_db_schema.php` trên Production DB để cập nhật bộ schema JSON/Markdown phản ánh trọn vẹn cấu trúc bảng hiện hành (`Migrations` v338). |

@@ -56,3 +56,17 @@ guide_assets/
 backend/automation/_locks/
 *.lock
 
+# Local data exports & personal report deliverables
+AGENTS.md
+MASTER_FEEDBACK_FIX_PLAN.md
+PROMPT_QUY_TRINH_HOA_HONG.md
+DANH_SACH_VA_PHAN_TICH_TOAN_BO_HOC_VIEN_IDEAS.xlsx
+leads_50_with_interactions.csv
+leads_50_with_interactions.json
+students_data.json
+backend/normalized_students.json
+BAO_CAO_*
+Huong_Dan_*
+TEST_INFRA.md
+TEST_READY.md
+

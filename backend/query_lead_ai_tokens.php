@@ -1,5 +1,5 @@
 <?php
-// e:/GIAO_DATA_GOOGLESHEETS/backend/query_lead_ai_tokens.php
+// backend/query_lead_ai_tokens.php
 require_once __DIR__ . '/db_connect.php';
 
 header("Content-Type: application/json; charset=UTF-8");

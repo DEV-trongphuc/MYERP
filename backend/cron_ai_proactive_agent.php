@@ -7,7 +7,7 @@
  * Manager / Specialist) & Vai trò (Role) của từng nhân sự để gửi thông điệp điều hành,
  * nhắc việc, cảnh báo SLA và gợi ý hành động thông minh trực tiếp vào hộp chat SI IDEAS.
  *
- * Tuân thủ 100% Hiến chương MYERP (AGENTS.md):
+ * Nguyên tắc vận hành:
  * - Zero Mock Data: 100% số liệu truy vấn trực tiếp từ MySQL thực tế.
  * - Zero Spam: Chỉ gửi tối đa 1 bản tin/khung giờ/ngày qua bảng `sent_notifications`,
  *   tự động bỏ qua nhân sự đang nghỉ phép (`vacation_mode`, `hrm_leave_requests`) hoặc ngày lễ.

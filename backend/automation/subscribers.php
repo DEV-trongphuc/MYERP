@@ -1727,7 +1727,7 @@ WHERE sfs.workspace_id = ? AND f.workspace_id = ? AND sfs.subscriber_id = ? AND 
                 $pdo->prepare("UPDATE lists SET subscriber_count = GREATEST(0, subscriber_count - 1), phone_count = GREATEST(0, phone_count - ?) WHERE id = ? AND workspace_id = ?")->execute([$hasPhone, $lid, $workspace_id]);
             }
 
-            // AGENTS.md Rule 4 Mandate: 100% Soft-Delete. Preserve historical activity & delivery logs.
+            // 100% Soft-Delete Mandate: Preserve historical activity & delivery logs.
             $pdo->prepare("DELETE FROM subscriber_tags WHERE subscriber_id = ? AND workspace_id = ?")->execute([$path, $workspace_id]);
             // subscriber_activity preserved for historical analytics
             $pdo->prepare("UPDATE subscriber_flow_states SET status = 'cancelled', updated_at = NOW() WHERE subscriber_id = ? AND workspace_id = ? AND status IN ('waiting', 'processing', 'queued')")->execute([$path, $workspace_id]);

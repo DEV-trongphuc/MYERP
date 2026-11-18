@@ -9,12 +9,12 @@ echo "====================================================\n\n";
 
 $tenantId = 1;
 $creatorUserId = 100009; // Dev Admin
-$executorUserId = 100013; // Nhân sự Demo (Giả lập Nguyễn Thị Duy Phương)
+$executorUserId = 100013; // Nhân sự thực hiện mẫu
 
 // 1. Tạo dữ liệu mô tả dạng cấu trúc chuỗi
-$reqEmployeeName = "Huỳnh Trọng Phúc";
+$reqEmployeeName = "Nhân sự Demo A";
 $reqDate = date('Y-m-d');
-$executorName = "Nguyễn Thị Duy Phương";
+$executorName = "Nhân sự Thực Hiện B";
 $sendMethod = "Chuyển phát nhanh";
 $sendTimeFrame = "Chiều (13:00 - 17:00)";
 $recipientName = "Nguyễn Văn A";
@@ -43,7 +43,7 @@ try {
     $stmt->execute([
         $tenantId,
         $creatorUserId,
-        "Đăng ký: In, đóng dấu và gửi hồ sơ của Huỳnh Trọng Phúc",
+        "Đăng ký: In, đóng dấu và gửi hồ sơ của Nhân sự Demo A",
         $generalDesc,
         $generalDesc,
         $executorUserId

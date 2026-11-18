@@ -8,7 +8,7 @@ import os
 import re
 import random
 
-BASE_DIR = r"d:\GITHUB_SPACE\MYERP"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 class TestEmpiricalChallengerM1(unittest.TestCase):
 

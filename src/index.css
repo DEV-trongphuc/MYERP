@@ -41,7 +41,7 @@ html, body {
   --safe-area-right: env(safe-area-inset-right, 0px);
 }
 
-/* 4. Drawer & Modal Z-Index Hierarchy (Strict Hiến Chương MYERP)
+/* 4. Drawer & Modal Z-Index Hierarchy
    NOTE: Never place 10-digit integers inside var(--x, 21474836xx) fallbacks in CSS files because
    LightningCSS parses var() fallback tokens as 32-bit float (f32) and truncates them to 2147480000. */
 .subject-announcement-modal-backdrop {

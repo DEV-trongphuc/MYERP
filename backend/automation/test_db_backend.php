@@ -837,7 +837,7 @@ $score = round(($passed / $total) * 100);
 
         <!-- Footer -->
         <div class="text-center text-xs text-slate-600 font-medium">
-            DOMATION Autoflow Integration Test Engine &bull; Developed by Antigravity
+            DOMATION Autoflow Integration Test Engine &bull; MYERP Automation Suite
         </div>
     </div>
 </body>

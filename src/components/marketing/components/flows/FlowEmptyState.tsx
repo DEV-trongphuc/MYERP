@@ -9,7 +9,7 @@ interface FlowEmptyStateProps {
 
 const FlowEmptyState: React.FC<FlowEmptyStateProps> = ({ onCreateClick }) => (
   <div className="flex flex-col items-center justify-center py-20 px-6 bg-white rounded-2xl border border-slate-200 text-center">
-    {/* Quiet wireframe node preview (unslop visuals.md: product moment in palette) */}
+    {/* Wireframe node preview */}
     <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50/70 px-5 py-4" aria-hidden="true">
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 shadow-xs">

@@ -3198,7 +3198,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 paddingTop: '6px'
               }}
             >
-              {/* Subtabs Phân Luồng Hồ Sơ (Chuẩn Executive Segmented Control theo AGENTS.md Chapter V) */}
+              {/* Subtabs Phân Luồng Hồ Sơ (Segmented Control) */}
               <div
                 className="touch-scroll-x"
                 style={{

@@ -231,7 +231,7 @@ for c_norm_key, v_list in bh_by_cust.items():
 sql_lines.append("COMMIT;")
 
 full_sql = '\n'.join(sql_lines)
-with open(r'd:\GITHUB_SPACE\MYERP\scripts\sync_misa.sql', 'w', encoding='utf-8') as f:
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sync_misa.sql'), 'w', encoding='utf-8') as f:
     f.write(full_sql)
 
 print(f"Generated sync_misa.sql with {len(sql_lines)} lines.")

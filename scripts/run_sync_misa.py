@@ -42,7 +42,7 @@ print(f"deposits before: {dep_pre}")
 print(f"deposit_milestones before: {ms_pre}")
 
 print("\n=== 2. EXECUTING sync_misa.sql ===")
-with open(r'd:\GITHUB_SPACE\MYERP\scripts\sync_misa.sql', 'r', encoding='utf-8') as f:
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sync_misa.sql'), 'r', encoding='utf-8') as f:
     sql_content = f.read()
 
 proc = subprocess.Popen(

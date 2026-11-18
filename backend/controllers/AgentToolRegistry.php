@@ -353,7 +353,7 @@ class AgentToolRegistry {
                                 ],
                                 'user_query' => [
                                     'type' => 'STRING',
-                                    'description' => 'Tên hoặc mã ID của nhân sự cụ thể (ví dụ: "Huỳnh Trọng Phúc", "Phúc", 100067)'
+                                    'description' => 'Tên hoặc mã ID của nhân sự cụ thể (ví dụ: "Nguyễn Văn A", "Minh", 100067)'
                                 ],
                                 'month' => [
                                     'type' => 'INTEGER',
@@ -1218,7 +1218,7 @@ class AgentToolRegistry {
                                 ],
                                 'consultant_name' => [
                                     'type' => 'STRING',
-                                    'description' => 'Tên gần đúng của chuyên viên tư vấn (vd: "Phúc", "Trần Trọng Phúc")'
+                                    'description' => 'Tên gần đúng của chuyên viên tư vấn (vd: "Minh", "Nguyễn Văn A")'
                                 ],
                                 'compensation_count' => [
                                     'type' => 'INTEGER',

@@ -17,9 +17,8 @@ Nền tảng quản trị doanh nghiệp đa phân hệ (Multi-Tenant Enterprise
 
 | Tài liệu | Nội dung chính |
 | :--- | :--- |
-| **[`docs/ARCHITECTURE_DESIGN.md`](docs/ARCHITECTURE_DESIGN.md)** | Kiến trúc C4 tổng thể, vòng đời SPA/PWA, Dual-Router Backend, Concurrency State Machines (`FOR UPDATE` + Anti-Self-Approval), `SI IDEAS` AI Swarm, Marketing Engine & ERD `~251` bảng. |
-| **[`docs/HANDOVER_RUNBOOK.md`](docs/HANDOVER_RUNBOOK.md)** | Hướng dẫn thiết lập `.env`, quy trình Dev/Build/Lint, Deploy Staging & Production, Migration/Backup/Restore DB, Cron Orchestrator, kiểm thử `143` ca E2E và checklist bảo mật sau bàn giao. |
-| **[`AGENTS.md`](AGENTS.md)** | Hiến chương kiến trúc hệ thống, quy chuẩn UI/UX (`Brand DNA`), kỷ luật SQL & quy trình kiểm định 4 cổng. |
+| **[`docs/ARCHITECTURE_DESIGN.md`](docs/ARCHITECTURE_DESIGN.md)** | Kiến trúc C4 tổng thể, vòng đời SPA/PWA, Dual-Router Backend, State Machines (`FOR UPDATE` + Anti-Self-Approval), `SI IDEAS` AI Swarm, Marketing Engine & ERD `~251` bảng. |
+| **[`docs/HANDOVER_RUNBOOK.md`](docs/HANDOVER_RUNBOOK.md)** | Hướng dẫn thiết lập `.env`, quy trình Dev/Build/Lint, Deploy Staging & Production, Migration/Backup/Restore DB, Cron Orchestrator, kiểm thử E2E và checklist bảo mật sau bàn giao. |
 
 ---
 

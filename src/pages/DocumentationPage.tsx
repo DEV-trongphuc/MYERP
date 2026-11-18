@@ -3652,7 +3652,7 @@ export const DocumentationPage: React.FC = () => {
 
               <h2 id="calendar-enterprise">1. Lịch Trình Công Việc Doanh Nghiệp &amp; Tích Hợp Kế Toán (/calendar)</h2>
               <p>
-                Màn hình <code>/calendar</code> ([CalendarPage.tsx](file:///d:/GITHUB_SPACE/MYERP/src/pages/CalendarPage.tsx))
+                Màn hình <code>/calendar</code> (<code>CalendarPage.tsx</code>)
                 là trung tâm điều phối hoạt động thường nhật của toàn bộ doanh nghiệp:
               </p>
               <ul>
@@ -3673,7 +3673,7 @@ export const DocumentationPage: React.FC = () => {
 
               <h2 id="calendar-sales-portal">2. Lịch Trình Tuyển Sinh &amp; Tư Vấn Sales (KPIs, 3 Màu Phân Loại &amp; Check-in Proof)</h2>
               <p>
-                Trên không gian làm việc của chuyên viên tuyển sinh ([SalePortal.tsx](file:///d:/GITHUB_SPACE/MYERP/src/pages/SalePortal.tsx)),
+                Trên không gian làm việc của chuyên viên tuyển sinh (<code>SalePortal.tsx</code>),
                 Lịch trình được thiết kế như một <strong>Buồng Lái Tác Nghiệp (Sales Cockpit)</strong> tối ưu chuyển đổi:
               </p>
               <div className="doc-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', margin: '14px 0' }}>
@@ -3711,7 +3711,7 @@ export const DocumentationPage: React.FC = () => {
 
               <h2 id="calendar-smart-attendance">3. Lịch Chấm Công Sinh Trắc Học &amp; Bảng Xếp Ca (Smart Attendance)</h2>
               <p>
-                Phân hệ Chấm công ([AttendancePage.tsx](file:///d:/GITHUB_SPACE/MYERP/src/pages/AttendancePage.tsx))
+                Phân hệ Chấm công (<code>AttendancePage.tsx</code>)
                 cung cấp lịch chấm công sinh trắc học thông minh đa lớp:
               </p>
               <ul>
@@ -3729,7 +3729,7 @@ export const DocumentationPage: React.FC = () => {
 
               <h2 id="calendar-academic-training">4. Lịch Đào Tạo, Thời Khóa Biểu &amp; Lịch Giảng Viên (Academic Schedules)</h2>
               <p>
-                Phân hệ Quản lý Đào tạo ([AcademicPortal.tsx](file:///d:/GITHUB_SPACE/MYERP/src/pages/AcademicPortal.tsx))
+                Phân hệ Quản lý Đào tạo (<code>AcademicPortal.tsx</code>)
                 vận hành lịch biểu đào tạo quy chuẩn học thuật quốc tế:
               </p>
               <ul>

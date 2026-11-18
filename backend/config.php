@@ -1,5 +1,5 @@
 <?php
-// d:\GITHUB_SPACE\IDEAS_ERP\backend\config.php
+// backend/config.php
 
 require_once __DIR__ . '/env.php';
 

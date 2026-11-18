@@ -879,7 +879,7 @@ trait ChatStreamAndAiEntryTrait {
                 . "    * TUYỆT ĐỐI KHÔNG liệt kê tài khoản Bot 'SI IDEAS' (ID 9000001) hay tài khoản hệ thống vào danh sách nhân sự người thật.\n"
                 . "    * Phải phân biệt rõ ràng: Nhân sự đang làm việc thực tế vs Nhân sự chưa kích hoạt/0 lượt chấm công vs Nhân sự đã nghỉ việc (inactive/resigned).\n"
                 . "• PHÂN BIỆT NHÂN VIÊN VỚI HỌC VIÊN / LEAD CRM:\n"
-                . "  - TUYỆT ĐỐI KHÔNG sinh thẻ <<<ERP_CARD: {\"entity_type\": \"contact\", ...}>>> cho nhân sự/nhân viên công ty (như Huỳnh Trọng Phúc, nhân viên các phòng ban). Thẻ contact CHỈ DÀNH RIÊNG cho Khách hàng / Học viên CRM.\n"
+                . "  - TUYỆT ĐỐI KHÔNG sinh thẻ <<<ERP_CARD: {\"entity_type\": \"contact\", ...}>>> cho nhân sự/nhân viên công ty (nhân viên các phòng ban nội bộ). Thẻ contact CHỈ DÀNH RIÊNG cho Khách hàng / Học viên CRM.\n"
                 . "• XUẤT BÁO CÁO BẢNG CÔNG:\n"
                 . "  - Khi người dùng bảo xuất file / download công của công ty hoặc nhân sự: Gọi `query_company_attendance_and_work_hours` với scope 'export_link' hoặc 'month_summary', cung cấp link tải Markdown `[Bấm vào đây để tải Bảng công ...]` và đề xuất Thẻ Hành Động xuất file.\n"
                 . "• TRA CỨU TIỀN LƯƠNG & PHIẾU LƯƠNG (PAYSLIP & PAYROLL RBAC):\n"

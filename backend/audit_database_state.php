@@ -1,5 +1,5 @@
 <?php
-// e:/GIAO_DATA_GOOGLESHEETS/backend/audit_database_state.php
+// backend/audit_database_state.php
 require_once __DIR__ . '/db_connect.php';
 
 header("Content-Type: text/plain; charset=UTF-8");

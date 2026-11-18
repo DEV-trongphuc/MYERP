@@ -13343,7 +13343,7 @@ switch ($action) {
             $success = true;
         } else if ($type === 'attendance_reminder') {
             $workStart = $input['work_start'] ?? '08:00';
-            $userName = $input['user_name'] ?? 'Huỳnh Trọng Phúc';
+            $userName = $input['user_name'] ?? 'Nguyễn Văn A';
             $userRole = $input['role'] ?? 'Marketing';
             $frontendUrl = get_tenant_frontend_url($conn, (int)($decodedUser['tenant_id'] ?? 1)) ?: 'http://localhost:5173';
             $loginAttendanceLink = rtrim($frontendUrl, '/') . '/login?redirect=/attendance';
@@ -13360,7 +13360,7 @@ switch ($action) {
             $success = sendEmailNotification($email, $subject, $title, $content, '', true);
         } else if ($type === 'checkin_missing_reminder') {
             $workStart = $input['work_start'] ?? '08:00';
-            $userName = $input['user_name'] ?? 'Huỳnh Trọng Phúc';
+            $userName = $input['user_name'] ?? 'Nguyễn Văn A';
             $userRole = $input['role'] ?? 'Marketing';
             $frontendUrl = get_tenant_frontend_url($conn, (int)($decodedUser['tenant_id'] ?? 1)) ?: 'http://localhost:5173';
             $loginAttendanceLink = rtrim($frontendUrl, '/') . '/login?redirect=/attendance';

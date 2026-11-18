@@ -30,7 +30,7 @@ if (!function_exists('run_migration_2026_11_18_legacy_stage_notify')) {
 
             $alreadyMigrated = false;
             try {
-                $stmtFlag = $pdo->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'legacy_stage_notify_migrated_v1' LIMIT 1");
+                $stmtFlag = $pdo->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'legacy_stage_notify_migrated_v2' LIMIT 1");
                 $stmtFlag->execute([$tid]);
                 $alreadyMigrated = ((string)$stmtFlag->fetchColumn() === '1');
             } catch (\Throwable $eFlag) {
