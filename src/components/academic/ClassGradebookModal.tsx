@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X, BookOpen, Upload, Download, Save, Search, CheckCircle2,
-  AlertCircle, Loader2, FileSpreadsheet, Users, Award, Sparkles, Check
+  AlertCircle, Loader2, FileSpreadsheet, Users, Award, Check
 } from 'lucide-react';
 import api from '../../api/axios';
 import { toast } from 'react-hot-toast';
@@ -284,7 +284,7 @@ export const ClassGradebookModal: React.FC<ClassGradebookModalProps> = ({
       const res = await api.post(`/academic/class-gradebook/${selectedCampaignId}`, {
         rows: rowsPayload
       });
-      toast.success(res.data?.message || 'Đã lưu bảng điểm cả lớp thành công!');
+      toast.success(res.data?.message || 'Đã lưu bảng điểm cả lớp thành công.');
       setDirtyCount(0);
       onSaved?.();
       await loadGradebook(selectedCampaignId);
@@ -356,7 +356,7 @@ export const ClassGradebookModal: React.FC<ClassGradebookModalProps> = ({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast.success(`Đã tải file mẫu môn "${cleanTargetSubName}" (Thang điểm 6.0)!`);
+      toast.success(`Đã tải file mẫu môn "${cleanTargetSubName}" (Thang điểm 6.0).`);
       return;
     }
 
@@ -401,7 +401,7 @@ export const ClassGradebookModal: React.FC<ClassGradebookModalProps> = ({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast.success('Đã tải xuống file mẫu tất cả môn (Thang điểm 6.0)!');
+    toast.success('Đã tải xuống file mẫu tất cả môn (Thang điểm 6.0).');
   };
 
   // Parse CSV / TSV text into preview rows
@@ -588,7 +588,7 @@ export const ClassGradebookModal: React.FC<ClassGradebookModalProps> = ({
     reader.onload = ev => {
       const content = String(ev.target?.result || '');
       parseImportContent(content);
-      toast.success(`Đã đọc file "${file.name}" thành công!`);
+      toast.success(`Đã đọc file "${file.name}" thành công.`);
     };
     reader.readAsText(file, 'UTF-8');
     e.target.value = '';
@@ -601,7 +601,7 @@ export const ClassGradebookModal: React.FC<ClassGradebookModalProps> = ({
       const res = await api.post(`/academic/class-gradebook/${selectedCampaignId}`, {
         rows: importPreviewRows
       });
-      toast.success(res.data?.message || 'Đã import điểm cả lớp thành công!');
+      toast.success(res.data?.message || 'Đã import điểm cả lớp thành công.');
       setActiveMode('grid');
       setImportPreviewRows([]);
       setImportText('');
@@ -954,13 +954,13 @@ export const ClassGradebookModal: React.FC<ClassGradebookModalProps> = ({
                   border: 'none',
                   background: '#BD1D2D',
                   color: '#ffffff',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   fontSize: '0.82rem',
                   cursor: saving ? 'not-allowed' : 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  boxShadow: '0 2px 6px rgba(189, 29, 45, 0.25)'
+                  fontVariantNumeric: 'tabular-nums',
                 }}
               >
                 {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}

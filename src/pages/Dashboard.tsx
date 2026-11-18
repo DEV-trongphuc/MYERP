@@ -1154,7 +1154,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       label: t('TỔNG DATA TIẾP NHẬN'),
       value: stats?.total_today?.toLocaleString() || '0',
       icon: GitBranch,
-      color: 'var(--color-primary)', // Purple for Total Data
+      color: 'var(--color-primary)', // Brand crimson for Total Data
       change: stats?.total_change,
       up: (stats?.total_change || '').startsWith('+')
     },
@@ -1246,8 +1246,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     }
     if (r === 'manager' || t.includes('quản lý') || t.includes('trưởng phòng')) {
       return {
-        background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
-        boxShadow: '0 2px 8px rgba(139, 92, 246, 0.4)'
+        background: 'linear-gradient(135deg, #334155 0%, #0f172a 100%)',
+        boxShadow: '0 2px 8px rgba(15, 23, 42, 0.32)'
       };
     }
     if (r === 'hr' || t.includes('nhân sự')) {
@@ -1276,8 +1276,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     }
     if (r === 'sale_admin' || r === 'saleadmin') {
       return {
-        background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-        boxShadow: '0 2px 8px rgba(99, 102, 241, 0.4)'
+        background: 'linear-gradient(135deg, #475569 0%, #1e293b 100%)',
+        boxShadow: '0 2px 8px rgba(51, 65, 85, 0.35)'
       };
     }
     return {
@@ -1364,7 +1364,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               size={isMobile ? 58 : 68} 
               style={{ border: '2px solid rgba(189, 29, 45, 0.45)', boxShadow: '0 0 12px rgba(189, 29, 45, 0.25)' }}
             />
-            <span className="animate-pulse" style={{
+            <span style={{
               position: 'absolute',
               bottom: 1,
               right: 1,
@@ -1372,24 +1372,23 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               height: 12,
               borderRadius: '50%',
               backgroundColor: '#10b981',
-              border: '2px solid #181515',
-              boxShadow: '0 0 8px #10b981'
+              border: '2px solid #181515'
             }} />
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0, flex: 1 }}>
             <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '4px' : '8px' }}>
               <h2 className="welcome-banner-title" style={{ fontSize: isMobile ? '1.05rem' : '1.25rem' }}>
-                {t('Chào mừng trở lại,')} {user?.name || ''}
+                {t('Xin chào,')} {user?.name || ''}
               </h2>
               {isMobile && (
                 <span style={{ 
                   fontSize: '0.625rem', 
-                  fontWeight: 900, 
+                  fontWeight: 700, 
                   color: '#ffffff', 
                   padding: '2px 8px', 
-                  borderRadius: '20px', 
+                  borderRadius: '6px', 
                   textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
+                  letterSpacing: '0.04em',
                   ...getRoleBadgeStyle(user?.role || '', getUserJobTitle(user))
                 }}>
                   {getRoleLabel(user?.role || '', user)}
@@ -1408,12 +1407,12 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               <div style={{ display: 'flex' }}>
                 <span style={{ 
                   fontSize: '0.625rem', 
-                  fontWeight: 900, 
+                  fontWeight: 700, 
                   color: '#ffffff', 
                   padding: '2px 8px', 
-                  borderRadius: '20px', 
+                  borderRadius: '6px', 
                   textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
+                  letterSpacing: '0.04em',
                   ...getRoleBadgeStyle(user?.role || '', getUserJobTitle(user))
                 }}>
                   {getRoleLabel(user?.role || '', user)}
@@ -1424,8 +1423,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
         </div>
 
         {/* Middle section: Issues/Tasks */}
-        <div style={{ flex: isMobile ? '1 1 100%' : '2 1 380px', display: 'flex', flexDirection: 'column', gap: '10px', minWidth: isMobile ? '100%' : '280px' }}>
-          <h4 style={{ margin: 0, fontSize: '0.72rem', fontWeight: 800, color: '#f4f4f5', textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.9 }}>
+        <div style={{ flex: isMobile ? '1 1 100%' : '2 1 380px', display: 'flex', flexDirection: 'column', gap: '12px', minWidth: isMobile ? '100%' : '280px' }}>
+          <h4 style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#f4f4f5', textTransform: 'uppercase', letterSpacing: '0.06em', opacity: 0.9 }}>
             {t('Nhiệm vụ & Phê duyệt tồn đọng')}
           </h4>
           {issuesList.length > 0 ? (
@@ -1435,7 +1434,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   key={index} 
                   onClick={issue.action}
                   className="welcome-task-row"
-                  style={{ padding: isMobile ? '8px 12px' : '10px 16px' }}
+                  style={{ padding: isMobile ? '8px 12px' : '12px 16px' }}
                 >
                   {issue.icon}
                   <span style={{ flex: 1, fontSize: '0.78rem' }}>{issue.text}</span>
@@ -1443,9 +1442,9 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               ))}
             </div>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '10px' }}>
               <CheckSquare size={14} style={{ color: '#10b981' }} />
-              <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{t('Tuyệt vời! Bạn không có nhiệm vụ nào chưa hoàn thành.')}</span>
+              <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{t('Không có nhiệm vụ nào đang chờ xử lý')}</span>
             </div>
           )}
         </div>
@@ -1761,17 +1760,17 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             overflow: hidden;
             background: linear-gradient(135deg, #181515 0%, #381f21 50%, #121010 100%) !important;
             border: 1px solid rgba(189, 29, 45, 0.4) !important;
-            border-radius: 20px !important;
+            border-radius: 16px !important;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25), 0 1px 0 rgba(255, 255, 255, 0.08) inset !important;
-            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
-            padding: 1.75rem 2.25rem !important;
+            transition: border-color 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1) !important;
+            padding: 24px 32px !important;
             display: flex;
             flex-direction: row;
             align-items: center;
             justify-content: space-between;
             flex-wrap: wrap;
-            gap: 1.5rem;
-            margin-bottom: 0.5rem;
+            gap: 24px;
+            margin-bottom: 8px;
           }
           .welcome-banner::before {
             content: '';
@@ -1781,21 +1780,20 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             width: 350px;
             height: 350px;
             border-radius: 50%;
-            background: radial-gradient(circle, rgba(189, 29, 45, 0.15) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(189, 29, 45, 0.12) 0%, transparent 70%);
             pointer-events: none;
           }
           .welcome-banner:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 14px 35px rgba(189, 29, 45, 0.22), 0 1px 0 rgba(255, 255, 255, 0.12) inset !important;
+            box-shadow: 0 12px 32px rgba(189, 29, 45, 0.2), 0 1px 0 rgba(255, 255, 255, 0.12) inset !important;
             border-color: rgba(189, 29, 45, 0.55) !important;
           }
           .welcome-action-btn {
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            transition: background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1) !important;
             cursor: pointer;
-            border-radius: 12px !important;
-            padding: 10px 20px !important;
+            border-radius: 10px !important;
+            padding: 8px 16px !important;
             font-size: 0.8rem !important;
-            font-weight: 750 !important;
+            font-weight: 600 !important;
             display: inline-flex !important;
             align-items: center !important;
             gap: 8px !important;
@@ -1805,12 +1803,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             background: linear-gradient(135deg, #BD1D2D 0%, #a31422 100%) !important;
             border: none !important;
             color: white !important;
-            box-shadow: 0 4px 14px rgba(189, 29, 45, 0.45) !important;
+            box-shadow: 0 4px 14px rgba(189, 29, 45, 0.4) !important;
           }
           .welcome-action-btn.primary-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(189, 29, 45, 0.6) !important;
-            filter: brightness(1.15);
+            box-shadow: 0 6px 18px rgba(189, 29, 45, 0.55) !important;
+            filter: brightness(1.08);
           }
           .welcome-action-btn.outline-btn {
             background: rgba(255, 255, 255, 0.05) !important;
@@ -1821,21 +1818,19 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             background: rgba(189, 29, 45, 0.18) !important;
             border-color: rgba(189, 29, 45, 0.5) !important;
             color: #ffffff !important;
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(189, 29, 45, 0.25) !important;
           }
           .welcome-task-row {
             background: rgba(255, 255, 255, 0.04) !important;
             border: 1px solid rgba(255, 255, 255, 0.12) !important;
-            border-radius: 12px !important;
-            padding: 10px 16px !important;
+            border-radius: 10px !important;
+            padding: 8px 16px !important;
             display: flex;
             align-items: center;
             gap: 12px;
             font-size: 0.825rem;
             color: #ffffff !important;
-            font-weight: 700 !important;
-            transition: all 0.2s ease;
+            font-weight: 600 !important;
+            transition: background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.18s cubic-bezier(0.22, 1, 0.36, 1);
             cursor: pointer;
             text-decoration: none;
             box-shadow: 0 2px 6px rgba(0,0,0,0.15) !important;
@@ -1844,22 +1839,19 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             background: rgba(189, 29, 45, 0.15) !important;
             border-color: rgba(189, 29, 45, 0.4) !important;
             color: #ffffff !important;
-            transform: translateX(4px);
-            box-shadow: 0 4px 12px rgba(189, 29, 45, 0.25) !important;
           }
           .welcome-banner-title {
             font-size: 1.15rem !important;
-            font-weight: 800 !important;
+            font-weight: 600 !important;
             color: #ffffff !important;
             margin: 0 !important;
-            letter-spacing: -0.3px !important;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+            letter-spacing: -0.02em !important;
             line-height: 1.3 !important;
           }
           @media (max-width: 768px) {
             .welcome-banner {
-              padding: 0.875rem 1.125rem !important;
-              gap: 0.875rem !important;
+              padding: 16px 16px !important;
+              gap: 12px !important;
               border-radius: 16px !important;
             }
             .welcome-banner-title {
@@ -1868,18 +1860,18 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           }
         `}</style>
 
-        <div className="welcome-banner" style={{ marginBottom: '1.25rem' }}>
+        <div className="welcome-banner" style={{ marginBottom: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '12px' : '20px', minWidth: 0, flex: '1 1 auto' }}>
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <Avatar
                 name={user?.name || 'Admin'}
                 src={user?.avatar || user?.avatar_url}
-                size={isMobile ? 50 : 65}
+                size={isMobile ? 48 : 64}
                 style={{
                   borderRadius: '50%',
                   border: '2px solid rgba(189, 29, 45, 0.6)',
                   boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
-                  fontWeight: 800
+                  fontWeight: 700
                 }}
               />
               <div className="ping-dot" style={{ 
@@ -1898,8 +1890,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               <h2 className="welcome-banner-title">
                 {t('Xin chào')}, {user?.name || 'Admin'}
               </h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.72rem', color: '#cbd5e1', fontWeight: 650, display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.72rem', color: '#cbd5e1', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Calendar size={12} style={{ opacity: 0.8 }} />
                   {new Date().toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                 </span>
@@ -1907,7 +1899,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   padding: '2px 8px', 
                   borderRadius: '6px', 
                   fontSize: '0.65rem', 
-                  fontWeight: 800, 
+                  fontWeight: 700, 
                   color: '#ffffff',
                   textTransform: 'uppercase',
                   letterSpacing: '0.03em',
@@ -1920,19 +1912,19 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           </div>
 
           <div style={{ flex: '1 1 auto', maxWidth: isMobile ? '100%' : '520px', minWidth: isMobile ? '100%' : '320px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 {isAdminOrManager ? t('Nhiệm vụ & Phê duyệt tồn đọng') : t('Không gian làm việc')}
               </div>
               {isAdminOrManager ? (
                 issues.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {issues.slice(0, 2).map((issue, index) => (
                       <div key={index} className="welcome-task-row" onClick={issue.action}>
                         {issue.type === 'ticket' && <AlertTriangle size={14} style={{ color: '#fbbf24' }} />}
                         {issue.type === 'gatekeeper' && <Zap size={14} style={{ color: '#60a5fa' }} />}
                         {issue.type === 'checkin' && <Clock size={14} style={{ color: '#ff8a8a' }} />}
-                        {issue.type === 'coop' && <Scale size={14} style={{ color: '#c084fc' }} />}
+                        {issue.type === 'coop' && <Scale size={14} style={{ color: '#f87171' }} />}
                         {issue.type === 'expense' && <DollarSign size={14} style={{ color: '#34d399' }} />}
                         <span style={{ flex: 1, fontSize: '0.78rem' }}>{issue.text}</span>
                       </div>
@@ -1942,17 +1934,17 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
-                    gap: '10px', 
-                    padding: isMobile ? '8px 12px' : '10px 16px', 
+                    gap: '8px', 
+                    padding: isMobile ? '8px 12px' : '12px 16px', 
                     background: 'rgba(255, 255, 255, 0.03)', 
                     border: '1px dashed rgba(255, 255, 255, 0.15)', 
-                    borderRadius: '12px', 
+                    borderRadius: '10px', 
                     color: '#cbd5e1',
                     fontSize: '0.75rem'
                   }}>
                     <CheckCircle2 size={15} style={{ color: '#10b981', flexShrink: 0 }} />
-                    <span style={{ fontWeight: 650 }}>
-                      {t('Không có yêu cầu phê duyệt nào đang chờ xử lý. Chúc bạn 1 ngày làm việc năng lượng.')}
+                    <span style={{ fontWeight: 500 }}>
+                      {t('Không có yêu cầu phê duyệt nào đang chờ xử lý')}
                     </span>
                   </div>
                 )
@@ -1962,9 +1954,9 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   onClick={() => navigate('/workspace')}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <CheckSquare size={15} style={{ color: '#10b981' }} />
-                    <span style={{ fontSize: '0.78rem', fontWeight: 650 }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>
                       {t('Bàn làm việc — Quản lý công việc & lịch trình cá nhân')}
                     </span>
                   </div>
@@ -2086,17 +2078,17 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             overflow: hidden;
             background: linear-gradient(135deg, #181515 0%, #381f21 50%, #121010 100%) !important;
             border: 1px solid rgba(189, 29, 45, 0.4) !important;
-            border-radius: 20px !important;
+            border-radius: 16px !important;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25), 0 1px 0 rgba(255, 255, 255, 0.08) inset !important;
-            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
-            padding: 1.75rem 2.25rem !important;
+            transition: border-color 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1) !important;
+            padding: 24px 32px !important;
             display: flex;
             flex-direction: row;
             align-items: center;
             justify-content: space-between;
             flex-wrap: wrap;
-            gap: 1.5rem;
-            margin-bottom: 0.5rem;
+            gap: 24px;
+            margin-bottom: 8px;
           }
           .welcome-banner::before {
             content: '';
@@ -2106,21 +2098,20 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             width: 350px;
             height: 350px;
             border-radius: 50%;
-            background: radial-gradient(circle, rgba(189, 29, 45, 0.15) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(189, 29, 45, 0.12) 0%, transparent 70%);
             pointer-events: none;
           }
           .welcome-banner:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 14px 35px rgba(189, 29, 45, 0.22), 0 1px 0 rgba(255, 255, 255, 0.12) inset !important;
+            box-shadow: 0 12px 32px rgba(189, 29, 45, 0.2), 0 1px 0 rgba(255, 255, 255, 0.12) inset !important;
             border-color: rgba(189, 29, 45, 0.55) !important;
           }
           .welcome-action-btn {
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            transition: background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1) !important;
             cursor: pointer;
-            border-radius: 12px !important;
-            padding: 10px 20px !important;
+            border-radius: 10px !important;
+            padding: 8px 16px !important;
             font-size: 0.8rem !important;
-            font-weight: 750 !important;
+            font-weight: 600 !important;
             display: inline-flex !important;
             align-items: center !important;
             gap: 8px !important;
@@ -2130,12 +2121,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             background: linear-gradient(135deg, #BD1D2D 0%, #a31422 100%) !important;
             border: none !important;
             color: white !important;
-            box-shadow: 0 4px 14px rgba(189, 29, 45, 0.45) !important;
+            box-shadow: 0 4px 14px rgba(189, 29, 45, 0.4) !important;
           }
           .welcome-action-btn.primary-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(189, 29, 45, 0.6) !important;
-            filter: brightness(1.15);
+            box-shadow: 0 6px 18px rgba(189, 29, 45, 0.55) !important;
+            filter: brightness(1.08);
           }
           .welcome-action-btn.outline-btn {
             background: rgba(255, 255, 255, 0.05) !important;
@@ -2146,21 +2136,19 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             background: rgba(189, 29, 45, 0.18) !important;
             border-color: rgba(189, 29, 45, 0.5) !important;
             color: #ffffff !important;
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(189, 29, 45, 0.25) !important;
           }
           .welcome-task-row {
             background: rgba(255, 255, 255, 0.04) !important;
             border: 1px solid rgba(255, 255, 255, 0.12) !important;
-            border-radius: 12px !important;
-            padding: 10px 16px !important;
+            border-radius: 10px !important;
+            padding: 8px 16px !important;
             display: flex;
             align-items: center;
             gap: 12px;
             font-size: 0.825rem;
             color: #ffffff !important;
-            font-weight: 700 !important;
-            transition: all 0.2s ease;
+            font-weight: 600 !important;
+            transition: background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.18s cubic-bezier(0.22, 1, 0.36, 1);
             cursor: pointer;
             text-decoration: none;
             box-shadow: 0 2px 6px rgba(0,0,0,0.15) !important;
@@ -2169,22 +2157,19 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             background: rgba(189, 29, 45, 0.15) !important;
             border-color: rgba(189, 29, 45, 0.4) !important;
             color: #ffffff !important;
-            transform: translateX(4px);
-            box-shadow: 0 4px 12px rgba(189, 29, 45, 0.25) !important;
           }
           .welcome-banner-title {
             font-size: 1.15rem !important;
-            font-weight: 800 !important;
+            font-weight: 600 !important;
             color: #ffffff !important;
             margin: 0 !important;
-            letter-spacing: -0.3px !important;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+            letter-spacing: -0.02em !important;
             line-height: 1.3 !important;
           }
           @media (max-width: 768px) {
             .welcome-banner {
-              padding: 0.875rem 1.125rem !important;
-              gap: 0.875rem !important;
+              padding: 16px 16px !important;
+              gap: 12px !important;
               border-radius: 16px !important;
             }
             .welcome-banner-title {
@@ -2432,7 +2417,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             {isHrLoading ? (
               <Skeleton width={80} height={36} style={{ margin: '4px 0' }} />
             ) : (
-              <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{totalHeadcount}</div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{totalHeadcount}</div>
             )}
             <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 'auto', fontWeight: 600 }}>
               {isHrLoading ? <Skeleton width={140} height={12} /> : <span>{deptData.length} {t('phòng ban đang hoạt động')}</span>}
@@ -2451,7 +2436,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               <Skeleton width={80} height={36} style={{ margin: '4px 0' }} />
             ) : (
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: '1.85rem', fontWeight: 800, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums' }}>{presentToday}</span>
+                <span style={{ fontSize: '1.45rem', fontWeight: 800, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums' }}>{presentToday}</span>
                 <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b' }}>({presentPctToday}%)</span>
               </div>
             )}
@@ -2471,7 +2456,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             {isHrLoading ? (
               <Skeleton width={80} height={36} style={{ margin: '4px 0' }} />
             ) : (
-              <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{lateToday}</div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{lateToday}</div>
             )}
             <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 'auto', fontWeight: 600 }}>
               {isHrLoading ? <Skeleton width={160} height={12} /> : <span>{t('Ghi nhận đi trễ hoặc về sớm hôm nay')}</span>}
@@ -2489,7 +2474,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             {isHrLoading ? (
               <Skeleton width={80} height={36} style={{ margin: '4px 0' }} />
             ) : (
-              <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{totalPendingRequests}</div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{totalPendingRequests}</div>
             )}
             <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 'auto', fontWeight: 600 }}>
               {isHrLoading ? <Skeleton width={170} height={12} /> : <span>{t('Đơn xin nghỉ phép & tạm ứng chờ duyệt')}</span>}
@@ -2570,7 +2555,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 })
               ) : (
                 <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem 0', fontSize: '0.85rem' }}>
-                  🎉 {t('Tuyệt vời! Không có nhân viên nào đi trễ trong kỳ.')}
+                  {t('Không có nhân viên nào đi trễ trong kỳ')}
                 </div>
               )}
             </div>
@@ -2680,14 +2665,14 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 600, fill: '#64748b' }} axisLine={false} tickLine={false} />
                     <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} width={40} unit="%" />
                     <Tooltip 
-                      contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 4px 12px rgba(15,23,42,0.08)' }} 
+                      contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 4px 12px rgba(15,23,42,0.08)', fontVariantNumeric: 'tabular-nums' }} 
                       formatter={(value: any, _name: any, item: any) => {
                         const payload = item?.payload;
                         if (payload?.isFuture) return [t('Chưa diễn ra'), t('Tỷ lệ')];
                         return [`${value}% (${payload?.count || 0}/${payload?.total || 0} ${t('nhân sự')})`, t('Đi làm')];
                       }}
                     />
-                    <Bar dataKey="rate" radius={[6, 6, 0, 0]} barSize={32}>
+                    <Bar dataKey="rate" radius={[4, 4, 0, 0]} barSize={32}>
                       {weeklyAttendanceData.map((entry, idx) => {
                         const fill = entry.isFuture ? '#e2e8f0' : entry.rate >= 80 ? '#10b981' : entry.rate >= 50 ? '#f59e0b' : '#ef4444';
                         return <Cell key={`hr-att-${idx}`} fill={fill} />;
@@ -2831,7 +2816,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       { label: 'Marketing', icon: Briefcase, color: '#ef4444' },
       { label: 'Văn phòng phẩm', icon: CreditCard, color: '#BD1D2D' },
       { label: 'Nhân sự', icon: Tag, color: '#06b6d4' },
-      { label: 'Khác', icon: Package, color: '#8b5cf6' },
+      { label: 'Khác', icon: Package, color: '#64748b' },
     ];
 
     const getPoCatInfo = (cat: string) => {
@@ -2839,7 +2824,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       if (normalized === 'Di chuyển' || normalized === 'Vận chuyển') normalized = 'Vận Chuyển';
       if (normalized === 'Công cụ' || normalized === 'công cụ') normalized = 'Văn phòng phẩm';
       const found = PO_CATEGORIES.find(c => c.label.toLowerCase() === normalized.toLowerCase());
-      return found || { label: cat || 'Khác', icon: Package, color: '#8b5cf6' };
+      return found || { label: cat || 'Khác', icon: Package, color: '#64748b' };
     };
 
     const renderPoWorkflowSteps = (po: any) => {
@@ -3637,11 +3622,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={cashFlowTrend} margin={{ left: -10, right: 5, top: 10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} width={40} />
-                  <Tooltip formatter={(val: any) => `${Number(val || 0).toLocaleString()} tr`} />
-                  <Bar dataKey="revenue" name={t('Thu nhập')} fill="#60a5fa" radius={[4, 4, 0, 0]} barSize={16} />
-                  <Bar dataKey="expenses" name={t('Chi phí')} fill="#ef4444" radius={[4, 4, 0, 0]} barSize={16} />
+                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} width={40} />
+                  <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, fontVariantNumeric: 'tabular-nums' }} formatter={(val: any) => `${Number(val || 0).toLocaleString()} tr`} />
+                  <Bar dataKey="revenue" name={t('Thu nhập')} fill="#334155" radius={[4, 4, 0, 0]} barSize={16} />
+                  <Bar dataKey="expenses" name={t('Chi phí')} fill="#C6333D" radius={[4, 4, 0, 0]} barSize={16} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -3793,9 +3778,9 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={cohortData} margin={{ left: -15, right: 5, top: 10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="cohort_month" tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 4px 12px rgba(15,23,42,0.08)' }} />
+                    <XAxis dataKey="cohort_month" tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 4px 12px rgba(15,23,42,0.08)', fontVariantNumeric: 'tabular-nums' }} />
                     <Legend verticalAlign="top" height={36} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, fontWeight: 600 }} />
                     <Bar dataKey="converted_1_month" name={t('Trong 1 tháng')} fill="#C6333D" radius={[4, 4, 0, 0]} maxBarSize={16} />
                     <Bar dataKey="converted_2_months" name={t('Trong 2 tháng')} fill="#0f172a" radius={[4, 4, 0, 0]} maxBarSize={16} />
@@ -3867,10 +3852,10 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={conversionData} margin={{ left: -15, right: -10, top: 10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="left" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} unit="%" />
-                    <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 4px 12px rgba(15,23,42,0.08)' }} />
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} unit="%" />
+                    <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 4px 12px rgba(15,23,42,0.08)', fontVariantNumeric: 'tabular-nums' }} />
                     <Legend verticalAlign="top" height={36} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, fontWeight: 600 }} />
                     <Bar yAxisId="left" dataKey="total_leads" name={t('Tổng Lead')} fill="#cbd5e1" radius={[4, 4, 0, 0]} maxBarSize={14} />
                     <Bar yAxisId="left" dataKey="customer_count" name={t('Khách hàng chốt')} fill="#0f172a" radius={[4, 4, 0, 0]} maxBarSize={14} />
@@ -3905,9 +3890,9 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={revenueData} margin={{ left: -10, right: 5, top: 10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={fmtVndCompact} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={(value) => [fmtVndCompact(Number(value)), '']} contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 4px 12px rgba(15,23,42,0.08)' }} />
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={fmtVndCompact} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(value) => [fmtVndCompact(Number(value)), '']} contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 4px 12px rgba(15,23,42,0.08)', fontVariantNumeric: 'tabular-nums' }} />
                     <Legend verticalAlign="top" height={36} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, fontWeight: 600 }} />
                     <Area type="monotone" dataKey="realized_revenue" name={t('Doanh thu thực tế')} fill="rgba(198, 51, 61, 0.08)" stroke="#C6333D" strokeWidth={2.5} />
                     <Bar dataKey="projected_revenue" name={t('Doanh thu dự kiến')} fill="#0f172a" radius={[4, 4, 0, 0]} maxBarSize={18} />
@@ -4147,7 +4132,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             />
           </div>
 
-          {/* Button to open Connection Health Modal styled purple as "Hệ thống" */}
+          {/* Button to open Connection Health Modal */}
           <button
             className="btn primary resource-health-btn"
             onClick={() => setShowHealthModal(true)}
@@ -4298,8 +4283,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0' }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-text-muted)', opacity: 0.5 }} />
-                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem', fontStyle: 'italic' }}>
-                    {t('Không có dữ liệu đánh giá từ AI Pre-screener trong khoảng thời gian này.')}
+                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
+                    {t('Không có dữ liệu đánh giá từ AI Pre-screener trong khoảng thời gian này')}
                   </span>
                 </div>
               )}
@@ -4667,25 +4652,25 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
                     <XAxis
                       dataKey="time"
-                      tick={{ fontSize: isMobile ? 8 : 11, fill: 'var(--color-text-light)' }}
+                      tick={{ fontSize: 11, fill: 'var(--color-text-light)' }}
                       axisLine={false}
                       tickLine={false}
                       interval={isMobile ? 'preserveStartEnd' : 'preserveEnd'}
                     />
-                    <YAxis domain={[0, (max) => (max < 5 ? 5 : Math.ceil(max * 1.15))]} tick={{ fontSize: 10, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} width={40} />
+                    <YAxis domain={[0, (max) => (max < 5 ? 5 : Math.ceil(max * 1.15))]} tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} width={40} />
                     <Tooltip content={({ active, payload, label }) => {
                       if (active && payload && payload.length) {
                         return (
                           <div style={{ background: 'var(--color-surface)', padding: '12px', borderRadius: '10px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid var(--color-border)' }}>
                             <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: 4 }}>{label}</div>
-                            <div style={{ fontSize: '0.8125rem', color: 'var(--color-primary)' }}>{t('Lưu lượng Data:')} <span style={{ fontWeight: 800 }}>{payload[0].value}</span></div>
+                            <div style={{ fontSize: '0.8125rem', color: 'var(--color-primary)', fontVariantNumeric: 'tabular-nums' }}>{t('Lưu lượng Data:')} <span style={{ fontWeight: 700 }}>{payload[0].value}</span></div>
                           </div>
                         );
                       }
                       return null;
                     }} />
-                    <Bar dataKey="volume" fill="#C6333D" fillOpacity={0.9} radius={[4, 4, 0, 0]} maxBarSize={22}>
-                      <LabelList dataKey="volume" position="top" style={{ fill: '#0f172a', fontSize: '10.5px', fontWeight: 800 }} offset={6} />
+                    <Bar dataKey="volume" fill="#C6333D" fillOpacity={0.92} radius={[4, 4, 0, 0]} maxBarSize={22}>
+                      <LabelList dataKey="volume" position="top" style={{ fill: '#0f172a', fontSize: '11px', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }} offset={6} />
                     </Bar>
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -4803,8 +4788,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                                 return { bg: 'var(--color-danger-light)', color: 'var(--color-danger)', text: t('Blacklist') };
                               case 'reminder':
                                 return {
-                                  bg: theme === 'dark' ? 'rgba(219, 39, 119, 0.15)' : '#fce7f3',
-                                  color: theme === 'dark' ? '#f472b6' : '#db2777',
+                                  bg: theme === 'dark' ? 'rgba(245, 158, 11, 0.16)' : '#fef3c7',
+                                  color: theme === 'dark' ? '#fbbf24' : '#b45309',
                                   text: t('Nhắc lại')
                                 };
                               case 'databank_claim':
@@ -5204,18 +5189,12 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     return (
                       <ResponsiveContainer width="100%" height={260}>
                         <BarChart data={sortedData} margin={{ top: 20, right: 10, left: -10, bottom: 5 }}>
-                          <defs>
-                            <linearGradient id="ticketErrorGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#C6333D" stopOpacity={1} />
-                              <stop offset="100%" stopColor="#991B1B" stopOpacity={0.85} />
-                            </linearGradient>
-                          </defs>
                           <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
                           <XAxis
                             dataKey="name"
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fontSize: isMobile ? 8 : 10, fill: '#0f172a', fontWeight: 600 }}
+                            tick={{ fontSize: isMobile ? 10 : 11, fill: '#64748b', fontWeight: 500 }}
                             interval={0}
                             angle={isMobile ? -25 : -12}
                             textAnchor="end"
@@ -5225,15 +5204,15 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                             allowDecimals={false}
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fontSize: 10, fill: '#64748b' }}
+                            tick={{ fontSize: 11, fill: '#64748b' }}
                           />
                           <Tooltip
                             cursor={{ fill: 'rgba(198, 51, 61, 0.04)' }}
-                            contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}
+                            contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.06)', fontVariantNumeric: 'tabular-nums' }}
                             itemStyle={{ color: '#BD1D2D', fontWeight: 700 }}
                           />
-                          <Bar dataKey="errors" fill="url(#ticketErrorGradient)" radius={[4, 4, 0, 0]} barSize={26} name={t("Số lỗi được duyệt")}>
-                            <LabelList dataKey="errors" position="top" style={{ fill: '#0f172a', fontSize: '10.5px', fontWeight: 800 }} offset={6} />
+                          <Bar dataKey="errors" fill="#C6333D" radius={[4, 4, 0, 0]} barSize={26} name={t("Số lỗi được duyệt")}>
+                            <LabelList dataKey="errors" position="top" style={{ fill: '#0f172a', fontSize: '11px', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }} offset={6} />
                           </Bar>
                         </BarChart>
                       </ResponsiveContainer>
@@ -5765,18 +5744,18 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   {/* KPI Cards Row (3 Columns) */}
                   <div className="responsive-grid-3" style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: '0.75rem' }}>
                     {/* Card 1: Tổng khách hàng */}
-                    <div className="stat-card hover-lift total-card" style={{ display: 'flex', flexDirection: 'column', padding: '1rem', minHeight: '120px', borderRadius: '12px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
+                    <div className="stat-card total-card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '120px', borderRadius: '16px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                        <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 800, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Tổng khách hàng')}</span>
-                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(198, 51, 61, 0.08)', color: '#C6333D', flexShrink: 0 }}><Users size={16} /></div>
+                        <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Tổng khách hàng')}</span>
+                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', flexShrink: 0 }}><Users size={16} /></div>
                       </div>
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
-                        <div className="stat-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                        <div className="stat-value" style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
                           {statsData.summary.total_received || 0}
                         </div>
                         <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500 }}>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#C6333D', display: 'inline-block' }} />
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#BD1D2D', display: 'inline-block' }} />
                             {t('Tổng data đang chăm sóc')}: {statsData.summary.total_received || 0}
                           </span>
                         </div>
@@ -5784,22 +5763,22 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     </div>
 
                     {/* Card 2: Được chia */}
-                    <div className="stat-card hover-lift distributed-card" style={{ display: 'flex', flexDirection: 'column', padding: '1rem', minHeight: '120px', borderRadius: '12px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
+                    <div className="stat-card distributed-card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '120px', borderRadius: '16px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                        <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 800, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Được chia')}</span>
-                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: '#f8fafc', color: '#334155', border: '1px solid #e2e8f0', flexShrink: 0 }}><Send size={16} /></div>
+                        <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Được chia')}</span>
+                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', flexShrink: 0 }}><Send size={16} /></div>
                       </div>
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
-                        <div className="stat-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                        <div className="stat-value" style={{ fontSize: '1.45rem', fontWeight: 800, color: '#BD1D2D', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
                           {(statsData.summary.distributed_count || 0) + (statsData.summary.coop_count || 0)}
                         </div>
                         <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500, display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#334155', display: 'inline-block' }} />
                             {t('Chia tự động')}: {statsData.summary.distributed_count || 0}
                           </span>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fbbf24', display: 'inline-block' }} />
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#64748b', display: 'inline-block' }} />
                             {t('Hợp tác (co.op)')}: {statsData.summary.coop_count || 0}
                           </span>
                         </div>
@@ -5807,18 +5786,18 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     </div>
 
                     {/* Card 4: Tự nhập */}
-                    <div className="stat-card hover-lift out_of_hours-card" style={{ display: 'flex', flexDirection: 'column', padding: '1rem', minHeight: '120px', borderRadius: '12px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
+                    <div className="stat-card out_of_hours-card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '120px', borderRadius: '16px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                        <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 800, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Tự nhập')}</span>
-                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: '#f8fafc', color: '#334155', border: '1px solid #e2e8f0', flexShrink: 0 }}><UserPlus size={16} /></div>
+                        <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Tự nhập')}</span>
+                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', flexShrink: 0 }}><UserPlus size={16} /></div>
                       </div>
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
-                        <div className="stat-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                        <div className="stat-value" style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
                           {statsData.summary.self_count || 0}
                         </div>
                         <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500 }}>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#334155', display: 'inline-block' }} />
                             {t('Tự tạo hoặc giới thiệu')}: {statsData.summary.self_count || 0}
                           </span>
                         </div>
@@ -5833,18 +5812,12 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                       <div style={{ height: 180, width: '100%' }}>
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={statsData.by_date} margin={{ left: -10, right: 5, top: 20, bottom: 0 }}>
-                            <defs>
-                              <linearGradient id="statsDateGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#e63946" stopOpacity={1} />
-                                <stop offset="100%" stopColor="#a31422" stopOpacity={0.8} />
-                              </linearGradient>
-                            </defs>
                             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
-                            <XAxis dataKey="date" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                            <YAxis domain={[0, (max: number) => (max < 5 ? 5 : Math.ceil(max * 1.15))]} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
-                            <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8 }} />
-                            <Bar dataKey="count" fill="url(#statsDateGradient)" radius={[4, 4, 0, 0]} maxBarSize={30} name={t("Data thành công")}>
-                              <LabelList dataKey="count" position="top" style={{ fill: 'var(--color-text)', fontSize: 10, fontWeight: 700 }} offset={6} />
+                            <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
+                            <YAxis domain={[0, (max: number) => (max < 5 ? 5 : Math.ceil(max * 1.15))]} tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} width={34} />
+                            <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8, fontVariantNumeric: 'tabular-nums' }} />
+                            <Bar dataKey="count" fill="#C6333D" radius={[4, 4, 0, 0]} maxBarSize={30} name={t("Data thành công")}>
+                              <LabelList dataKey="count" position="top" style={{ fill: 'var(--color-text)', fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }} offset={6} />
                             </Bar>
                           </BarChart>
                         </ResponsiveContainer>
@@ -5863,9 +5836,9 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                       <h4 style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--color-text)' }}>{t('Tỷ lệ Trạng thái Data')}</h4>
                       {(() => {
                         const statusChartData = [
-                          { name: t('Thành công'), value: statsData.summary.successful, color: '#a31422' },
+                          { name: t('Thành công'), value: statsData.summary.successful, color: '#C6333D' },
                           { name: t('Nhắc lại'), value: statsData.summary.reminder, color: '#f59e0b' },
-                          { name: t('Lỗi'), value: statsData.summary.error, color: '#ef4444' }
+                          { name: t('Lỗi'), value: statsData.summary.error, color: '#334155' }
                         ].filter(item => item.value > 0);
 
                         return statsData.summary.total > 0 && statusChartData.length > 0 ? (
@@ -5886,7 +5859,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                                       <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
                                   </Pie>
-                                  <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8 }} />
+                                  <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8, fontVariantNumeric: 'tabular-nums' }} />
                                 </PieChart>
                               </ResponsiveContainer>
                             </div>
@@ -5894,7 +5867,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                               {statusChartData.map((item, idx) => (
                                 <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: item.color }} />
-                                  <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
+                                  <span style={{ fontWeight: 600, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                                     {item.name}: <strong style={{ fontSize: '0.8125rem' }}>{item.value}</strong> ({Math.round(item.value / statsData.summary.total * 100)}%)
                                   </span>
                                 </div>
@@ -5917,12 +5890,12 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={statsData.rounds} layout="vertical" margin={{ left: -10, right: 10, top: 0, bottom: 0 }}>
                               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border-light)" />
-                              <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                              <YAxis dataKey="round_name" type="category" width={90} tick={{ fontSize: 9, fontWeight: 600 }} axisLine={false} tickLine={false} />
-                              <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8 }} />
-                              <Bar dataKey="successful_count" stackId="a" fill="#a31422" radius={[0, 0, 0, 0]} barSize={12} name={t("Thành công")} />
+                              <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
+                              <YAxis dataKey="round_name" type="category" width={92} tick={{ fontSize: 11, fontWeight: 600, fill: 'var(--color-text)' }} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8, fontVariantNumeric: 'tabular-nums' }} />
+                              <Bar dataKey="successful_count" stackId="a" fill="#C6333D" radius={[0, 0, 0, 0]} barSize={12} name={t("Thành công")} />
                               <Bar dataKey="reminder_count" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} barSize={12} name={t("Nhắc lại")} />
-                              <Bar dataKey="error_count" stackId="a" fill="#ef4444" radius={[0, 4, 4, 0]} barSize={12} name={t("Lỗi")} />
+                              <Bar dataKey="error_count" stackId="a" fill="#334155" radius={[0, 4, 4, 0]} barSize={12} name={t("Lỗi")} />
                             </BarChart>
                           </ResponsiveContainer>
                         </div>
@@ -6109,8 +6082,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     height: '100%'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '10px', background: 'rgba(0, 104, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <img src="https://stc-zpl.zdn.vn/favicon.ico" style={{ width: 20, height: 20 }} alt="Zalo" />
+                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(15, 23, 42, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <img src="https://stc-zpl.zdn.vn/favicon.ico" style={{ width: 18, height: 18 }} alt="Zalo" />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                         <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t("Zalo Bot")}</span>
@@ -6121,7 +6094,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', margin: '4px 0' }}>
                       <span
                         title={(stats?.total_zalo_sent ?? 0).toLocaleString()}
-                        style={{ fontSize: '1.625rem', fontWeight: 800, color: '#0068ff', lineHeight: 1 }}
+                        style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}
                       >
                         {formatNumberCompact(stats?.total_zalo_sent ?? 0)}
                       </span>
@@ -6131,7 +6104,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     <div style={{
                       fontSize: '0.7rem',
                       color: 'var(--color-text-muted)',
-                      borderTop: '1px dashed var(--color-border-light)',
+                      borderTop: '1px solid var(--color-border-light)',
                       paddingTop: '8px',
                       display: 'flex',
                       alignItems: 'center',
@@ -6147,7 +6120,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
                   {/* Telegram Card */}
                   <div style={{
-                    padding: '14px 16px',
+                    padding: '16px',
                     background: 'var(--color-surface)',
                     borderRadius: 16,
                     border: '1px solid var(--color-border)',
@@ -6155,12 +6128,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     flexDirection: 'column',
                     justifyContent: 'space-between',
                     gap: 12,
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
                     height: '100%'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '10px', background: 'rgba(0, 136, 204, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/8/82/Telegram_logo.svg" style={{ width: 20, height: 20 }} alt="Telegram" />
+                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(15, 23, 42, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/8/82/Telegram_logo.svg" style={{ width: 18, height: 18 }} alt="Telegram" />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                         <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t("Telegram Bot")}</span>
@@ -6171,7 +6143,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', margin: '4px 0' }}>
                       <span
                         title={(stats?.total_telegram_sent ?? 0).toLocaleString()}
-                        style={{ fontSize: '1.625rem', fontWeight: 800, color: '#0088cc', lineHeight: 1 }}
+                        style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}
                       >
                         {formatNumberCompact(stats?.total_telegram_sent ?? 0)}
                       </span>
@@ -6181,7 +6153,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     <div style={{
                       fontSize: '0.7rem',
                       color: 'var(--color-text-muted)',
-                      borderTop: '1px dashed var(--color-border-light)',
+                      borderTop: '1px solid var(--color-border-light)',
                       paddingTop: '8px',
                       display: 'flex',
                       alignItems: 'center',
@@ -6189,7 +6161,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                       fontWeight: 500
                     }}>
                       <span>{t("Chi phí:")}</span>
-                      <span style={{ color: '#0088cc', fontWeight: 600, background: 'rgba(0, 136, 204, 0.1)', padding: '2px 6px', borderRadius: 4, fontSize: '0.6875rem' }}>
+                      <span style={{ color: '#059669', fontWeight: 600, background: 'rgba(16, 185, 129, 0.1)', padding: '2px 6px', borderRadius: 4, fontSize: '0.6875rem' }}>
                         {t("Miễn phí")}
                       </span>
                     </div>
@@ -6197,7 +6169,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
                   {/* Email Card */}
                   <div style={{
-                    padding: '14px 16px',
+                    padding: '16px',
                     background: 'var(--color-surface)',
                     borderRadius: 16,
                     border: '1px solid var(--color-border)',
@@ -6205,12 +6177,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     flexDirection: 'column',
                     justifyContent: 'space-between',
                     gap: 12,
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
                     height: '100%'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '10px', background: 'rgba(234, 67, 53, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <img src="https://www.gstatic.com/images/branding/product/1x/gmail_2020q4_32dp.png" style={{ width: 20, height: 20 }} alt="Gmail" />
+                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <img src="https://www.gstatic.com/images/branding/product/1x/gmail_2020q4_32dp.png" style={{ width: 18, height: 18 }} alt="Gmail" />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                         <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t("Email gửi đi")}</span>
@@ -6221,7 +6192,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', margin: '4px 0' }}>
                       <span
                         title={(stats?.total_emails_sent ?? 0).toLocaleString()}
-                        style={{ fontSize: '1.625rem', fontWeight: 800, color: '#ea4335', lineHeight: 1 }}
+                        style={{ fontSize: '1.45rem', fontWeight: 800, color: '#BD1D2D', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}
                       >
                         {formatNumberCompact(stats?.total_emails_sent ?? 0)}
                       </span>
@@ -6231,7 +6202,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     <div style={{
                       fontSize: '0.7rem',
                       color: 'var(--color-text-muted)',
-                      borderTop: '1px dashed var(--color-border-light)',
+                      borderTop: '1px solid var(--color-border-light)',
                       paddingTop: '8px',
                       display: 'flex',
                       alignItems: 'center',
@@ -6239,7 +6210,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                       fontWeight: 500
                     }}>
                       <span>{t("Chi phí:")}</span>
-                      <span style={{ color: 'var(--color-text)', fontWeight: 600, fontSize: '0.7rem' }}>
+                      <span style={{ color: 'var(--color-text)', fontWeight: 600, fontSize: '0.7rem', fontVariantNumeric: 'tabular-nums' }}>
                         {(() => {
                           const sentEmails = stats?.total_emails_sent ?? 0;
                           const costUsd = (sentEmails * 0.10) / 1000;
@@ -6252,7 +6223,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
                   {/* Tokens Card */}
                   <div style={{
-                    padding: '14px 16px',
+                    padding: '16px',
                     background: 'var(--color-surface)',
                     borderRadius: 16,
                     border: '1px solid var(--color-border)',
@@ -6260,12 +6231,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     flexDirection: 'column',
                     justifyContent: 'space-between',
                     gap: 12,
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
                     height: '100%'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '10px', background: 'rgba(142, 68, 173, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <img src="https://www.gstatic.com/lamda/images/gemini_sparkle_aurora_33f86dc0c0257da337c63.svg" style={{ width: 20, height: 20 }} alt="Gemini" />
+                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <img src="https://www.gstatic.com/lamda/images/gemini_sparkle_aurora_33f86dc0c0257da337c63.svg" style={{ width: 18, height: 18 }} alt="Gemini" />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                         <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t("Token AI sử dụng")}</span>
@@ -6276,7 +6246,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', margin: '4px 0' }}>
                       <span
                         title={(stats?.total_tokens_used ?? 0).toLocaleString()}
-                        style={{ fontSize: '1.625rem', fontWeight: 800, color: '#8e44ad', lineHeight: 1 }}
+                        style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}
                       >
                         {formatNumberCompact(stats?.total_tokens_used ?? 0)}
                       </span>
@@ -6286,7 +6256,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     <div style={{
                       fontSize: '0.7rem',
                       color: 'var(--color-text-muted)',
-                      borderTop: '1px dashed var(--color-border-light)',
+                      borderTop: '1px solid var(--color-border-light)',
                       paddingTop: '8px',
                       display: 'flex',
                       alignItems: 'center',
@@ -6434,16 +6404,16 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
                             <XAxis
                               dataKey="time"
-                              tick={{ fontSize: 9, fill: 'var(--color-text-light)' }}
+                              tick={{ fontSize: 11, fill: 'var(--color-text-light)' }}
                               axisLine={false}
                               tickLine={false}
                             />
                             <YAxis
                               domain={[0, (max) => (max < 5 ? 5 : Math.ceil(max * 1.15))]}
-                              tick={{ fontSize: 8, fill: 'var(--color-text-light)' }}
+                              tick={{ fontSize: 11, fill: 'var(--color-text-light)' }}
                               axisLine={false}
                               tickLine={false}
-                              width={healthChartMetric === 'token' ? 45 : 30}
+                              width={healthChartMetric === 'token' ? 48 : 34}
                               tickFormatter={(v) => typeof v === 'number' ? (v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v.toString())) : v}
                             />
                             <Tooltip content={({ active, payload, label }) => {
@@ -6451,16 +6421,16 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                                 return (
                                   <div style={{ background: 'var(--color-surface)', padding: '10px', borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', border: '1px solid var(--color-border)', fontSize: '0.75rem' }}>
                                     <div style={{ fontWeight: 700, color: 'var(--color-text)', marginBottom: 2 }}>{label}</div>
-                                    <div style={{ color: getMetricColor(healthChartMetric) }}>
-                                      {getMetricLabel(healthChartMetric)}: <span style={{ fontWeight: 800 }}>{typeof payload[0].value === 'number' ? payload[0].value.toLocaleString() : payload[0].value}</span>
+                                    <div style={{ color: getMetricColor(healthChartMetric), fontVariantNumeric: 'tabular-nums' }}>
+                                      {getMetricLabel(healthChartMetric)}: <span style={{ fontWeight: 700 }}>{typeof payload[0].value === 'number' ? payload[0].value.toLocaleString() : payload[0].value}</span>
                                     </div>
                                   </div>
                                 );
                               }
                               return null;
                             }} />
-                            <Bar dataKey="volume" fill={getMetricColor(healthChartMetric)} fillOpacity={0.85} radius={[3, 3, 0, 0]} maxBarSize={24}>
-                              <LabelList dataKey="volume" position="top" style={{ fill: 'var(--color-text)', fontSize: 9, fontWeight: 700 }} offset={4} formatter={(v: any) => typeof v === 'number' ? v.toLocaleString() : (v ? String(v) : '')} />
+                            <Bar dataKey="volume" fill={getMetricColor(healthChartMetric)} fillOpacity={0.9} radius={[4, 4, 0, 0]} maxBarSize={24}>
+                              <LabelList dataKey="volume" position="top" style={{ fill: 'var(--color-text)', fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }} offset={4} formatter={(v: any) => typeof v === 'number' ? v.toLocaleString() : (v ? String(v) : '')} />
                             </Bar>
                           </BarChart>
                         </ResponsiveContainer>

@@ -17,6 +17,7 @@ import { AIContractImportModal } from './ui/AIContractImportModal';
 import type { ExtractedContractData } from '../utils/aiContractParser';
 import { pushOverlay } from '../utils/overlayStack';
 import api from '../api/axios';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 interface DepositCreateDrawerProps {
   isOpen: boolean;
@@ -349,10 +350,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
       setLoadingCustomerDocs(true);
       api.get(`/cloud-files?contact_id=${activeContactId}&limit=1000`)
         .then(res => {
-          const items = res.data?.data?.items || res.data?.data || [];
-          if (Array.isArray(items)) {
-            setCustomerDocs(items);
-          }
+          setCustomerDocs(extractArray(res?.data));
         })
         .catch(err => console.error('Error loading customer cloud files:', err))
         .finally(() => setLoadingCustomerDocs(false));
@@ -387,10 +385,10 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
               : allContacts;
             setContacts(filteredContacts);
           }
-          if (resProj.success) setProjects(resProj.data || []);
-          if (resComp.success) setCompanies(resComp.data?.items || resComp.data || []);
-          if (resSup.success) setSuppliers(resSup.data?.items || resSup.data || []);
-          if (resCoop.success) setCoopSlips(resCoop.data || []);
+          if (resProj.success) setProjects(extractArray(resProj));
+          if (resComp.success) setCompanies(extractArray(resComp));
+          if (resSup.success) setSuppliers(extractArray(resSup));
+          if (resCoop.success) setCoopSlips(extractArray(resCoop));
 
           if (resUsr.success && Array.isArray(resUsr.data)) {
             const list = resUsr.data;
@@ -692,8 +690,8 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
         const res = await fetchAPI(`contacts?search=${encodeURIComponent(q)}&limit=50`, { signal });
         if (signal.aborted) return;
         if (res.success && res.data) {
-          const items = res.data.items || res.data || [];
-          if (Array.isArray(items) && items.length > 0) {
+          const items = extractArray(res);
+          if (items.length > 0) {
             setContacts(prev => {
               const existingMap = new Map(prev.map(c => [String(c.id), c]));
               items.forEach((c: any) => {
@@ -711,8 +709,8 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
         const res = await fetchAPI(`companies?search=${encodeURIComponent(q)}&limit=50`, { signal });
         if (signal.aborted) return;
         if (res.success && res.data) {
-          const items = res.data.items || res.data || [];
-          if (Array.isArray(items) && items.length > 0) {
+          const items = extractArray(res);
+          if (items.length > 0) {
             setCompanies(prev => {
               const existingMap = new Map(prev.map(c => [String(c.id), c]));
               items.forEach((c: any) => {

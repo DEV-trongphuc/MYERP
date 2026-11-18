@@ -881,7 +881,7 @@ const TimelineIcon = ({ type }: { type: string }) => {
     switch (type) {
         case 'message': return <div className="w-full h-full flex items-center justify-center rounded-full text-blue-500 bg-blue-50"><MessageCircle className="w-4 h-4" /></div>;
         case 'comment': return <div className="w-full h-full flex items-center justify-center rounded-full text-emerald-500 bg-emerald-50"><MessageSquare className="w-4 h-4" /></div>;
-        case 'lead_form': return <div className="w-full h-full flex items-center justify-center rounded-full text-purple-500 bg-purple-50"><FileText className="w-4 h-4" /></div>;
+        case 'lead_form': return <div className="w-full h-full flex items-center justify-center rounded-full text-[#BD1D2D] bg-rose-50"><FileText className="w-4 h-4" /></div>;
         default: return <div className="w-full h-full flex items-center justify-center rounded-full text-slate-400 bg-slate-50"><Clock className="w-4 h-4" /></div>;
     }
 };

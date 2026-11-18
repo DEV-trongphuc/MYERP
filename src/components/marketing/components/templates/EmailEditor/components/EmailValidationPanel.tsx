@@ -150,7 +150,7 @@ const EmailValidationPanel: React.FC<EmailValidationPanelProps> = ({
                         <div className="w-16 h-16 rounded-[14px] bg-emerald-50 flex items-center justify-center mb-4 shadow-sm">
                             <CheckCircle2 className="w-8 h-8 text-emerald-500" />
                         </div>
-                        <p className="text-sm font-bold text-slate-700 mb-1">Email đã sẵn sàng! 🎉</p>
+                        <p className="text-sm font-bold text-slate-700 mb-1">Email đã sẵn sàng</p>
                         <p className="text-xs text-slate-400 leading-relaxed">
                             Tất cả nút bấm, hình ảnh đã có link/mô tả đầy đủ và link hủy đăng ký hợp lệ.
                         </p>

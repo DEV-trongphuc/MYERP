@@ -1,11 +1,13 @@
 """
 Test campaigns.php PUT handler when ID is provided in JSON body (as domationApi.updateCampaign does)
 """
+import os
+import shutil
 import subprocess
 import json
 import sys
 
-PHP_BIN = r"C:\Users\LENOVO\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe"
+PHP_BIN = os.environ.get("PHP_BIN") or shutil.which("php") or "php"
 
 test_script = """<?php
 // Mock php://input wrapper

@@ -526,7 +526,7 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
                 <div className="flex-1 flex flex-col min-w-[300px] border-r border-slate-800">
                     <div className="flex justify-between items-center px-6 py-4 bg-slate-950 border-b border-slate-800 shrink-0">
                         <span className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                            <span className="w-2 h-2 rounded-full bg-slate-400"></span>
                             HTML Code Editor
                         </span>
                     </div>
@@ -618,25 +618,22 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
                                         {dragOverId === 'root' && dropPosition && <div className="absolute inset-0 bg-[var(--color-primary)]/10 z-40 border-2 border-[var(--color-primary)] border-dashed pointer-events-none rounded-xl"></div>}
 
                                         <div className="relative mb-8">
-                                            <div className="absolute -inset-10 bg-slate-50 rounded-full animate-pulse opacity-60"></div>
-                                            <div className="absolute -inset-6 bg-slate-100/50 rounded-full animate-pulse delay-75"></div>
-                                            <div className="relative bg-white p-8 rounded-[18px] shadow-2xl shadow-red-600/10 border border-slate-200 flex items-center justify-center transform hover:scale-105 transition-transform duration-500">
+                                            <div className="relative bg-white p-8 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-center">
                                                 <Layout className="w-16 h-16 text-[var(--color-primary)]" />
-                                                <div className="absolute -bottom-2 -right-2 bg-[var(--color-primary)] text-white p-2.5 rounded-[14px] shadow-xl ring-4 ring-white">
-                                                    <Plus className="w-5 h-5 font-black" />
+                                                <div className="absolute -bottom-2 -right-2 bg-[var(--color-primary)] text-white p-2.5 rounded-xl shadow-md ring-4 ring-white">
+                                                    <Plus className="w-5 h-5" />
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Thiết kế Email của bạn</h3>
+                                        <h3 className="text-2xl font-bold text-slate-900 mb-3 tracking-tight">Thiết kế Email của bạn</h3>
                                         <p className="text-sm text-slate-500 max-w-[320px] mb-10 font-medium leading-relaxed">
                                             Bắt đầu bằng cách kéo các thành phần nội dung từ <span className="text-[var(--color-primary)] font-bold underline decoration-dotted underline-offset-4">thanh công cụ bên trái</span> và thả vào vùng trung tâm này.
                                         </p>
 
-                                        <div className="group relative flex items-center gap-4 py-4 px-8 bg-white rounded-[14px] border-2 border-dashed border-slate-200 shadow-sm transition-all hover:border-[var(--color-primary)] hover:shadow-md cursor-default overflow-hidden">
-                                            <div className="absolute inset-0 bg-slate-50/30 -translate-x-full group-hover:translate-x-0 transition-transform duration-500"></div>
-                                            <ArrowLeft className="w-5 h-5 text-[var(--color-primary)] relative z-10 animate-pulse" />
-                                            <span className="text-[11px] font-black uppercase tracking-widest text-[var(--color-primary)] relative z-10">Kéo Item thả vào đây →</span>
+                                        <div className="group relative flex items-center gap-4 py-4 px-8 bg-white rounded-xl border-2 border-dashed border-slate-200 shadow-xs transition-colors hover:border-[var(--color-primary)] cursor-default overflow-hidden">
+                                            <ArrowLeft className="w-5 h-5 text-[var(--color-primary)] relative z-10" />
+                                            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-primary)] relative z-10">Kéo Item thả vào đây →</span>
                                         </div>
                                     </div>
                                 ) : (
@@ -685,7 +682,7 @@ const EmailCanvas: React.FC<EmailCanvasProps> = ({
 
                 {selectedBlockId && (
                     <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-bottom-10 fade-in duration-300">
-                        <div className={`flex items-center bg-slate-900/90 backdrop-blur-md rounded-full px-2 py-1.5 shadow-2xl border border-white/10 ${breadcrumbBounce ? 'animate-bounce' : ''}`}>
+                        <div className={`flex items-center bg-slate-900/90 backdrop-blur-md rounded-full px-2 py-1.5 shadow-2xl border border-white/10 transition-colors ${breadcrumbBounce ? 'ring-1 ring-[#BD1D2D]/60' : ''}`}>
                             <button onClick={(e) => { e.stopPropagation(); handleSelectBlock(null); }} className="p-1.5 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors"><Home className="w-3.5 h-3.5" /></button>
                             {breadcrumbs?.map((b, idx, arr) => {
                                 const Icon = b.type === 'section' ? Square : (b.type === 'row' ? GripHorizontal : (b.type === 'column' ? Box : Type));

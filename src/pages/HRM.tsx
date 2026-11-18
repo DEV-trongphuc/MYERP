@@ -197,12 +197,12 @@ export default function HRM() {
       case 'hr':
         return { bg: 'rgba(16, 185, 129, 0.08)', color: '#10b981', text: t('HR') };
       case 'accountant':
-        return { bg: 'rgba(139, 92, 246, 0.08)', color: '#8b5cf6', text: t('Kế toán') };
+        return { bg: 'rgba(15, 23, 42, 0.08)', color: '#0f172a', text: t('Kế toán') };
       case 'marketing':
         return { bg: 'rgba(13, 148, 136, 0.08)', color: '#0d9488', text: t('Marketing') };
       case 'sale_admin':
       case 'saleadmin':
-        return { bg: 'rgba(79, 70, 229, 0.08)', color: '#4f46e5', text: t('Sale Admin') };
+        return { bg: 'rgba(51, 65, 85, 0.08)', color: '#334155', text: t('Sale Admin') };
       case 'sales':
       default:
         return { bg: 'rgba(100, 116, 139, 0.08)', color: '#64748b', text: t('Sales') };
@@ -313,10 +313,10 @@ export default function HRM() {
               <Avatar src={approver1.avatar_url || approver1.avatar} name={approver1.full_name || approver1.name} size={22} />
             </div>
             {isL1Done && (
-              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#10b981', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 900 }}>✓</span>
+              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#10b981', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 700 }}>✓</span>
             )}
             {isL1Reject && (
-              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#ef4444', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 900 }}>✕</span>
+              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#ef4444', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 700 }}>✕</span>
             )}
           </div>
         ) : (
@@ -341,10 +341,10 @@ export default function HRM() {
               <Avatar src={approver2.avatar_url || approver2.avatar} name={approver2.full_name || approver2.name} size={22} />
             </div>
             {isL2Done && (
-              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#10b981', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 900 }}>✓</span>
+              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#10b981', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 700 }}>✓</span>
             )}
             {isL2Reject && (
-              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#ef4444', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 900 }}>✕</span>
+              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#ef4444', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 700 }}>✕</span>
             )}
           </div>
         )}
@@ -2668,7 +2668,7 @@ export default function HRM() {
                             dataKey="label"
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fontSize: 9.5, fill: '#64748b' }}
+                            tick={{ fontSize: 11, fill: '#64748b' }}
                             interval={0}
                             tickFormatter={(val) => {
                               const short = val.replace('Phòng ', '').replace('Ban ', '').replace('& Quản lý', '').trim();
@@ -2679,7 +2679,7 @@ export default function HRM() {
                             axisLine={false}
                             tickLine={false}
                             allowDecimals={false}
-                            tick={{ fontSize: 10, fill: '#64748b' }}
+                            tick={{ fontSize: 11, fill: '#64748b' }}
                             width={30}
                           />
                           <Tooltip
@@ -2687,7 +2687,7 @@ export default function HRM() {
                               if (active && payload && payload.length) {
                                 const d = payload[0].payload;
                                 return (
-                                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)' }}>
+                                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)', fontVariantNumeric: 'tabular-nums' }}>
                                     <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#0f172a' }}>{label}</div>
                                     <div style={{ fontSize: '0.78rem', color: '#334155', fontWeight: 700, marginTop: '2px' }}>
                                       Quy mô: {d.count} nhân sự ({d.pct}%)
@@ -2698,8 +2698,8 @@ export default function HRM() {
                               return null;
                             }}
                           />
-                          <Bar dataKey="count" fill="#334155" radius={[6, 6, 2, 2]} barSize={24}>
-                            <LabelList dataKey="count" position="top" style={{ fill: '#0f172a', fontSize: 10, fontWeight: 700 }} offset={4} />
+                          <Bar dataKey="count" fill="#334155" radius={[4, 4, 0, 0]} barSize={24}>
+                            <LabelList dataKey="count" position="top" style={{ fill: '#0f172a', fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }} offset={4} />
                           </Bar>
                         </BarChart>
                       </ResponsiveContainer>
@@ -2867,7 +2867,7 @@ export default function HRM() {
                             axisLine={false}
                             tickLine={false}
                             allowDecimals={false}
-                            tick={{ fontSize: 10, fill: '#64748b' }}
+                            tick={{ fontSize: 11, fill: '#64748b' }}
                             width={45}
                             tickFormatter={(val) => deptChartMetric === 'headcount' ? `${val}` : FMT_COMPACT(val)}
                           />
@@ -2876,7 +2876,7 @@ export default function HRM() {
                               if (active && payload && payload.length) {
                                 const d = payload[0].payload;
                                 return (
-                                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 14px', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)' }}>
+                                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 14px', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)', fontVariantNumeric: 'tabular-nums' }}>
                                     <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>{label}</div>
                                     <div style={{ fontSize: '0.8rem', color: '#C6333D', fontWeight: 600, marginTop: '3px' }}>
                                       Quy mô: <strong>{d.count} nhân sự</strong>
@@ -2893,13 +2893,13 @@ export default function HRM() {
                           <Bar
                             dataKey={deptChartMetric === 'headcount' ? 'count' : 'salary'}
                             fill="#C6333D"
-                            radius={[6, 6, 2, 2]}
+                            radius={[4, 4, 0, 0]}
                             barSize={24}
                           >
                             <LabelList
                               dataKey={deptChartMetric === 'headcount' ? 'count' : 'salary'}
                               position="top"
-                              style={{ fill: '#0f172a', fontSize: 10, fontWeight: 700 }}
+                              style={{ fill: '#0f172a', fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}
                               offset={6}
                               formatter={(v: any) => deptChartMetric === 'headcount' ? `${v}` : FMT_COMPACT(v)}
                             />
@@ -3043,7 +3043,7 @@ export default function HRM() {
                         })
                       ) : (
                         <div style={{ textAlign: 'center', color: '#64748b', padding: '1.5rem 0', fontSize: '0.78rem' }}>
-                          🎉 Không có nhân viên đi trễ trong kỳ.
+                          Không có nhân viên đi trễ trong kỳ
                         </div>
                       )
                     ) : (
@@ -3254,10 +3254,10 @@ export default function HRM() {
                                           fontSize: '0.65rem',
                                           fontWeight: 700,
                                           padding: '1px 6px',
-                                          borderRadius: '999px',
+                                          borderRadius: '6px',
                                           border: 'none',
-                                          backgroundColor: isMale ? 'rgba(59, 130, 246, 0.12)' : 'rgba(236, 72, 153, 0.12)',
-                                          color: isMale ? '#1d4ed8' : '#be185d'
+                                          backgroundColor: isMale ? 'rgba(59, 130, 246, 0.12)' : 'rgba(189, 29, 45, 0.08)',
+                                          color: isMale ? '#1d4ed8' : '#BD1D2D'
                                         }}>
                                           {isMale ? 'Nam • Trễ 30p/tháng' : 'Nữ • Trễ 60p/tháng'}
                                         </span>
@@ -3423,9 +3423,9 @@ export default function HRM() {
                           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                             <div style={{
                               width: '32px', height: '32px', borderRadius: '8px',
-                              background: isOvertime ? 'rgba(139, 92, 246, 0.1)' : isRemote ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)',
+                              background: isOvertime ? 'rgba(189, 29, 45, 0.08)' : isRemote ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)',
                               display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                              color: isOvertime ? '#8b5cf6' : isRemote ? '#10b981' : '#3b82f6'
+                              color: isOvertime ? '#BD1D2D' : isRemote ? '#10b981' : '#3b82f6'
                             }}>
                               {isOvertime ? <Flame size={16} /> : <Calendar size={16} />}
                             </div>
@@ -4199,97 +4199,79 @@ export default function HRM() {
               {payslips.length > 0 && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
                   {/* Card 1: Nhân sự tính lương */}
-                  <div className="stat-card hover-lift" style={{ minHeight: '110px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '1.1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
-                    <div className="decor-svg" style={{ color: '#3b82f6', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
-                      <Users size={65} />
-                    </div>
+                  <div className="stat-card" style={{ minHeight: '110px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Nhân sự tính lương')}</span>
-                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(59, 130, 246, 0.08)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Nhân sự tính lương')}</span>
+                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Users size={16} />
                       </div>
                     </div>
-                    <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.4rem', fontWeight: 800 }}>
+                    <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.35rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                       {stats.empCount}
                     </div>
                   </div>
 
                   {/* Card 2: Tổng lương ngày công */}
-                  <div className="stat-card hover-lift" style={{ minHeight: '110px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '1.1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
-                    <div className="decor-svg" style={{ color: '#6366f1', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
-                      <Calendar size={65} />
-                    </div>
+                  <div className="stat-card" style={{ minHeight: '110px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Lương ngày công')}</span>
-                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(99, 102, 241, 0.08)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Lương ngày công')}</span>
+                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Calendar size={16} />
                       </div>
                     </div>
-                    <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.25rem', fontWeight: 800 }}>
+                    <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.25rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                       {formatCurrency(stats.totalBasic)}
                     </div>
                   </div>
 
                   {/* Card 3: Tổng phụ cấp */}
-                  <div className="stat-card hover-lift" style={{ minHeight: '110px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '1.1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
-                    <div className="decor-svg" style={{ color: '#0d9488', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
-                      <CreditCard size={65} />
-                    </div>
+                  <div className="stat-card" style={{ minHeight: '110px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Tổng phụ cấp')}</span>
-                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(13, 148, 136, 0.08)', color: '#0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Tổng phụ cấp')}</span>
+                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <CreditCard size={16} />
                       </div>
                     </div>
-                    <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.25rem', fontWeight: 800 }}>
+                    <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.25rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                       {formatCurrency(stats.totalAllowances)}
                     </div>
                   </div>
 
                   {/* Card 4: Tổng thưởng */}
-                  <div className="stat-card hover-lift" style={{ minHeight: '110px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '1.1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
-                    <div className="decor-svg" style={{ color: '#10b981', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
-                      <Award size={65} />
-                    </div>
+                  <div className="stat-card" style={{ minHeight: '110px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Các khoản thưởng')}</span>
-                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Các khoản thưởng')}</span>
+                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Award size={16} />
                       </div>
                     </div>
-                    <div className="stat-value" style={{ color: '#10b981', margin: '4px 0', fontSize: '1.25rem', fontWeight: 800 }}>
+                    <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.25rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                       {formatCurrency(stats.totalBonuses)}
                     </div>
                   </div>
 
                   {/* Card 5: Các khoản khấu trừ */}
-                  <div className="stat-card hover-lift" style={{ minHeight: '110px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '1.1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
-                    <div className="decor-svg" style={{ color: '#ef4444', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
-                      <ShieldAlert size={65} />
-                    </div>
+                  <div className="stat-card" style={{ minHeight: '110px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Các khoản trừ')}</span>
-                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Các khoản trừ')}</span>
+                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <ShieldAlert size={16} />
                       </div>
                     </div>
-                    <div className="stat-value" style={{ color: '#ef4444', margin: '4px 0', fontSize: '1.25rem', fontWeight: 800 }}>
+                    <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.25rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                       -{formatCurrency(stats.totalDeductions)}
                     </div>
                   </div>
 
                   {/* Card 6: TỔNG THỰC LĨNH (NET) */}
-                  <div className="stat-card hover-lift" style={{ minHeight: '110px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '1.1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
-                    <div className="decor-svg" style={{ color: '#2563eb', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
-                      <DollarSign size={65} />
-                    </div>
+                  <div className="stat-card" style={{ minHeight: '110px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Thực lĩnh (NET)')}</span>
-                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(37, 99, 235, 0.08)', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Thực lĩnh (NET)')}</span>
+                      <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <DollarSign size={16} />
                       </div>
                     </div>
-                    <div className="stat-value" style={{ color: '#2563eb', margin: '4px 0', fontSize: '1.35rem', fontWeight: 900 }}>
+                    <div className="stat-value" style={{ color: '#BD1D2D', margin: '4px 0', fontSize: '1.35rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
                       {formatCurrency(stats.totalNet)}
                     </div>
                   </div>

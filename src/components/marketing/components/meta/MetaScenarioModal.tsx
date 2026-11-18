@@ -342,20 +342,19 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
         >
             <div className="flex flex-col bg-white max-h-[90vh]">
                 {/* Header */}
-                <div className={`p-8 border-b border-slate-50 flex justify-between items-center relative overflow-hidden`}>
-                    <div className={`absolute inset-0 opacity-10 ${formData.type === 'welcome' ? 'bg-gradient-to-r from-[#BD1D2D] to-[#9A1523]' : formData.type === 'holiday' ? 'bg-gradient-to-r from-rose-500 to-red-600' : 'bg-gradient-to-r from-blue-500 to-indigo-600'}`}></div>
+                <div className="p-8 border-b border-slate-100 flex justify-between items-center relative overflow-hidden bg-slate-50/70">
                     <div className="relative z-10 flex items-center gap-4">
-                        <div className={`w-14 h-14 rounded-[14px] shadow-xl flex items-center justify-center text-white ${formData.type === 'welcome' ? 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] shadow-[var(--color-primary)]/30' : formData.type === 'holiday' ? 'bg-gradient-to-br from-rose-500 to-red-600 shadow-rose-500/30' : 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/30'}`}>
+                        <div className={`w-14 h-14 rounded-2xl shadow-sm flex items-center justify-center text-white ${formData.type === 'welcome' || formData.type === 'holiday' ? 'bg-[#BD1D2D]' : 'bg-slate-900'}`}>
                             {formData.type === 'welcome' ? <Star className="w-7 h-7" /> : formData.type === 'holiday' ? <Calendar className="w-7 h-7" /> : <Zap className="w-7 h-7" />}
                         </div>
                         <div>
-                            <h2 className="text-2xl font-black text-slate-800 tracking-tight">
+                            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
                                 {scenario ? 'Cập Nhật Kịch Bản' : 'Tạo Kịch Bản Mới'}
                             </h2>
                             <p className="text-sm font-medium text-slate-500">Thiết lập phản hồi tự động cho Meta Messenger</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="relative z-10 p-3 hover:bg-white rounded-full transition-all text-slate-400 hover:text-slate-600 shadow-sm"><X className="w-6 h-6" /></button>
+                    <button onClick={onClose} className="relative z-10 p-3 hover:bg-white rounded-full transition-colors text-slate-400 hover:text-slate-600"><X className="w-6 h-6" /></button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto bg-slate-50/50 custom-scrollbar min-h-0">
@@ -376,11 +375,11 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                                         label="Loại kích hoạt"
                                         value={formData.type}
                                         options={[
-                                            { value: 'welcome', label: <div className="flex items-center gap-2"><Star className="w-4 h-4 text-[var(--color-primary)]" /><span>Quan tâm</span></div> },
-                                            { value: 'first_message', label: <div className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-rose-500" /><span>Bắt chuyện</span></div> },
-                                            { value: 'keyword', label: <div className="flex items-center gap-2"><MessageCircle className="w-4 h-4 text-indigo-500" /><span>Từ khóa</span></div> },
-                                            { value: 'ai_reply', label: <div className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-emerald-500" /><span>AI chăm sóc</span></div> },
-                                            { value: 'holiday', label: <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-rose-600" /><span>Ngày nghỉ</span></div> }
+                                            { value: 'welcome', label: <div className="flex items-center gap-2"><Star className="w-4 h-4 text-[#BD1D2D]" /><span>Quan tâm</span></div> },
+                                            { value: 'first_message', label: <div className="flex items-center gap-2"><MessageSquare className="w-4 h-4 text-[#BD1D2D]" /><span>Bắt chuyện</span></div> },
+                                            { value: 'keyword', label: <div className="flex items-center gap-2"><MessageCircle className="w-4 h-4 text-slate-600" /><span>Từ khóa</span></div> },
+                                            { value: 'ai_reply', label: <div className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-[#BD1D2D]" strokeWidth={1.75} /><span>AI chăm sóc</span></div> },
+                                            { value: 'holiday', label: <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-[#BD1D2D]" /><span>Ngày nghỉ</span></div> }
                                         ]}
                                         onChange={(val) => {
                                             const updates: any = { type: val };
@@ -396,35 +395,35 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tiêu đề kịch bản</label>
+                                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Tiêu đề kịch bản</label>
                                 <input
                                     type="text"
                                     placeholder="VD: Chào mừng khách mới, Tư vấn giá..."
-                                    className="w-full px-5 py-4 bg-white border border-slate-100 focus:border-blue-500/30 focus:ring-4 focus:ring-blue-500/5 rounded-[14px] text-sm font-bold transition-all outline-none shadow-sm"
+                                    className="w-full px-4 py-3.5 bg-white border border-slate-200 focus:border-[#BD1D2D] focus:ring-2 focus:ring-[#BD1D2D]/10 rounded-xl text-sm font-semibold transition-colors outline-none"
                                     value={formData.title}
                                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                 />
                             </div>
 
                             {formData.type === 'keyword' && (
-                                <div className="space-y-4 p-6 bg-indigo-50/50 rounded-[18px] border border-indigo-100 animate-in slide-in-from-top-2">
+                                <div className="space-y-4 p-6 bg-slate-100/70 rounded-2xl border border-slate-200 animate-in slide-in-from-top-2">
                                     <div className="flex items-center justify-between">
-                                        <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
-                                            <MessageCircle className="w-4 h-4" /> Từ khóa kích hoạt
+                                        <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                                            <MessageCircle className="w-4 h-4 text-[#BD1D2D]" /> Từ khóa kích hoạt
                                         </label>
                                     </div>
                                     <input
                                         type="text"
                                         placeholder="VD: giá cả, sản phẩm, hỗ trợ (phân cách bằng dấu phẩy)"
-                                        className="w-full px-5 py-4 bg-white border border-indigo-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-[14px] text-sm font-bold transition-all outline-none text-indigo-700 shadow-sm"
+                                        className="w-full px-4 py-3.5 bg-white border border-slate-200 focus:border-[#BD1D2D] focus:ring-2 focus:ring-[#BD1D2D]/10 rounded-xl text-sm font-semibold transition-colors outline-none text-slate-800"
                                         value={formData.trigger_text}
                                         onChange={(e) => setFormData({ ...formData, trigger_text: e.target.value })}
                                     />
-                                    <div className="bg-white/50 p-4 rounded-[14px] border border-indigo-100 space-y-2">
-                                        <div className="flex items-center gap-2 text-[10px] font-bold text-indigo-400 uppercase tracking-tight">
-                                            <AlertCircle className="w-3.5 h-3.5" /> Lưu ý:
+                                    <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2">
+                                        <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 uppercase">
+                                            <AlertCircle className="w-3.5 h-3.5 text-[#BD1D2D]" /> Lưu ý
                                         </div>
-                                        <ul className="text-[10px] text-slate-500 font-medium space-y-1 ml-5 list-disc leading-relaxed">
+                                        <ul className="text-[11px] text-slate-500 font-medium space-y-1 ml-5 list-disc leading-relaxed">
                                             <li>Dùng dấu phẩy (`,`) để ngăn cách nhiều từ khóa.</li>
                                             <li>Hệ thống sẽ tự động khớp từ khóa trong tin nhắn của khách.</li>
                                         </ul>
@@ -433,10 +432,10 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                             )}
 
                             {formData.type === 'ai_reply' && (
-                                <div className="space-y-4 p-6 bg-emerald-50/50 rounded-[18px] border border-emerald-100 animate-in slide-in-from-top-2">
+                                <div className="space-y-4 p-6 bg-emerald-50/50 rounded-2xl border border-emerald-200/80 animate-in slide-in-from-top-2">
                                     <div className="flex items-center justify-between">
-                                        <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-2">
-                                            <Sparkles className="w-4 h-4" /> Kích hoạt Trí Tuệ Nhân Tạo (AI)
+                                        <label className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-2">
+                                            <Sparkles className="w-4 h-4" strokeWidth={1.75} /> Kích hoạt Trí Tuệ Nhân Tạo (AI)
                                         </label>
                                     </div>
                                     <div className="space-y-4">
@@ -653,7 +652,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                                                         if (!perDaySchedule[day.id]) return null;
                                                         return (
                                                             <div key={day.id} className="flex items-center gap-4 bg-white p-3 rounded-[14px] border border-slate-100/50 shadow-sm">
-                                                                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-[10px] font-black">{day.label}</div>
+                                                                <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center text-[10px] font-bold">{day.label}</div>
                                                                 <div className="flex-1 grid grid-cols-2 gap-4">
                                                                     <div className="flex items-center gap-2">
                                                                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Từ</span>
@@ -880,13 +879,13 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
 
                                                     {btn.type !== 'reply' && (
                                                         <div className="mt-3 space-y-2 animate-in slide-in-from-top-1 duration-200">
-                                                            <div className="flex items-center gap-2 ml-1 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                                                {btn.type === 'web_url' ? <Link className="w-3 h-3 text-blue-500" /> : btn.type === 'phone_number' ? <Phone className="w-3 h-3 text-emerald-500" /> : <Globe className="w-3 h-3 text-indigo-500" />}
+                                                            <div className="flex items-center gap-2 ml-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                                                {btn.type === 'web_url' ? <Link className="w-3 h-3 text-slate-600" /> : btn.type === 'phone_number' ? <Phone className="w-3 h-3 text-emerald-600" /> : <Globe className="w-3 h-3 text-[#BD1D2D]" />}
                                                                 {btn.type === 'web_url' ? 'Link liên kết' : btn.type === 'phone_number' ? 'Số điện thoại' : 'Payload nhận diện'}
                                                             </div>
                                                             <input
                                                                 type="text"
-                                                                className="w-full px-4 py-2.5 bg-slate-50 border border-transparent focus:border-blue-500/10 rounded-xl text-xs font-bold outline-none transition-all"
+                                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:border-[#BD1D2D] rounded-xl text-xs font-semibold outline-none transition-colors"
                                                                 placeholder={btn.type === 'web_url' ? 'https://...' : btn.type === 'phone_number' ? 'VD: +849...' : 'Payload...'}
                                                                 value={btn.type === 'web_url' ? (btn.url || '') : (btn.payload || '')}
                                                                 onChange={(e) => handleButtonChange(idx, btn.type === 'web_url' ? 'url' : 'payload', e.target.value)}
@@ -897,7 +896,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                                             </div>
                                         ))}
                                         {formData.buttons.length === 0 && (
-                                            <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-[14px]">
+                                            <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-xl">
                                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Chưa có nút bấm nào</p>
                                             </div>
                                         )}
@@ -905,7 +904,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                                             <button
                                                 type="button"
                                                 onClick={handleAddButton}
-                                                className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors flex items-center gap-2"
+                                                className="px-4 py-2 bg-rose-50 text-[#BD1D2D] rounded-xl text-xs font-semibold hover:bg-rose-100 transition-colors flex items-center gap-2"
                                             >
                                                 <Plus className="w-4 h-4" /> Thêm nút bấm
                                             </button>
@@ -919,7 +918,7 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                         <div className="lg:w-5/12 bg-slate-100 p-8 flex items-start justify-center relative">
                             <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
                             <div className="sticky top-0 flex flex-col items-center justify-center pt-4 w-full">
-                                <div className="w-[320px] bg-white rounded-[18px] shadow-2xl border-[8px] border-slate-800 overflow-hidden relative z-10 flex flex-col h-[620px] scale-95 origin-top">
+                                <div className="w-[320px] bg-white rounded-2xl shadow-xl border-[8px] border-slate-800 overflow-hidden relative z-10 flex flex-col h-[620px] scale-95 origin-top">
                                     {/* StatusBar */}
                                     <div className="h-7 bg-slate-800 w-full flex justify-center items-center">
                                         <div className="w-16 h-1 bg-slate-700 rounded-full"></div>
@@ -941,15 +940,15 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
 
                                     <div className="flex-1 bg-[#e2e8f0] p-4 space-y-4 overflow-y-auto">
                                         <div className="flex items-end gap-2">
-                                            <div className="bg-white rounded-r-[14px] rounded-tl-[14px] overflow-hidden shadow-sm max-w-[85%] border border-slate-100">
+                                            <div className="bg-white rounded-r-xl rounded-tl-xl overflow-hidden shadow-sm max-w-[85%] border border-slate-100">
                                                 {formData.type === 'ai_reply' ? (
                                                     <div className="p-3 text-[11px] text-slate-800 space-y-3">
-                                                        <div className="flex items-center gap-2 text-emerald-600 font-black text-[9px] uppercase tracking-wider mb-2">
-                                                            <Sparkles className="w-3 h-3" /> AI đang trả lời...
+                                                        <div className="flex items-center gap-2 text-emerald-700 font-bold text-[10px] uppercase tracking-wider mb-2">
+                                                            <Sparkles className="w-3 h-3" strokeWidth={1.75} /> AI đang trả lời...
                                                         </div>
                                                         <div className="h-2 w-full bg-slate-100 rounded-full animate-pulse"></div>
                                                         <div className="h-2 w-3/4 bg-slate-100 rounded-full animate-pulse"></div>
-                                                        <p className="text-[10px] text-slate-400 italic font-medium">Phản hồi sẽ được tạo tự động bởi AI.</p>
+                                                        <p className="text-[10px] text-slate-500 font-medium">Phản hồi sẽ được tạo tự động bởi AI.</p>
                                                     </div>
                                                 ) : (
                                                     <>
@@ -993,13 +992,13 @@ const MetaScenarioModal: React.FC<MetaScenarioModalProps> = ({ scenario, onClose
                 <div className="sticky bottom-0 bg-white border-t border-slate-100 px-8 py-5 flex justify-end gap-3 shrink-0 z-10">
                     <button
                         onClick={onClose}
-                        className="px-6 py-3 bg-white text-slate-600 rounded-[14px] text-sm font-bold hover:bg-slate-100 transition-all border border-slate-200 shadow-sm"
+                        className="px-6 py-3 bg-white text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-100 transition-colors border border-slate-200"
                     >
                         Hủy
                     </button>
                     <button
                         onClick={handleSubmit}
-                        className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-[14px] text-sm font-bold hover:shadow-lg hover:scale-105 transition-all shadow-blue-500/30"
+                        className="px-6 py-3 bg-[#BD1D2D] hover:bg-[#9A1523] text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
                     >
                         Lưu kịch bản
                     </button>

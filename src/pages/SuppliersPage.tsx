@@ -3,12 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Truck, Plus, Search, MoreHorizontal, Mail, Phone, MapPin, 
-  Trash2, Pencil, ExternalLink, Filter, Download, User, Hash,
-  ArrowUpRight, Building2, X, Layers, History, FileBadge, FileText,
-  BarChart3, Receipt, Calendar, DollarSign, TrendingUp, Clock, Save,
-  ChevronLeft, ChevronRight, Loader2, CheckCircle2, AlertCircle, Files,
-  Globe, Briefcase, CreditCard
+  Truck, Plus, Search, Mail, Phone, MapPin, 
+  Trash2, Pencil, ExternalLink, Filter, Download, User,
+  Building2, X, Layers, History, FileBadge,
+  BarChart3, Receipt, DollarSign, Clock, Save,
+  ChevronLeft, ChevronRight, Loader2
 } from 'lucide-react';
 import api from '../api/axios';
 import { useUIStore } from '../store/uiStore';
@@ -23,6 +22,7 @@ import { CardSkeleton } from '../components/ui/Skeleton';
 import { ActivityModal } from '../components/ui/ActivityModal';
 import styles from './EntityDrawer.module.css';
 import { canEditPartnerOrSupplier, isSales } from '../utils/roleUtils';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 const PRESTIGE_OPTIONS = [
   { value: 'A', label: 'Hạng A (Rất uy tín)' },
@@ -40,7 +40,7 @@ const SUPPLIER_TABS = [
   { id: 'info', label: 'Thông tin', icon: Building2, color: '#eb4e3d' },
   { id: 'activities', label: 'Hoạt động / Tương tác', icon: History, color: '#f09a37' },
   { id: 'purchase_orders', label: 'Đơn mua (PO)', icon: FileBadge, color: '#2563eb' },
-  { id: 'stats', label: 'Thống kê', icon: BarChart3, color: '#8b5cf6' },
+  { id: 'stats', label: 'Thống kê', icon: BarChart3, color: '#334155' },
   { id: 'invoices_docs', label: 'Tài liệu & Hóa đơn', icon: Receipt, color: '#0ea5e9' },
 ];
 
@@ -91,7 +91,7 @@ export const SuppliersPage: React.FC = () => {
         justifyContent: 'center',
         width: '28px',
         height: '28px',
-        borderRadius: '7px',
+        borderRadius: '8px',
         backgroundColor: bgColor,
         color: 'white',
         flexShrink: 0
@@ -127,8 +127,7 @@ export const SuppliersPage: React.FC = () => {
   useEffect(() => {
     api.get('/projects?all=1')
       .then(res => {
-        const list = res.data.data || res.data || [];
-        setProjectsList(Array.isArray(list) ? list : (list.items || []));
+        setProjectsList(extractArray(res?.data));
       })
       .catch(() => {});
   }, []);
@@ -149,7 +148,7 @@ export const SuppliersPage: React.FC = () => {
     setActivitiesLoading(true);
     try {
       const r = await api.get('/activities', { params: { related_type: 'supplier', related_id: sId } });
-      setActivities(r.data.data?.items || r.data.data || []);
+      setActivities(extractArray(r?.data));
     } catch {
       setActivities([]);
     } finally {
@@ -163,7 +162,7 @@ export const SuppliersPage: React.FC = () => {
     setLoadingPO(true);
     try {
       const r = await api.get('/purchase-orders', { params: { supplier_id: sId, limit: 100 } });
-      setPurchaseOrders(r.data.data?.orders || r.data.data?.items || r.data.data || []);
+      setPurchaseOrders(extractArray(r?.data, 'orders'));
     } catch {
       setPurchaseOrders([]);
     } finally {
@@ -177,7 +176,7 @@ export const SuppliersPage: React.FC = () => {
     setLoadingInvoices(true);
     try {
       const r = await api.get('/invoices', { params: { supplier_id: sId, limit: 100 } });
-      setInvoices(r.data.data?.items || r.data.data || []);
+      setInvoices(extractArray(r?.data));
     } catch {
       setInvoices([]);
     } finally {
@@ -391,7 +390,7 @@ export const SuppliersPage: React.FC = () => {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      addToast('Xuất danh sách đối tác thành công!', 'success');
+      addToast('Xuất danh sách đối tác thành công', 'success');
     } catch (e: any) {
       addToast('Lỗi khi xuất danh sách đối tác: ' + e.message, 'error');
     } finally {
@@ -411,7 +410,7 @@ export const SuppliersPage: React.FC = () => {
           <p className="page-subtitle">Quản lý danh sách các trường học, viện đào tạo và doanh nghiệp đối tác liên kết</p>
         </div>
         <div className="flex gap-3">
-          <button className="btn outline hover-lift" onClick={handleExport} disabled={isExporting} title="Xuất danh sách đối tác">
+          <button className="btn outline" onClick={handleExport} disabled={isExporting} title="Xuất danh sách đối tác">
             {isExporting ? <Loader2 size={18} className="spin" /> : <Download size={18} />}
             <span>{isExporting ? 'Đang xuất...' : 'Xuất Excel'}</span>
           </button>
@@ -450,7 +449,7 @@ export const SuppliersPage: React.FC = () => {
             borderRadius: '10px', 
             padding: '0 12px',
             height: '36px',
-            transition: 'all 0.2s ease-in-out'
+            transition: 'border-color 0.15s ease'
           }}
         >
           <Search size={14} style={{ color: 'var(--color-text-muted)', opacity: 0.7 }} />
@@ -584,18 +583,18 @@ export const SuppliersPage: React.FC = () => {
               return (
                 <motion.div 
                   key={s.id} 
-                  className="card hover-lift relative overflow-hidden"
+                  className="card relative overflow-hidden"
                   style={{
-                    padding: '1rem',
+                    padding: '16px',
                     display: 'flex',
                     flexDirection: 'column',
-                    borderRadius: '12px',
+                    borderRadius: '16px',
                     background: 'var(--color-surface)',
-                    border: '1px solid var(--color-border-light)',
-                    boxShadow: 'var(--shadow-sm)',
+                    border: '1px solid var(--color-border)',
+                    boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                     cursor: 'pointer',
                     position: 'relative',
-                    transition: 'all 0.2s ease',
+                    transition: 'border-color 0.15s ease, background-color 0.15s ease',
                     minHeight: '180px'
                   }}
                   initial={{ opacity: 0, y: 10 }}
@@ -1392,12 +1391,11 @@ export const SuppliersPage: React.FC = () => {
                                                 window.location.href = `/projects?search=${encodeURIComponent(p)}`;
                                               }
                                             }}
-                                            className="hover-lift"
                                             style={{ 
                                               background: 'rgba(163, 20, 34, 0.04)', 
                                               color: 'var(--color-primary)', 
                                               border: '1px solid rgba(163, 20, 34, 0.15)', 
-                                              padding: '5px 12px', 
+                                              padding: '4px 12px', 
                                               borderRadius: '8px', 
                                               fontSize: '0.825rem', 
                                               fontWeight: 600,
@@ -1413,7 +1411,7 @@ export const SuppliersPage: React.FC = () => {
                                         );
                                       })
                                     ) : (
-                                      <span style={{ fontSize: '0.875rem', color: 'var(--color-text-light)', fontStyle: 'italic' }}>Không có chương trình hợp tác tiêu biểu.</span>
+                                      <span style={{ fontSize: '0.875rem', color: 'var(--color-text-light)' }}>Không có chương trình hợp tác tiêu biểu.</span>
                                     )}
                                   </div>
                                 ) : (
@@ -1553,14 +1551,14 @@ export const SuppliersPage: React.FC = () => {
                         <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                             <div>
-                              <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)' }}>Lịch sử Hoạt động & Tương tác</h4>
-                              <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Các cuộc gọi, lịch hẹn làm việc, đàm phán và ghi chú đối tác</p>
+                              <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)' }}>Lịch sử hoạt động &amp; tương tác</h4>
+                              <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Các cuộc gọi, lịch hẹn làm việc, đàm phán và ghi chú đối tác</p>
                             </div>
                             <button
                               type="button"
                               className="btn primary sm"
                               onClick={() => setShowActivityModal(true)}
-                              style={{ height: '36px', fontSize: '0.825rem', padding: '0 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                              style={{ height: '36px', fontSize: '0.825rem', padding: '0 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}
                             >
                               <Plus size={16} />
                               Thêm hoạt động
@@ -1595,11 +1593,11 @@ export const SuppliersPage: React.FC = () => {
                                   : act.activity_type === 'note' ? 'Ghi chú'
                                   : 'Hoạt động';
                                 const typeBg = act.activity_type === 'call' ? '#eff6ff'
-                                  : act.activity_type === 'meeting' ? '#faf5ff'
+                                  : act.activity_type === 'meeting' ? '#f1f5f9'
                                   : act.activity_type === 'email' ? '#f0fdf4'
                                   : '#f8fafc';
                                 const typeColor = act.activity_type === 'call' ? '#2563eb'
-                                  : act.activity_type === 'meeting' ? '#9333ea'
+                                  : act.activity_type === 'meeting' ? '#334155'
                                   : act.activity_type === 'email' ? '#16a34a'
                                   : '#475569';
 
@@ -1729,7 +1727,7 @@ export const SuppliersPage: React.FC = () => {
                                       </div>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
-                                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                                      <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                                         {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(poTotal)}
                                       </div>
                                       <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
@@ -1754,57 +1752,55 @@ export const SuppliersPage: React.FC = () => {
                         return (
                           <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                             <div>
-                              <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)' }}>Hiệu suất & Thống kê Đối tác NCC</h4>
-                              <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Tổng hợp số liệu mua hàng (PO), tiến độ thực hiện và giao dịch cung ứng</p>
+                              <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)' }}>Hiệu suất &amp; thống kê đối tác NCC</h4>
+                              <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Tổng hợp số liệu mua hàng (PO), tiến độ thực hiện và giao dịch cung ứng</p>
                             </div>
 
-                            {/* 4 Glassmorphism Stat Cards */}
-                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                            {/* 4 Chapter V KPI Cards */}
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
                               {/* Card 1: Tổng chi phí PO */}
                               <div style={{
-                                padding: '1.25rem',
+                                padding: '20px',
                                 borderRadius: '16px',
-                                background: 'linear-gradient(135deg, rgba(239, 246, 255, 0.9) 0%, rgba(255, 255, 255, 0.8) 100%)',
-                                backdropFilter: 'blur(10px)',
-                                border: '1px solid rgba(191, 219, 254, 0.7)',
-                                boxShadow: '0 10px 25px -5px rgba(37, 99, 235, 0.12), 0 4px 6px -2px rgba(0, 0, 0, 0.02)',
+                                background: 'var(--color-surface)',
+                                border: '1px solid var(--color-border)',
+                                boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                                 display: 'flex',
                                 flexDirection: 'column',
                                 gap: '8px'
                               }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tổng chi phí mua (PO)</span>
-                                  <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <DollarSign size={16} />
+                                  <span style={{ fontSize: '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tổng chi phí mua (PO)</span>
+                                  <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <DollarSign size={17} />
                                   </div>
                                 </div>
-                                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#1e3a8a', letterSpacing: '-0.02em' }}>
+                                <div style={{ fontSize: '1.45rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                                   {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(totalPOCost)}
                                 </div>
-                                <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                <div style={{ fontSize: '0.72rem', color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>
                                   Chi phí từ {purchaseOrders.length} đơn đặt hàng
                                 </div>
                               </div>
 
                               {/* Card 2: Đơn mua hoàn tất */}
                               <div style={{
-                                padding: '1.25rem',
+                                padding: '20px',
                                 borderRadius: '16px',
-                                background: 'linear-gradient(135deg, rgba(240, 253, 244, 0.9) 0%, rgba(255, 255, 255, 0.8) 100%)',
-                                backdropFilter: 'blur(10px)',
-                                border: '1px solid rgba(187, 247, 208, 0.7)',
-                                boxShadow: '0 10px 25px -5px rgba(16, 185, 129, 0.12), 0 4px 6px -2px rgba(0, 0, 0, 0.02)',
+                                background: 'var(--color-surface)',
+                                border: '1px solid var(--color-border)',
+                                boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                                 display: 'flex',
                                 flexDirection: 'column',
                                 gap: '8px'
                               }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Đơn mua hoàn tất</span>
-                                  <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <FileBadge size={16} />
+                                  <span style={{ fontSize: '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Đơn mua hoàn tất</span>
+                                  <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <FileBadge size={17} />
                                   </div>
                                 </div>
-                                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#14532d', letterSpacing: '-0.02em' }}>
+                                <div style={{ fontSize: '1.45rem', fontWeight: 700, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums' }}>
                                   {completedPOs}
                                 </div>
                                 <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
@@ -1814,23 +1810,22 @@ export const SuppliersPage: React.FC = () => {
 
                               {/* Card 3: Số đơn mua chờ duyệt */}
                               <div style={{
-                                padding: '1.25rem',
+                                padding: '20px',
                                 borderRadius: '16px',
-                                background: 'linear-gradient(135deg, rgba(254, 243, 199, 0.9) 0%, rgba(255, 255, 255, 0.8) 100%)',
-                                backdropFilter: 'blur(10px)',
-                                border: '1px solid rgba(253, 230, 138, 0.7)',
-                                boxShadow: '0 10px 25px -5px rgba(245, 158, 11, 0.12), 0 4px 6px -2px rgba(0, 0, 0, 0.02)',
+                                background: 'var(--color-surface)',
+                                border: '1px solid var(--color-border)',
+                                boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                                 display: 'flex',
                                 flexDirection: 'column',
                                 gap: '8px'
                               }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Đơn mua chờ duyệt</span>
-                                  <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <Clock size={16} />
+                                  <span style={{ fontSize: '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Đơn mua chờ duyệt</span>
+                                  <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Clock size={17} />
                                   </div>
                                 </div>
-                                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#78350f', letterSpacing: '-0.02em' }}>
+                                <div style={{ fontSize: '1.45rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                                   {pendingPOs}
                                 </div>
                                 <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
@@ -1840,27 +1835,26 @@ export const SuppliersPage: React.FC = () => {
 
                               {/* Card 4: Tổng chương trình liên kết */}
                               <div style={{
-                                padding: '1.25rem',
+                                padding: '20px',
                                 borderRadius: '16px',
-                                background: 'linear-gradient(135deg, rgba(245, 243, 255, 0.9) 0%, rgba(255, 255, 255, 0.8) 100%)',
-                                backdropFilter: 'blur(10px)',
-                                border: '1px solid rgba(221, 214, 254, 0.7)',
-                                boxShadow: '0 10px 25px -5px rgba(139, 92, 246, 0.12), 0 4px 6px -2px rgba(0, 0, 0, 0.02)',
+                                background: 'var(--color-surface)',
+                                border: '1px solid var(--color-border)',
+                                boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                                 display: 'flex',
                                 flexDirection: 'column',
                                 gap: '8px'
                               }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b21a8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Chương trình liên kết</span>
-                                  <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <Building2 size={16} />
+                                  <span style={{ fontSize: '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Chương trình liên kết</span>
+                                  <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Building2 size={17} />
                                   </div>
                                 </div>
-                                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#581c87', letterSpacing: '-0.02em' }}>
+                                <div style={{ fontSize: '1.45rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                                   {selectedProjects.length}
                                 </div>
                                 <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                                  Dự án & chương trình đào tạo phối hợp
+                                  Dự án &amp; chương trình đào tạo phối hợp
                                 </div>
                               </div>
                             </div>
@@ -1951,10 +1945,10 @@ export const SuppliersPage: React.FC = () => {
                                       </div>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
-                                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                                      <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                                         {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(invTotal)}
                                       </div>
-                                      <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                      <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px', fontVariantNumeric: 'tabular-nums' }}>
                                         Thuế VAT: {inv.vat_rate || 0}%
                                       </div>
                                     </div>

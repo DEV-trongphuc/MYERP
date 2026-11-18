@@ -30,7 +30,7 @@ const TYPE_META: Record<FeedbackType, { label: string; icon: React.ReactNode; co
     bug: { label: 'Lỗi', icon: <Bug className="w-3.5 h-3.5" />, color: '#ef4444', bg: 'bg-red-500/10 text-red-400' },
     suggestion: { label: 'Góp ý', icon: <Lightbulb className="w-3.5 h-3.5" />, color: '#BD1D2D', bg: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]' },
     praise: { label: 'Khen ngợi', icon: <Heart className="w-3.5 h-3.5" />, color: '#10b981', bg: 'bg-emerald-500/10 text-emerald-400' },
-    other: { label: 'Khác', icon: <MessageSquare className="w-3.5 h-3.5" />, color: '#6366f1', bg: 'bg-indigo-500/10 text-indigo-400' },
+    other: { label: 'Khác', icon: <MessageSquare className="w-3.5 h-3.5" />, color: '#64748B', bg: 'bg-slate-500/10 text-slate-400' },
 };
 
 const STATUS_META: Record<FeedbackStatus, { label: string; icon: React.ReactNode; cls: string }> = {
@@ -62,14 +62,14 @@ const FeedbackRow: React.FC<{
     };
 
     return (
-        <div className="rounded-[14px] border border-slate-800 bg-slate-900/40 overflow-hidden transition-all">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden transition-colors">
             {/* Row header */}
             <div
                 className="flex items-start gap-3 p-4 cursor-pointer hover:bg-slate-800/30 transition-colors"
                 onClick={() => setExpanded(p => !p)}
             >
                 {/* Type badge */}
-                <span className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold shrink-0 ${tm.bg}`}>
+                <span className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold shrink-0 ${tm.bg}`}>
                     {tm.icon} {tm.label}
                 </span>
 
@@ -77,7 +77,7 @@ const FeedbackRow: React.FC<{
                 <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-200 truncate">{fb.title}</p>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-bold ${sm.cls}`}>
+                        <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-semibold ${sm.cls}`}>
                             {sm.icon} {sm.label}
                         </span>
                         {fb.user_name && (
@@ -87,13 +87,13 @@ const FeedbackRow: React.FC<{
                             <span className="text-[11px] text-slate-500">{fb.user_email}</span>
                         )}
                         {!fb.user_name && !fb.user_email && (
-                            <span className="text-[11px] text-slate-600 italic">Khách</span>
+                            <span className="text-[11px] text-slate-500">Khách</span>
                         )}
-                        <span className="text-[11px] text-slate-600">
+                        <span className="text-[11px] text-slate-500 tabular-nums">
                             {new Date(fb.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         </span>
                         {fb.screenshot_url && (
-                            <span className="flex items-center gap-0.5 text-[11px] text-indigo-400">
+                            <span className="flex items-center gap-1 text-[11px] text-slate-300">
                                 <Image className="w-3 h-3" /> Có ảnh
                             </span>
                         )}
@@ -111,18 +111,18 @@ const FeedbackRow: React.FC<{
                 <div className="px-4 pb-4 pt-1 border-t border-slate-800 space-y-4">
                     {/* Description */}
                     <div>
-                        <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1">Mô tả</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-1">Mô tả</p>
                         <p className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">{fb.description}</p>
                     </div>
 
                     {/* Screenshot */}
                     {fb.screenshot_url && (
                         <div>
-                            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Screenshot</p>
+                            <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-2">Screenshot</p>
                             <img
                                 src={fb.screenshot_url}
                                 alt="Screenshot"
-                                className="max-h-48 rounded-[14px] border border-slate-700 cursor-zoom-in object-cover"
+                                className="max-h-48 rounded-xl border border-slate-700 cursor-zoom-in object-cover"
                                 onClick={() => setLightbox(true)}
                             />
                         </div>
@@ -131,15 +131,15 @@ const FeedbackRow: React.FC<{
                     {/* Page URL */}
                     {fb.page_url && (
                         <div>
-                            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1">Trang</p>
-                            <a href={fb.page_url} target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:underline break-all">{fb.page_url}</a>
+                            <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-1">Trang</p>
+                            <a href={fb.page_url} target="_blank" rel="noreferrer" className="text-xs text-slate-300 hover:text-white hover:underline break-all">{fb.page_url}</a>
                         </div>
                     )}
 
                     {/* Admin controls */}
                     <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-slate-800">
                         <div className="flex-1">
-                            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1">Ghi chú nội bộ</p>
+                            <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-1">Ghi chú nội bộ</p>
                             <textarea
                                 value={note}
                                 onChange={e => setNote(e.target.value)}
@@ -150,7 +150,7 @@ const FeedbackRow: React.FC<{
                         </div>
                         <div className="sm:w-44 flex flex-col gap-2.5">
                             <div>
-                                <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1">Trạng thái</p>
+                                <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-1">Trạng thái</p>
                                 <select
                                     value={status}
                                     onChange={e => setStatus(e.target.value as FeedbackStatus)}
@@ -165,7 +165,7 @@ const FeedbackRow: React.FC<{
                             <button
                                 onClick={handleSave}
                                 disabled={saving}
-                                className="w-full py-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] hover:brightness-110 text-white text-xs font-bold transition-all active:scale-95 disabled:opacity-60"
+                                className="w-full py-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] hover:brightness-110 text-white text-xs font-semibold transition-colors disabled:opacity-60"
                             >
                                 {saving ? 'Đang lưu...' : 'Lưu'}
                             </button>
@@ -177,7 +177,7 @@ const FeedbackRow: React.FC<{
             {/* Lightbox */}
             {lightbox && fb.screenshot_url && createPortal(
                 <div className="fixed inset-0 z-[99999] bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4" onClick={() => setLightbox(false)}>
-                    <img src={fb.screenshot_url} alt="Screenshot full" className="max-w-full max-h-full rounded-[18px] shadow-2xl object-contain" />
+                    <img src={fb.screenshot_url} alt="Screenshot full" className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain" />
                 </div>,
                 getMktPortalRoot()
             )}
@@ -249,13 +249,13 @@ const FeedbackAdminPanel: React.FC = () => {
             {/* Header */}
             <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
-                    <h2 className="text-xl font-black text-white">Feedback từ người dùng</h2>
-                    <p className="text-slate-500 text-sm mt-0.5">{total} phản hồi tổng cộng</p>
+                    <h2 className="text-xl font-bold text-white">Feedback từ người dùng</h2>
+                    <p className="text-slate-500 text-sm mt-0.5 tabular-nums">{total} phản hồi tổng cộng</p>
                 </div>
                 <button
                     onClick={fetchFeedbacks}
                     disabled={loading}
-                    className="flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)] bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold transition-all active:scale-95"
+                    className="flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)] bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-semibold transition-colors"
                 >
                     <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                     Làm mới
@@ -265,11 +265,11 @@ const FeedbackAdminPanel: React.FC = () => {
             {/* Status summary */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {(Object.entries(STATUS_META) as [FeedbackStatus, typeof STATUS_META[FeedbackStatus]][]).map(([k, m]) => (
-                    <div key={k} className={`flex items-center gap-2.5 px-4 py-3 rounded-[14px] border ${m.cls}`}>
+                    <div key={k} className={`flex items-center gap-2.5 px-4 py-3 rounded-xl border ${m.cls}`}>
                         {m.icon}
                         <div>
-                            <p className="text-[13px] font-bold">{counts[k] || 0}</p>
-                            <p className="text-[10px] opacity-70">{m.label}</p>
+                            <p className="text-[13px] font-bold tabular-nums">{counts[k] || 0}</p>
+                            <p className="text-[10px] opacity-75">{m.label}</p>
                         </div>
                     </div>
                 ))}

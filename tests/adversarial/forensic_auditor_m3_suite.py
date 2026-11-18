@@ -1,10 +1,11 @@
 import os
+import shutil
 import re
 import hashlib
 import json
 from datetime import datetime, timedelta
 
-PHP_BIN = r"C:\Users\LENOVO\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe"
+PHP_BIN = os.environ.get("PHP_BIN") or shutil.which("php") or "php"
 
 files_to_check = [
     r"backend/automation/tracking_processor.php",

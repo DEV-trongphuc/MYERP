@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CustomModal } from './CustomModal';
-import { AlertTriangle, Send, Loader2, Info, CheckCircle2, ShieldAlert, Sparkles, User, Phone, Mail, Layers } from 'lucide-react';
+import { AlertTriangle, Send, Loader2, Info, CheckCircle2, ShieldAlert, User, Phone, Mail, Layers } from 'lucide-react';
 import api from '../../api/axios';
 import { fetchAPI } from '../../utils/api';
 import toast from 'react-hot-toast';
@@ -42,14 +42,14 @@ export const REPORT_REASONS: ReportReasonOption[] = [
     label: 'Spam ảo / Junk lead',
     description: 'Khách hàng vừa gọi cuộc 1 đã báo không đăng ký, cháu chắt nghịch máy, bấm nhầm hoặc đăng ký ảo.',
     badge: 'Spam / Rác',
-    badgeColor: '#ec4899'
+    badgeColor: '#dc2626'
   },
   {
     id: 'unqualified',
     label: 'Khác / Data Unqualified',
     description: 'Data không đúng đối tượng tuyển sinh (chưa tốt nghiệp CĐ/ĐH, khác chuyên ngành, không có tiếng Anh...).',
     badge: 'Không đạt chuẩn',
-    badgeColor: '#8b5cf6'
+    badgeColor: '#475569'
   }
 ];
 
@@ -120,9 +120,9 @@ export const ReportDataModal: React.FC<ReportDataModalProps> = ({
       if (res && res.success !== false) {
         setSubmittedSuccess(true);
         if (res.auto_approved) {
-          toast.success(t('Báo cáo lỗi đã được HỆ THỐNG TỰ ĐỘNG PHÊ DUYỆT & ĐỀN BÙ thành công!'));
+          toast.success(t('Báo cáo lỗi đã được hệ thống tự động phê duyệt và đền bù'));
         } else {
-          toast.success(res.message || t('Đã gửi báo cáo data lỗi thành công! Đang chờ Quản lý duyệt bù vòng.'));
+          toast.success(res.message || t('Đã gửi báo cáo data lỗi. Đang chờ Quản lý duyệt bù vòng.'));
         }
         setTimeout(() => {
           setSubmittedSuccess(false);
@@ -173,8 +173,8 @@ export const ReportDataModal: React.FC<ReportDataModalProps> = ({
           }}>
             <CheckCircle2 size={36} />
           </div>
-          <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-text)', margin: '0 0 8px 0' }}>
-            {t('Gửi báo cáo thành công!')}
+          <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--color-text)', margin: '0 0 8px 0' }}>
+            {t('Gửi báo cáo thành công')}
           </h3>
           <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.5 }}>
             {t('Ticket đã được gửi tới Quản lý xét duyệt. Khi được duyệt, hệ thống sẽ tự động kích hoạt lượt bù vòng ưu tiên cho bạn.')}
@@ -354,8 +354,7 @@ export const ReportDataModal: React.FC<ReportDataModalProps> = ({
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
-                background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
-                boxShadow: '0 4px 12px rgba(220, 38, 38, 0.25)',
+                background: '#BD1D2D',
                 color: 'white',
                 border: 'none',
                 cursor: submitting ? 'not-allowed' : 'pointer'

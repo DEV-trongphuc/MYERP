@@ -7,6 +7,7 @@ import { Avatar } from './ui/Avatar';
 import { fetchAPI } from '../utils/api';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 const beautifyPhone = (phoneStr: string): string => {
   if (!phoneStr) return '';
@@ -940,7 +941,7 @@ export const QuickAddLeadModal = () => {
     try {
       const json = await fetchAPI('get_unique_sources');
       if (json.success) {
-        setExistingSources(json.data || []);
+        setExistingSources(extractArray(json));
       }
     } catch (e: any) {
       console.error(e.message);

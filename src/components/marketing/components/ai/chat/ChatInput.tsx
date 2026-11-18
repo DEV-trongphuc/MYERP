@@ -62,9 +62,9 @@ interface ChatInputProps {
 const ToggleSwitch = ({ active, onClick, isDarkTheme }: { active: boolean, onClick: () => void, isDarkTheme?: boolean }) => (
     <div
         onClick={(e) => { e.stopPropagation(); onClick(); }}
-        className={`relative w-9 h-5 rounded-full transition-all duration-300 cursor-pointer shrink-0 ml-auto ${active ? 'bg-emerald-500' : (isDarkTheme ? 'bg-slate-700' : 'bg-slate-200')}`}
+        className={`relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer shrink-0 ml-auto ${active ? 'bg-emerald-500' : (isDarkTheme ? 'bg-slate-700' : 'bg-slate-200')}`}
     >
-        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-300 transform ${active ? 'translate-x-4' : 'translate-x-0'}`} />
+        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200 transform ${active ? 'translate-x-4' : 'translate-x-0'}`} />
     </div>
 );
 
@@ -100,7 +100,7 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
             <div className="flex items-center gap-2 px-1">
                 <button
                     onClick={toggleListening}
-                    className={`p-2 rounded-xl transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : (isDarkTheme ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-600 hover:text-[var(--color-primary)] hover:bg-slate-100')}`}
+                    className={`p-2 rounded-xl transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : (isDarkTheme ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-600 hover:text-[var(--color-primary)] hover:bg-slate-100')}`}
                     title="Voice Input"
                 >
                     <Mic className="w-5 h-5" />
@@ -109,7 +109,7 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
                 <div className="relative">
                     <button
                         onClick={() => setIsAttachDropdownOpen(!isAttachDropdownOpen)}
-                        className={`p-2 rounded-xl transition-all ${isAttachDropdownOpen ? (isDarkTheme ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]' : 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]') : (isDarkTheme ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-600 hover:text-[var(--color-primary)] hover:bg-slate-100')}`}
+                        className={`p-2 rounded-xl transition-colors ${isAttachDropdownOpen ? (isDarkTheme ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]' : 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]') : (isDarkTheme ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-600 hover:text-[var(--color-primary)] hover:bg-slate-100')}`}
                     >
                         <Paperclip className="w-5 h-5" />
                     </button>
@@ -117,21 +117,21 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
                     {isAttachDropdownOpen && (
                         <>
                             <div className="fixed inset-0 z-40" onClick={() => setIsAttachDropdownOpen(false)} />
-                            <div className={`absolute bottom-full left-0 mb-3 w-72 backdrop-blur-xl border rounded-[18px] shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-bottom-2 duration-300 ${isDarkTheme ? 'bg-[#0D1117] border-slate-700' : 'bg-white border-slate-200'}`}>
+                            <div className={`absolute bottom-full left-0 mb-3 w-72 backdrop-blur-xl border rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-bottom-2 duration-200 ${isDarkTheme ? 'bg-[#0D1117] border-slate-700' : 'bg-white border-slate-200'}`}>
                                 <div className={`px-4 py-2 border-b mb-2 flex items-center justify-between ${isDarkTheme ? 'border-slate-800' : 'border-slate-100'}`}>
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Attachments</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Attachments</span>
                                 </div>
                                 <div className="space-y-1">
                                     <button
                                         onClick={() => { fileInputRef.current?.click(); setIsAttachDropdownOpen(false); }}
-                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isDarkTheme ? 'text-slate-300 hover:bg-slate-800 hover:text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-[var(--color-primary)]'}`}
+                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDarkTheme ? 'text-slate-300 hover:bg-slate-800 hover:text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-[var(--color-primary)]'}`}
                                     >
                                         <Upload className="w-4 h-4" />
                                         <div className="text-left"><div className="text-xs font-bold">Computer</div></div>
                                     </button>
                                     <button
                                         onClick={() => { setIsDocWorkspaceOpen(true); setActiveDoc(null); setExplorerSearchTerm(""); setIsAttachDropdownOpen(false); }}
-                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isDarkTheme ? 'text-slate-300 hover:bg-slate-800 hover:text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-[var(--color-primary)]'}`}
+                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDarkTheme ? 'text-slate-300 hover:bg-slate-800 hover:text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-[var(--color-primary)]'}`}
                                     >
                                         <BookOpen className="w-4 h-4" />
                                         <div className="text-left"><div className="text-xs font-bold">Workspace</div></div>
@@ -158,7 +158,7 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
                                         ? `Message ${activeBot?.name}...`
                                         : `Message ${activeBot?.name || 'AI Assistant'}...`
                         }
-                        className={`w-full bg-transparent border-0 focus:ring-0 outline-none focus:outline-none py-2 px-2 text-[15px] leading-relaxed resize-none transition-all font-medium selection:bg-[var(--color-primary)] selection:text-white ${isDarkTheme ? 'text-white placeholder:text-slate-500/50' : 'text-slate-700 placeholder:text-slate-300'}`}
+                        className={`w-full bg-transparent border-0 focus:ring-0 outline-none focus:outline-none py-2 px-2 text-[15px] leading-relaxed resize-none transition-colors font-medium selection:bg-[var(--color-primary)] selection:text-white ${isDarkTheme ? 'text-white placeholder:text-slate-500/50' : 'text-slate-700 placeholder:text-slate-300'}`}
                         style={{ minHeight: '40px', maxHeight: '200px' }}
                     />
                 </div>
@@ -175,11 +175,11 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
                                     message: `Rewrite and enhance this prompt: "${input}"`,
                                     model_config: { model: 'gemini-3.5-flash-lite' }
                                 });
-                                if (res.success && res.data?.message) { setInput(res.data.message); toast.success('Enhanced!'); }
+                                if (res.success && res.data?.message) { setInput(res.data.message); toast.success('Enhanced'); }
                             } catch (e) { toast.error('AI Error'); } finally { setIsEnhancing(false); }
                         }}
                         disabled={!input.trim() || isEnhancing || !activeBot}
-                        className={`p-2 rounded-xl transition-all ${!input.trim() ? 'opacity-30' : ''} ${isDarkTheme ? 'text-slate-400 hover:text-[var(--color-primary)] hover:bg-slate-800' : 'text-slate-600 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5'}`}
+                        className={`p-2 rounded-xl transition-colors ${!input.trim() ? 'opacity-30' : ''} ${isDarkTheme ? 'text-slate-400 hover:text-[var(--color-primary)] hover:bg-slate-800' : 'text-slate-600 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5'}`}
                     >
                         <Wand2 className={`w-5 h-5 ${isEnhancing ? 'animate-spin' : ''}`} />
                     </button>
@@ -187,9 +187,9 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
                     <button
                         onClick={handleSend}
                         disabled={loadingChat || (!input.trim() && attachments.length === 0) || !activeBot}
-                        className={`p-2 rounded-xl transition-all shadow-lg ${loadingChat || (!input.trim() && attachments.length === 0) || !activeBot
+                        className={`p-2 rounded-xl transition-colors shadow-sm ${loadingChat || (!input.trim() && attachments.length === 0) || !activeBot
                             ? 'opacity-40 cursor-not-allowed bg-slate-200 text-slate-400'
-                            : 'bg-[var(--color-primary)] text-white shadow-[var(--color-primary)]/20'}`}
+                            : 'bg-[var(--color-primary)] text-white'}`}
                     >
                         {loadingChat ? <Loader2 className="w-5 h-5 animate-spin" /> : <ArrowRight className="w-5 h-5" strokeWidth={3} />}
                     </button>
@@ -197,7 +197,7 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
             </div>
 
             {/* AI Settings Toolbar */}
-            <div className={`mt-2 p-1.5 rounded-[14px] border flex flex-wrap items-center justify-between gap-2 shadow-sm ${isDarkTheme ? 'bg-[#0D1117] border-slate-700/50' : 'bg-slate-50/80 border-slate-100'}`}>
+            <div className={`mt-2 p-1.5 rounded-xl border flex flex-wrap items-center justify-between gap-2 shadow-xs ${isDarkTheme ? 'bg-[#0D1117] border-slate-700/50' : 'bg-slate-50/80 border-slate-200'}`}>
                 <div className="flex items-center gap-1">
                     {/* Model Selector */}
                     {!isImageGenMode && (
@@ -205,10 +205,10 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
                             <div className="relative">
                                 <button
                                     onClick={() => setIsModelModalOpen(!isModelModalOpen)}
-                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all ${isDarkTheme ? 'bg-[#0D1117] border border-slate-700 text-white hover:border-[var(--color-primary)] shadow-sm' : 'bg-white border border-slate-200 text-slate-700 hover:border-[var(--color-primary)] shadow-sm'}`}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition-colors ${isDarkTheme ? 'bg-[#0D1117] border border-slate-700 text-white hover:border-[var(--color-primary)] shadow-xs' : 'bg-white border border-slate-200 text-slate-700 hover:border-[var(--color-primary)] shadow-xs'}`}
                                 >
                                     <div className="w-6 h-6 rounded-lg bg-[var(--color-primary)] flex items-center justify-center shrink-0"><Brain className="w-3.5 h-3.5 text-white" /></div>
-                                    <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">
+                                    <span className="text-[10px] font-bold uppercase tracking-widest hidden sm:block">
                                         {getModelDisplayName(AI_MODELS.find(m => m.id === selectedModel)?.name || '', categoryName).split(' ')[0]}
                                     </span>
                                     <ChevronDown className="w-3 h-3 opacity-50" />
@@ -217,7 +217,7 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
                                     <>
                                         {/* [P18-C3] Click-outside dismiss */}
                                         <div className="fixed inset-0 z-40" onClick={() => setIsModelModalOpen(false)} />
-                                        <div className={`absolute bottom-full left-0 mb-3 w-64 border rounded-[14px] shadow-2xl overflow-hidden z-50 ${isDarkTheme ? 'bg-[#0D1117] border-slate-700' : 'bg-white border-slate-200'}`}>
+                                        <div className={`absolute bottom-full left-0 mb-3 w-64 border rounded-xl shadow-2xl overflow-hidden z-50 ${isDarkTheme ? 'bg-[#0D1117] border-slate-700' : 'bg-white border-slate-200'}`}>
                                             {AI_MODELS.map(m => (
                                                 <button key={m.id} onClick={() => {
                                                     setSelectedModel(m.id);
@@ -244,10 +244,10 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
                     <div className="relative">
                         <button
                             onClick={() => setIsAiModeModalOpen(!isAiModeModalOpen)}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all ${isDarkTheme ? 'bg-[#0D1117] border border-slate-700 text-white hover:border-[var(--color-primary)] shadow-sm' : 'bg-white border border-slate-200 text-slate-700 hover:border-[var(--color-primary)] shadow-sm'}`}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition-colors ${isDarkTheme ? 'bg-[#0D1117] border border-slate-700 text-white hover:border-[var(--color-primary)] shadow-xs' : 'bg-white border border-slate-200 text-slate-700 hover:border-[var(--color-primary)] shadow-xs'}`}
                         >
                             <div className="w-6 h-6 rounded-lg bg-[var(--color-primary)] flex items-center justify-center shrink-0">{isCodeMode ? <FileCode className="w-3.5 h-3.5 text-white" /> : isImageGenMode ? <ImageIcon className="w-3.5 h-3.5 text-white" /> : <Sparkles className="w-3.5 h-3.5 text-white" />}</div>
-                            <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">
+                            <span className="text-[10px] font-bold uppercase tracking-widest hidden sm:block">
                                 {isCodeMode ? 'Code' : isImageGenMode ? 'Image' : 'Expert'}
                             </span>
                             <ChevronDown className="w-3 h-3 opacity-50" />
@@ -256,7 +256,7 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
                             <>
                                 {/* [P18-C3] Click-outside dismiss for mode dropdown */}
                                 <div className="fixed inset-0 z-40" onClick={() => setIsAiModeModalOpen(false)} />
-                                <div className={`absolute bottom-full left-0 mb-3 w-56 border rounded-[14px] shadow-2xl overflow-hidden z-50 ${isDarkTheme ? 'bg-[#0D1117] border-slate-700' : 'bg-white border-slate-200'}`}>
+                                <div className={`absolute bottom-full left-0 mb-3 w-56 border rounded-xl shadow-2xl overflow-hidden z-50 ${isDarkTheme ? 'bg-[#0D1117] border-slate-700' : 'bg-white border-slate-200'}`}>
                                     <div className="p-1.5 space-y-1">
                                         {[
                                             { id: 'expert', label: 'Expert Mode', icon: Sparkles, active: !isCodeMode && !isImageGenMode, onClick: () => { setIsCodeMode(false); setIsImageGenMode(false); setIsKbOnlyMode(true); } },
@@ -268,7 +268,7 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
                                             if (!orgUser.permissions?.modes) return true; // Default to allow if no specific rules
                                             return orgUser.permissions.modes.includes(mode.id);
                                         }).map(mode => (
-                                            <button key={mode.id} onClick={() => { mode.onClick(); setIsAiModeModalOpen(false); setSuggestedQuestions([]); }} className={`w-full p-2.5 rounded-xl flex items-center gap-3 transition-all ${mode.active ? 'bg-[var(--color-primary)] text-white' : (isDarkTheme ? 'text-slate-400 hover:bg-slate-800 hover:text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-[var(--color-primary)]')}`}>
+                                            <button key={mode.id} onClick={() => { mode.onClick(); setIsAiModeModalOpen(false); setSuggestedQuestions([]); }} className={`w-full p-2.5 rounded-xl flex items-center gap-3 transition-colors ${mode.active ? 'bg-[var(--color-primary)] text-white' : (isDarkTheme ? 'text-slate-400 hover:bg-slate-800 hover:text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-[var(--color-primary)]')}`}>
                                                 <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${mode.active ? 'bg-white/20' : 'bg-[var(--color-primary)] text-white'}`}>
                                                     <mode.icon className="w-4 h-4" />
                                                 </div>
@@ -287,7 +287,7 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
                             <div className="flex items-center gap-1">
                                 <button
                                     onClick={() => { const newVal = !isKbOnlyMode; setIsKbOnlyMode(newVal); if (newVal) setIsResearchMode(false); }}
-                                    className={`p-1.5 rounded-lg transition-all ${isKbOnlyMode ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : (isDarkTheme ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-400 hover:bg-slate-100')}`}
+                                    className={`p-1.5 rounded-lg transition-colors ${isKbOnlyMode ? 'bg-emerald-500 text-white shadow-sm' : (isDarkTheme ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-400 hover:bg-slate-100')}`}
                                     title="Chế độ Kiến thức (Knowledge Only)"
                                 >
                                     <Database className="w-3.5 h-3.5" />
@@ -296,7 +296,7 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
                                 {hasPdfs && (
                                     <button
                                         onClick={() => setIsCiteMode(!isCiteMode)}
-                                        className={`p-1.5 rounded-lg transition-all ${isCiteMode ? 'bg-[var(--color-primary)] text-white shadow-lg shadow-[var(--color-primary)]/20' : (isDarkTheme ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-400 hover:bg-slate-100')}`}
+                                        className={`p-1.5 rounded-lg transition-colors ${isCiteMode ? 'bg-[var(--color-primary)] text-white shadow-sm' : (isDarkTheme ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-400 hover:bg-slate-100')}`}
                                         title="Trích dẫn tài liệu (Citation Mode)"
                                     >
                                         <FileText className="w-3.5 h-3.5" />
@@ -305,7 +305,7 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
 
                                 <button
                                     onClick={() => { const newVal = !isResearchMode; setIsResearchMode(newVal); if (newVal) setIsKbOnlyMode(false); }}
-                                    className={`p-1.5 rounded-lg transition-all ${isResearchMode ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/20' : (isDarkTheme ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-400 hover:bg-slate-100')}`}
+                                    className={`p-1.5 rounded-lg transition-colors ${isResearchMode ? 'bg-sky-500 text-white shadow-sm' : (isDarkTheme ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-400 hover:bg-slate-100')}`}
                                     title="Chế độ Nghiên cứu (Research Mode)"
                                 >
                                     <Globe className="w-3.5 h-3.5" />
@@ -353,17 +353,17 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
 
                 <div className="flex items-center gap-2">
                     {/* Shift + Enter Hint */}
-                    <span className={`text-[9px] font-black uppercase tracking-tighter opacity-70 hidden lg:block ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>Shift + Enter ⏎</span>
+                    <span className={`text-[10px] font-semibold uppercase opacity-70 hidden lg:block ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>Shift + Enter ⏎</span>
 
                     {!isMobile ? (
                         <div className={`flex items-center gap-0.5 p-0.5 rounded-xl ${isDarkTheme ? 'bg-slate-900/50' : 'bg-slate-100/50'}`}>
-                            <button onClick={() => setAutoTTS(!autoTTS)} className={`p-1.5 rounded-lg transition-all ${autoTTS ? 'text-green-500' : (isDarkTheme ? 'text-slate-200 hover:text-white' : 'text-slate-600 hover:text-slate-900')}`} title="Auto TTS">{autoTTS ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}</button>
-                            <button onClick={() => setIsZenMode(!isZenMode)} className={`p-1.5 rounded-lg transition-all ${isZenMode ? 'text-blue-500' : (isDarkTheme ? 'text-slate-200 hover:text-white' : 'text-slate-600 hover:text-slate-900')}`} title="Zen Mode"><Maximize2 className="w-3.5 h-3.5" /></button>
-                            <button onClick={handleExportChat} className={`p-1.5 rounded-lg transition-all ${isDarkTheme ? 'text-slate-200 hover:text-emerald-400' : 'text-slate-600 hover:text-emerald-600'}`} title="Export"><Download className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => setAutoTTS(!autoTTS)} className={`p-1.5 rounded-lg transition-colors ${autoTTS ? 'text-green-500' : (isDarkTheme ? 'text-slate-200 hover:text-white' : 'text-slate-600 hover:text-slate-900')}`} title="Auto TTS">{autoTTS ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}</button>
+                            <button onClick={() => setIsZenMode(!isZenMode)} className={`p-1.5 rounded-lg transition-colors ${isZenMode ? 'text-blue-500' : (isDarkTheme ? 'text-slate-200 hover:text-white' : 'text-slate-600 hover:text-slate-900')}`} title="Zen Mode"><Maximize2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={handleExportChat} className={`p-1.5 rounded-lg transition-colors ${isDarkTheme ? 'text-slate-200 hover:text-emerald-400' : 'text-slate-600 hover:text-emerald-600'}`} title="Export"><Download className="w-3.5 h-3.5" /></button>
                             {/* Share button */}
                             <button
                                 onClick={onShareConversation}
-                                className={`p-1.5 rounded-lg transition-all relative group/share ${isConvPublic
+                                className={`p-1.5 rounded-lg transition-colors relative group/share ${isConvPublic
                                     ? 'text-blue-500 bg-blue-500/10'
                                     : (isDarkTheme ? 'text-slate-200 hover:text-blue-400' : 'text-slate-600 hover:text-blue-600')
                                     }`}
@@ -371,23 +371,23 @@ const ChatInput: React.FC<ChatInputProps> = React.memo(({
                             >
                                 <Share2 className="w-3.5 h-3.5" />
                                 {isConvPublic && (
-                                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full" />
                                 )}
                             </button>
-                            <button onClick={() => setIsClearConfirmOpen(true)} className={`p-1.5 rounded-lg transition-all ${isDarkTheme ? 'text-slate-200 hover:text-rose-400' : 'text-slate-600 hover:text-rose-600'}`} title="Clear"><Trash2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => setIsClearConfirmOpen(true)} className={`p-1.5 rounded-lg transition-colors ${isDarkTheme ? 'text-slate-200 hover:text-rose-400' : 'text-slate-600 hover:text-rose-600'}`} title="Clear"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
                     ) : (
                         <div className="relative">
                             <button
                                 onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
-                                className={`p-2 rounded-xl transition-all ${isMoreMenuOpen ? (isDarkTheme ? 'bg-slate-800 text-[var(--color-primary)]' : 'bg-slate-100 text-[var(--color-primary)]') : (isDarkTheme ? 'text-slate-400' : 'text-slate-600')}`}
+                                className={`p-2 rounded-xl transition-colors ${isMoreMenuOpen ? (isDarkTheme ? 'bg-slate-800 text-[var(--color-primary)]' : 'bg-slate-100 text-[var(--color-primary)]') : (isDarkTheme ? 'text-slate-400' : 'text-slate-600')}`}
                             >
                                 <MoreHorizontal className="w-5 h-5" />
                             </button>
                             {isMoreMenuOpen && (
                                 <>
                                     <div className="fixed inset-0 z-40" onClick={() => setIsMoreMenuOpen(false)} />
-                                    <div className={`absolute bottom-full right-0 mb-3 w-64 border rounded-[14px] shadow-2xl overflow-hidden z-50 p-1.5 space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-300 ${isDarkTheme ? 'bg-[#0D1117] border-slate-700' : 'bg-white border-slate-200'}`}>
+                                    <div className={`absolute bottom-full right-0 mb-3 w-64 border rounded-xl shadow-2xl overflow-hidden z-50 p-1.5 space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-200 ${isDarkTheme ? 'bg-[#0D1117] border-slate-700' : 'bg-white border-slate-200'}`}>
                                         <button onClick={() => { setIsKbOnlyMode(!isKbOnlyMode); if (!isKbOnlyMode) setIsResearchMode(false); }} className={`w-full px-4 py-3 rounded-xl flex items-center justify-between transition-colors ${isKbOnlyMode ? 'bg-[var(--color-primary)]/5' : (isDarkTheme ? 'hover:bg-slate-800' : 'hover:bg-slate-50')}`}>
                                             <div className="flex items-center gap-3">
                                                 <Database className={`w-4 h-4 ${isKbOnlyMode ? 'text-emerald-500' : 'text-slate-400'}`} />

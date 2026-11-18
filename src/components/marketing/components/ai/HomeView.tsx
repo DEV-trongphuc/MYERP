@@ -20,22 +20,22 @@ const ChatbotCard = React.memo(({
     return (
         <div
             onClick={onClick}
-            className={`group p-6 rounded-[18px] border transition-all duration-500 cursor-pointer relative overflow-hidden flex flex-col justify-between gap-6 ${isDarkTheme ? 'bg-[#0D1117] border-slate-800 hover:border-[var(--color-primary)]/30 hover:shadow-2xl hover:shadow-[var(--color-primary)]/5' : 'bg-white border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-slate-200 hover:border-slate-300'}`}
+            className={`group p-6 rounded-2xl border transition-colors cursor-pointer relative overflow-hidden flex flex-col justify-between gap-6 ${isDarkTheme ? 'bg-[#0D1117] border-slate-800 hover:border-slate-600' : 'bg-white border-slate-200 shadow-sm hover:border-slate-300'}`}
         >
-            <div className="absolute top-0 right-0 p-8 opacity-[0.03] text-slate-400 group-hover:scale-125 transition-transform">
+            <div className="absolute top-0 right-0 p-8 opacity-[0.03] text-slate-400">
                 <Bot className="w-32 h-32" />
             </div>
 
             <div className="flex justify-between items-start relative z-10">
                 <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-[14px] bg-gradient-to-br from-[var(--color-primary)] to-[#9A1523] flex items-center justify-center text-white shadow-xl shadow-[var(--color-primary)]/20 group-hover:rotate-3 transition-transform shrink-0 overflow-hidden border border-slate-100/10">
+                    <div className="w-14 h-14 rounded-xl bg-[#BD1D2D] flex items-center justify-center text-white shadow-sm shrink-0 overflow-hidden border border-slate-100/10">
                         {bot.settings?.bot_avatar ? (
                             <img
                                 src={bot.settings.bot_avatar}
-                                className={`w-full h-full object-cover ${categoryId ? 'grayscale group-hover:grayscale-0 transition-all duration-500' : ''}`}
+                                className={`w-full h-full object-cover ${categoryId ? 'grayscale group-hover:grayscale-0 transition-[filter] duration-200' : ''}`}
                             />
                         ) : (
-                            <div className={`w-full h-full flex items-center justify-center transition-all duration-500 ${categoryId ? 'bg-[var(--color-primary)]' : 'bg-gradient-to-br from-[#c2410c] to-[#9a3412]'}`}>
+                            <div className={`w-full h-full flex items-center justify-center transition-colors ${categoryId ? 'bg-[var(--color-primary)]' : 'bg-[#0F172A]'}`}>
                                 <Bot className="w-7 h-7" />
                             </div>
                         )}
@@ -45,7 +45,7 @@ const ChatbotCard = React.memo(({
                         <p className={`text-[10px] font-mono mt-1 pr-2 truncate uppercase tracking-widest ${isDarkTheme ? 'text-slate-500' : 'text-slate-400'}`}>{bot.domain || 'AI ASSISTANT'}</p>
                     </div>
                 </div>
-                <div className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tight border shrink-0 ${isActive
+                <div className={`px-2 py-0.5 rounded-md text-[9px] font-semibold uppercase border shrink-0 ${isActive
                     ? (isDarkTheme ? 'bg-emerald-900/40 text-emerald-400 border-emerald-800/50' : 'bg-emerald-50 text-emerald-600 border-emerald-100')
                     : (isDarkTheme ? 'bg-slate-800 text-slate-500 border-slate-700' : 'bg-slate-50 text-slate-400 border-slate-100')
                     }`}>
@@ -54,24 +54,24 @@ const ChatbotCard = React.memo(({
             </div>
 
             <div className="space-y-4 relative z-10">
-                <div className={`flex items-center justify-between p-3 rounded-[14px] border transition-colors ${isDarkTheme ? 'bg-[#0B0F17] border-slate-800 group-hover:bg-[#161B24]' : 'bg-slate-50 border-slate-100 group-hover:bg-slate-100 group-hover:border-slate-200'}`}>
+                <div className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${isDarkTheme ? 'bg-[#0B0F17] border-slate-800 group-hover:bg-[#161B24]' : 'bg-slate-50 border-slate-100 group-hover:bg-slate-100 group-hover:border-slate-200'}`}>
                     <div className="flex flex-col">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tài liệu</span>
+                        <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest">Tài liệu</span>
 
-                        <span className={`text-sm font-black ${isDarkTheme ? 'text-slate-300' : 'text-slate-700'}`}>{(bot.stats?.docs_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">docs</span></span>
+                        <span className={`text-sm font-bold tabular-nums ${isDarkTheme ? 'text-slate-300' : 'text-slate-700'}`}>{(bot.stats?.docs_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">docs</span></span>
                     </div>
                     <div className={`h-8 w-px ${isDarkTheme ? 'bg-slate-800' : 'bg-slate-200'}`}></div>
                     <div className="flex flex-col items-end">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Cuộc trò chuyện</span>
-                        <span className={`text-sm font-black ${isDarkTheme ? 'text-slate-300' : 'text-slate-700'}`}>{(bot.stats?.queries_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">convos</span></span>
+                        <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest">Cuộc trò chuyện</span>
+                        <span className={`text-sm font-bold tabular-nums ${isDarkTheme ? 'text-slate-300' : 'text-slate-700'}`}>{(bot.stats?.queries_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">convos</span></span>
                     </div>
                 </div>
 
                 <button
                     onClick={(e) => onStartChat(e, bot)}
-                    className={`w-full h-11 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-500 flex items-center justify-center gap-2 group/btn ${isDarkTheme ? 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700' : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'}`}
+                    className={`w-full h-11 rounded-xl text-[10px] font-semibold uppercase tracking-widest transition-colors flex items-center justify-center gap-2 group/btn ${isDarkTheme ? 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700' : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'}`}
                 >
-                    <MessageSquare className="w-4 h-4 text-slate-400 group-hover/btn:scale-110 transition-transform" />
+                    <MessageSquare className="w-4 h-4 text-slate-400" />
                     START CHATTING
                 </button>
             </div>
@@ -113,7 +113,7 @@ const HomeView = React.memo(({
                 {/* AI Training Style Header */}
                 <div className="w-full flex flex-col items-center text-center md:flex-row md:justify-between md:items-start md:text-left gap-6 md:gap-0 mb-6 md:mb-10 px-0 md:px-4 relative">
                     <div className="flex flex-col items-center md:items-start animate-in fade-in slide-in-from-left-5 duration-700">
-                        <h1 className={`text-2xl md:text-[32px] font-black leading-tight flex items-center justify-center md:justify-start gap-2 ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+                        <h1 className={`text-2xl md:text-[32px] font-bold leading-tight flex items-center justify-center md:justify-start gap-2 ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
                             AI Agents<span className="text-[var(--color-primary)] text-3xl md:text-4xl leading-none">.</span>
                         </h1>
                         <div className="flex items-center justify-center md:justify-start gap-3 mt-2 md:mt-3">
@@ -125,12 +125,12 @@ const HomeView = React.memo(({
                     </div>
 
 
-                    <div className="absolute -top-12 -right-6 z-10 hidden md:block group cursor-pointer transition-transform hover:-translate-y-2 duration-300">
+                    <div className="absolute -top-12 -right-6 z-10 hidden md:block group cursor-pointer">
                         <a href="https://www.facebook.com/tunri0" target="_blank" rel="noopener noreferrer" title="Liên hệ IT Support">
                             <img
                                 src="https://pngfile.net/files/preview/960x960/11741189725reo9wbrtum5xxfbhubjnxavgk71sl6ptkgksc801wvj0l5pjgdch8arnleln7oqh0kzvi0wrniegc642iks8woshwo14pifdaq67.png"
                                 alt="AI Mascot"
-                                className="w-40 h-auto drop-shadow-2xl animate-bounce-slow group-hover:animate-none"
+                                className="w-40 h-auto drop-shadow-xl"
                                 style={{ transform: 'scaleX(-1)' }}
                             />
                         </a>
@@ -138,12 +138,12 @@ const HomeView = React.memo(({
                 </div>
 
                 {/* Main Content Container (White Card style) */}
-                <div className={`w-full rounded-[18px] md:rounded-[18px] border shadow-sm p-4 md:p-8 min-h-[600px] animate-in fade-in slide-in-from-bottom-5 duration-1000 delay-200 transition-colors ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800' : 'bg-white border-slate-200'}`}>
+                <div className={`w-full rounded-2xl border shadow-sm p-4 md:p-8 min-h-[600px] animate-in fade-in slide-in-from-bottom-5 duration-500 transition-colors ${isDarkTheme ? 'bg-[rgba(13,17,23,0.6)] backdrop-blur-md border-slate-800' : 'bg-white border-slate-200'}`}>
                     {/* Search & Controls Row */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 mb-6 md:mb-10">
                         <div className="flex items-center gap-4 md:gap-6 justify-between md:justify-start">
                             <h3 className={`text-base md:text-lg font-bold ${isDarkTheme ? 'text-slate-200' : 'text-slate-800'}`}>Danh sách AI Agents</h3>
-                            <div className={`text-[9px] md:text-[10px] font-black uppercase tracking-widest px-2 md:px-3 py-1 md:py-1.5 rounded-lg border ${isDarkTheme ? 'bg-slate-800 text-slate-500 border-slate-700' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
+                            <div className={`text-[9px] md:text-[10px] font-semibold tabular-nums uppercase tracking-widest px-2 md:px-3 py-1 md:py-1.5 rounded-lg border ${isDarkTheme ? 'bg-slate-800 text-slate-500 border-slate-700' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
                                 Tổng cộng: {chatbots.length}
                             </div>
                         </div>
@@ -158,10 +158,10 @@ const HomeView = React.memo(({
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     placeholder="Tìm kiếm AI..."
-                                    className={`w-full h-10 md:h-11 border-2 rounded-xl pl-9 md:pl-11 pr-4 text-xs font-bold transition-all outline-none ${isDarkTheme ? 'bg-slate-900 border-slate-800 text-slate-200 focus:bg-[#0B0F17] focus:border-slate-700 placeholder:text-slate-600' : 'bg-slate-50 border-slate-100 text-slate-700 focus:bg-white focus:border-slate-300 shadow-sm placeholder:text-slate-400'}`}
+                                    className={`w-full h-10 md:h-11 border-2 rounded-xl pl-9 md:pl-11 pr-4 text-xs font-semibold transition-colors outline-none ${isDarkTheme ? 'bg-slate-900 border-slate-800 text-slate-200 focus:bg-[#0B0F17] focus:border-slate-700 placeholder:text-slate-600' : 'bg-slate-50 border-slate-100 text-slate-700 focus:bg-white focus:border-slate-300 shadow-sm placeholder:text-slate-400'}`}
                                 />
                             </div>
-                            <button className={`shrink-0 h-10 md:h-11 w-10 md:w-auto md:px-5 border rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-sm ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                            <button className={`shrink-0 h-10 md:h-11 w-10 md:w-auto md:px-5 border rounded-xl text-[10px] font-semibold uppercase tracking-widest transition-colors flex items-center justify-center gap-2 shadow-sm ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                                 <BookOpen className="w-4 h-4 text-slate-500" />
                                 <span className="hidden md:inline">Mẹo & Hướng dẫn</span>
                                 <ChevronDown className="hidden md:block w-3.5 h-3.5 text-slate-400" />
@@ -172,7 +172,7 @@ const HomeView = React.memo(({
                     {/* Grid of Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                         {loadingList ? [1, 2, 3].map(i => (
-                            <div key={i} className={`h-48 rounded-[18px] animate-pulse border ${isDarkTheme ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`} />
+                            <div key={i} className={`h-48 rounded-2xl animate-pulse border ${isDarkTheme ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`} />
                         )) : filteredChatbots.map(bot => (
                             <ChatbotCard
                                 key={bot.id}

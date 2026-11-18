@@ -32,8 +32,8 @@ interface BranchConnectorProps {
 
 export const BranchConnector: React.FC<BranchConnectorProps> = ({
   height = 90,
-  leftColor = "#8b5cf6", // Purple by default
-  rightColor = "#8b5cf6",
+  leftColor = "#64748B", // Slate by default
+  rightColor = "#64748B",
   dashed = true // Dashed by default
 }) => {
   const midX = 50;
@@ -66,7 +66,7 @@ interface MultiBranchConnectorProps {
 export const MultiBranchConnector: React.FC<MultiBranchConnectorProps> = ({
   height = 90,
   branches = 2,
-  color = "#8b5cf6"
+  color = "#64748B"
 }) => {
   const midX = 50;
   const midY = height / 2;

@@ -2384,16 +2384,15 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
                   padding: '8px 16px',
                   borderRadius: '8px',
                   border: 'none',
-                  background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)',
+                  background: '#BD1D2D',
                   color: '#ffffff',
                   fontSize: '0.8rem',
-                  fontWeight: 750,
+                  fontWeight: 600,
                   cursor: isTransferring || !selectedNewOwnerId ? 'not-allowed' : 'pointer',
                   opacity: isTransferring || !selectedNewOwnerId ? 0.6 : 1,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 8px rgba(225, 29, 72, 0.3)'
+                  gap: '8px'
                 }}
               >
                 {isTransferring ? (
@@ -2531,17 +2530,16 @@ export const ChatMediaVaultPanel: React.FC<Props> = ({
                   borderRadius: '8px',
                   border: 'none',
                   background: disbandConfirmText.trim().toLowerCase() === 'confirm' 
-                    ? 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)' 
-                    : '#e2e8f0',
+                    ? '#BD1D2D' 
+                    : '#E2E8F0',
                   color: disbandConfirmText.trim().toLowerCase() === 'confirm' ? '#ffffff' : '#94a3b8',
                   fontSize: '0.82rem',
-                  fontWeight: 800,
+                  fontWeight: 600,
                   cursor: isDisbanding || disbandConfirmText.trim().toLowerCase() !== 'confirm' ? 'not-allowed' : 'pointer',
-                  boxShadow: disbandConfirmText.trim().toLowerCase() === 'confirm' ? '0 4px 12px rgba(220, 38, 38, 0.35)' : 'none',
-                  transition: 'all 0.15s ease',
+                  transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px'
+                  gap: '8px'
                 }}
               >
                 {isDisbanding ? (

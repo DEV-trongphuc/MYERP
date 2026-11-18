@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Plus, Search, Building2, X, Loader2, Pencil, Trash2, Globe, Phone, Mail, MapPin, Users, LayoutGrid, List, Filter, RefreshCw, Download, DollarSign, Briefcase, MoreHorizontal } from 'lucide-react';
+import { Plus, Search, Building2, X, Pencil, Trash2, Phone, Mail, LayoutGrid, List, Filter, Download, MoreHorizontal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
 import { CopyButton } from '../components/ui/CopyButton';
@@ -264,19 +264,18 @@ export const CompaniesPage: React.FC = () => {
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                padding: '6px 14px',
-                borderRadius: '20px',
+                padding: '6px 12px',
+                borderRadius: '8px',
                 fontSize: '0.8125rem',
                 fontWeight: isActive ? 600 : 500,
                 whiteSpace: 'nowrap',
                 cursor: 'pointer',
-                transition: 'all 0.18s ease',
+                transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
                 border: isActive ? '1px solid #334155' : '1px solid var(--color-border-light, #e2e8f0)',
                 background: isActive ? '#334155' : 'var(--color-bg-light, #f8fafc)',
                 color: isActive ? '#ffffff' : 'var(--color-text-muted, #64748b)',
-                boxShadow: isActive ? '0 2px 6px rgba(51, 65, 85, 0.2)' : 'none'
+                boxShadow: isActive ? '0 1px 3px rgba(15, 23, 42, 0.12)' : 'none'
               }}
-              className="hover-lift"
             >
               <span>{f.label}</span>
             </button>
@@ -522,16 +521,16 @@ export const CompaniesPage: React.FC = () => {
                   key={co.id}
                   className="card card-hover"
                   style={{
-                    padding: '1.25rem',
+                    padding: '20px',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
                     borderRadius: '16px',
                     background: 'var(--color-surface)',
                     border: '1px solid var(--color-border-light)',
-                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
+                    boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                     cursor: 'pointer',
-                    transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                    transition: 'border-color 0.15s ease, background-color 0.15s ease',
                     position: 'relative'
                   }}
                   initial={{ opacity: 0, y: 10 }}
@@ -548,13 +547,12 @@ export const CompaniesPage: React.FC = () => {
                           <h3 
                             style={{ 
                               fontSize: '0.95rem', 
-                              fontWeight: 800, 
+                              fontWeight: 700, 
                               color: 'var(--color-text)', 
                               margin: 0, 
                               overflow: 'hidden', 
                               textOverflow: 'ellipsis', 
                               whiteSpace: 'nowrap',
-                              letterSpacing: '-0.01em'
                             }} 
                             title={co.name}
                           >
@@ -713,7 +711,7 @@ export const CompaniesPage: React.FC = () => {
                       </td>
                       <td style={{ padding: '1rem' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          {co.phone ? <PhoneLink phone={co.phone} style={{ fontSize: '0.875rem', fontWeight: 700 }} /> : <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>}
+                          {co.phone ? <PhoneLink phone={co.phone} style={{ fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }} /> : <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>—</span>}
                           {co.email && <p className="text-xs text-light" style={{ color: 'var(--color-text-muted)' }}>{co.email}</p>}
                         </div>
                       </td>
@@ -729,7 +727,7 @@ export const CompaniesPage: React.FC = () => {
                         <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>{co.focus_markets || '—'}</span>
                       </td>
                       <td style={{ padding: '1rem' }}>
-                        <span style={{ fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 600 }}>{co.agent_count || 0} sales</span>
+                        <span style={{ fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{co.agent_count || 0} sales</span>
                       </td>
                       <td style={{ padding: '1rem' }}>
                         <span className={`badge ${ST_CLASS[co.status] || 'info'}`}>{ST_LABEL[co.status] || co.status}</span>
@@ -808,7 +806,7 @@ export const CompaniesPage: React.FC = () => {
               },
               defaultFilename: `export_companies_${Date.now()}.csv`,
               onSuccess: () => {
-                addToast('Tải xuống danh sách đối tác thành công!', 'success');
+                addToast('Tải xuống danh sách đối tác thành công', 'success');
               },
             });
           } catch (err: any) {

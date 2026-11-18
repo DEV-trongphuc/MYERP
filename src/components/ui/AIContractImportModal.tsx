@@ -183,23 +183,23 @@ export const AIContractImportModal: React.FC<AIContractImportModalProps> = ({
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           style={{
             background: 'var(--color-surface, #ffffff)',
-            borderRadius: '20px',
+            borderRadius: '16px',
             maxWidth: '680px',
             width: '100%',
             maxHeight: '90vh',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            boxShadow: '0 20px 50px -10px rgba(0, 0, 0, 0.25)',
+            boxShadow: '0 20px 48px -12px rgba(15, 23, 42, 0.25)',
             border: '1px solid var(--color-border-light)'
           }}
           onClick={e => e.stopPropagation()}
         >
-          {/* Header - Ideas Deep Brand Red */}
+          {/* Header - Ideas Brand Red */}
           <div
             style={{
-              padding: '1.15rem 1.5rem',
-              background: 'linear-gradient(135deg, #BD1D2D 0%, #94101e 100%)',
+              padding: '16px 24px',
+              background: '#BD1D2D',
               color: '#ffffff',
               display: 'flex',
               alignItems: 'center',
@@ -211,21 +211,21 @@ export const AIContractImportModal: React.FC<AIContractImportModalProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div
                 style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '10px',
-                  background: 'rgba(255, 255, 255, 0.2)',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  background: 'rgba(255, 255, 255, 0.16)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center'
                 }}
               >
-                <Sparkles size={20} color="#ffffff" />
+                <Sparkles size={18} strokeWidth={1.75} color="#ffffff" />
               </div>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   AI Import Hợp Đồng & Lịch Trình
-                  <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px', borderRadius: '20px', background: 'rgba(255,255,255,0.25)', textTransform: 'uppercase' }}>
+                  <span style={{ fontSize: '0.65rem', fontWeight: 600, padding: '2px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.2)', textTransform: 'uppercase' }}>
                     Auto-Fill SO
                   </span>
                 </h3>
@@ -338,16 +338,16 @@ export const AIContractImportModal: React.FC<AIContractImportModalProps> = ({
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    padding: '5px 12px',
-                    borderRadius: '20px',
+                    gap: '8px',
+                    padding: '4px 12px',
+                    borderRadius: '8px',
                     background: 'rgba(189, 29, 45, 0.08)',
                     fontSize: '0.72rem',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     color: '#BD1D2D'
                   }}
                 >
-                  <Sparkles size={12} />
+                  <Sparkles size={12} strokeWidth={1.75} />
                   <span>Trích xuất tự động thông tin học viên & các đợt thanh toán vào SO</span>
                 </div>
               </div>
@@ -404,9 +404,8 @@ export const AIContractImportModal: React.FC<AIContractImportModalProps> = ({
                       position: 'absolute',
                       left: 0,
                       right: 0,
-                      height: '2.5px',
-                      background: 'linear-gradient(90deg, transparent 0%, #BD1D2D 50%, transparent 100%)',
-                      boxShadow: '0 0 10px #BD1D2D, 0 0 4px #BD1D2D',
+                      height: '2px',
+                      background: '#BD1D2D',
                       zIndex: 10
                     }}
                   />
@@ -491,7 +490,7 @@ export const AIContractImportModal: React.FC<AIContractImportModalProps> = ({
                         {extractedData.programName}
                       </span>
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
                       Tổng: <strong style={{ color: '#BD1D2D', fontSize: '0.85rem' }}>{Number(extractedData.totalAmount || 0).toLocaleString('vi-VN')} đ</strong> • {extractedData.milestones.length} đợt thanh toán
                     </div>
                   </div>
@@ -579,7 +578,7 @@ export const AIContractImportModal: React.FC<AIContractImportModalProps> = ({
                           <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <Calendar size={12} /> {m.expected_pay_date}
                           </span>
-                          <strong style={{ color: 'var(--color-text)', minWidth: '105px', textAlign: 'right' }}>
+                          <strong style={{ color: 'var(--color-text)', minWidth: '105px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                             {Number(m.amount).toLocaleString('vi-VN')} đ
                           </strong>
                         </div>
@@ -605,7 +604,7 @@ export const AIContractImportModal: React.FC<AIContractImportModalProps> = ({
           >
             <button
               type="button"
-              className="btn secondary sm hover-lift"
+              className="btn secondary sm"
               onClick={handleClose}
               disabled={isProcessing}
               style={{ padding: '8px 16px', borderRadius: '8px' }}
@@ -622,19 +621,18 @@ export const AIContractImportModal: React.FC<AIContractImportModalProps> = ({
                   handleClose();
                 }}
                 style={{
-                  padding: '8px 18px',
+                  padding: '8px 16px',
                   borderRadius: '8px',
-                  background: 'linear-gradient(135deg, #BD1D2D 0%, #94101e 100%)',
+                  background: '#BD1D2D',
                   border: 'none',
                   color: '#ffffff',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 4px 12px rgba(189, 29, 45, 0.3)'
+                  gap: '8px'
                 }}
               >
-                <Sparkles size={15} />
+                <Sparkles size={14} strokeWidth={1.75} />
                 <span>Áp dụng vào Đơn bán hàng (SO)</span>
               </button>
             )}

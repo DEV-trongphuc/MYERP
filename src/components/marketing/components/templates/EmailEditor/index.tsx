@@ -993,7 +993,7 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                                 justifyContent: 'center',
                             }}
                         >
-                            <Sparkles className="w-5 h-5 text-white" />
+                            <Sparkles className="w-5 h-5 text-white" strokeWidth={1.75} />
                             {/* Tooltip */}
                             <span
                                 className="absolute right-full mr-3 px-3 py-1.5 rounded-[10px] text-xs font-bold text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 -translate-x-1 group-hover:translate-x-0"
@@ -1188,7 +1188,7 @@ const EmailEditor: React.FC<EmailEditorProps> = ({ template, groups, onSave, onC
                     }, 200);
                     setTimeout(() => {
                         setIsApplyingAI(false);
-                        toast.success('🎉 Email AI đã được áp dụng!', { duration: 2500 });
+                        toast.success('Email AI đã được áp dụng', { duration: 2500 });
                     }, 950);
                 }}
                 currentBlocks={blocks}

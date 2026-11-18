@@ -1016,7 +1016,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                 <DollarSign size={16} />
               </div>
             </div>
-            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.65rem', fontVariantNumeric: 'tabular-nums' }}>
+            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.45rem', fontVariantNumeric: 'tabular-nums' }}>
               {formatVND(summary.spend)}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontSize: '0.74rem', color: '#64748b', fontWeight: 500 }}>
@@ -1045,7 +1045,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                 <Users size={16} />
               </div>
             </div>
-            <div className="stat-value" style={{ fontWeight: 800, color: '#BD1D2D', fontSize: '1.65rem', fontVariantNumeric: 'tabular-nums' }}>
+            <div className="stat-value" style={{ fontWeight: 800, color: '#BD1D2D', fontSize: '1.45rem', fontVariantNumeric: 'tabular-nums' }}>
               {formatNumber(summary.meta_leads)}{' '}
               <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#64748b' }}>
                 Leads ({formatChangeText(summary.leads_change_pct)})
@@ -1077,7 +1077,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                 <Globe size={16} />
               </div>
             </div>
-            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.65rem', fontVariantNumeric: 'tabular-nums' }}>
+            <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.45rem', fontVariantNumeric: 'tabular-nums' }}>
               {formatNumber(summary.reach)}{' '}
               <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#64748b' }}>
                 ({formatChangeText(summary.reach_change_pct)})
@@ -1105,12 +1105,12 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
               <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b', fontSize: '0.73rem' }}>
                 CHUYỂN ĐỔI CRM &amp; DOANH THU
               </span>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Target size={16} />
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.65rem', fontVariantNumeric: 'tabular-nums' }}>
+              <span className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.45rem', fontVariantNumeric: 'tabular-nums' }}>
                 {formatNumber(summary.qualified_3_12_leads)}
               </span>
               <span
@@ -1529,8 +1529,8 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
             <div className="card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
-                    Xu Hướng Chi Tiêu &amp; Kết Quả Theo Ngày
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                    Xu hướng chi tiêu &amp; kết quả theo ngày
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
                     Biến động ngân sách và kết quả quảng cáo theo từng ngày trong kỳ
@@ -1614,21 +1614,37 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                   <ResponsiveContainer width="100%" height={240}>
                     <BarChart data={dailyTrend} margin={{ top: 18, right: 8, left: -18, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                      <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#475569', fontWeight: 600 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#475569', fontWeight: 500 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
                       <YAxis
-                        tick={{ fontSize: 10, fill: '#64748b' }}
+                        tick={{ fontSize: 11, fill: '#64748b' }}
                         axisLine={false}
                         tickLine={false}
                         tickFormatter={(val) => (dailyMetric === 'spend' ? `${Math.round(Number(val) / 1_000_000)}M` : formatNumber(val))}
                       />
                       <Tooltip
-                        contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.75rem', background: '#ffffff' }}
+                        cursor={{ fill: 'rgba(15, 23, 42, 0.04)' }}
+                        contentStyle={{
+                          borderRadius: 8,
+                          border: '1px solid #e2e8f0',
+                          fontSize: '0.75rem',
+                          background: '#ffffff',
+                          boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)',
+                          fontVariantNumeric: 'tabular-nums'
+                        }}
                         formatter={(val: any) => [
                           dailyMetric === 'spend' ? formatVND(val) : formatNumber(val),
-                          dailyMetric.toUpperCase()
+                          dailyMetric === 'spend'
+                            ? 'Chi phí'
+                            : dailyMetric === 'leads'
+                            ? 'Leads'
+                            : dailyMetric === 'reach'
+                            ? 'Tiếp cận'
+                            : dailyMetric === 'messages'
+                            ? 'Tin nhắn'
+                            : 'Lượt nhấp'
                         ]}
                       />
-                      <Bar dataKey={dailyMetric} fill="#C6333D" radius={[5, 5, 2, 2]} maxBarSize={24}>
+                      <Bar dataKey={dailyMetric} fill="#C6333D" radius={[4, 4, 0, 0]} maxBarSize={24}>
                         {dailyTrend.map((entry: any, index: number) => {
                           const maxVal = Math.max(...dailyTrend.map((d: any) => Number(d[dailyMetric] || 0)), 1);
                           const isPeak = Number(entry[dailyMetric] || 0) >= maxVal * 0.85;
@@ -1648,11 +1664,11 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
             <div className="card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
-                    Phân Bổ Chi Tiêu &amp; Kết Quả Theo Mục Tiêu (META GOAL)
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                    Phân bổ chi tiêu theo mục tiêu quảng cáo
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
-                    Tổng hợp theo đúng `optimization_goal` của từng AdSet (`QUALITY LEAD`, `REACH`, ...)
+                    Tổng hợp theo mục tiêu tối ưu hóa của từng AdSet (Quality Lead, Reach...)
                   </p>
                 </div>
                 <span style={{ padding: '4px 10px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '0.73rem', fontWeight: 700, color: '#0f172a' }}>
@@ -1671,22 +1687,30 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                     <ResponsiveContainer width="100%" height={210}>
                       <BarChart data={metaGoalChart} margin={{ top: 20, right: 10, left: -15, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                        <XAxis dataKey="display_name" tick={{ fontSize: 9.5, fill: '#475569', fontWeight: 700 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
+                        <XAxis dataKey="display_name" tick={{ fontSize: 11, fill: '#475569', fontWeight: 500 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
                         <YAxis
-                          tick={{ fontSize: 9.5, fill: '#64748b' }}
+                          tick={{ fontSize: 11, fill: '#64748b' }}
                           axisLine={false}
                           tickLine={false}
                           tickFormatter={(v) => `${Math.round(Number(v) / 1_000_000)}M`}
                         />
                         <Tooltip
-                          contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.75rem', background: '#ffffff' }}
-                          formatter={(val: any) => [formatVND(val), 'Chi phí (Spend)']}
+                          cursor={{ fill: 'rgba(15, 23, 42, 0.04)' }}
+                          contentStyle={{
+                            borderRadius: 8,
+                            border: '1px solid #e2e8f0',
+                            fontSize: '0.75rem',
+                            background: '#ffffff',
+                            boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)',
+                            fontVariantNumeric: 'tabular-nums'
+                          }}
+                          formatter={(val: any) => [formatVND(val), 'Chi phí']}
                         />
-                        <Bar dataKey="spend" barSize={36} radius={[6, 6, 2, 2]}>
+                        <Bar dataKey="spend" barSize={36} radius={[4, 4, 0, 0]}>
                           {metaGoalChart.map((entry: any, idx: number) => (
                             <Cell key={`goal-${idx}`} fill={idx === 0 ? '#C6333D' : '#334155'} />
                           ))}
-                          <LabelList dataKey="shortSpend" position="top" style={{ fontSize: '10px', fontWeight: 800, fill: '#0f172a' }} />
+                          <LabelList dataKey="shortSpend" position="top" style={{ fontSize: '10.5px', fontWeight: 600, fill: '#334155', fontVariantNumeric: 'tabular-nums' }} />
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
@@ -1731,8 +1755,8 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
             <div className="card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
-                    Chi Tiêu Theo Nền Tảng Quảng Cáo (SPENT PLATFORM)
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                    Chi tiêu theo nền tảng quảng cáo
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
                     Phân bổ ngân sách thực tế giữa Facebook, Instagram &amp; Audience Network / Threads
@@ -1749,7 +1773,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                     background: '#f8fafc',
                     color: '#0f172a',
                     fontSize: '0.74rem',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -1757,7 +1781,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                   }}
                 >
                   <BarChart3 size={13} style={{ color: '#BD1D2D' }} />
-                  <span>Details ({placementPositions.length} vị trí)</span>
+                  <span>Chi tiết ({placementPositions.length} vị trí)</span>
                 </button>
               </div>
 
@@ -1850,11 +1874,11 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
             <div className="card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
-                    Phân Bổ Chi Tiêu Theo Độ Tuổi &amp; Giới Tính (AGE - GENDER)
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                    Phân bổ chi tiêu theo độ tuổi &amp; giới tính
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
-                    Đối chiếu ngân sách quảng cáo theo nhóm tuổi (`18-24` đến `65+`) và giới tính Nam / Nữ
+                    Đối chiếu ngân sách quảng cáo theo nhóm tuổi (18–24 đến 65+) và giới tính Nam / Nữ
                   </p>
                 </div>
                 <div
@@ -1883,7 +1907,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                       cursor: 'pointer'
                     }}
                   >
-                    Age &amp; Gender
+                    Tuổi &amp; giới tính
                   </button>
                   <button
                     type="button"
@@ -1901,7 +1925,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                       cursor: 'pointer'
                     }}
                   >
-                    Age Only
+                    Chỉ độ tuổi
                   </button>
                 </div>
               </div>
@@ -1915,22 +1939,30 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                   <ResponsiveContainer width="100%" height={225}>
                     <BarChart data={ageGenderBreakdown} margin={{ top: 18, right: 10, left: -15, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                      <XAxis dataKey="age" tick={{ fontSize: 10.5, fill: '#475569', fontWeight: 700 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
+                      <XAxis dataKey="age" tick={{ fontSize: 11, fill: '#475569', fontWeight: 500 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
                       <YAxis
-                        tick={{ fontSize: 10, fill: '#64748b' }}
+                        tick={{ fontSize: 11, fill: '#64748b' }}
                         axisLine={false}
                         tickLine={false}
                         tickFormatter={(v) => `${Math.round(Number(v) / 1_000_000)}M`}
                       />
                       <Tooltip
-                        contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.75rem', background: '#ffffff' }}
+                        cursor={{ fill: 'rgba(15, 23, 42, 0.04)' }}
+                        contentStyle={{
+                          borderRadius: 8,
+                          border: '1px solid #e2e8f0',
+                          fontSize: '0.75rem',
+                          background: '#ffffff',
+                          boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)',
+                          fontVariantNumeric: 'tabular-nums'
+                        }}
                         formatter={(val: any, name: any) => [
                           formatVND(val),
-                          name === 'male' ? 'Nam (Male)' : name === 'female' ? 'Nữ (Female)' : 'Tổng (Total)'
+                          name === 'male' ? 'Nam' : name === 'female' ? 'Nữ' : 'Tổng chi phí'
                         ]}
                       />
                       {ageOnlyMode ? (
-                        <Bar dataKey="total" fill="#C6333D" barSize={28} radius={[6, 6, 2, 2]}>
+                        <Bar dataKey="total" fill="#C6333D" barSize={28} radius={[4, 4, 0, 0]}>
                           {ageGenderBreakdown.map((entry: any, index: number) => {
                             const maxT = Math.max(...ageGenderBreakdown.map((x: any) => Number(x.total || 0)), 1);
                             return <Cell key={`ag-${index}`} fill={Number(entry.total || 0) >= maxT ? '#C6333D' : '#334155'} />;
@@ -1938,8 +1970,8 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                         </Bar>
                       ) : (
                         <>
-                          <Bar dataKey="male" fill="#C6333D" barSize={16} radius={[5, 5, 2, 2]} />
-                          <Bar dataKey="female" fill="#334155" barSize={16} radius={[5, 5, 2, 2]} />
+                          <Bar dataKey="male" fill="#C6333D" barSize={16} radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="female" fill="#334155" barSize={16} radius={[4, 4, 0, 0]} />
                         </>
                       )}
                     </BarChart>
@@ -1952,8 +1984,8 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
             <div className="card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
-                    Top Tỉnh / Thành Phố Chi Tiêu Cao Nhất (REGION SPENT)
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                    Top tỉnh / thành phố chi tiêu cao nhất
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
                     Phân bổ ngân sách &amp; kết quả theo khu vực địa lý thực tế từ Meta Ads
@@ -1975,22 +2007,30 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                       <XAxis
                         dataKey="region"
-                        tick={{ fontSize: 9.5, fill: '#475569', fontWeight: 700 }}
+                        tick={{ fontSize: 11, fill: '#475569', fontWeight: 500 }}
                         axisLine={{ stroke: '#e2e8f0' }}
                         tickLine={false}
                         tickFormatter={(v) => (String(v).length > 14 ? String(v).slice(0, 13) + '…' : String(v))}
                       />
                       <YAxis
-                        tick={{ fontSize: 10, fill: '#64748b' }}
+                        tick={{ fontSize: 11, fill: '#64748b' }}
                         axisLine={false}
                         tickLine={false}
                         tickFormatter={(v) => `${Math.round(Number(v) / 1_000_000)}M`}
                       />
                       <Tooltip
-                        contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.75rem', background: '#ffffff' }}
-                        formatter={(val: any) => [formatVND(val), 'Spend']}
+                        cursor={{ fill: 'rgba(15, 23, 42, 0.04)' }}
+                        contentStyle={{
+                          borderRadius: 8,
+                          border: '1px solid #e2e8f0',
+                          fontSize: '0.75rem',
+                          background: '#ffffff',
+                          boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)',
+                          fontVariantNumeric: 'tabular-nums'
+                        }}
+                        formatter={(val: any) => [formatVND(val), 'Chi phí']}
                       />
-                      <Bar dataKey="spend" barSize={26} radius={[6, 6, 2, 2]}>
+                      <Bar dataKey="spend" barSize={26} radius={[4, 4, 0, 0]}>
                         {regionBreakdown.map((_entry: any, index: number) => (
                           <Cell key={`reg-${index}`} fill={index === 0 ? '#C6333D' : '#334155'} />
                         ))}
@@ -2138,11 +2178,11 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
             <div className="card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
-                    Phễu Chuyển Đổi Từ Meta Leads Đến Giai Đoạn Pipeline CRM
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                    Phễu chuyển đổi từ Meta Leads đến Pipeline CRM
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
-                    Theo dõi tỷ lệ chuyển đổi từ Kết quả Lead trên Meta sang Lead CRM, Qualified &amp; Won
+                    Theo dõi tỷ lệ chuyển đổi từ kết quả Lead trên Meta sang Lead CRM, Qualified &amp; Won
                   </p>
                 </div>
                 <span
@@ -2164,20 +2204,28 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={funnelStages} margin={{ top: 18, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis dataKey="stage" tick={{ fontSize: 10, fill: '#475569', fontWeight: 600 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="stage" tick={{ fontSize: 11, fill: '#475569', fontWeight: 500 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                     <Tooltip
-                      contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.75rem', background: '#ffffff' }}
+                      cursor={{ fill: 'rgba(15, 23, 42, 0.04)' }}
+                      contentStyle={{
+                        borderRadius: 8,
+                        border: '1px solid #e2e8f0',
+                        fontSize: '0.75rem',
+                        background: '#ffffff',
+                        boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)',
+                        fontVariantNumeric: 'tabular-nums'
+                      }}
                       formatter={(val: any) => [`${val} leads`, 'Số lượng']}
                     />
-                    <Bar dataKey="count" barSize={28} radius={[6, 6, 2, 2]}>
+                    <Bar dataKey="count" barSize={28} radius={[4, 4, 0, 0]}>
                       {funnelStages.map((_entry: any, index: number) => (
                         <Cell
                           key={`cell-${index}`}
                           fill={index === funnelStages.length - 1 ? '#BD1D2D' : index === 0 ? '#C6333D' : '#334155'}
                         />
                       ))}
-                      <LabelList dataKey="count" position="top" style={{ fontSize: '10.5px', fontWeight: 800, fill: '#0f172a' }} />
+                      <LabelList dataKey="count" position="top" style={{ fontSize: '11px', fontWeight: 600, fill: '#334155', fontVariantNumeric: 'tabular-nums' }} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -2198,7 +2246,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                     <Users size={16} />
                   </div>
                 </div>
-                <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.7rem', fontVariantNumeric: 'tabular-nums' }}>
+                <div className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.45rem', fontVariantNumeric: 'tabular-nums' }}>
                   {formatNumber(summary.total_leads)}{' '}
                   <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#64748b' }}>
                     Lead CRM
@@ -2231,7 +2279,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <span className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.7rem', fontVariantNumeric: 'tabular-nums' }}>
+                  <span className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.45rem', fontVariantNumeric: 'tabular-nums' }}>
                     {formatNumber(summary.new_1_2_leads)}
                   </span>
                   <span
@@ -2263,19 +2311,58 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                 </div>
               </div>
 
-              {/* Card 3: Qualified từ 3 - 12 (Pipeline 3-12) — BADGE MÀU ĐỎ */}
+              {/* Card 3: Qualified từ 3 - 12 (Pipeline 3-12) */}
               <div className="stat-card" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b', fontSize: '0.73rem' }}>
                     QUALIFIED (PIPELINE 3–12)
                   </span>
-                  <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Target size={16} />
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <span className="stat-value" style={{ fontWeight: 800, color: '#BD1D2D', fontSize: '1.7rem', fontVariantNumeric: 'tabular-nums' }}>
+                  <span className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.45rem', fontVariantNumeric: 'tabular-nums' }}>
                     {formatNumber(summary.qualified_3_12_leads)}
+                  </span>
+                  <span
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      background: '#f1f5f9',
+                      color: '#334155',
+                      fontSize: '0.74rem',
+                      fontWeight: 700
+                    }}
+                  >
+                    Qualified ({summary.qualified_3_12_pct}%)
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontSize: '0.74rem', color: '#64748b', fontWeight: 500 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#334155', flexShrink: 0 }} />
+                    <span>Giai đoạn: <strong style={{ color: '#0f172a' }}>Pipeline 03 → 12 (Đang tư vấn)</strong></span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#64748b', flexShrink: 0 }} />
+                    <span>Chi phí / Qualified (CPQ): <strong style={{ color: '#0f172a' }}>{formatShortMoney(summary.cpq_3_12 || summary.cpq)}</strong></span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 4: Win 13 - 14 (Pipeline 13-14) — BRAND CRIMSON HIGHLIGHT */}
+              <div className="stat-card" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b', fontSize: '0.73rem' }}>
+                    WIN / HỌC VIÊN (PIPELINE 13–14)
+                  </span>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <TrendingUp size={16} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span className="stat-value" style={{ fontWeight: 800, color: '#BD1D2D', fontSize: '1.45rem', fontVariantNumeric: 'tabular-nums' }}>
+                    {formatNumber(summary.won_leads)}
                   </span>
                   <span
                     style={{
@@ -2284,46 +2371,7 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                       background: '#fef2f2',
                       color: '#BD1D2D',
                       fontSize: '0.74rem',
-                      fontWeight: 800
-                    }}
-                  >
-                    Qualified ({summary.qualified_3_12_pct}%)
-                  </span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontSize: '0.74rem', color: '#64748b', fontWeight: 500 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#BD1D2D', flexShrink: 0 }} />
-                    <span>Giai đoạn: <strong style={{ color: '#0f172a' }}>Pipeline 03 → 12 (Đang tư vấn)</strong></span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#e11d48', flexShrink: 0 }} />
-                    <span>Chi phí / Qualified (CPQ): <strong style={{ color: '#0f172a' }}>{formatShortMoney(summary.cpq_3_12 || summary.cpq)}</strong></span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Card 4: Win 13 - 14 (Pipeline 13-14) — BADGE HỌC VIÊN MÀU HỒNG */}
-              <div className="stat-card" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: '#64748b', fontSize: '0.73rem' }}>
-                    WIN / HỌC VIÊN (PIPELINE 13–14)
-                  </span>
-                  <div style={{ width: 32, height: 32, borderRadius: 8, background: '#fdf2f8', color: '#db2777', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <TrendingUp size={16} />
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <span className="stat-value" style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.7rem', fontVariantNumeric: 'tabular-nums' }}>
-                    {formatNumber(summary.won_leads)}
-                  </span>
-                  <span
-                    style={{
-                      padding: '3px 8px',
-                      borderRadius: 6,
-                      background: '#fdf2f8',
-                      color: '#db2777',
-                      fontSize: '0.74rem',
-                      fontWeight: 800
+                      fontWeight: 700
                     }}
                   >
                     Học viên / Win ({summary.won_pct}%)
@@ -2331,15 +2379,15 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontSize: '0.74rem', color: '#64748b', fontWeight: 500 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f472b6', flexShrink: 0 }} />
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#64748b', flexShrink: 0 }} />
                     <span>13 - Chờ đóng phí: <strong style={{ color: '#0f172a' }}>{formatNumber(summary.stage_13_leads)} lead</strong></span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ec4899', flexShrink: 0 }} />
-                    <span>14 - Học viên chính thức: <strong style={{ color: '#db2777' }}>{formatNumber(summary.stage_14_leads)} học viên</strong></span>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#BD1D2D', flexShrink: 0 }} />
+                    <span>14 - Học viên chính thức: <strong style={{ color: '#BD1D2D' }}>{formatNumber(summary.stage_14_leads)} học viên</strong></span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#db2777', flexShrink: 0 }} />
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#991B1B', flexShrink: 0 }} />
                     <span>Doanh thu: <strong style={{ color: '#0f172a' }}>{formatShortMoney(summary.actual_revenue)}</strong> • CPW: <strong style={{ color: '#0f172a' }}>{formatShortMoney(summary.cpw)}</strong></span>
                   </div>
                 </div>
@@ -2363,33 +2411,33 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', fontSize: '0.75rem', color: '#475569' }}>
-                  <span style={{ fontWeight: 800, color: '#0f172a' }}>Tỷ trọng Pipeline Lead:</span>
+                  <span style={{ fontWeight: 700, color: '#0f172a' }}>Tỷ trọng Pipeline Lead:</span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#64748b' }} />
+                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#94a3b8' }} />
                     <span>New (1–2):</span>
-                    <span style={{ padding: '2px 8px', borderRadius: 6, background: '#f1f5f9', color: '#334155', fontWeight: 800, fontSize: '0.73rem' }}>
+                    <span style={{ padding: '2px 8px', borderRadius: 6, background: '#f1f5f9', color: '#334155', fontWeight: 700, fontSize: '0.73rem', fontVariantNumeric: 'tabular-nums' }}>
                       {summary.new_1_2_leads} ({summary.new_1_2_pct}%)
                     </span>
                   </span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#C6333D' }} />
+                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#334155' }} />
                     <span>Qualified (3–12):</span>
-                    <span style={{ padding: '2px 8px', borderRadius: 6, background: '#fef2f2', color: '#BD1D2D', fontWeight: 800, fontSize: '0.73rem' }}>
+                    <span style={{ padding: '2px 8px', borderRadius: 6, background: '#f1f5f9', color: '#334155', fontWeight: 700, fontSize: '0.73rem', fontVariantNumeric: 'tabular-nums' }}>
                       {summary.qualified_3_12_leads} ({summary.qualified_3_12_pct}%)
                     </span>
                   </span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#ec4899' }} />
+                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#BD1D2D' }} />
                     <span>Học viên / Win (13–14):</span>
-                    <span style={{ padding: '2px 8px', borderRadius: 6, background: '#fdf2f8', color: '#db2777', fontWeight: 800, fontSize: '0.73rem' }}>
+                    <span style={{ padding: '2px 8px', borderRadius: 6, background: '#fef2f2', color: '#BD1D2D', fontWeight: 700, fontSize: '0.73rem', fontVariantNumeric: 'tabular-nums' }}>
                       {summary.won_leads} ({summary.won_pct}%)
                     </span>
                   </span>
                 </div>
                 <div style={{ flex: '1 1 260px', maxWidth: 420, height: 8, borderRadius: 999, background: '#f1f5f9', overflow: 'hidden', display: 'flex' }}>
                   <div style={{ width: `${summary.new_1_2_pct}%`, background: '#94a3b8', height: '100%' }} title={`New (1-2): ${summary.new_1_2_leads} (${summary.new_1_2_pct}%)`} />
-                  <div style={{ width: `${summary.qualified_3_12_pct}%`, background: '#C6333D', height: '100%' }} title={`Qualified (3-12): ${summary.qualified_3_12_leads} (${summary.qualified_3_12_pct}%)`} />
-                  <div style={{ width: `${summary.won_pct}%`, background: '#ec4899', height: '100%' }} title={`Học viên / Win (13-14): ${summary.won_leads} (${summary.won_pct}%)`} />
+                  <div style={{ width: `${summary.qualified_3_12_pct}%`, background: '#334155', height: '100%' }} title={`Qualified (3-12): ${summary.qualified_3_12_leads} (${summary.qualified_3_12_pct}%)`} />
+                  <div style={{ width: `${summary.won_pct}%`, background: '#BD1D2D', height: '100%' }} title={`Học viên / Win (13-14): ${summary.won_leads} (${summary.won_pct}%)`} />
                 </div>
               </div>
             )}
@@ -3503,8 +3551,8 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
             <div className="card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
-                    Hiệu Quả Theo Nhóm Quảng Cáo (AdSet)
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                    Hiệu quả theo nhóm quảng cáo (AdSet)
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
                     So sánh hiệu quả thu hút Lead trên từng nhóm đối tượng quảng cáo
@@ -3524,21 +3572,29 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                       <XAxis
                         dataKey="name"
-                        tick={{ fontSize: 9.5, fill: '#475569', fontWeight: 600 }}
+                        tick={{ fontSize: 11, fill: '#475569', fontWeight: 500 }}
                         axisLine={{ stroke: '#e2e8f0' }}
                         tickLine={false}
                         tickFormatter={(val) => (String(val).length > 18 ? String(val).slice(0, 18) + '…' : String(val))}
                       />
-                      <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                       <Tooltip
-                        contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.75rem', background: '#ffffff' }}
+                        cursor={{ fill: 'rgba(15, 23, 42, 0.04)' }}
+                        contentStyle={{
+                          borderRadius: 8,
+                          border: '1px solid #e2e8f0',
+                          fontSize: '0.75rem',
+                          background: '#ffffff',
+                          boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)',
+                          fontVariantNumeric: 'tabular-nums'
+                        }}
                         formatter={(val: any, _name: any, props: any) => [
-                          `${val} leads (Spend: ${formatVND(props?.payload?.spend || 0)})`,
+                          `${val} leads (Chi phí: ${formatVND(props?.payload?.spend || 0)})`,
                           'Kết quả'
                         ]}
                       />
-                      <Bar dataKey="count" fill="#C6333D" barSize={26} radius={[6, 6, 2, 2]}>
-                        <LabelList dataKey="count" position="top" style={{ fontSize: '10.5px', fontWeight: 800, fill: '#0f172a' }} />
+                      <Bar dataKey="count" fill="#C6333D" barSize={26} radius={[4, 4, 0, 0]}>
+                        <LabelList dataKey="count" position="top" style={{ fontSize: '11px', fontWeight: 600, fill: '#334155', fontVariantNumeric: 'tabular-nums' }} />
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
@@ -3553,8 +3609,8 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
             <div className="card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
-                    Phân Tích Câu Trả Lời Khảo Sát Instant Form
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                    Phân tích câu trả lời khảo sát Instant Form
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
                     Chân dung học viên tổng hợp trực tiếp từ câu trả lời biểu mẫu đăng ký Meta
@@ -3709,8 +3765,8 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
               <div className="card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
-                    <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
-                      Phễu Giữ Chân Người Xem Video (Video Retention Funnel)
+                    <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>
+                      Phễu giữ chân người xem video
                     </h3>
                     <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
                       Tỷ lệ xem video từ 3 giây → 25% → 50% → 75% → 95% → ThruPlay → 100%
@@ -3748,11 +3804,11 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
               <div className="card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
-                    <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
-                      Phân Bổ Chi Tiêu Theo Thiết Bị (Device Breakdown)
+                    <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>
+                      Phân bổ chi tiêu theo thiết bị
                     </h3>
                     <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
-                      Thiết bị người dùng tiếp cận quảng cáo (`impression_device`)
+                      Thiết bị người dùng tiếp cận quảng cáo trên Meta
                     </p>
                   </div>
                   <Smartphone size={16} style={{ color: '#BD1D2D' }} />
@@ -3795,8 +3851,8 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
             <div className="card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
-                    Thống Kê Theo Biểu Mẫu Instant Form (`form_name`)
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>
+                    Thống kê theo biểu mẫu Instant Form
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
                     Số lượng Lead và chuyển đổi thực tế từ từng biểu mẫu quảng cáo Meta
@@ -3840,8 +3896,8 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#C6333D' }} />
                         Qualified: {f.qualified_3_12 ?? f.qualified ?? 0}
                       </span>
-                      <span style={{ padding: '2px 7px', borderRadius: 5, background: '#fdf2f8', color: '#db2777', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ec4899' }} />
+                      <span style={{ padding: '2px 7px', borderRadius: 5, background: '#fef2f2', color: '#991B1B', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#BD1D2D' }} />
                         Học viên: {f.won || 0}
                       </span>
                     </div>
@@ -3855,8 +3911,8 @@ export const MetaAdsAttributionDeck: React.FC<MetaAdsAttributionDeckProps> = ({
           <div className="card" style={{ padding: '1.35rem', borderRadius: 16, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
-                  Danh Sách Chiến Dịch, Nhóm Quảng Cáo &amp; Bài Quảng Cáo Toàn Phễu (Hierarchical Funnel)
+                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                  Danh sách chiến dịch, nhóm quảng cáo &amp; bài quảng cáo toàn phễu
                 </h3>
                 <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
                   Kết hợp trực tiếp Chi phí, Kết quả Meta với Phễu CRM 3 tầng: New (1–2) → Qualified (3–12) → Học viên / Win (13–14)

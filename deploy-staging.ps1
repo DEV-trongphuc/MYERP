@@ -25,10 +25,10 @@ if ([string]::IsNullOrWhiteSpace($RemoteDir) -or $RemoteDir.StartsWith("-")) {
     $RemoteDir = "myerp-stagging.ideas.edu.vn"
 }
 
-$sshKey = "C:\Users\LENOVO\.ssh\id_ed25519"
-$sshUser = "vhvxoigh"
-$sshHost = "103.110.87.26"
-$sshPort = "2210"
+$sshKey = if ($env:SSH_KEY) { $env:SSH_KEY } else { Join-Path $HOME ".ssh\id_ed25519" }
+$sshUser = if ($env:SSH_USER) { $env:SSH_USER } else { "vhvxoigh" }
+$sshHost = if ($env:STAGING_SSH_HOST) { $env:STAGING_SSH_HOST } else { "103.110.87.26" }
+$sshPort = if ($env:SSH_PORT) { $env:SSH_PORT } else { "2210" }
 
 # Fast-path: Sync Schema Only (No build, no archive upload)
 if ($SyncSchemaOnly) {

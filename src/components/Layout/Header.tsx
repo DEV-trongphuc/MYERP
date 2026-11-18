@@ -64,10 +64,10 @@ const getNotifMeta = (notif: any) => {
     return {
       icon: '🔄',
       badge: 'CHUYỂN GIAO LEAD',
-      badgeBg: '#f3e8ff',
-      badgeColor: '#7e22ce',
-      borderColor: '#e9d5ff',
-      leftPill: '#a855f7',
+      badgeBg: '#F1F5F9',
+      badgeColor: '#334155',
+      borderColor: '#CBD5E1',
+      leftPill: '#475569',
       ctaText: 'Mở chi tiết Lead →'
     };
   }
@@ -1702,15 +1702,15 @@ export const Header = ({
       position: 'relative',
       height: 66,
       background: isWs 
-        ? 'linear-gradient(180deg, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0.42) 100%)'
+        ? 'linear-gradient(180deg, rgba(15, 23, 42, 0.78) 0%, rgba(15, 23, 42, 0.62) 100%)'
         : 'var(--color-surface)',
-      backdropFilter: isWs ? 'blur(24px) saturate(180%) contrast(110%)' : 'none',
-      WebkitBackdropFilter: isWs ? 'blur(24px) saturate(180%) contrast(110%)' : 'none',
+      backdropFilter: isWs ? 'blur(20px) saturate(160%)' : 'none',
+      WebkitBackdropFilter: isWs ? 'blur(20px) saturate(160%)' : 'none',
       borderBottom: isWs 
-        ? '1px solid rgba(255, 255, 255, 0.14)'
+        ? '1px solid rgba(255, 255, 255, 0.16)'
         : '1px solid var(--color-border)',
       boxShadow: isWs 
-        ? '0 8px 32px 0 rgba(0, 0, 0, 0.3)' 
+        ? '0 4px 20px 0 rgba(15, 23, 42, 0.25)' 
         : 'none',
       transition: 'background 0.3s cubic-bezier(0.25, 0.1, 0.25, 1), backdrop-filter 0.3s ease, -webkit-backdrop-filter 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease',
       display: 'flex',
@@ -1786,31 +1786,31 @@ export const Header = ({
             justifyContent: isMobile ? 'center' : 'flex-start',
             gap: '0.5rem',
             background: isWs
-              ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.06) 100%)'
+              ? 'rgba(15, 23, 42, 0.56)'
               : 'var(--color-bg)',
             border: isWs
-              ? '1px solid rgba(255, 255, 255, 0.28)'
+              ? '1px solid rgba(255, 255, 255, 0.22)'
               : '1px solid var(--color-border)',
             borderRadius: 9999,
             padding: isMobile ? '0' : '0.4rem 0.875rem',
-            color: isWs ? '#ffffff' : 'var(--color-text-light)',
+            color: isWs ? '#f8fafc' : 'var(--color-text-light)',
             fontSize: '0.875rem',
             cursor: 'pointer',
-            transition: 'all 0.2s ease',
+            transition: 'background-color 0.2s ease, border-color 0.2s ease',
             width: isMobile ? 36 : 320,
             height: isMobile ? 36 : undefined,
             maxWidth: '100%',
             flexShrink: 0,
-            backdropFilter: isWs ? 'blur(10px)' : 'none',
-            WebkitBackdropFilter: isWs ? 'blur(10px)' : 'none',
-            boxShadow: isWs ? '0 2px 10px rgba(0, 0, 0, 0.25)' : 'none',
-            textShadow: isWs ? '0 1px 3px rgba(0, 0, 0, 0.8)' : 'none'
+            backdropFilter: isWs ? 'blur(12px)' : 'none',
+            WebkitBackdropFilter: isWs ? 'blur(12px)' : 'none',
+            boxShadow: isWs ? 'inset 0 1px 0 rgba(255, 255, 255, 0.06)' : 'none',
+            textShadow: 'none'
           }} 
           className="responsive-search-box"
         >
-          <Search size={16} style={{ color: isWs ? '#ffffff' : 'currentColor', filter: isWs ? 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))' : 'none', flexShrink: 0 }} />
+          <Search size={16} style={{ color: isWs ? '#f8fafc' : 'currentColor', flexShrink: 0 }} />
           {!isMobile && (
-            <span style={{ color: isWs ? '#ffffff' : 'inherit', textShadow: isWs ? '0 1px 3px rgba(0, 0, 0, 0.8)' : 'none', fontWeight: isWs ? 500 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span style={{ color: isWs ? '#f8fafc' : 'inherit', fontWeight: isWs ? 500 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {t("Tìm kiếm toàn hệ thống...")}
             </span>
           )}
@@ -1820,10 +1820,9 @@ export const Header = ({
               display: 'flex',
               alignItems: 'center',
               gap: 2,
-              background: isWs ? 'rgba(255, 255, 255, 0.18)' : 'var(--color-border)',
-              border: isWs ? '1px solid rgba(255, 255, 255, 0.25)' : 'none',
-              color: isWs ? '#ffffff' : 'var(--color-text-muted)',
-              textShadow: isWs ? '0 1px 2px rgba(0, 0, 0, 0.8)' : 'none',
+              background: isWs ? 'rgba(255, 255, 255, 0.14)' : 'var(--color-border)',
+              border: isWs ? '1px solid rgba(255, 255, 255, 0.22)' : 'none',
+              color: isWs ? '#f1f5f9' : 'var(--color-text-muted)',
               padding: '1px 6px',
               borderRadius: 4,
               fontSize: '0.7rem'
@@ -1869,16 +1868,15 @@ export const Header = ({
       <div className="header-actions-right" style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.35rem' : '0.875rem' }}>
         {isDemo && (
           <div className="responsive-hide-mobile" style={{
-            background: 'linear-gradient(to right, #f59e0b, #d97706)',
+            background: '#D97706',
             color: 'white',
             padding: '4px 10px',
-            borderRadius: 20,
+            borderRadius: 6,
             fontSize: '0.7rem',
             fontWeight: 700,
             display: 'flex',
             alignItems: 'center',
-            gap: 4,
-            boxShadow: '0 2px 8px rgba(217, 119, 6, 0.2)'
+            gap: 4
           }}>
             DEMO MODE
           </div>
@@ -1904,22 +1902,21 @@ export const Header = ({
                     style={{ 
                       display: 'flex', 
                       alignItems: 'center', 
-                      gap: '5px', 
-                      background: 'rgba(139, 92, 246, 0.1)', 
-                      border: '1px solid rgba(139, 92, 246, 0.3)', 
-                      color: '#7c3aed', 
+                      gap: '6px', 
+                      background: 'rgba(189, 29, 45, 0.08)', 
+                      border: '1px solid rgba(189, 29, 45, 0.25)', 
+                      color: '#BD1D2D', 
                       borderRadius: '8px', 
-                      padding: '4px 10px', 
+                      padding: '4px 12px', 
                       height: '36px', 
                       fontSize: '0.72rem', 
-                      fontWeight: 700, 
+                      fontWeight: 600, 
                       whiteSpace: 'nowrap', 
-                      cursor: 'pointer',
-                      boxShadow: '0 2px 8px rgba(124, 58, 237, 0.12)'
+                      cursor: 'pointer'
                     }}
                     title={t('Đã quá giờ tan ca hôm nay - Click để tạo phiếu Cập nhật công')}
                   >
-                    <FileText size={13} color="#7c3aed" />
+                    <FileText size={13} color="#BD1D2D" strokeWidth={1.75} />
                     <span>{t('Cập nhật công hôm nay')}</span>
                   </div>
                 );
@@ -2096,6 +2093,7 @@ export const Header = ({
                 color: 'white',
                 fontSize: '10px',
                 fontWeight: 700,
+                fontVariantNumeric: 'tabular-nums',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -2125,7 +2123,7 @@ export const Header = ({
             border: 'none',
             background: 'none',
             cursor: 'pointer',
-            transition: 'all 0.2s',
+            transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
             position: 'relative',
             outline: 'none',
             filter: isWs ? 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))' : 'none'
@@ -2153,6 +2151,7 @@ export const Header = ({
               color: 'white',
               fontSize: '10px',
               fontWeight: 700,
+              fontVariantNumeric: 'tabular-nums',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -2230,6 +2229,7 @@ export const Header = ({
               color: 'white',
               fontSize: '10px',
               fontWeight: 700,
+              fontVariantNumeric: 'tabular-nums',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -2708,65 +2708,65 @@ export const Header = ({
           const getItemColor = (itemName: string) => {
             const lowercase = itemName.toLowerCase();
             
-            // 1. Exact string matches
-            if (lowercase === 'dashboard') return { bg: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: '#ffffff' };
-            if (lowercase === 'bàn làm việc') return { bg: 'linear-gradient(135deg, #10b981, #047857)', color: '#ffffff' };
-            if (lowercase === 'chấm công' || lowercase === 'quản lý chấm công' || lowercase === 'quản lý công') return { bg: 'linear-gradient(135deg, #ff7a00, #d05300)', color: '#ffffff' };
-            if (lowercase === 'báo cáo') return { bg: 'linear-gradient(135deg, #8b5cf6, #5b21b6)', color: '#ffffff' };
-            if (lowercase === 'tiềm năng' || lowercase === 'khách hàng') return { bg: 'linear-gradient(135deg, #f43f5e, #be123c)', color: '#ffffff' };
-            if (lowercase === 'pipeline') return { bg: 'linear-gradient(135deg, #10b981, #047857)', color: '#ffffff' };
-            if (lowercase === 'nhật ký data') return { bg: 'linear-gradient(135deg, #0ea5e9, #0284c7)', color: '#ffffff' };
-            if (lowercase === 'thanh toán') return { bg: 'linear-gradient(135deg, #0d9488, #115e59)', color: '#ffffff' };
-            if (lowercase === 'chi phí chi tiêu' || lowercase === 'purchase order') return { bg: 'linear-gradient(135deg, #10b981, #047857)', color: '#ffffff' };
-            if (lowercase === 'quy trình' || lowercase === 'quy trình phê duyệt' || lowercase === 'phê duyệt') return { bg: 'linear-gradient(135deg, #dc2626, #991b1b)', color: '#ffffff' };
-            if (lowercase === 'sales order') return { bg: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#ffffff' };
-            if (lowercase === 'nhà cung cấp') return { bg: 'linear-gradient(135deg, #0ea5e9, #0284c7)', color: '#ffffff' };
-            if (lowercase === 'đối tác kinh doanh' || lowercase === 'đối tác') return { bg: 'linear-gradient(135deg, #8b5cf6, #5b21b6)', color: '#ffffff' };
-            if (lowercase === 'chương trình') return { bg: 'linear-gradient(135deg, #06b6d4, #0891b2)', color: '#ffffff' };
-            if (lowercase === 'tài liệu') return { bg: 'linear-gradient(135deg, #eab308, #a16207)', color: '#ffffff' };
-            if (lowercase === 'chiến dịch') return { bg: 'linear-gradient(135deg, #f43f5e, #be123c)', color: '#ffffff' };
-            if (lowercase === 'tài khoản cá nhân') return { bg: 'linear-gradient(135deg, #64748b, #475569)', color: '#ffffff' };
-            if (lowercase === 'phòng ban') return { bg: 'linear-gradient(135deg, #06b6d4, #0891b2)', color: '#ffffff' };
-            if (lowercase === 'nhân sự công ty' || lowercase === 'nhân sự & lương') return { bg: 'linear-gradient(135deg, #8b5cf6, #5b21b6)', color: '#ffffff' };
-            if (lowercase === 'lịch trình') return { bg: 'linear-gradient(135deg, #6366f1, #4338ca)', color: '#ffffff' };
-            if (lowercase === 'phiếu lương cá nhân' || lowercase === 'phiếu lương') return { bg: 'linear-gradient(135deg, #ec4899, #be185d)', color: '#ffffff' };
-            if (lowercase === 'workchat' || lowercase === 'tin nhắn' || lowercase === 'tin nhắn nội bộ') return { bg: 'linear-gradient(135deg, #ef4444, #991b1b)', color: '#ffffff' };
-            if (lowercase === 'ticket hỗ trợ' || lowercase === 'helpdesk') return { bg: 'linear-gradient(135deg, #ff7a00, #d05300)', color: '#ffffff' };
-            if (lowercase === 'cài đặt hệ thống') return { bg: 'linear-gradient(135deg, #0ea5e9, #0284c7)', color: '#ffffff' };
-            if (lowercase === 'huấn luyện ai') return { bg: 'linear-gradient(135deg, #bd1d2d, #8b101b)', color: '#ffffff' };
+            // 1. Exact string matches (Crisp solid surfaces, zero purple/pink gradient slop)
+            if (lowercase === 'dashboard') return { bg: '#2563EB', color: '#ffffff' };
+            if (lowercase === 'bàn làm việc') return { bg: '#059669', color: '#ffffff' };
+            if (lowercase === 'chấm công' || lowercase === 'quản lý chấm công' || lowercase === 'quản lý công') return { bg: '#D97706', color: '#ffffff' };
+            if (lowercase === 'báo cáo') return { bg: '#334155', color: '#ffffff' };
+            if (lowercase === 'tiềm năng' || lowercase === 'khách hàng') return { bg: '#BD1D2D', color: '#ffffff' };
+            if (lowercase === 'pipeline') return { bg: '#059669', color: '#ffffff' };
+            if (lowercase === 'nhật ký data') return { bg: '#0284C7', color: '#ffffff' };
+            if (lowercase === 'thanh toán') return { bg: '#0D9488', color: '#ffffff' };
+            if (lowercase === 'chi phí chi tiêu' || lowercase === 'purchase order') return { bg: '#059669', color: '#ffffff' };
+            if (lowercase === 'quy trình' || lowercase === 'quy trình phê duyệt' || lowercase === 'phê duyệt') return { bg: '#BD1D2D', color: '#ffffff' };
+            if (lowercase === 'sales order') return { bg: '#D97706', color: '#ffffff' };
+            if (lowercase === 'nhà cung cấp') return { bg: '#0284C7', color: '#ffffff' };
+            if (lowercase === 'đối tác kinh doanh' || lowercase === 'đối tác') return { bg: '#334155', color: '#ffffff' };
+            if (lowercase === 'chương trình') return { bg: '#0891B2', color: '#ffffff' };
+            if (lowercase === 'tài liệu') return { bg: '#CA8A04', color: '#ffffff' };
+            if (lowercase === 'chiến dịch') return { bg: '#E11D48', color: '#ffffff' };
+            if (lowercase === 'tài khoản cá nhân') return { bg: '#475569', color: '#ffffff' };
+            if (lowercase === 'phòng ban') return { bg: '#0891B2', color: '#ffffff' };
+            if (lowercase === 'nhân sự công ty' || lowercase === 'nhân sự & lương') return { bg: '#334155', color: '#ffffff' };
+            if (lowercase === 'lịch trình') return { bg: '#0284C7', color: '#ffffff' };
+            if (lowercase === 'phiếu lương cá nhân' || lowercase === 'phiếu lương') return { bg: '#BD1D2D', color: '#ffffff' };
+            if (lowercase === 'workchat' || lowercase === 'tin nhắn' || lowercase === 'tin nhắn nội bộ') return { bg: '#BD1D2D', color: '#ffffff' };
+            if (lowercase === 'ticket hỗ trợ' || lowercase === 'helpdesk') return { bg: '#D97706', color: '#ffffff' };
+            if (lowercase === 'cài đặt hệ thống') return { bg: '#0284C7', color: '#ffffff' };
+            if (lowercase === 'huấn luyện ai') return { bg: '#BD1D2D', color: '#ffffff' };
 
             // 2. Keyword fallback checks (ordered from specific to general)
-            if (lowercase.includes('workchat') || lowercase.includes('tin nhắn') || lowercase.includes('chat')) return { bg: 'linear-gradient(135deg, #ef4444, #991b1b)', color: '#ffffff' };
-            if (lowercase.includes('dashboard')) return { bg: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: '#ffffff' };
-            if (lowercase.includes('chấm công')) return { bg: 'linear-gradient(135deg, #ff7a00, #d05300)', color: '#ffffff' };
-            if (lowercase.includes('bàn làm việc') || lowercase.includes('hoạt động')) return { bg: 'linear-gradient(135deg, #10b981, #047857)', color: '#ffffff' };
-            if (lowercase.includes('báo cáo') || lowercase.includes('thống kê')) return { bg: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: '#ffffff' };
-            if (lowercase.includes('databank') || lowercase.includes('kho data')) return { bg: 'linear-gradient(135deg, #eab308, #a16207)', color: '#ffffff' };
-            if (lowercase.includes('khách hàng') || lowercase.includes('contacts')) return { bg: 'linear-gradient(135deg, #f43f5e, #be123c)', color: '#ffffff' };
-            if (lowercase.includes('pipeline') || lowercase.includes('chi phí') || lowercase.includes('purchase')) return { bg: 'linear-gradient(135deg, #10b981, #047857)', color: '#ffffff' };
-            if (lowercase.includes('vòng phân bổ') || lowercase.includes('phân bổ') || lowercase.includes('chiến dịch')) return { bg: 'linear-gradient(135deg, #ff7a00, #d05300)', color: '#ffffff' };
-            if (lowercase.includes('định tuyến') || lowercase.includes('logic')) return { bg: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#ffffff' };
-            if (lowercase.includes('tích hợp')) return { bg: 'linear-gradient(135deg, #0d9488, #0f766e)', color: '#ffffff' };
-            if (lowercase.includes('capi')) return { bg: 'linear-gradient(135deg, #2563eb, #1e40af)', color: '#ffffff' };
-            if (lowercase.includes('cài đặt')) return { bg: 'linear-gradient(135deg, #0ea5e9, #0284c7)', color: '#ffffff' };
-            if (lowercase.includes('phòng ban')) return { bg: 'linear-gradient(135deg, #06b6d4, #0891b2)', color: '#ffffff' };
-            if (lowercase.includes('tài khoản')) return { bg: 'linear-gradient(135deg, #64748b, #475569)', color: '#ffffff' };
-            if (lowercase.includes('đối soát') || lowercase.includes('phân quyền')) return { bg: 'linear-gradient(135deg, #ec4899, #be185d)', color: '#ffffff' };
-            if (lowercase.includes('huấn luyện ai')) return { bg: 'linear-gradient(135deg, #BD1D2D, #8b101b)', color: '#ffffff' };
-            if (lowercase.includes('ai') || lowercase.includes('gatekeeper')) return { bg: 'linear-gradient(135deg, #14b8a6, #0f766e)', color: '#ffffff' };
-            if (lowercase.includes('ticket') || lowercase.includes('helpdesk')) return { bg: 'linear-gradient(135deg, #ff7a00, #d05300)', color: '#ffffff' };
-            if (lowercase.includes('giỏ hàng') || lowercase.includes('sản phẩm')) return { bg: 'linear-gradient(135deg, #06b6d4, #0891b2)', color: '#ffffff' };
-            if (lowercase.includes('tài liệu')) return { bg: 'linear-gradient(135deg, #eab308, #a16207)', color: '#ffffff' };
-            if (lowercase.includes('chủ đầu tư')) return { bg: 'linear-gradient(135deg, #84cc16, #4d7c0f)', color: '#ffffff' };
-            if (lowercase.includes('báo giá') || lowercase.includes('hóa đơn')) return { bg: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#ffffff' };
-            if (lowercase.includes('đặt cọc') || lowercase.includes('hợp tác') || lowercase.includes('sales order') || lowercase.includes('dự báo')) return { bg: 'linear-gradient(135deg, #14b8a6, #0f766e)', color: '#ffffff' };
-            if (lowercase.includes('lịch trình') || lowercase.includes('lịch biểu') || lowercase.includes('lịch học')) return { bg: 'linear-gradient(135deg, #6366f1, #4338ca)', color: '#ffffff' };
-            if (lowercase.includes('khóa học') || lowercase.includes('học viên')) return { bg: 'linear-gradient(135deg, #8b5cf6, #5b21b6)', color: '#ffffff' };
-            if (lowercase.includes('bảng tin')) return { bg: 'linear-gradient(135deg, #f43f5e, #be123c)', color: '#ffffff' };
-            if (lowercase.includes('chi nhánh') || lowercase.includes('team') || lowercase.includes('nhân viên') || lowercase.includes('nhân sự') || lowercase.includes('nhân sự công ty')) return { bg: 'linear-gradient(135deg, #8b5cf6, #5b21b6)', color: '#ffffff' };
-            if (lowercase.includes('dự án') || lowercase.includes('công ty')) return { bg: 'linear-gradient(135deg, #64748b, #475569)', color: '#ffffff' };
+            if (lowercase.includes('workchat') || lowercase.includes('tin nhắn') || lowercase.includes('chat')) return { bg: '#BD1D2D', color: '#ffffff' };
+            if (lowercase.includes('dashboard')) return { bg: '#2563EB', color: '#ffffff' };
+            if (lowercase.includes('chấm công')) return { bg: '#D97706', color: '#ffffff' };
+            if (lowercase.includes('bàn làm việc') || lowercase.includes('hoạt động')) return { bg: '#059669', color: '#ffffff' };
+            if (lowercase.includes('báo cáo') || lowercase.includes('thống kê')) return { bg: '#2563EB', color: '#ffffff' };
+            if (lowercase.includes('databank') || lowercase.includes('kho data')) return { bg: '#CA8A04', color: '#ffffff' };
+            if (lowercase.includes('khách hàng') || lowercase.includes('contacts')) return { bg: '#BD1D2D', color: '#ffffff' };
+            if (lowercase.includes('pipeline') || lowercase.includes('chi phí') || lowercase.includes('purchase')) return { bg: '#059669', color: '#ffffff' };
+            if (lowercase.includes('vòng phân bổ') || lowercase.includes('phân bổ') || lowercase.includes('chiến dịch')) return { bg: '#D97706', color: '#ffffff' };
+            if (lowercase.includes('định tuyến') || lowercase.includes('logic')) return { bg: '#334155', color: '#ffffff' };
+            if (lowercase.includes('tích hợp')) return { bg: '#0D9488', color: '#ffffff' };
+            if (lowercase.includes('capi')) return { bg: '#2563EB', color: '#ffffff' };
+            if (lowercase.includes('cài đặt')) return { bg: '#0284C7', color: '#ffffff' };
+            if (lowercase.includes('phòng ban')) return { bg: '#0891B2', color: '#ffffff' };
+            if (lowercase.includes('tài khoản')) return { bg: '#475569', color: '#ffffff' };
+            if (lowercase.includes('đối soát') || lowercase.includes('phân quyền')) return { bg: '#BD1D2D', color: '#ffffff' };
+            if (lowercase.includes('huấn luyện ai')) return { bg: '#BD1D2D', color: '#ffffff' };
+            if (lowercase.includes('ai') || lowercase.includes('gatekeeper')) return { bg: '#0D9488', color: '#ffffff' };
+            if (lowercase.includes('ticket') || lowercase.includes('helpdesk')) return { bg: '#D97706', color: '#ffffff' };
+            if (lowercase.includes('giỏ hàng') || lowercase.includes('sản phẩm')) return { bg: '#0891B2', color: '#ffffff' };
+            if (lowercase.includes('tài liệu')) return { bg: '#CA8A04', color: '#ffffff' };
+            if (lowercase.includes('chủ đầu tư')) return { bg: '#4D7C0F', color: '#ffffff' };
+            if (lowercase.includes('báo giá') || lowercase.includes('hóa đơn')) return { bg: '#D97706', color: '#ffffff' };
+            if (lowercase.includes('đặt cọc') || lowercase.includes('hợp tác') || lowercase.includes('sales order') || lowercase.includes('dự báo')) return { bg: '#0D9488', color: '#ffffff' };
+            if (lowercase.includes('lịch trình') || lowercase.includes('lịch biểu') || lowercase.includes('lịch học')) return { bg: '#0284C7', color: '#ffffff' };
+            if (lowercase.includes('khóa học') || lowercase.includes('học viên')) return { bg: '#334155', color: '#ffffff' };
+            if (lowercase.includes('bảng tin')) return { bg: '#E11D48', color: '#ffffff' };
+            if (lowercase.includes('chi nhánh') || lowercase.includes('team') || lowercase.includes('nhân viên') || lowercase.includes('nhân sự') || lowercase.includes('nhân sự công ty')) return { bg: '#334155', color: '#ffffff' };
+            if (lowercase.includes('dự án') || lowercase.includes('công ty')) return { bg: '#475569', color: '#ffffff' };
             
-            return { bg: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: '#ffffff' };
+            return { bg: '#2563EB', color: '#ffffff' };
           };
 
           const ITEM_DESC: Record<string, string> = {
@@ -3844,24 +3844,16 @@ export const Header = ({
             };
 
             const btnBg = isPastShiftEndWithoutCheckIn
-              ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)'
+              ? '#334155'
               : (isNoWorkScheduled && isNotCheckedIn)
-                ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                ? '#059669'
                 : isNotCheckedIn 
-                  ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                  ? '#BD1D2D'
                   : needsCheckOut || isPendingApproval
-                    ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                    : 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+                    ? '#D97706'
+                    : '#059669';
 
-            const btnShadow = isPastShiftEndWithoutCheckIn
-              ? '0 10px 25px rgba(124, 58, 237, 0.45)'
-              : (isNoWorkScheduled && isNotCheckedIn)
-                ? '0 8px 20px rgba(16, 185, 129, 0.35)'
-                : isNotCheckedIn
-                  ? '0 10px 25px rgba(239, 68, 68, 0.45)'
-                  : needsCheckOut || isPendingApproval
-                    ? '0 10px 25px rgba(245, 158, 11, 0.45)'
-                    : '0 8px 20px rgba(16, 185, 129, 0.35)';
+            const btnShadow = '0 4px 12px rgba(15, 23, 42, 0.2)';
 
             const btnTitle = (isNoWorkScheduled && isNotCheckedIn)
               ? t('Hôm nay không có lịch làm việc - Click để xem bảng chấm công')
@@ -3896,15 +3888,17 @@ export const Header = ({
                   cursor: 'pointer',
                   boxShadow: btnShadow,
                   zIndex: 990,
-                  transition: 'all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                  transition: 'opacity 0.15s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
                   outline: 'none'
                 }}
                 title={btnTitle}
                 onMouseEnter={e => {
                   prewarmSmartCheckInGPS();
-                  e.currentTarget.style.transform = 'scale(1.08)';
+                  e.currentTarget.style.opacity = '0.92';
                 }}
-                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                onMouseLeave={e => {
+                  e.currentTarget.style.opacity = '1';
+                }}
               >
                 {isPastShiftEndWithoutCheckIn ? (
                   <FileText size={22} />
@@ -4426,17 +4420,17 @@ export const Header = ({
                         
                         const bgBase = notif.is_read 
                           ? 'var(--color-surface)' 
-                          : (isWarning ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.02) 0%, rgba(239, 68, 68, 0.06) 100%)' 
-                             : isPipeline ? 'linear-gradient(135deg, rgba(37, 99, 235, 0.03) 0%, rgba(37, 99, 235, 0.08) 100%)'
-                             : isAttendanceUpdate ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.02) 0%, rgba(139, 92, 246, 0.06) 100%)'
-                             : 'linear-gradient(135deg, rgba(59, 130, 246, 0.02) 0%, rgba(59, 130, 246, 0.06) 100%)');
+                          : (isWarning ? 'rgba(239, 68, 68, 0.04)' 
+                             : isPipeline ? 'rgba(37, 99, 235, 0.05)'
+                             : isAttendanceUpdate ? 'rgba(15, 23, 42, 0.04)'
+                             : 'rgba(59, 130, 246, 0.04)');
                         
                         const borderColor = notif.is_read
                           ? 'var(--color-border-light)'
-                          : (isWarning ? 'rgba(239, 68, 68, 0.2)' 
-                             : isPipeline ? 'rgba(37, 99, 235, 0.3)'
-                             : isAttendanceUpdate ? 'rgba(139, 92, 246, 0.25)' 
-                             : 'rgba(59, 130, 246, 0.2)');
+                          : (isWarning ? 'rgba(239, 68, 68, 0.22)' 
+                             : isPipeline ? 'rgba(37, 99, 235, 0.25)'
+                             : isAttendanceUpdate ? 'rgba(15, 23, 42, 0.16)' 
+                             : 'rgba(59, 130, 246, 0.22)');
 
                         return (
                           <div
@@ -4445,31 +4439,26 @@ export const Header = ({
                             style={{
                               display: 'flex',
                               alignItems: 'start',
-                              gap: '0.875rem',
-                              padding: '14px 16px',
+                              gap: '12px',
+                              padding: '12px 16px',
                               borderRadius: '12px',
                               background: bgBase,
                               border: `1px solid ${borderColor}`,
                               cursor: notif.link || isWarning ? 'pointer' : 'default',
-                              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                              transition: 'border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
                               position: 'relative',
-                              boxShadow: notif.is_read ? 'none' : '0 4px 12px rgba(0, 0, 0, 0.03)',
-                              opacity: notif.is_read ? 0.75 : 1
+                              opacity: notif.is_read ? 0.78 : 1
                             }}
                             onMouseEnter={e => {
-                              e.currentTarget.style.borderColor = isWarning ? '#ef4444' : isPipeline ? '#2563eb' : isAttendanceUpdate ? '#8b5cf6' : '#3b82f6';
-                              e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.08)';
-                              e.currentTarget.style.transform = 'translateY(-1px)';
+                              e.currentTarget.style.borderColor = isWarning ? '#ef4444' : isPipeline ? '#2563eb' : isAttendanceUpdate ? '#475569' : '#3b82f6';
                               if (notif.is_read) {
                                 e.currentTarget.style.opacity = '1';
                               }
                             }}
                             onMouseLeave={e => {
                               e.currentTarget.style.borderColor = borderColor;
-                              e.currentTarget.style.boxShadow = notif.is_read ? 'none' : '0 4px 12px rgba(0, 0, 0, 0.03)';
-                              e.currentTarget.style.transform = 'none';
                               if (notif.is_read) {
-                                e.currentTarget.style.opacity = '0.75';
+                                e.currentTarget.style.opacity = '0.78';
                               }
                             }}
                           >
@@ -4508,7 +4497,7 @@ export const Header = ({
                                             case 'expense': case 'approval': case 'approval_request': return '#BD1D2D'; 
                                             case 'project_roster': return '#10b981'; 
                                             case 'project_document': case 'contact_document': return '#f59e0b'; 
-                                            case 'project_comment': case 'attendance_update': return '#8b5cf6'; 
+                                            case 'project_comment': case 'attendance_update': return '#334155'; 
                                             case 'attendance': return '#eab308'; 
                                             default: return '#6b7280'; 
                                           } 

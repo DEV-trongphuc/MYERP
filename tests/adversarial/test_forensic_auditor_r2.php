@@ -26,7 +26,8 @@ $_SESSION["workspace_id"] = 1;
 require_once __DIR__ . "/../../backend/automation/links_qr.php";
 ';
 file_put_contents(__DIR__ . '/temp_missing_id.php', $testScriptMissing);
-$out = shell_exec('C:\\Users\\LENOVO\\AppData\\Local\\Microsoft\\WinGet\\Packages\\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\\php.exe ' . escapeshellarg(__DIR__ . '/temp_missing_id.php'));
+$phpBin = getenv('PHP_BIN') ?: PHP_BINARY;
+$out = shell_exec(escapeshellarg($phpBin) . ' ' . escapeshellarg(__DIR__ . '/temp_missing_id.php'));
 @unlink(__DIR__ . '/temp_missing_id.php');
 $jsonMissing = json_decode(trim($out), true);
 if (!isset($jsonMissing['message']) || $jsonMissing['message'] !== 'ID required') {
@@ -44,7 +45,7 @@ $_SESSION["workspace_id"] = 1;
 require_once __DIR__ . "/../../backend/automation/links_qr.php";
 ';
 file_put_contents(__DIR__ . '/temp_not_found.php', $testScriptNotFound);
-$outNF = shell_exec('C:\\Users\\LENOVO\\AppData\\Local\\Microsoft\\WinGet\\Packages\\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\\php.exe ' . escapeshellarg(__DIR__ . '/temp_not_found.php'));
+$outNF = shell_exec(escapeshellarg($phpBin) . ' ' . escapeshellarg(__DIR__ . '/temp_not_found.php'));
 @unlink(__DIR__ . '/temp_not_found.php');
 $jsonNF = json_decode(trim($outNF), true);
 if (!isset($jsonNF['message']) || $jsonNF['message'] !== 'Link not found or access denied') {
@@ -76,7 +77,7 @@ $_SESSION["workspace_id"] = 1;
 require_once __DIR__ . "/../../backend/automation/links_qr.php";
 ';
     file_put_contents(__DIR__ . '/temp_real.php', $testScriptReal);
-    $outReal = shell_exec('C:\\Users\\LENOVO\\AppData\\Local\\Microsoft\\WinGet\\Packages\\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\\php.exe ' . escapeshellarg(__DIR__ . '/temp_real.php'));
+    $outReal = shell_exec(escapeshellarg($phpBin) . ' ' . escapeshellarg(__DIR__ . '/temp_real.php'));
     @unlink(__DIR__ . '/temp_real.php');
     $jsonReal = json_decode(trim($outReal), true);
     

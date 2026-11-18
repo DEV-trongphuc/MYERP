@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
     Globe, Lock, Users, ShieldCheck, X, Search, Check, Building2,
-    UserCheck, Eye, Edit3, Sparkles, Loader2, Layers
+    UserCheck, Eye, Edit3, Loader2, Layers
 } from 'lucide-react';
 import erpApi from '../../../../api/axios';
 import { Avatar } from '../../../ui/Avatar';
@@ -905,7 +905,7 @@ const TemplateAccessModal: React.FC<TemplateAccessModalProps> = ({
                         )}
                         {draft.visibility === 'custom' && (
                             <span className="inline-flex items-center gap-1.5 font-semibold text-[#BD1D2D] bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg">
-                                <Sparkles className="w-3.5 h-3.5" />
+                                <Layers className="w-3.5 h-3.5" />
                                 Đã chọn: {draft.allowed_team_ids.length} Team, {draft.allowed_departments.length} Phòng ban, {draft.allowed_user_ids.length} Nhân sự ({draft.permission === 'edit' ? 'Được sửa' : 'Chỉ dùng'})
                             </span>
                         )}

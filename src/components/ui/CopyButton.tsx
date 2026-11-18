@@ -45,7 +45,7 @@ export const CopyButton: React.FC<CopyButtonProps> = ({ text, className = '', si
     if (success) {
       playPopSound();
       setCopied(true);
-      toast.success(t('Đã sao chép vào bộ nhớ tạm!'), { id: 'copy-toast' });
+      toast.success(t('Đã sao chép vào bộ nhớ tạm'), { id: 'copy-toast' });
       setTimeout(() => setCopied(false), 2000);
     } else {
       toast.error(t('Không thể sao chép'));
@@ -75,7 +75,7 @@ export const CopyButton: React.FC<CopyButtonProps> = ({ text, className = '', si
         ...style
       }}
       className={className}
-      title={copied ? t('Đã sao chép!') : t('Sao chép')}
+      title={copied ? t('Đã sao chép') : t('Sao chép')}
     >
       {copied ? <Check size={size} /> : <Copy size={size} />}
     </button>

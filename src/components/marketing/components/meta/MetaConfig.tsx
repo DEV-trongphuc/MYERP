@@ -419,7 +419,7 @@ const MetaConfig: React.FC = () => {
                     >
                         <Target className="w-4 h-4" />
                         <span>Meta Ad Account (Quảng cáo & Leads)</span>
-                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold tabular-nums ${
                             activeSection === 'adaccounts' ? 'bg-red-50 text-[#C6333D] border border-red-200' : 'bg-slate-200 text-slate-600'
                         }`}>
                             1
@@ -428,7 +428,7 @@ const MetaConfig: React.FC = () => {
                     <button
                         type="button"
                         onClick={() => setActiveSection('pages')}
-                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 ${
                             activeSection === 'pages'
                                 ? 'bg-white text-[#C6333D] shadow-xs'
                                 : 'text-slate-600 hover:text-slate-900'
@@ -436,7 +436,7 @@ const MetaConfig: React.FC = () => {
                     >
                         <Facebook className="w-4 h-4" />
                         <span>Facebook Fanpages (Messenger Bot)</span>
-                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold tabular-nums ${
                             activeSection === 'pages' ? 'bg-red-50 text-[#C6333D] border border-red-200' : 'bg-slate-200 text-slate-600'
                         }`}>
                             {configs.length}
@@ -445,7 +445,7 @@ const MetaConfig: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2 text-xs text-slate-500 font-semibold">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
                     <span>Meta Graph API v24.0 Live</span>
                 </div>
             </div>
@@ -464,9 +464,9 @@ const MetaConfig: React.FC = () => {
                                 </div>
                                 <div>
                                     <div className="flex items-center gap-2.5 flex-wrap">
-                                        <h3 className="text-xl font-extrabold text-slate-900">{savedAdAccount.name}</h3>
+                                        <h3 className="text-xl font-bold text-slate-900">{savedAdAccount.name}</h3>
                                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                                             Đang kích hoạt
                                         </span>
                                         <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-mono font-bold">
@@ -696,7 +696,7 @@ const MetaConfig: React.FC = () => {
                         {isLoadingCampaigns ? (
                             <div className="py-12 flex flex-col items-center justify-center gap-3">
                                 <Loader2 className="w-6 h-6 animate-spin text-[#C6333D]" />
-                                <p className="text-xs text-slate-500 font-semibold animate-pulse">Đang tải chiến dịch Meta Ads...</p>
+                                <p className="text-xs text-slate-500 font-semibold">Đang tải chiến dịch Meta Ads...</p>
                             </div>
                         ) : campaigns.length === 0 ? (
                             <div className="py-12 text-center text-slate-400 text-xs font-semibold">
@@ -710,9 +710,9 @@ const MetaConfig: React.FC = () => {
                                         <div key={c.id} className="p-4 hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                             <div className="min-w-0">
                                                 <div className="flex items-center gap-2">
-                                                    <span className={`w-2 h-2 rounded-full shrink-0 ${isActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
-                                                    <h5 className="text-xs font-extrabold text-slate-900 truncate">{c.name}</h5>
-                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                                                    <span className={`w-2 h-2 rounded-full shrink-0 ${isActive ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                                    <h5 className="text-xs font-bold text-slate-900 truncate">{c.name}</h5>
+                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
                                                         isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'
                                                     }`}>
                                                         {c.status}
@@ -1058,12 +1058,12 @@ const MetaConfig: React.FC = () => {
                     >
                         <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                             <div className="flex items-center gap-3">
-                                <div className="p-2.5 bg-[#C6333D] rounded-[14px] !text-white">
+                                <div className="p-2.5 bg-[#C6333D] rounded-xl !text-white">
                                     <ShieldCheck className="w-6 h-6" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-black text-slate-900">Token Scopes & Permissions</h3>
-                                    <p className="text-xs text-slate-500 font-bold">{debugModal.pageName}</p>
+                                    <h3 className="text-lg font-bold text-slate-900">Token Scopes & Permissions</h3>
+                                    <p className="text-xs text-slate-500 font-semibold">{debugModal.pageName}</p>
                                 </div>
                             </div>
                             <button
@@ -1078,18 +1078,18 @@ const MetaConfig: React.FC = () => {
                             {debugModal.isLoading ? (
                                 <div className="flex flex-col items-center justify-center py-12 gap-4">
                                     <Loader2 className="w-10 h-10 animate-spin text-[#C6333D]" />
-                                    <p className="text-sm text-slate-500 font-bold animate-pulse">Đang truy vấn Meta API...</p>
+                                    <p className="text-sm text-slate-500 font-semibold">Đang truy vấn Meta API...</p>
                                 </div>
                             ) : debugModal.data ? (
                                 <div className="space-y-6">
                                     {/* App Info */}
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div className="p-4 bg-slate-50 rounded-[14px] border border-slate-100">
-                                            <p className="text-[10px] text-slate-400 font-black uppercase mb-1">Facebook App</p>
+                                        <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Facebook App</p>
                                             <p className="font-bold text-slate-800 break-all">{debugModal.data.debug?.application || 'N/A'}</p>
                                         </div>
-                                        <div className="p-4 bg-slate-50 rounded-[14px] border border-slate-100">
-                                            <p className="text-[10px] text-slate-400 font-black uppercase mb-1">API Version</p>
+                                        <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">API Version</p>
                                             <p className="font-bold text-slate-800">{debugModal.data.debug?.version || 'v24.0'}</p>
                                         </div>
                                     </div>

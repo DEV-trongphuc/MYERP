@@ -34,11 +34,11 @@ const envBackend = parseEnvFile(path.join(rootDir, 'backend/.env'));
 const envLocal = parseEnvFile(path.join(rootDir, 'backend/.env.local'));
 
 const DB_CONFIG = {
-  host: envLocal.DB_HOST || envBackend.DB_HOST || '127.0.0.1',
-  port: parseInt(envLocal.DB_PORT || envBackend.DB_PORT || '3306', 10),
-  user: envLocal.DB_USER || envBackend.DB_USER || 'vhvxoigh_mail_auto',
-  password: envLocal.DB_PASS || envBackend.DB_PASS || 'Ideas@812',
-  database: envLocal.DB_NAME || envBackend.DB_NAME || 'vhvxoigh_myerp'
+  host: envLocal.DB_HOST || envBackend.DB_HOST || process.env.DB_HOST || '127.0.0.1',
+  port: parseInt(envLocal.DB_PORT || envBackend.DB_PORT || process.env.DB_PORT || '3306', 10),
+  user: envLocal.DB_USER || envBackend.DB_USER || process.env.DB_USER || '',
+  password: envLocal.DB_PASS || envBackend.DB_PASS || process.env.DB_PASS || '',
+  database: envLocal.DB_NAME || envBackend.DB_NAME || process.env.DB_NAME || 'vhvxoigh_myerp'
 };
 
 class InMemoryDatabaseEngine {

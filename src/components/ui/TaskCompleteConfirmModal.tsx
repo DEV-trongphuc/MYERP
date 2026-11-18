@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CheckCircle2, X, User, UserCheck, Users, Calendar, 
-  FileText, CheckSquare, Sparkles, Tag, Check, Loader2,
+  FileText, CheckSquare, Tag, Check, Loader2,
   ExternalLink, FileSpreadsheet, Paperclip
 } from 'lucide-react';
 import { Avatar } from './Avatar';
@@ -191,9 +191,8 @@ export const TaskCompleteConfirmModal: React.FC<TaskCompleteConfirmModalProps> =
                 fontSize: '0.725rem',
                 fontWeight: 700
               }}>
-                <CheckCircle2 size={13} strokeWidth={2.5} />
+                <CheckCircle2 size={13} strokeWidth={2} />
                 <span>{t('Xác nhận hoàn thành công việc')}</span>
-                <Sparkles size={12} style={{ color: '#f59e0b', marginLeft: '2px' }} />
               </div>
 
               <button
@@ -354,11 +353,11 @@ export const TaskCompleteConfirmModal: React.FC<TaskCompleteConfirmModalProps> =
                 flexDirection: 'column',
                 gap: '8px'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                  <Users size={12} style={{ color: '#8b5cf6' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <Users size={12} style={{ color: '#334155' }} strokeWidth={1.75} />
                   <span>{t('Liên quan')}</span>
                   {participantUsers.length > 0 && (
-                    <span style={{ fontSize: '0.65rem', color: '#8b5cf6', fontWeight: 800 }}>({participantUsers.length})</span>
+                    <span style={{ fontSize: '0.68rem', color: '#BD1D2D', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>({participantUsers.length})</span>
                   )}
                 </div>
 
@@ -399,7 +398,7 @@ export const TaskCompleteConfirmModal: React.FC<TaskCompleteConfirmModalProps> =
                     )}
                   </div>
                 ) : (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                     {t('Không có')}
                   </span>
                 )}
@@ -435,7 +434,7 @@ export const TaskCompleteConfirmModal: React.FC<TaskCompleteConfirmModalProps> =
                     {displayDescription}
                   </div>
                 ) : !detectedUrls.length && !checklistItems.length ? (
-                  <span style={{ fontSize: '0.78rem', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
                     {t('Không có mô tả chi tiết kèm theo.')}
                   </span>
                 ) : null}

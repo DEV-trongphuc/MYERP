@@ -3,8 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import {
   FileText, Plus, Search, Download, CheckCircle2, Clock, AlertCircle,
-  Eye, Trash2, Printer, X, Loader2, ArrowUpRight, ArrowDownRight, TrendingUp, DollarSign,
-  Pencil, Copy, Send, Package
+  Eye, Trash2, Printer, X, ArrowUpRight, ArrowDownRight, TrendingUp,
+  Package
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '../store/uiStore';
@@ -235,77 +235,48 @@ export const InvoicesPage: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI Cards — styled premium like the data distribution dashboard */}
-      <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+      {/* KPI Cards (Chapter V DNA) */}
+      <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
         {[
           {
             label: 'Tổng doanh thu',
             value: FMT(totalRev),
             icon: TrendingUp,
-            color: '#a31422',
-            bg: 'rgba(163, 20, 34, 0.08)',
+            color: '#BD1D2D',
+            bg: 'rgba(189, 29, 45, 0.08)',
             sub: `${items.length} hóa đơn`,
             change: getChangePercent(totalRev, prevTotalRev),
             badWhenUp: false,
-            decor: (
-              <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                <path d="M10 20 L40 50 L60 40 L90 80" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
-                <path d="M70 80 L90 80 L90 60" stroke="currentColor" strokeWidth="2" />
-                <circle cx="10" cy="20" r="4" fill="currentColor" />
-                <circle cx="40" cy="50" r="4" fill="currentColor" />
-                <circle cx="60" cy="40" r="4" fill="currentColor" />
-                <circle cx="90" cy="80" r="6" fill="currentColor" />
-              </svg>
-            )
           },
           {
             label: 'Đã thu hồi',
             value: FMT(paidAmt),
             icon: CheckCircle2,
-            color: '#10b981',
-            bg: 'rgba(16, 185, 129, 0.08)',
+            color: '#BD1D2D',
+            bg: 'rgba(189, 29, 45, 0.08)',
             sub: `${items.filter(i => i.status === 'paid').length} đã thanh toán`,
             change: getChangePercent(paidAmt, prevPaidAmt),
             badWhenUp: false,
-            decor: (
-              <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
-                <path d="M35 50 L45 60 L65 40" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            )
           },
           {
             label: 'Chờ thanh toán',
             value: FMT(pendingAmt),
             icon: Clock,
-            color: '#f59e0b',
-            bg: 'rgba(245, 158, 11, 0.08)',
+            color: '#334155',
+            bg: 'rgba(15, 23, 42, 0.06)',
             sub: `${items.filter(i => i.status === 'pending').length} hóa đơn đang đợi`,
             change: getChangePercent(pendingAmt, prevPendingAmt),
             badWhenUp: true,
-            decor: (
-              <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
-                <path d="M50 20 L50 50 L70 50" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            )
           },
           {
             label: 'Nợ quá hạn',
             value: FMT(overdueAmt),
             icon: AlertCircle,
-            color: '#ef4444',
-            bg: 'rgba(239, 68, 68, 0.08)',
+            color: '#334155',
+            bg: 'rgba(15, 23, 42, 0.06)',
             sub: `${items.filter(i => i.status === 'overdue').length} hóa đơn quá hạn`,
             change: getChangePercent(overdueAmt, prevOverdueAmt),
             badWhenUp: true,
-            decor: (
-              <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
-                <line x1="50" y1="30" x2="50" y2="60" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                <circle cx="50" cy="73" r="3" fill="currentColor" />
-              </svg>
-            )
           },
         ].map((k, i) => {
           const isDecrease = k.change < 0;
@@ -317,51 +288,45 @@ export const InvoicesPage: React.FC = () => {
           return (
             <motion.div 
               key={i} 
-              className="stat-card hover-lift" 
-              initial={{ opacity: 0, y: 16 }} 
+              className="stat-card" 
+              initial={{ opacity: 0, y: 12 }} 
               animate={{ opacity: 1, y: 0 }} 
-              transition={{ delay: i * 0.06 }} 
+              transition={{ delay: i * 0.05 }} 
               style={{ 
                 display: 'flex', 
                 flexDirection: 'column', 
-                minHeight: '135px',
-                padding: '1.25rem',
-                position: 'relative',
-                overflow: 'hidden'
+                minHeight: '132px',
+                padding: '20px',
+                borderRadius: '16px',
               }}
             >
-              {/* Decorative Background SVG */}
-              <div className="decor-svg" style={{ color: k.color }}>
-                {k.decor}
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-light)' }}>{k.label}</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.73rem', color: '#64748b' }}>{k.label}</span>
                 <div className="stat-icon" style={{
                   background: k.bg,
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   color: k.color,
                   flexShrink: 0
                 }}>
-                  <Icon size={18} />
+                  <Icon size={17} />
                 </div>
               </div>
 
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 2 }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                 {loading ? (
                   <div className="skeleton" style={{ height: 28, width: '80%', borderRadius: 6, marginBottom: 8 }} />
                 ) : (
-                  <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '1.5rem', lineHeight: 1.2 }}>{k.value}</div>
+                  <div className="stat-value" style={{ fontWeight: 700, color: i === 1 ? '#BD1D2D' : 'var(--color-text)', fontSize: '1.5rem', lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>{k.value}</div>
                 )}
-                <div className="stat-desc" style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '100%', fontWeight: 500 }} title={k.sub}>{k.sub}</div>
+                <div className="stat-desc" style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '100%', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }} title={k.sub}>{k.sub}</div>
                 
                 {!isZero && (
-                  <div className="stat-change" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, color: trendColor, marginTop: 'auto' }}>
+                  <div className="stat-change" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: trendColor, marginTop: 'auto' }}>
                     {TrendIcon}
                     <span>{isDecrease ? '' : '+'}{k.change}%</span>
                     <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>{getPeriodCompareText(period)}</span>
@@ -375,7 +340,7 @@ export const InvoicesPage: React.FC = () => {
 
       {/* Status filter tabs */}
       {!isMobile && (
-        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
           {[
             { key: '', label: 'Tất cả', count: items.length },
             { key: 'paid', label: 'Đã thanh toán', count: items.filter(i => i.status === 'paid').length },
@@ -383,7 +348,7 @@ export const InvoicesPage: React.FC = () => {
             { key: 'overdue', label: 'Quá hạn', count: items.filter(i => i.status === 'overdue').length },
           ].map(tab => (
             <button key={tab.key} onClick={() => { setStatusFilter(tab.key); setPage(1); }}
-              style={{ padding: '0.4rem 1rem', borderRadius: 'var(--radius-full)', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.18s', border: '1px solid', borderColor: statusFilter === tab.key ? 'var(--color-primary)' : 'var(--color-border-light)', background: statusFilter === tab.key ? 'var(--color-primary-light)' : 'var(--color-surface)', color: statusFilter === tab.key ? 'var(--color-primary)' : 'var(--color-text-light)' }}>
+              style={{ padding: '6px 16px', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', cursor: 'pointer', transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease', border: '1px solid', borderColor: statusFilter === tab.key ? 'var(--color-primary)' : 'var(--color-border-light)', background: statusFilter === tab.key ? 'var(--color-primary-light)' : 'var(--color-surface)', color: statusFilter === tab.key ? 'var(--color-primary)' : 'var(--color-text-light)' }}>
               {tab.label} <span style={{ marginLeft: '4px', opacity: 0.75 }}>({tab.count})</span>
             </button>
           ))}

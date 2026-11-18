@@ -108,16 +108,16 @@ export const QRCodeCallModal: React.FC = () => {
               <div style={{ display: 'flex', gap: '1rem' }}>
                 <button 
                   onClick={handleCopyPhone}
-                  className={`btn ${copied ? 'success' : 'primary'} hover-lift`}
+                  className={`btn ${copied ? 'success' : 'primary'}`}
                   style={{ 
                     flex: 1, 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center', 
                     gap: '8px', 
-                    height: '42px', 
-                    borderRadius: '10px',
-                    transition: 'all 0.2s ease',
+                    height: '40px', 
+                    borderRadius: '8px',
+                    transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1)',
                     background: copied ? 'var(--color-success, #10b981)' : undefined
                   }}
                 >

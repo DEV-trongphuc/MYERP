@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    Plus, Trash2, GitMerge, ChevronRight, Sparkles, Tag, ChevronDown, Check,
+    Plus, Trash2, GitMerge, ChevronRight, Tag, ChevronDown, Check,
     Layers, Search, User, Briefcase, Activity
 } from 'lucide-react';
 import { api } from '../../../services/storageAdapter';
@@ -98,7 +98,7 @@ const CustomSelect = ({
                     isOpen
                         ? 'border-[var(--color-primary)] ring-2 ring-[#BD1D2D]/10'
                         : 'border-slate-200 hover:border-slate-300'
-                } rounded-[var(--radius-md)] px-3 py-2 text-xs font-bold text-slate-700 transition-all shadow-sm`}
+                } rounded-[var(--radius-md)] px-3 py-2 text-xs font-bold text-slate-700 transition-colors shadow-sm`}
             >
                 <div className="flex items-center gap-2 truncate">
                     {Icon && (
@@ -120,7 +120,7 @@ const CustomSelect = ({
             </button>
 
             {isOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-100 rounded-[14px] shadow-xl z-[80] max-h-64 overflow-y-auto custom-scrollbar p-1.5 animate-in fade-in zoom-in-95 duration-150 min-w-[210px]">
+                <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-100 rounded-xl shadow-xl z-[80] max-h-64 overflow-y-auto custom-scrollbar p-1.5 animate-in fade-in zoom-in-95 duration-150 min-w-[210px]">
                     {options.length > 6 && (
                         <div className="px-2 pb-1.5 mb-1 border-b border-slate-100">
                             <div className="relative">
@@ -136,7 +136,7 @@ const CustomSelect = ({
                         </div>
                     )}
                     {filteredOptions.length === 0 ? (
-                        <div className="p-3 text-center text-[10px] text-slate-400 italic">Không có dữ liệu phù hợp</div>
+                        <div className="p-3 text-center text-[10px] text-slate-400">Không có dữ liệu phù hợp</div>
                     ) : (
                         filteredOptions.map(opt => (
                             <button
@@ -207,7 +207,7 @@ const GroupedFieldSelect = ({
                     isOpen
                         ? 'border-[var(--color-primary)] ring-2 ring-[#BD1D2D]/10'
                         : 'border-slate-200 hover:border-slate-300'
-                } rounded-[var(--radius-md)] px-3 py-2 text-xs font-bold text-slate-700 transition-all shadow-sm`}
+                } rounded-[var(--radius-md)] px-3 py-2 text-xs font-bold text-slate-700 transition-colors shadow-sm`}
             >
                 <div className="flex items-center gap-2 truncate">
                     <GroupIcon
@@ -225,7 +225,7 @@ const GroupedFieldSelect = ({
             </button>
 
             {isOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-100 rounded-[14px] shadow-xl z-[85] max-h-80 overflow-y-auto custom-scrollbar p-2 animate-in fade-in zoom-in-95 duration-150 min-w-[270px]">
+                <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-100 rounded-xl shadow-xl z-[85] max-h-80 overflow-y-auto custom-scrollbar p-2 animate-in fade-in zoom-in-95 duration-150 min-w-[270px]">
                     <div className="px-1.5 pb-2 mb-1.5 border-b border-slate-100 sticky top-0 bg-white z-10">
                         <div className="relative">
                             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -254,7 +254,7 @@ const GroupedFieldSelect = ({
 
                         return (
                             <div key={group.id} className="mb-2 last:mb-0">
-                                <div className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/80 rounded-[var(--radius-md)] mb-1">
+                                <div className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-slate-400 bg-slate-50/80 rounded-[var(--radius-md)] mb-1">
                                     <IconComp className="w-3 h-3 text-[var(--color-primary)]" />
                                     <span>{group.label}</span>
                                 </div>
@@ -672,7 +672,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                             value={rule.value || ''}
                             onChange={e => updateItem(idx, { ...rule, value: e.target.value })}
                             placeholder="Hoặc nhập ID / Tên Vòng chia (Team Sale)..."
-                            className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-all"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-colors"
                         />
                     </div>
                 );
@@ -695,7 +695,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                             value={rule.value || ''}
                             onChange={e => updateItem(idx, { ...rule, value: e.target.value })}
                             placeholder="Hoặc nhập ID / Tên Chi nhánh..."
-                            className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-all"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-colors"
                         />
                     </div>
                 );
@@ -718,7 +718,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                             value={rule.value || ''}
                             onChange={e => updateItem(idx, { ...rule, value: e.target.value })}
                             placeholder="Hoặc nhập ID / Mã lớp / Tên lớp đào tạo..."
-                            className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-all"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-colors"
                         />
                     </div>
                 );
@@ -739,7 +739,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                             value={rule.value || ''}
                             onChange={e => updateItem(idx, { ...rule, value: e.target.value })}
                             placeholder="Hoặc nhập tên nhãn Tag trực tiếp..."
-                            className="mt-1.5 w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-all"
+                            className="mt-1.5 w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-colors"
                         />
                     </div>
                 );
@@ -760,7 +760,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                             value={rule.value || ''}
                             onChange={e => updateItem(idx, { ...rule, value: e.target.value })}
                             placeholder="Hoặc nhập ID giai đoạn / tên giai đoạn (VD: Đặt cọc, Qualified)..."
-                            className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-all"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-colors"
                         />
                     </div>
                 );
@@ -783,7 +783,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                             value={rule.value || ''}
                             onChange={e => updateItem(idx, { ...rule, value: e.target.value })}
                             placeholder={fieldDef.placeholder || 'Nhập ID hoặc tên Sale phụ trách...'}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-all"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-colors"
                         />
                     </div>
                 );
@@ -815,7 +815,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                                 value={rule.value || ''}
                                 onChange={e => updateItem(idx, { ...rule, value: e.target.value })}
                                 placeholder="Nhập số ngày (VD: 7, 30, 365)..."
-                                className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-all"
+                                className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-2 text-xs font-bold tabular-nums text-slate-800 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-colors"
                             />
                             <span className="text-[11px] font-bold text-slate-500 shrink-0">ngày trước</span>
                         </div>
@@ -827,7 +827,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                             type="date"
                             value={rule.value || ''}
                             onChange={e => updateItem(idx, { ...rule, value: e.target.value })}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-all"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-2 text-xs font-bold tabular-nums text-slate-800 outline-none focus:bg-white focus:border-[var(--color-primary)] transition-colors"
                         />
                     </div>
                 );
@@ -840,7 +840,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                         value={rule.value || ''}
                         onChange={e => updateItem(idx, { ...rule, value: e.target.value })}
                         placeholder={fieldDef.placeholder || 'Nhập giá trị so sánh...'}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[#BD1D2D]/10 transition-all placeholder:text-slate-400"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[#BD1D2D]/10 transition-colors placeholder:text-slate-400"
                     />
                 </div>
             );
@@ -848,23 +848,23 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
 
         return (
             <div
-                className={`relative rounded-[14px] border transition-all ${
+                className={`relative rounded-xl border transition-colors ${
                     depth === 0
                         ? 'bg-slate-50/70 border-slate-200 p-4'
-                        : 'bg-white border-indigo-100 p-3.5 mt-3 ml-4 shadow-sm'
+                        : 'bg-white border-slate-300 p-3.5 mt-3 ml-4 shadow-sm'
                 }`}
             >
-                {depth > 0 && <div className="absolute -left-4 top-6 w-4 h-0.5 bg-indigo-200" />}
+                {depth > 0 && <div className="absolute -left-4 top-6 w-4 h-0.5 bg-slate-300" />}
 
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                         <button
                             type="button"
                             onClick={handleLogicToggle}
-                            className={`px-3 py-1 rounded-[var(--radius-md)] text-[10px] font-black uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5 cursor-pointer border ${
+                            className={`px-3 py-1 rounded-[var(--radius-md)] text-[10px] font-bold uppercase tracking-wider transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer border ${
                                 group.logic === 'AND'
                                     ? 'bg-red-50 text-[var(--color-primary)] border-red-200 hover:bg-red-100'
-                                    : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                                    : 'bg-slate-100 text-slate-800 border-slate-300 hover:bg-slate-200/70'
                             }`}
                         >
                             <Layers className="w-3 h-3" />
@@ -891,7 +891,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                     {safeConditions.length > 1 && (
                         <div
                             className={`absolute left-2.5 top-4 bottom-4 w-0.5 ${
-                                group?.logic === 'AND' ? 'bg-red-200' : 'bg-indigo-200'
+                                group?.logic === 'AND' ? 'bg-red-200' : 'bg-slate-300'
                             } -z-0`}
                         />
                     )}
@@ -938,7 +938,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                         return (
                             <div
                                 key={idx}
-                                className="relative z-10 flex items-start gap-2 bg-white p-3.5 rounded-[14px] border border-slate-200 shadow-sm hover:border-slate-300 transition-all group"
+                                className="relative z-10 flex items-start gap-2 bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-colors group"
                             >
                                 <div className="flex-1 min-w-0">
                                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
@@ -966,7 +966,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                                     <button
                                         type="button"
                                         onClick={() => removeItem(idx)}
-                                        className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-[var(--radius-md)] transition-all opacity-0 group-hover:opacity-100 shrink-0 mt-0.5"
+                                        className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-[var(--radius-md)] transition-[opacity,background-color,color] opacity-0 group-hover:opacity-100 shrink-0 mt-0.5"
                                     >
                                         <Trash2 className="w-4 h-4" />
                                     </button>
@@ -980,7 +980,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                     <button
                         type="button"
                         onClick={addRule}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-[var(--color-primary)] text-slate-600 hover:text-[var(--color-primary)] rounded-[var(--radius-md)] text-[11px] font-bold transition-all shadow-sm"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-[var(--color-primary)] text-slate-600 hover:text-[var(--color-primary)] rounded-[var(--radius-md)] text-[11px] font-bold transition-colors shadow-sm"
                     >
                         <Plus className="w-3.5 h-3.5" /> Thêm điều kiện
                     </button>
@@ -988,7 +988,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                         <button
                             type="button"
                             onClick={addSubGroup}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-dashed border-indigo-200 hover:border-indigo-400 text-indigo-600 rounded-[var(--radius-md)] text-[11px] font-bold transition-all"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-dashed border-slate-300 hover:border-slate-400 text-slate-700 rounded-[var(--radius-md)] text-[11px] font-bold transition-colors"
                         >
                             <GitMerge className="w-3.5 h-3.5" /> Thêm cụm (Group)
                         </button>
@@ -1001,12 +1001,12 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
     return (
         <div className="space-y-6 animate-in fade-in duration-300 pb-20">
             {/* Header Info */}
-            <div className="p-4 bg-gradient-to-r from-red-50/70 to-indigo-50/60 rounded-[14px] border border-red-100 flex gap-3 items-start">
-                <div className="p-2 bg-white rounded-[var(--radius-md)] shadow-sm text-[var(--color-primary)] shrink-0 mt-0.5">
-                    <Sparkles className="w-5 h-5" />
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex gap-3 items-start">
+                <div className="p-2 bg-white border border-slate-200 rounded-[var(--radius-md)] shadow-sm text-[var(--color-primary)] shrink-0 mt-0.5">
+                    <GitMerge className="w-5 h-5" strokeWidth={1.75} />
                 </div>
                 <div>
-                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide mb-1">
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide mb-1">
                         Phân nhánh Đa điều kiện (MYERP Pipeline & Đa kênh)
                     </h4>
                     <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
@@ -1016,38 +1016,38 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
             </div>
 
             {/* Smart Branch Presets (Chèn nhanh Bộ nhánh thông minh) */}
-            <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-[14px] space-y-2.5">
+            <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl space-y-2.5">
                 <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                        ⚡ Chèn nhanh Bộ nhánh thông minh (Smart Branch Presets)
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                        Chèn nhanh Bộ nhánh thông minh (Smart Branch Presets)
                     </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <button
                         type="button"
                         onClick={() => applySmartPreset('temperature')}
-                        className="p-2.5 bg-white hover:bg-amber-50/60 border border-slate-200 hover:border-amber-300 rounded-xl text-left text-[11px] font-bold text-slate-700 hover:text-amber-800 transition-all shadow-sm cursor-pointer"
+                        className="p-2.5 bg-white hover:bg-amber-50/60 border border-slate-200 hover:border-amber-300 rounded-xl text-left text-[11px] font-bold text-slate-700 hover:text-amber-800 transition-colors shadow-sm cursor-pointer"
                     >
-                        🔥 Rẽ nhánh theo Nhiệt độ (Hot / Warm / Cold)
+                        Rẽ nhánh theo Nhiệt độ (Hot / Warm / Cold)
                     </button>
                     <button
                         type="button"
                         onClick={() => applySmartPreset('team')}
-                        className="p-2.5 bg-white hover:bg-indigo-50/60 border border-slate-200 hover:border-indigo-300 rounded-xl text-left text-[11px] font-bold text-slate-700 hover:text-indigo-800 transition-all shadow-sm cursor-pointer"
+                        className="p-2.5 bg-white hover:bg-slate-100 border border-slate-200 hover:border-slate-300 rounded-xl text-left text-[11px] font-bold text-slate-700 hover:text-slate-900 transition-colors shadow-sm cursor-pointer"
                     >
                         👥 Rẽ nhánh theo Vòng chia (Team Sale)
                     </button>
                     <button
                         type="button"
                         onClick={() => applySmartPreset('channel')}
-                        className="p-2.5 bg-white hover:bg-cyan-50/60 border border-slate-200 hover:border-cyan-300 rounded-xl text-left text-[11px] font-bold text-slate-700 hover:text-cyan-800 transition-all shadow-sm cursor-pointer"
+                        className="p-2.5 bg-white hover:bg-cyan-50/60 border border-slate-200 hover:border-cyan-300 rounded-xl text-left text-[11px] font-bold text-slate-700 hover:text-cyan-800 transition-colors shadow-sm cursor-pointer"
                     >
                         📱 Rẽ nhánh Kênh tối ưu (Zalo OA ➔ Email ➔ Gọi SĐT)
                     </button>
                     <button
                         type="button"
                         onClick={() => applySmartPreset('deposit')}
-                        className="p-2.5 bg-white hover:bg-emerald-50/60 border border-slate-200 hover:border-emerald-300 rounded-xl text-left text-[11px] font-bold text-slate-700 hover:text-emerald-800 transition-all shadow-sm cursor-pointer"
+                        className="p-2.5 bg-white hover:bg-emerald-50/60 border border-slate-200 hover:border-emerald-300 rounded-xl text-left text-[11px] font-bold text-slate-700 hover:text-emerald-800 transition-colors shadow-sm cursor-pointer"
                     >
                         🎓 Rẽ nhánh theo Trạng thái Cọc & Nhập học
                     </button>
@@ -1057,7 +1057,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
             {/* Branch Tabs */}
             <div>
                 <div className="flex items-center justify-between mb-2 px-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         Danh sách Nhánh ({branches.length}/8)
                     </label>
                     <button
@@ -1078,7 +1078,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                             <div
                                 key={b.id}
                                 onClick={() => setActiveBranchIdx(idx)}
-                                className={`group flex items-center gap-2 px-3.5 py-2 rounded-[var(--radius-md)] border text-xs font-bold cursor-pointer transition-all shrink-0 select-none ${
+                                className={`group flex items-center gap-2 px-3.5 py-2 rounded-[var(--radius-md)] border text-xs font-bold cursor-pointer transition-colors shrink-0 select-none ${
                                     isActive
                                         ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)] shadow-sm'
                                         : 'bg-white text-slate-600 border-slate-200 hover:border-red-200 hover:bg-red-50/30'
@@ -1115,7 +1115,7 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
             {activeBranch && (
                 <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-5 animate-in fade-in slide-in-from-right-4 duration-200" key={activeBranch.id}>
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
                             Tên hiển thị trên sơ đồ
                         </label>
                         <input
@@ -1123,12 +1123,12 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
                             value={activeBranch.label || activeBranch.name || ''}
                             onChange={e => updateActiveBranch({ label: e.target.value, name: e.target.value })}
                             placeholder="VD: Lead Nóng - Đã Đặt Cọc..."
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-sm font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-sm font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                             Cấu hình Logic cho "{activeBranch.label || activeBranch.name || 'Nhánh'}"
                         </label>
                         {renderConditionGroup(
@@ -1143,14 +1143,14 @@ export const AdvancedConditionConfig: React.FC<AdvancedConditionConfigProps> = (
             )}
 
             {/* Priority Visualizer */}
-            <div className="p-3 bg-slate-100 rounded-[14px] flex items-center justify-center gap-2 text-[10px] font-bold text-slate-500 overflow-x-auto">
+            <div className="p-3 bg-slate-100 rounded-xl flex items-center justify-center gap-2 text-[10px] font-bold text-slate-500 overflow-x-auto">
                 <span>Thứ tự ưu tiên:</span>
                 {branches.map((b, i) => (
                     <React.Fragment key={b.id}>
                         <span
                             className={`px-2 py-0.5 rounded-[var(--radius-md)] ${
                                 i === activeBranchIdx
-                                    ? 'bg-red-100 text-[var(--color-primary)] font-black'
+                                    ? 'bg-red-100 text-[var(--color-primary)] font-bold'
                                     : 'bg-white border border-slate-200'
                             }`}
                         >

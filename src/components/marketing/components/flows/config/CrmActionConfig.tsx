@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
     Briefcase, PhoneCall, CheckSquare, UserCheck, BellRing, Flame, Thermometer,
-    Snowflake, Clock, Sparkles, Check, Layers, AlertCircle, RefreshCw, Users
+    Snowflake, Clock, Check, Layers, AlertCircle, RefreshCw, Users
 } from 'lucide-react';
 import erpApi from '../../../../../api/axios';
 import { STANDARD_PIPELINE_STAGES, CRM_ACTION_TYPES } from '../../../constants/flowConstants';
@@ -155,15 +155,15 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
     return (
         <div className="space-y-6 animate-in fade-in duration-200 pb-6">
             {/* Header Info */}
-            <div className="p-4 bg-indigo-50/70 border border-indigo-100 rounded-[14px] flex items-start gap-3">
-                <div className="p-2 bg-white rounded-[var(--radius-md)] text-indigo-700 shadow-sm shrink-0">
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-3">
+                <div className="p-2 bg-white border border-slate-200 rounded-[var(--radius-md)] text-[#BD1D2D] shadow-sm shrink-0">
                     <Briefcase className="w-5 h-5" />
                 </div>
                 <div>
-                    <h4 className="text-xs font-black text-indigo-950 uppercase tracking-wide mb-0.5">
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide mb-0.5">
                         Đồng bộ Tác vụ trực tiếp sang MYERP CRM
                     </h4>
-                    <p className="text-[11px] text-indigo-700/80 font-medium leading-relaxed">
+                    <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
                         Khi khách hàng đi tới bước này, hệ thống sẽ tự động thực thi nghiệp vụ trên hồ sơ Lead/Contact trong CRM theo thời gian thực.
                     </p>
                 </div>
@@ -171,7 +171,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
 
             {/* Action Type Selector */}
             <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 px-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5 px-1">
                     Loại tác vụ CRM cần thực hiện
                 </label>
                 <div className="grid grid-cols-1 gap-2.5">
@@ -199,7 +199,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                 key={item.id}
                                 type="button"
                                 onClick={() => handleSelectActionType(item.id)}
-                                className={`w-full flex items-start gap-3.5 p-3.5 rounded-[14px] border text-left transition-all cursor-pointer ${
+                                className={`w-full flex items-start gap-3.5 p-3.5 rounded-xl border text-left transition-colors cursor-pointer ${
                                     isSelected
                                         ? 'bg-red-50/60 border-[var(--color-primary)] ring-2 ring-[#BD1D2D]/10 shadow-sm'
                                         : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/60'
@@ -217,7 +217,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center justify-between gap-2">
                                         <span
-                                            className={`text-xs font-black ${
+                                            className={`text-xs font-bold ${
                                                 isSelected ? 'text-[var(--color-primary)]' : 'text-slate-800'
                                             }`}
                                         >
@@ -243,7 +243,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
             {actionType === 'assign_round_robin' && (
                 <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-sm animate-in fade-in duration-200">
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                             Chọn Vòng chia / Team Sale đích
                         </label>
                         <select
@@ -257,7 +257,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                     roundName: selectedTeam?.label || ''
                                 });
                             }}
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors"
                         >
                             <option value="">-- Tự động chọn Vòng chia phù hợp --</option>
                             {crmTeams.map(t => (
@@ -268,7 +268,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                         </select>
                     </div>
 
-                    <label className="flex items-start gap-3 p-3.5 rounded-[14px] bg-indigo-50/50 border border-indigo-200 cursor-pointer hover:bg-indigo-50 transition-colors">
+                    <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100/70 transition-colors">
                         <input
                             type="checkbox"
                             checked={config.respectShifts !== false}
@@ -276,7 +276,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                             className="mt-0.5 w-4 h-4 accent-[#BD1D2D] rounded cursor-pointer"
                         />
                         <div>
-                            <div className="text-xs font-black text-slate-800">
+                            <div className="text-xs font-bold text-slate-800">
                                 Chỉ chia cho Tư vấn viên đang trong Ca trực & không nghỉ phép (Vacation Mode)
                             </div>
                             <div className="text-[11px] text-slate-500 font-medium mt-0.5">
@@ -285,7 +285,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                         </div>
                     </label>
 
-                    <label className="flex items-start gap-3 p-3.5 rounded-[14px] bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100/70 transition-colors">
+                    <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100/70 transition-colors">
                         <input
                             type="checkbox"
                             checked={Boolean(config.onlyIfUnassigned ?? config.only_if_unassigned)}
@@ -299,7 +299,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                             className="mt-0.5 w-4 h-4 accent-[#BD1D2D] rounded cursor-pointer"
                         />
                         <div>
-                            <div className="text-xs font-black text-slate-800">
+                            <div className="text-xs font-bold text-slate-800">
                                 Chỉ chia nếu Lead chưa có người phụ trách
                             </div>
                             <div className="text-[11px] text-slate-500 font-medium mt-0.5">
@@ -314,7 +314,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
             {actionType === 'reassign_if_uncontacted' && (
                 <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-sm animate-in fade-in duration-200">
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                             Vòng chia / Team Sale điều phối lại
                         </label>
                         <select
@@ -328,7 +328,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                     roundName: selectedTeam?.label || ''
                                 });
                             }}
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors"
                         >
                             <option value="">-- Giữ nguyên Vòng chia của Sale hiện tại --</option>
                             {crmTeams.map(t => (
@@ -340,7 +340,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                     </div>
 
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
                             Lý do điều phối lại (Ghi nhận vào Log & Thông báo)
                         </label>
                         <input
@@ -348,11 +348,11 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                             value={config.note || ''}
                             onChange={e => onChange({ ...config, note: e.target.value })}
                             placeholder="VD: Quá 2h chưa liên hệ - Tự động điều phối sang Sale khác"
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors"
                         />
                     </div>
 
-                    <div className="p-3.5 bg-rose-50/70 border border-rose-200 rounded-[14px] flex items-start gap-2.5 text-[11px] font-medium text-rose-800">
+                    <div className="p-3.5 bg-rose-50/70 border border-rose-200 rounded-xl flex items-start gap-2.5 text-[11px] font-medium text-rose-800">
                         <RefreshCw className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                         <span>
                             Hệ thống sẽ tự động loại trừ Tư vấn viên cũ (chưa liên hệ đúng SLA), chọn Tư vấn viên kế tiếp trong ca trực theo chuẩn Round-Robin và gửi thông báo khẩn cho Sale mới.
@@ -365,14 +365,14 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
             {actionType === 'update_temperature' && (
                 <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-5 shadow-sm animate-in fade-in duration-200">
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                             Độ nóng của Lead (Temperature)
                         </label>
                         <div className="grid grid-cols-3 gap-2">
                             {[
-                                { id: 'hot', label: '🔥 Nóng (Hot)', icon: Flame, activeClass: 'bg-rose-50 border-rose-500 text-rose-700' },
-                                { id: 'warm', label: '🌤️ Ấm (Warm)', icon: Thermometer, activeClass: 'bg-amber-50 border-amber-500 text-amber-700' },
-                                { id: 'cold', label: '❄️ Lạnh (Cold)', icon: Snowflake, activeClass: 'bg-sky-50 border-sky-500 text-sky-700' }
+                                { id: 'hot', label: 'Nóng (Hot)', icon: Flame, activeClass: 'bg-rose-50 border-rose-500 text-rose-700' },
+                                { id: 'warm', label: 'Ấm (Warm)', icon: Thermometer, activeClass: 'bg-amber-50 border-amber-500 text-amber-700' },
+                                { id: 'cold', label: 'Lạnh (Cold)', icon: Snowflake, activeClass: 'bg-sky-50 border-sky-500 text-sky-700' }
                             ].map(temp => {
                                 const Icon = temp.icon;
                                 const active = (config.temperature || 'hot') === temp.id;
@@ -381,7 +381,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                         key={temp.id}
                                         type="button"
                                         onClick={() => onChange({ ...config, temperature: temp.id })}
-                                        className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-[var(--radius-md)] border text-xs font-black transition-all cursor-pointer ${
+                                        className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-[var(--radius-md)] border text-xs font-bold transition-colors cursor-pointer ${
                                             active
                                                 ? `${temp.activeClass} shadow-sm`
                                                 : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'
@@ -396,7 +396,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                     </div>
 
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                             Trạng thái chăm sóc Lead (Tùy chọn)
                         </label>
                         <div className="grid grid-cols-3 gap-2">
@@ -412,13 +412,13 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                         key={st.id}
                                         type="button"
                                         onClick={() => onChange({ ...config, leadStatus: st.id, lead_status: st.id })}
-                                        className={`p-2.5 rounded-[var(--radius-md)] border text-center transition-all cursor-pointer ${
+                                        className={`p-2.5 rounded-[var(--radius-md)] border text-center transition-colors cursor-pointer ${
                                             active
                                                 ? 'bg-red-50 border-[var(--color-primary)] text-[var(--color-primary)] shadow-sm'
                                                 : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'
                                         }`}
                                     >
-                                        <div className="text-xs font-black">{st.label}</div>
+                                        <div className="text-xs font-bold">{st.label}</div>
                                         <div className="text-[10px] opacity-75 font-bold">{st.sub}</div>
                                     </button>
                                 );
@@ -432,7 +432,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
             {actionType === 'update_stage' && (
                 <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-5 shadow-sm animate-in fade-in duration-200">
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                             Giai đoạn Pipeline đích (Stage)
                         </label>
                         <select
@@ -445,7 +445,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                     stage_name: selected?.label || e.target.value
                                 });
                             }}
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors"
                         >
                             <option value="">-- Giữ nguyên giai đoạn hiện tại --</option>
                             {pipelineStages.map(st => (
@@ -457,13 +457,13 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                     </div>
 
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                             Trạng thái chăm sóc Lead (Lead Status)
                         </label>
                         <div className="grid grid-cols-3 gap-2">
                             {[
                                 { id: 'active', label: 'Đang chăm sóc', sub: 'Active', color: 'emerald' },
-                                { id: 'nurture', label: 'Nuôi dưỡng', sub: 'Nurture', color: 'indigo' },
+                                { id: 'nurture', label: 'Nuôi dưỡng', sub: 'Nurture', color: 'slate' },
                                 { id: 'lost', label: 'Thất bại', sub: 'Lost', color: 'rose' }
                             ].map(st => {
                                 const active = (config.lead_status || 'active') === st.id;
@@ -472,13 +472,13 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                         key={st.id}
                                         type="button"
                                         onClick={() => onChange({ ...config, lead_status: st.id })}
-                                        className={`p-2.5 rounded-[var(--radius-md)] border text-center transition-all cursor-pointer ${
+                                        className={`p-2.5 rounded-[var(--radius-md)] border text-center transition-colors cursor-pointer ${
                                             active
                                                 ? 'bg-red-50 border-[var(--color-primary)] text-[var(--color-primary)] shadow-sm'
                                                 : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'
                                         }`}
                                     >
-                                        <div className="text-xs font-black">{st.label}</div>
+                                        <div className="text-xs font-bold">{st.label}</div>
                                         <div className="text-[10px] opacity-75 font-bold">{st.sub}</div>
                                     </button>
                                 );
@@ -487,7 +487,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                     </div>
 
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                             Độ nóng của Lead (Temperature)
                         </label>
                         <div className="grid grid-cols-3 gap-2">
@@ -503,7 +503,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                         key={temp.id}
                                         type="button"
                                         onClick={() => onChange({ ...config, temperature: temp.id })}
-                                        className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-[var(--radius-md)] border text-xs font-black transition-all cursor-pointer ${
+                                        className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-[var(--radius-md)] border text-xs font-bold transition-colors cursor-pointer ${
                                             active
                                                 ? `${temp.activeClass} shadow-sm`
                                                 : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'
@@ -523,14 +523,14 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
             {actionType === 'create_task' && (
                 <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-sm animate-in fade-in duration-200">
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                             Phân loại hoạt động cho Sale
                         </label>
                         <div className="grid grid-cols-2 gap-2.5">
                             <button
                                 type="button"
                                 onClick={() => onChange({ ...config, task_type: 'call' })}
-                                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-[var(--radius-md)] border text-xs font-black transition-all cursor-pointer ${
+                                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-[var(--radius-md)] border text-xs font-bold transition-colors cursor-pointer ${
                                     (config.task_type || 'call') === 'call'
                                         ? 'bg-red-50 border-[var(--color-primary)] text-[var(--color-primary)] shadow-sm'
                                         : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'
@@ -542,7 +542,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                             <button
                                 type="button"
                                 onClick={() => onChange({ ...config, task_type: 'task' })}
-                                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-[var(--radius-md)] border text-xs font-black transition-all cursor-pointer ${
+                                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-[var(--radius-md)] border text-xs font-bold transition-colors cursor-pointer ${
                                     config.task_type === 'task'
                                         ? 'bg-red-50 border-[var(--color-primary)] text-[var(--color-primary)] shadow-sm'
                                         : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'
@@ -556,7 +556,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
 
                     <div>
                         <div className="flex items-center justify-between mb-1.5">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                                 Tiêu đề công việc (Subject)
                             </label>
                             <div className="flex items-center gap-1">
@@ -577,12 +577,12 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                             value={config.subject || ''}
                             onChange={e => onChange({ ...config, subject: e.target.value })}
                             placeholder="VD: Gọi tư vấn báo giá cho {{full_name}}"
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
                             Ghi chú hướng dẫn cho Sale (Body)
                         </label>
                         <textarea
@@ -590,12 +590,12 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                             value={config.body || ''}
                             onChange={e => onChange({ ...config, body: e.target.value })}
                             placeholder="VD: Khách hàng đã mở email & bấm xem học bổng. Sale liên hệ tư vấn lộ trình chi tiết..."
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-medium text-slate-700 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all resize-none"
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-medium text-slate-700 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors resize-none"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
                             Hạn hoàn thành (Sau X giờ kể từ lúc tạo)
                         </label>
                         <div className="flex items-center gap-2">
@@ -612,7 +612,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                             due_in_hours: Math.max(1, parseInt(e.target.value) || 1)
                                         })
                                     }
-                                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-black text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold tabular-nums text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors"
                                 />
                             </div>
                             <span className="text-xs font-bold text-slate-500">giờ</span>
@@ -621,7 +621,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                     key={hr}
                                     type="button"
                                     onClick={() => onChange({ ...config, due_in_hours: hr })}
-                                    className={`px-2.5 py-2 rounded-[var(--radius-md)] text-[11px] font-black border transition-all cursor-pointer ${
+                                    className={`px-2.5 py-2 rounded-[var(--radius-md)] text-[11px] font-bold tabular-nums border transition-colors cursor-pointer ${
                                         Number(config.due_in_hours ?? 24) === hr
                                             ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
                                             : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white'
@@ -639,7 +639,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
             {actionType === 'assign_owner' && (
                 <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-sm animate-in fade-in duration-200">
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                             Tư vấn viên phụ trách (Sale Consultant)
                         </label>
                         {crmUsers.length > 0 && (
@@ -653,7 +653,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                         owner_name: found?.label || e.target.value
                                     });
                                 }}
-                                className="w-full px-3.5 py-2.5 mb-2 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                                className="w-full px-3.5 py-2.5 mb-2 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors"
                             >
                                 <option value="">-- Chọn Tư vấn viên trong hệ thống --</option>
                                 {crmUsers.map(u => (
@@ -668,11 +668,11 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                             value={config.owner_id || ''}
                             onChange={e => onChange({ ...config, owner_id: e.target.value })}
                             placeholder="Nhập ID hoặc Username của tư vấn viên..."
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors"
                         />
                     </div>
 
-                    <label className="flex items-start gap-3 p-3.5 rounded-[14px] bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100/70 transition-colors">
+                    <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100/70 transition-colors">
                         <input
                             type="checkbox"
                             checked={config.only_if_unassigned !== false}
@@ -682,7 +682,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                             className="mt-0.5 w-4 h-4 accent-[#BD1D2D] rounded cursor-pointer"
                         />
                         <div>
-                            <div className="text-xs font-black text-slate-800">
+                            <div className="text-xs font-bold text-slate-800">
                                 Chỉ phân bổ nếu Lead chưa có Sale phụ trách
                             </div>
                             <div className="text-[11px] text-slate-500 font-medium mt-0.5">
@@ -698,7 +698,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                 <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-sm animate-in fade-in duration-200">
                     <div>
                         <div className="flex items-center justify-between mb-1.5">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                                 Nội dung thông báo gửi cho Sale phụ trách
                             </label>
                             <div className="flex items-center gap-1">
@@ -724,12 +724,12 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                     body: e.target.value
                                 })
                             }
-                            placeholder="VD: Lead {{full_name}} ({{phone}}) vừa tương tác chiến dịch. Hãy gọi tư vấn ngay!"
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-medium text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all resize-none"
+                            placeholder="VD: Lead {{full_name}} ({{phone}}) vừa tương tác chiến dịch. Hãy gọi tư vấn ngay"
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-medium text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors resize-none"
                         />
                     </div>
 
-                    <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-[14px] flex items-center gap-2.5 text-[11px] font-medium text-amber-800">
+                    <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl flex items-center gap-2.5 text-[11px] font-medium text-amber-800">
                         <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
                         <span>
                             Thông báo sẽ được gửi tới Tư vấn viên đang phụ trách hồ sơ này trên chuông thông báo MYERP.
@@ -743,7 +743,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                 <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-sm animate-in fade-in duration-200">
                     <div>
                         <div className="flex items-center justify-between mb-1.5">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                                 Tiêu đề Ticket hỗ trợ (Subject)
                             </label>
                             <div className="flex items-center gap-1 flex-wrap">
@@ -770,12 +770,12 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                 })
                             }
                             placeholder="VD: Hỗ trợ học viên {{full_name}} ({{student_code}}) - Lớp {{class_name}}"
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
                             Nội dung chi tiết / Yêu cầu xử lý (Description)
                         </label>
                         <textarea
@@ -789,19 +789,19 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                 })
                             }
                             placeholder="VD: Học viên {{full_name}} có dư nợ học phí {{tuition_remaining}} hoặc cần phòng Học vụ liên hệ hỗ trợ..."
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-medium text-slate-700 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all resize-none"
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-medium text-slate-700 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors resize-none"
                         />
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
                                 Mức độ ưu tiên (Priority)
                             </label>
                             <select
                                 value={config.priority || 'medium'}
                                 onChange={e => onChange({ ...config, priority: e.target.value })}
-                                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors"
                             >
                                 <option value="low">Thấp (Low)</option>
                                 <option value="medium">Trung bình (Medium)</option>
@@ -811,7 +811,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                         </div>
 
                         <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
                                 Hạn xử lý SLA (Giờ)
                             </label>
                             <input
@@ -825,20 +825,20 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                         due_in_hours: Math.max(1, parseInt(e.target.value) || 24)
                                     })
                                 }
-                                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-black text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold tabular-nums text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors"
                             />
                         </div>
                     </div>
 
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
                             Người xử lý Ticket (Assignee - Để trống sẽ gán cho Sale phụ trách)
                         </label>
                         {crmUsers.length > 0 ? (
                             <select
                                 value={config.assignee_id || ''}
                                 onChange={e => onChange({ ...config, assignee_id: e.target.value })}
-                                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors"
                             >
                                 <option value="">-- Tự động gán cho Sale / Cố vấn phụ trách hồ sơ --</option>
                                 {crmUsers.map(u => (
@@ -853,7 +853,7 @@ export const CrmActionConfig: React.FC<CrmActionConfigProps> = ({ config, onChan
                                 value={config.assignee_id || ''}
                                 onChange={e => onChange({ ...config, assignee_id: e.target.value })}
                                 placeholder="Nhập ID nhân sự xử lý (Để trống = Sale phụ trách)..."
-                                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-all"
+                                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-xs font-bold text-slate-800 focus:bg-white focus:border-[var(--color-primary)] outline-none transition-colors"
                             />
                         )}
                     </div>

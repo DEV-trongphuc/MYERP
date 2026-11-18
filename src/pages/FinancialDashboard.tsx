@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   TrendingUp, CreditCard, DollarSign, AlertTriangle, 
-  ArrowUpRight, ArrowDownRight, Filter, Calendar, FileText, CheckCircle2, RefreshCw
+  ArrowUpRight, ArrowDownRight, FileText, CheckCircle2, RefreshCw
 } from 'lucide-react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+  Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer, Cell, PieChart, Pie, ComposedChart, Area, Line
 } from 'recharts';
 import api from '../api/axios';
@@ -13,9 +13,9 @@ import { PeriodFilter, getDateRange } from '../components/ui/PeriodFilter';
 import type { Period, DateRange } from '../components/ui/PeriodFilter';
 import { Skeleton } from '../components/ui/Skeleton';
 import toast from 'react-hot-toast';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 const PALETTE = ['#C6333D', '#334155', '#E11D48', '#64748B', '#991B1B', '#475569', '#FB7185', '#94A3B8', '#1E293B', '#CBD5E1'];
-const COLORS = PALETTE;
 
 const FMT_VND = (n: any) => {
   const num = Math.round(Number(n || 0));
@@ -39,20 +39,6 @@ export const FinancialDashboard: React.FC = () => {
   const [dateRange, setDateRange] = useState<DateRange>(getDateRange('this_month'));
   const [loading, setLoading] = useState(true);
   
-  // Theme state
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') || 'light';
-  });
-
-  useEffect(() => {
-    const handleThemeChange = () => {
-      const nextTheme = (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') || 'light';
-      setTheme(nextTheme);
-    };
-    window.addEventListener('theme-change', handleThemeChange);
-    return () => window.removeEventListener('theme-change', handleThemeChange);
-  }, []);
-
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -107,8 +93,8 @@ export const FinancialDashboard: React.FC = () => {
         cancellations: cancelledSum,
         cancellationsChange: `${cancelledDeposits.length} đơn`,
         cancellationBullets: [
-          { text: `${t('Tổng đơn hủy/bể cọc')}: ${cancelledDeposits.length}`, color: '#f59e0b' },
-          { text: `${t('Đơn hoàn tất cọc')}: ${safeSos.filter((d: any) => d.status === 'approved').length}`, color: 'var(--color-primary)' }
+          { label: t('Tổng đơn hủy/bể cọc'), value: String(cancelledDeposits.length) },
+          { label: t('Đơn hoàn tất cọc'), value: String(safeSos.filter((d: any) => d.status === 'approved').length) }
         ]
       });
 
@@ -134,9 +120,9 @@ export const FinancialDashboard: React.FC = () => {
       const pendingCount = safeSos.filter((d: any) => d.status === 'pending' || d.status === 'paid').length;
       const cancelledCount = cancelledDeposits.length;
       setInvoiceStatuses([
-        { name: t('Đã thanh toán'), value: approvedCount, color: '#10b981' },
-        { name: t('Chờ thanh toán'), value: pendingCount, color: '#3b82f6' },
-        { name: t('Đã hủy'), value: cancelledCount, color: '#ef4444' }
+        { name: t('Đã thanh toán'), value: approvedCount, color: PALETTE[1] },
+        { name: t('Chờ thanh toán'), value: pendingCount, color: PALETTE[7] },
+        { name: t('Đã hủy'), value: cancelledCount, color: PALETTE[0] }
       ]);
 
       setCancellationList(cancelledDeposits.slice(0, 10).map((d: any) => ({
@@ -162,77 +148,82 @@ export const FinancialDashboard: React.FC = () => {
 
   const kpis = useMemo(() => {
     if (!stats) return [];
+    const netMarginPct = stats.revenue > 0 ? Math.round((stats.netProfit / stats.revenue) * 100) : 0;
     return [
       {
         id: 'revenue',
         label: t('TỔNG DOANH THU'),
         value: FMT_VND(stats.revenue),
+        valueColor: 'var(--color-text)',
         icon: TrendingUp,
-        color: '#10b981',
-        bg: 'rgba(16, 185, 129, 0.08)',
+        iconColor: '#BD1D2D',
+        iconBg: 'rgba(189, 29, 45, 0.08)',
         change: stats.revenueChange,
         up: true,
         bullets: [
-          { text: t('Đã thu: 85%'), color: '#10b981' },
-          { text: t('Chờ đối soát: 15%'), color: '#3b82f6' }
+          { label: t('Đã thu'), value: '85%' },
+          { label: t('Chờ đối soát'), value: '15%' }
         ]
       },
       {
         id: 'expenses',
         label: t('TỔNG CHI PHÍ'),
         value: FMT_VND(stats.expenses),
+        valueColor: '#BD1D2D',
         icon: CreditCard,
-        color: 'var(--color-primary)',
-        bg: 'var(--color-primary-light)',
+        iconColor: '#BD1D2D',
+        iconBg: 'rgba(189, 29, 45, 0.08)',
         change: stats.expensesChange,
         up: false,
         bullets: [
-          { text: t('Lương & Hoa hồng: 60%'), color: 'var(--color-primary)' },
-          { text: t('Vận hành & MKT: 40%'), color: '#f59e0b' }
+          { label: t('Lương & Hoa hồng'), value: '60%' },
+          { label: t('Vận hành & MKT'), value: '40%' }
         ]
       },
       {
         id: 'netProfit',
         label: t('DÒNG TIỀN THUẦN'),
         value: FMT_VND(stats.netProfit),
+        valueColor: 'var(--color-text)',
         icon: DollarSign,
-        color: '#3b82f6',
-        bg: 'rgba(59, 130, 246, 0.08)',
+        iconColor: '#334155',
+        iconBg: 'rgba(15, 23, 42, 0.06)',
         change: stats.netChange,
         up: true,
         bullets: [
-          { text: t('Lợi nhuận ròng: ') + Math.round((stats.netProfit / stats.revenue) * 100) + '%', color: '#3b82f6' }
+          { label: t('Biên lợi nhuận ròng'), value: `${netMarginPct}%` }
         ]
       },
       {
         id: 'cancellations',
         label: t('THẤT THOÁT CỌC'),
         value: FMT_VND(stats.cancellations),
+        valueColor: 'var(--color-text)',
         icon: AlertTriangle,
-        color: '#f59e0b',
-        bg: 'rgba(245, 158, 11, 0.08)',
+        iconColor: '#334155',
+        iconBg: 'rgba(15, 23, 42, 0.06)',
         change: stats.cancellationsChange,
-        up: true,
+        up: false,
         bullets: stats.cancellationBullets
       }
     ];
   }, [stats, t]);
 
   return (
-    <div className="page-container" style={{ animation: 'slideUp 0.4s ease-out both', animationDelay: '50ms' }}>
+    <div className="page-container">
       
       {/* Page Header */}
-      <div className="page-header" style={{ marginBottom: '1.5rem' }}>
+      <div className="page-header" style={{ marginBottom: '24px' }}>
         <div>
-          <h1 className="page-title">{t("Báo Cáo Kế Toán & Tài Chính")}</h1>
-          <p className="page-subtitle">{t("Phân tích dòng tiền, chi phí và đối soát bể cọc/đổi căn thời gian thực.")}</p>
+          <h1 className="page-title">{t("Báo cáo Kế toán & Tài chính")}</h1>
+          <p className="page-subtitle">{t("Phân tích dòng tiền, chi phí và đối soát bể cọc, đổi căn theo thời gian thực")}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <button 
             className="btn icon-only" 
             onClick={fetchData} 
             title={t("Làm mới dữ liệu")}
-            style={{ height: 38, width: 38, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+            style={{ height: 36, width: 36, borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
           >
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -249,10 +240,10 @@ export const FinancialDashboard: React.FC = () => {
       </div>
 
       {/* KPI Grid */}
-      <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
+      <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '20px', marginBottom: '24px' }}>
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="card" style={{ padding: '1.25rem', minHeight: '140px' }}>
+            <div key={i} className="card" style={{ padding: '20px', minHeight: '140px', borderRadius: '16px' }}>
               <Skeleton width="40%" height={12} style={{ marginBottom: 12 }} />
               <Skeleton width="70%" height={28} style={{ marginBottom: 16 }} />
               <Skeleton width="90%" height={10} />
@@ -264,50 +255,46 @@ export const FinancialDashboard: React.FC = () => {
             return (
               <div 
                 key={kpi.id} 
-                className="card hover-lift" 
+                className="card" 
                 style={{ 
-                  padding: '1.25rem', 
+                  padding: '20px', 
                   minHeight: '140px', 
+                  borderRadius: '16px',
                   display: 'flex', 
                   flexDirection: 'column',
                   position: 'relative',
                   overflow: 'hidden'
                 }}
               >
-                {/* Decor SVG */}
-                <div className="decor-svg" style={{ color: kpi.color, opacity: 0.05, position: 'absolute', right: '-10px', bottom: '-10px', width: '80px', height: '80px', pointerEvents: 'none' }}>
-                  <Icon size={80} strokeWidth={1} />
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.73rem', color: '#64748b' }}>
                     {kpi.label}
                   </span>
-                  <div style={{ width: 32, height: 32, borderRadius: '8px', background: kpi.bg, color: kpi.color, display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center' }}>
-                    <Icon size={16} />
+                  <div style={{ width: 32, height: 32, borderRadius: '8px', background: kpi.iconBg, color: kpi.iconColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icon size={16} strokeWidth={1.75} />
                   </div>
                 </div>
 
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  <div className="stat-value" style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                  <div className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 700, color: kpi.valueColor, fontVariantNumeric: 'tabular-nums' }}>
                     {kpi.value}
                   </div>
                   
                   {/* Bullet Details */}
-                  <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '6px', marginBottom: '8px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    {kpi.bullets.map((b, bIdx) => (
-                      <div key={bIdx} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: b.color, display: 'inline-block' }} />
-                        <span>{b.text}</span>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '8px', marginBottom: '8px', display: 'flex', flexDirection: 'column', gap: '4px', fontVariantNumeric: 'tabular-nums' }}>
+                    {ensureArray(kpi?.bullets).map((b: any, bIdx: number) => (
+                      <div key={bIdx} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ color: '#94a3b8' }}>•</span>
+                        <span>{b.label}: <strong style={{ color: 'var(--color-text)', fontWeight: 600 }}>{b.value}</strong></span>
                       </div>
                     ))}
                   </div>
 
                   {/* Change Trend */}
-                  <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 700, color: kpi.up ? '#10b981' : 'var(--color-primary)' }}>
+                  <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600, color: kpi.up ? '#10b981' : '#BD1D2D', fontVariantNumeric: 'tabular-nums' }}>
                     {kpi.up ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
                     {kpi.change}
-                    <span style={{ color: 'var(--color-text-light)', marginLeft: '4px', fontWeight: 500 }}>
+                    <span style={{ color: '#64748b', marginLeft: '4px', fontWeight: 500 }}>
                       {t('so với kỳ trước')}
                     </span>
                   </div>
@@ -319,37 +306,36 @@ export const FinancialDashboard: React.FC = () => {
       </div>
 
       {/* Row 1: Charts */}
-      <div className="responsive-grid-6-4" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '6.5fr 3.5fr', gap: '1.25rem', marginBottom: '1.5rem' }}>
+      <div className="responsive-grid-6-4" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '6.5fr 3.5fr', gap: '20px', marginBottom: '24px' }}>
         
         {/* Cashflow Trends */}
-        <div className="card" style={{ padding: '1.25rem' }}>
-          <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <TrendingUp size={18} color="#10b981" /> {t('Dòng Tiền Thu Chi & Lợi Nhuận')}
-          </h3>
+        <div className="card" style={{ padding: '20px', borderRadius: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <TrendingUp size={18} color="#BD1D2D" strokeWidth={1.75} /> {t('Dòng tiền thu chi & Lợi nhuận')}
+            </h3>
+            <div style={{ display: 'flex', gap: '16px', fontSize: '0.75rem', fontWeight: 500, color: '#64748b' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><span style={{ width: 8, height: 8, borderRadius: '2px', background: '#C6333D' }} />{t('Doanh thu')}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><span style={{ width: 8, height: 8, borderRadius: '2px', background: '#334155' }} />{t('Chi phí')}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><span style={{ width: 8, height: 2, background: '#10b981' }} />{t('Lợi nhuận ròng')}</span>
+            </div>
+          </div>
           <div style={{ height: 280 }}>
             {loading ? <Skeleton width="100%" height="100%" /> : (
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={flowData} margin={{ left: -10, right: 5, top: 10 }}>
-                  <defs>
-                    <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="#10b981" stopOpacity={0.1} />
-                    </linearGradient>
-                    <linearGradient id="colorExp" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0.1} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={FMT_COMPACT} tick={{ fontSize: 10, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} width={40} />
+                <ComposedChart data={flowData} margin={{ left: -8, right: 8, top: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" strokeOpacity={0.7} vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={FMT_COMPACT} tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} width={44} />
                   <Tooltip 
-                    contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.08)' }}
-                    itemStyle={{ fontSize: 12 }}
+                    formatter={(v: any, name: any) => [FMT_VND(v), name]}
+                    contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)', fontSize: '0.8125rem', fontVariantNumeric: 'tabular-nums' }}
+                    labelStyle={{ fontWeight: 700, color: 'var(--color-text)', marginBottom: 4 }}
+                    itemStyle={{ fontSize: 12, padding: '2px 0' }}
                   />
-                  <Area name={t("Doanh thu")} type="monotone" dataKey="revenue" fill="url(#colorRev)" stroke="#10b981" strokeWidth={2} />
-                  <Bar name={t("Chi phí")} dataKey="expenses" fill="url(#colorExp)" radius={[4, 4, 0, 0]} maxBarSize={16} />
-                  <Line name={t("Lợi nhuận ròng")} type="monotone" dataKey="profit" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4 }} />
+                  <Area name={t("Doanh thu")} type="monotone" dataKey="revenue" fill="rgba(198, 51, 61, 0.08)" stroke="#C6333D" strokeWidth={2} dot={false} activeDot={{ r: 5, strokeWidth: 0, fill: '#C6333D' }} />
+                  <Bar name={t("Chi phí")} dataKey="expenses" fill="#334155" radius={[4, 4, 0, 0]} maxBarSize={18} />
+                  <Line name={t("Lợi nhuận ròng")} type="monotone" dataKey="profit" stroke="#10b981" strokeWidth={2} dot={{ r: 3, fill: '#10b981', strokeWidth: 0 }} activeDot={{ r: 5 }} />
                 </ComposedChart>
               </ResponsiveContainer>
             )}
@@ -357,9 +343,9 @@ export const FinancialDashboard: React.FC = () => {
         </div>
 
         {/* Invoice Status Distribution */}
-        <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
-          <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <FileText size={18} color="#3b82f6" /> {t('Phân Bổ Hóa Đơn')}
+        <div className="card" style={{ padding: '20px', borderRadius: '16px', display: 'flex', flexDirection: 'column' }}>
+          <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FileText size={18} color="#475569" strokeWidth={1.75} /> {t('Phân bổ hóa đơn')}
           </h3>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             {loading ? <Skeleton width="150px" height="150px" borderRadius="50%" /> : (
@@ -370,25 +356,28 @@ export const FinancialDashboard: React.FC = () => {
                       data={invoiceStatuses}
                       cx="50%"
                       cy="50%"
-                      innerRadius={50}
-                      outerRadius={70}
-                      paddingAngle={4}
+                      innerRadius={52}
+                      outerRadius={72}
+                      paddingAngle={3}
                       dataKey="value"
                     >
                       {invoiceStatuses.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                        <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
                       ))}
                     </Pie>
-                    <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }} />
+                    <Tooltip 
+                      formatter={(v: any, name: any) => [`${v} đơn`, name]}
+                      contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)', fontSize: '0.8125rem', fontVariantNumeric: 'tabular-nums' }} 
+                    />
                   </PieChart>
                 </ResponsiveContainer>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px 16px', width: '100%', marginTop: '12px', fontSize: '0.75rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px 16px', width: '100%', marginTop: '12px', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
                   {invoiceStatuses.map((entry, idx) => (
                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: entry.color }} />
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: entry.color, flexShrink: 0 }} />
                       <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{entry.name}</span>
-                      <span style={{ color: 'var(--color-text-muted)' }}>({entry.value}%)</span>
+                      <span style={{ color: '#64748b' }}>({entry.value})</span>
                     </div>
                   ))}
                 </div>
@@ -400,25 +389,26 @@ export const FinancialDashboard: React.FC = () => {
       </div>
 
       {/* Recent Orders Card */}
-      <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '10px' }}>
+      <div className="card" style={{ padding: '20px', borderRadius: '16px', display: 'flex', flexDirection: 'column', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
           <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <FileText size={18} color="var(--color-primary)" /> {t('Đơn Hàng Gần Đây (PO & SO)')}
+            <FileText size={18} color="#475569" strokeWidth={1.75} /> {t('Đơn hàng gần đây (PO & SO)')}
           </h3>
-          <div style={{ display: 'flex', gap: '4px', background: 'var(--color-bg)', padding: '3px', borderRadius: '8px' }}>
+          <div style={{ display: 'inline-flex', padding: '3px', borderRadius: '10px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', gap: '2px' }}>
             <button
               onClick={() => setActiveOrderType('so')}
               style={{
-                padding: '6px 14px',
+                height: '32px',
+                padding: '0 14px',
                 fontSize: '0.75rem',
-                fontWeight: 700,
-                borderRadius: '6px',
+                fontWeight: activeOrderType === 'so' ? 700 : 600,
+                borderRadius: '8px',
                 border: 'none',
                 background: activeOrderType === 'so' ? 'var(--color-surface)' : 'transparent',
-                color: activeOrderType === 'so' ? 'var(--color-text)' : 'var(--color-text-muted)',
+                color: activeOrderType === 'so' ? '#BD1D2D' : '#64748b',
                 cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: activeOrderType === 'so' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                transition: 'background-color 0.18s ease, color 0.18s ease',
+                boxShadow: activeOrderType === 'so' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
               }}
             >
               {t('SO gần đây')}
@@ -426,16 +416,17 @@ export const FinancialDashboard: React.FC = () => {
             <button
               onClick={() => setActiveOrderType('po')}
               style={{
-                padding: '6px 14px',
+                height: '32px',
+                padding: '0 14px',
                 fontSize: '0.75rem',
-                fontWeight: 700,
-                borderRadius: '6px',
+                fontWeight: activeOrderType === 'po' ? 700 : 600,
+                borderRadius: '8px',
                 border: 'none',
                 background: activeOrderType === 'po' ? 'var(--color-surface)' : 'transparent',
-                color: activeOrderType === 'po' ? 'var(--color-text)' : 'var(--color-text-muted)',
+                color: activeOrderType === 'po' ? '#BD1D2D' : '#64748b',
                 cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: activeOrderType === 'po' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                transition: 'background-color 0.18s ease, color 0.18s ease',
+                boxShadow: activeOrderType === 'po' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
               }}
             >
               {t('PO gần đây')}
@@ -445,9 +436,9 @@ export const FinancialDashboard: React.FC = () => {
 
         <div style={{ overflowX: 'auto', border: '1px solid var(--color-border-light)', borderRadius: '12px', background: 'var(--color-surface)' }} className="custom-scrollbar">
           {activeOrderType === 'so' ? (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left', fontVariantNumeric: 'tabular-nums' }}>
               <thead>
-                <tr style={{ background: 'var(--color-border-light)', color: 'var(--color-text-muted)', fontWeight: 700 }}>
+                <tr style={{ background: 'var(--color-border-light)', color: 'var(--color-text-muted)', fontWeight: 600 }}>
                   <th style={{ padding: '12px' }}>{t('Mã căn')}</th>
                   <th style={{ padding: '12px' }}>{t('Khách hàng')}</th>
                   <th style={{ padding: '12px' }}>{t('Chương trình')}</th>
@@ -477,7 +468,7 @@ export const FinancialDashboard: React.FC = () => {
                     <td style={{ padding: '12px' }}>{so.creator_name || '—'}</td>
                     <td style={{ padding: '12px' }}>
                       <span style={{ 
-                        padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700,
+                        padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 600,
                         background: so.status === 'approved' ? 'rgba(16, 185, 129, 0.08)' : (so.status === 'cancelled' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(245, 158, 11, 0.08)'),
                         color: so.status === 'approved' ? '#10b981' : (so.status === 'cancelled' ? '#dc2626' : '#d97706')
                       }}>
@@ -490,9 +481,9 @@ export const FinancialDashboard: React.FC = () => {
               </tbody>
             </table>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left', fontVariantNumeric: 'tabular-nums' }}>
               <thead>
-                <tr style={{ background: 'var(--color-border-light)', color: 'var(--color-text-muted)', fontWeight: 700 }}>
+                <tr style={{ background: 'var(--color-border-light)', color: 'var(--color-text-muted)', fontWeight: 600 }}>
                   <th style={{ padding: '12px' }}>{t('Mã PO')}</th>
                   <th style={{ padding: '12px' }}>{t('Tiêu đề / Nhà cung cấp')}</th>
                   <th style={{ padding: '12px', textAlign: 'right' }}>{t('Tổng tiền')}</th>
@@ -520,7 +511,7 @@ export const FinancialDashboard: React.FC = () => {
                     <td style={{ padding: '12px' }}>{po.creator_name || '—'}</td>
                     <td style={{ padding: '12px' }}>
                       <span style={{ 
-                        padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700,
+                        padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 600,
                         background: po.status === 'approved' || po.status === 'received' ? 'rgba(16, 185, 129, 0.08)' : (po.status === 'rejected' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(245, 158, 11, 0.08)'),
                         color: po.status === 'approved' || po.status === 'received' ? '#10b981' : (po.status === 'rejected' ? '#dc2626' : '#d97706')
                       }}>
@@ -537,15 +528,15 @@ export const FinancialDashboard: React.FC = () => {
       </div>
 
       {/* Row 2: Special Transaction Journal */}
-      <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
-        <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <CheckCircle2 size={18} color="var(--color-primary)" /> {t('Nhật Ký Đối Soát Giao Dịch Đặc Biệt (Đặt Cọc & Đổi Căn)')}
+      <div className="card" style={{ padding: '20px', borderRadius: '16px', display: 'flex', flexDirection: 'column' }}>
+        <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <CheckCircle2 size={18} color="#475569" strokeWidth={1.75} /> {t('Nhật ký đối soát giao dịch đặc biệt (Đặt cọc & Đổi căn)')}
         </h3>
         
         <div style={{ overflowX: 'auto', border: '1px solid var(--color-border-light)', borderRadius: '12px', background: 'var(--color-surface)' }} className="custom-scrollbar">
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left', fontVariantNumeric: 'tabular-nums' }}>
             <thead>
-              <tr style={{ background: 'var(--color-border-light)', color: 'var(--color-text-muted)', fontWeight: 700 }}>
+              <tr style={{ background: 'var(--color-border-light)', color: 'var(--color-text-muted)', fontWeight: 600 }}>
                 <th style={{ padding: '12px' }}>{t('Mã Deal')}</th>
                 <th style={{ padding: '12px' }}>{t('Khách hàng')}</th>
                 <th style={{ padding: '12px', textAlign: 'right' }}>{t('Số tiền cọc')}</th>
@@ -562,6 +553,10 @@ export const FinancialDashboard: React.FC = () => {
                     <td colSpan={7} style={{ padding: '12px' }}><Skeleton width="100%" height={16} /></td>
                   </tr>
                 ))
+              ) : cancellationList.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>{t('Không có giao dịch hủy cọc hoặc đổi căn trong kỳ')}</td>
+                </tr>
               ) : cancellationList.map((item, idx) => (
                 <tr key={idx} style={{ borderBottom: '1px solid var(--color-border-light)', height: '48px' }}>
                   <td style={{ padding: '12px', fontWeight: 700, color: 'var(--color-text)' }}>{item.id}</td>
@@ -571,18 +566,18 @@ export const FinancialDashboard: React.FC = () => {
                   </td>
                   <td style={{ padding: '12px' }}>
                     <span style={{ 
-                      padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700,
-                      background: item.amount === 0 ? 'rgba(59, 130, 246, 0.08)' : item.type.includes('trước') ? 'rgba(245, 158, 11, 0.08)' : 'var(--color-primary-light)',
-                      color: item.amount === 0 ? '#3b82f6' : item.type.includes('trước') ? '#f59e0b' : 'var(--color-primary)'
+                      padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 600,
+                      background: item.amount === 0 ? 'rgba(51, 65, 85, 0.08)' : item.type.includes('trước') ? 'rgba(245, 158, 11, 0.08)' : 'var(--color-primary-light)',
+                      color: item.amount === 0 ? '#334155' : item.type.includes('trước') ? '#d97706' : 'var(--color-primary)'
                     }}>
                       {item.type}
                     </span>
                   </td>
                   <td style={{ padding: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ 
                         width: 6, height: 6, borderRadius: '50%', 
-                        background: item.status.includes('hạ') ? '#f59e0b' : item.status.includes('Giữ') ? '#10b981' : '#3b82f6' 
+                        background: item.status.includes('hạ') ? '#f59e0b' : item.status.includes('Giữ') ? '#10b981' : '#BD1D2D' 
                       }} />
                       <span style={{ fontWeight: 600 }}>{item.status}</span>
                     </div>

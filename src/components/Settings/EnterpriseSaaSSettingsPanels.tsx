@@ -236,6 +236,96 @@ export const EnterpriseSaaSSettingsPanels: React.FC<Props> = ({ panel, usersList
     };
   }, [usersList]);
 
+  const activeSelectableUsers = useMemo(() => {
+    const list = Array.isArray(allUsers) ? allUsers : [];
+    return list
+      .filter((u: any) => {
+        if (!u || !u.id) return false;
+        if (Number(u.is_active) === 0 || u.is_active === false) return false;
+        const st = String(u.status || 'active').toLowerCase().trim();
+        if (st && st !== 'active') return false;
+        const r = String(u.role || '').toLowerCase().trim();
+        if (r === 'bot' || r === 'system' || Number(u.id) === 9000001) return false;
+        return true;
+      })
+      .sort((a: any, b: any) =>
+        String(a.full_name || a.name || '').localeCompare(String(b.full_name || b.name || ''), 'vi')
+      );
+  }, [allUsers]);
+
+  const renderUserIdsPicker = (selectedIdsRaw: any, onChangeIds: (nextIds: number[]) => void) => {
+    const selectedIds = Array.isArray(selectedIdsRaw)
+      ? Array.from(new Set(selectedIdsRaw.map(Number).filter((n) => Number.isFinite(n) && n > 0)))
+      : [];
+    const selectedSet = new Set(selectedIds);
+    const availableToAdd = activeSelectableUsers.filter((u: any) => !selectedSet.has(Number(u.id)));
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '185px' }}>
+        {selectedIds.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            {selectedIds.map((uid) => {
+              const found = (Array.isArray(allUsers) ? allUsers : []).find((u: any) => Number(u.id) === uid);
+              const uLabel = found?.full_name || found?.name || `ID ${uid}`;
+              return (
+                <span
+                  key={uid}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 7px',
+                    borderRadius: '14px',
+                    background: '#F8FAFC',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '0.73rem',
+                    fontWeight: 600,
+                    color: '#0F172A',
+                  }}
+                >
+                  <span>{uLabel}</span>
+                  <button
+                    type="button"
+                    onClick={() => onChangeIds(selectedIds.filter((id) => id !== uid))}
+                    title="Xóa nhân sự này"
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      color: '#64748B',
+                      padding: 0,
+                      lineHeight: 1,
+                      fontSize: '0.85rem',
+                    }}
+                  >
+                    ×
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+        <select
+          style={{ ...inputStyle, padding: '5px 8px', fontSize: '0.76rem', color: '#475569' }}
+          value=""
+          onChange={(e) => {
+            const val = Number(e.target.value);
+            if (val > 0 && !selectedSet.has(val)) {
+              onChangeIds([...selectedIds, val]);
+            }
+          }}
+        >
+          <option value="">+ Thêm nhân sự cụ thể...</option>
+          {availableToAdd.map((u: any) => (
+            <option key={u.id} value={u.id}>
+              {u.full_name || u.name || `User #${u.id}`} ({u.role || 'staff'})
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  };
+
   const notifySynced = async (msg: string) => {
     await refreshTenantConfig();
     if (typeof window !== 'undefined') {
@@ -932,8 +1022,8 @@ export const EnterpriseSaaSSettingsPanels: React.FC<Props> = ({ panel, usersList
               <Shield size={18} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
-                Quản trị Vai trò &amp; Phân quyền Phân hệ (Enterprise RBAC)
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0F172A' }}>
+                Quản trị vai trò &amp; phân quyền phân hệ
               </h3>
               <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748B' }}>
                 Thiết lập phạm vi Đọc / Ghi / Xóa / Duyệt thực tế trên từng phân hệ cho từng Role của Tenant #{config?.tenant_id || 1}.
@@ -1108,8 +1198,8 @@ export const EnterpriseSaaSSettingsPanels: React.FC<Props> = ({ panel, usersList
             <Users size={18} />
           </div>
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
-              Cơ cấu Phòng ban, Trưởng bộ phận &amp; Người duyệt Mặc định
+            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0F172A' }}>
+              Cơ cấu phòng ban, trưởng bộ phận &amp; người duyệt mặc định
             </h3>
             <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748B' }}>
               Thay thế hoàn toàn việc gán cứng ID phòng ban hay email cá nhân. Hệ thống tự động định tuyến người duyệt phép, chi phí và KPI Sales theo cấu hình dưới đây.
@@ -1309,8 +1399,8 @@ export const EnterpriseSaaSSettingsPanels: React.FC<Props> = ({ panel, usersList
               <CheckSquare size={18} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
-                Luồng Phê duyệt Đa cấp &amp; Chống Tự Duyệt (Workflow Engine)
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0F172A' }}>
+                Luồng phê duyệt đa cấp &amp; chống tự duyệt
               </h3>
               <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748B' }}>
                 Cấu hình Cấp 1 / Cấp 2 / Cấp 3, ngưỡng tiền phê duyệt và người theo dõi (Watchers) cho từng nghiệp vụ.
@@ -1470,8 +1560,8 @@ export const EnterpriseSaaSSettingsPanels: React.FC<Props> = ({ panel, usersList
               <Bell size={18} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
-                Ma trận Điểm bắn Thông báo Động (Event Notification Routing)
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0F172A' }}>
+                Ma trận điểm bắn thông báo động
               </h3>
               <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748B' }}>
                 Tùy chỉnh Role, Phòng ban, Email CC và Kênh nhận thông báo cho từng sự kiện thay vì fix cứng người nhận trong mã nguồn.
@@ -1488,6 +1578,7 @@ export const EnterpriseSaaSSettingsPanels: React.FC<Props> = ({ panel, usersList
             <thead>
               <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                 <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569' }}>Sự kiện Nghiệp vụ</th>
+                <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569' }}>Nhân sự nhận cụ thể</th>
                 <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569' }}>Roles nhận (phẩy)</th>
                 <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569' }}>Khối phòng ban</th>
                 <th style={{ padding: '10px 12px', textAlign: 'center', color: '#475569' }}>Gồm Sale/Owner</th>
@@ -1502,6 +1593,22 @@ export const EnterpriseSaaSSettingsPanels: React.FC<Props> = ({ panel, usersList
                     <td style={{ padding: '10px 12px' }}>
                       <div style={{ fontWeight: 700, color: '#0F172A' }}>{rule.name}</div>
                       <div style={{ fontSize: '0.72rem', color: '#94A3B8', fontFamily: 'monospace' }}>{rule.event_key}</div>
+                    </td>
+                    <td style={{ padding: '8px 12px' }}>
+                      {renderUserIdsPicker(rule.target_user_ids || [], (nextIds) => {
+                        setNotifRulesDraft((prev) =>
+                          prev.map((r, i) => {
+                            if (i !== idx) return r;
+                            const hasRoles = (r.target_roles || []).length > 0;
+                            const hasDepts = (r.target_departments || []).length > 0;
+                            const nextStrategy =
+                              nextIds.length > 0 && !hasRoles && !hasDepts
+                                ? 'users'
+                                : (nextIds.length > 0 || (hasRoles && hasDepts) ? 'combined' : 'roles');
+                            return { ...r, target_user_ids: nextIds, recipient_strategy: nextStrategy };
+                          })
+                        );
+                      })}
                     </td>
                     <td style={{ padding: '8px 12px' }}>
                       <input
@@ -1586,8 +1693,8 @@ export const EnterpriseSaaSSettingsPanels: React.FC<Props> = ({ panel, usersList
             <Layers size={18} />
           </div>
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
-              Thiết kế Phễu Pipeline &amp; Điểm bắn Thông báo Chuyển bước
+            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0F172A' }}>
+              Thiết kế phễu Pipeline &amp; điểm bắn thông báo chuyển bước
             </h3>
             <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748B' }}>
               Tùy chỉnh danh sách các bước Pipeline của Tenant, đánh dấu bước Chốt thành công (Won) / Thất bại (Lost) và cấu hình người nhận thông báo khi Lead chuyển bước.
@@ -1631,6 +1738,7 @@ export const EnterpriseSaaSSettingsPanels: React.FC<Props> = ({ panel, usersList
                 <th style={{ padding: '10px 10px', textAlign: 'left', color: '#475569' }}>Slug chuẩn</th>
                 <th style={{ padding: '10px 10px', textAlign: 'center', color: '#475569' }}>Won</th>
                 <th style={{ padding: '10px 10px', textAlign: 'center', color: '#475569' }}>Lost</th>
+                <th style={{ padding: '10px 10px', textAlign: 'left', color: '#475569' }}>Nhân sự nhận cụ thể</th>
                 <th style={{ padding: '10px 10px', textAlign: 'left', color: '#475569' }}>Thông báo tới Roles</th>
                 <th style={{ padding: '10px 10px', textAlign: 'left', color: '#475569' }}>Thông báo Khối</th>
                 <th style={{ padding: '10px 10px', textAlign: 'right', color: '#475569' }}>Thao tác</th>
@@ -1641,6 +1749,7 @@ export const EnterpriseSaaSSettingsPanels: React.FC<Props> = ({ panel, usersList
                 stagesDraft.map((st, idx) => {
                   const nRoles = (st.notify_config?.roles || []).join(', ');
                   const nDepts = (st.notify_config?.departments || []).join(', ');
+                  const nUserIds = Array.isArray(st.notify_config?.user_ids) ? st.notify_config.user_ids : [];
                   return (
                     <tr key={st.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                       <td style={{ padding: '8px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
@@ -1690,6 +1799,15 @@ export const EnterpriseSaaSSettingsPanels: React.FC<Props> = ({ panel, usersList
                             setStagesDraft((prev) => prev.map((r, i) => (i === idx ? { ...r, is_lost: v } : r)));
                           }}
                         />
+                      </td>
+                      <td style={{ padding: '8px 10px' }}>
+                        {renderUserIdsPicker(nUserIds, (nextIds) => {
+                          setStagesDraft((prev) =>
+                            prev.map((r, i) =>
+                              i === idx ? { ...r, notify_config: { ...(r.notify_config || {}), user_ids: nextIds } } : r
+                            )
+                          );
+                        })}
                       </td>
                       <td style={{ padding: '8px 10px' }}>
                         <input
@@ -1755,8 +1873,8 @@ export const EnterpriseSaaSSettingsPanels: React.FC<Props> = ({ panel, usersList
               <GraduationCap size={18} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
-                Cấu hình Học vụ: Tab Học viên, Chương trình Đào tạo &amp; Mẫu Email
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0F172A' }}>
+                Cấu hình học vụ: Tab học viên, chương trình đào tạo &amp; mẫu email
               </h3>
               <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748B' }}>
                 Toàn bộ các tab trên trang Học viên (/students), khung môn học và email tiếp nhận học viên được lưu trữ động trong Database theo từng Tenant.
@@ -2150,8 +2268,8 @@ export const EnterpriseSaaSSettingsPanels: React.FC<Props> = ({ panel, usersList
             <Building2 size={18} />
           </div>
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
-              Thương hiệu Tổ chức, Tên miền &amp; Đầu mối Vận hành (Multi-Tenant Profile)
+            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0F172A' }}>
+              Thương hiệu tổ chức, tên miền &amp; đầu mối vận hành
             </h3>
             <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748B' }}>
               Quản lý tập trung Logo, Tên miền nội bộ, Hotline/Email Học vụ, CC mặc định và liên kết LMS/AI của Tenant #{config?.tenant_id || 1}.

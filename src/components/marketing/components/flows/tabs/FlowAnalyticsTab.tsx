@@ -91,7 +91,7 @@ const FlowAnalyticsTab: React.FC<{
         { id: 'sent', label: 'Đã gửi', icon: Send, color: 'text-blue-500' },
         { id: 'failed', label: 'Lỗi / Bỏ qua', icon: AlertOctagon, color: 'text-rose-500' },
         { id: 'unsubscribe', label: 'Hủy đăng ký', icon: UserMinus, color: 'text-orange-500' },
-        { id: 'enter_flow', label: 'Tham gia', icon: Plus, color: 'text-indigo-500' },
+        { id: 'enter_flow', label: 'Tham gia', icon: Plus, color: 'text-slate-600' },
         { id: 'complete_flow', label: 'Hoàn thành', icon: Check, color: 'text-emerald-500' },
     ];
 
@@ -160,20 +160,20 @@ const FlowAnalyticsTab: React.FC<{
         if (type === 'trigger') {
             const tType = config.type || 'segment';
             switch (tType) {
-                case 'segment': return (config.targetSubtype === 'list' || config.targetSubtype === 'sync') ? { icon: ListPlus, gradient: 'from-emerald-500 to-teal-600', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10', label: 'List Trigger' } : { icon: Layers, gradient: 'from-orange-500 to-[#BD1D2D]', inlineGradient: 'linear-gradient(135deg, #f97316 0%, #BD1D2D 100%)', text: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-500/10', label: 'Segment Trigger' };
-                case 'form': return { icon: FileInput, gradient: 'from-[#BD1D2D] to-[#991522]', inlineGradient: 'linear-gradient(135deg, #BD1D2D 0%, #f97316 100%)', text: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-500/10', label: 'Form Trigger' };
-                case 'purchase': return { icon: ShoppingCart, gradient: 'from-pink-500 to-rose-600', text: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-50 dark:bg-pink-500/10', label: 'Purchase Trigger' };
-                case 'custom_event': return { icon: Zap, gradient: 'from-blue-500 to-indigo-600', text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', label: 'Custom Event' };
-                case 'tag': return { icon: Tag, gradient: 'from-emerald-500 to-teal-600', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10', label: 'Tag Trigger' };
-                case 'date': return { icon: Calendar, gradient: 'from-blue-500 to-indigo-600', text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', label: 'Date Event' };
-                case 'campaign': return { icon: Send, gradient: 'from-blue-500 to-purple-600', text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', label: 'Campaign Trigger' };
-                default: return { icon: Zap, gradient: 'from-slate-700 to-slate-900', text: 'text-slate-600 dark:text-slate-300', bg: 'bg-slate-50 dark:bg-slate-800', label: 'Trigger' };
+                case 'segment': return (config.targetSubtype === 'list' || config.targetSubtype === 'sync') ? { icon: ListPlus, gradient: 'bg-emerald-600', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10', label: 'List Trigger' } : { icon: Layers, gradient: 'bg-[#BD1D2D]', inlineGradient: 'linear-gradient(135deg, #f97316 0%, #BD1D2D 100%)', text: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-500/10', label: 'Segment Trigger' };
+                case 'form': return { icon: FileInput, gradient: 'bg-[#BD1D2D]', inlineGradient: 'linear-gradient(135deg, #BD1D2D 0%, #f97316 100%)', text: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-500/10', label: 'Form Trigger' };
+                case 'purchase': return { icon: ShoppingCart, gradient: 'bg-[#BD1D2D]', text: 'text-[#BD1D2D] dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-500/10', label: 'Purchase Trigger' };
+                case 'custom_event': return { icon: Zap, gradient: 'bg-blue-600', text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', label: 'Custom Event' };
+                case 'tag': return { icon: Tag, gradient: 'bg-emerald-600', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10', label: 'Tag Trigger' };
+                case 'date': return { icon: Calendar, gradient: 'bg-blue-600', text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', label: 'Date Event' };
+                case 'campaign': return { icon: Send, gradient: 'bg-[#BD1D2D]', text: 'text-[#BD1D2D] dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-500/10', label: 'Campaign Trigger' };
+                default: return { icon: Zap, gradient: 'bg-[#0F172A]', text: 'text-slate-600 dark:text-slate-300', bg: 'bg-slate-50 dark:bg-slate-800', label: 'Trigger' };
             }
         }
 
         // 2. ACTION STYLES
         switch (type) {
-            case 'action': return { icon: Mail, gradient: 'from-blue-600 to-indigo-700', text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', label: 'Email' };
+            case 'action': return { icon: Mail, gradient: 'bg-blue-600', text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', label: 'Email' };
             case 'zalo_zns': return {
                 icon: ({ className }: { className?: string }) => (
                     <img
@@ -182,20 +182,20 @@ const FlowAnalyticsTab: React.FC<{
                         className={className}
                     />
                 ),
-                gradient: 'from-blue-400 to-blue-600',
+                gradient: 'bg-blue-600',
                 text: 'text-blue-600 dark:text-blue-400',
                 bg: 'bg-blue-50 dark:bg-blue-500/10',
                 label: 'Zalo ZNS'
             };
-            case 'wait': return { icon: Clock, gradient: 'from-amber-400 to-orange-500', inlineGradient: 'linear-gradient(135deg, #fbbf24 0%, #f97316 100%)', text: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10', label: 'Delay' };
-            case 'condition': return { icon: GitMerge, gradient: 'from-indigo-500 to-purple-600', text: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-500/10', label: 'Condition' };
-            case 'advanced_condition': return { icon: GitMerge, gradient: 'from-indigo-500 to-purple-600', text: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-500/10', label: 'Adv. Condition' };
-            case 'split_test': return { icon: Beaker, gradient: 'from-blue-500 to-fuchsia-600', text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', label: 'A/B Test' };
-            case 'update_tag': return { icon: Tag, gradient: 'from-emerald-500 to-emerald-700', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10', label: 'Update Tag' };
-            case 'list_action': return { icon: List, gradient: 'from-orange-500 to-orange-700', text: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-500/10', label: 'List Action' };
-            case 'link_flow': return { icon: LinkIcon, gradient: 'from-slate-700 to-slate-900', text: 'text-slate-600 dark:text-slate-300', bg: 'bg-slate-50 dark:bg-slate-800', label: 'Jump Flow' };
-            case 'remove_action': return { icon: UserMinus, gradient: 'from-rose-500 to-red-600', text: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-500/10', label: 'Clean Up' };
-            default: return { icon: CheckCircle2, gradient: 'from-slate-400 to-slate-500', text: 'text-slate-500 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-800', label: 'Step' };
+            case 'wait': return { icon: Clock, gradient: 'bg-amber-500', inlineGradient: 'linear-gradient(135deg, #fbbf24 0%, #f97316 100%)', text: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10', label: 'Delay' };
+            case 'condition': return { icon: GitMerge, gradient: 'bg-[#0F172A]', text: 'text-slate-700 dark:text-slate-300', bg: 'bg-slate-100 dark:bg-slate-800', label: 'Condition' };
+            case 'advanced_condition': return { icon: GitMerge, gradient: 'bg-[#0F172A]', text: 'text-slate-700 dark:text-slate-300', bg: 'bg-slate-100 dark:bg-slate-800', label: 'Adv. Condition' };
+            case 'split_test': return { icon: Beaker, gradient: 'bg-blue-600', text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', label: 'A/B Test' };
+            case 'update_tag': return { icon: Tag, gradient: 'bg-emerald-600', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10', label: 'Update Tag' };
+            case 'list_action': return { icon: List, gradient: 'bg-orange-600', text: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-500/10', label: 'List Action' };
+            case 'link_flow': return { icon: LinkIcon, gradient: 'bg-[#0F172A]', text: 'text-slate-600 dark:text-slate-300', bg: 'bg-slate-50 dark:bg-slate-800', label: 'Jump Flow' };
+            case 'remove_action': return { icon: UserMinus, gradient: 'bg-rose-600', text: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-500/10', label: 'Clean Up' };
+            default: return { icon: CheckCircle2, gradient: 'bg-slate-500', text: 'text-slate-500 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-800', label: 'Step' };
         }
     };
 
@@ -913,7 +913,7 @@ const FlowAnalyticsTab: React.FC<{
         showToast('Đang xuất Báo cáo...', 'info');
         const res = await api.post(`flows?id=${flow.id}&route=export-analytics`, {});
         if (res.success) {
-            showToast('Xuất Báo cáo thành công!');
+            showToast('Xuất Báo cáo thành công');
         } else {
             showToast('Lỗi khi xuất Báo cáo', 'error');
         }
@@ -971,7 +971,7 @@ const FlowAnalyticsTab: React.FC<{
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(downloadUrl);
-            showToast('Xuất lịch sử thành công!');
+            showToast('Xuất lịch sử thành công');
         } catch (err) {
             console.error('Failed to export history:', err);
             showToast('Lỗi khi xuất lịch sử', 'error');
@@ -1009,7 +1009,7 @@ const FlowAnalyticsTab: React.FC<{
                 showToast('Đang dọn dẹp...', 'info');
                 const res = await api.post(`flows?id=${flow.id}&route=clean-failed`, {});
                 if (res.success) {
-                    showToast('Đã dọn dẹp người dùng bị lỗi!');
+                    showToast('Đã dọn dẹp người dùng bị lỗi');
                     refreshFlow();
                 } else {
                     showToast('Lỗi khi dọn dẹp', 'error');
@@ -1038,7 +1038,7 @@ const FlowAnalyticsTab: React.FC<{
                     padding: '16px 18px',
                     boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
                 }}
-                className={`stat-card w-full min-w-0 h-full flex flex-col justify-between transition-all duration-200 hover:shadow-md ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
+                className={`stat-card w-full min-w-0 h-full flex flex-col justify-between transition-shadow duration-200 hover:shadow-md ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
             >
                 <div className="relative z-10 flex flex-col justify-between h-full w-full min-w-0">
                     <div>
@@ -1113,7 +1113,7 @@ const FlowAnalyticsTab: React.FC<{
     const BottleneckBadge = ({ type, value, tooltip }: { type: 'time' | 'drop', value: string, tooltip?: string }) => (
         <div
             title={tooltip}
-            className={`absolute -top-3 -right-3 z-50 px-3 py-1.5 rounded-full shadow-none border flex items-center gap-2 animate-pulse cursor-help ${type === 'time' ? 'bg-amber-600 border-amber-400 text-white' : 'bg-orange-500 border-orange-400 text-white'
+            className={`absolute -top-3 -right-3 z-50 px-3 py-1.5 rounded-full shadow-none border flex items-center gap-2 cursor-help ${type === 'time' ? 'bg-amber-600 border-amber-400 text-white' : 'bg-orange-500 border-orange-400 text-white'
                 }`}
         >
             <AlertOctagon className="w-4 h-4" />
@@ -1125,13 +1125,13 @@ const FlowAnalyticsTab: React.FC<{
         <div ref={containerRef} className="p-3 md:p-6 lg:px-8 lg:pb-8 lg:pt-4 space-y-4 md:space-y-8 max-w-[1400px] mx-auto animate-in fade-in duration-500 relative pb-20">
 
             {/* Clean SaaS ERP Performance Header Banner */}
-            <div className="bg-[var(--color-surface)] border border-slate-200 dark:border-slate-800 rounded-xl p-5 md:p-6 shadow-none transition-all">
+            <div className="bg-[var(--color-surface)] border border-slate-200 dark:border-slate-800 rounded-xl p-5 md:p-6 shadow-none transition-colors">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
                     {/* Left: Main Performance */}
                     <div className="lg:col-span-5 lg:border-r border-[var(--color-border-light)] lg:pr-6">
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-[14px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-100 dark:border-blue-800/40">
+                                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-100 dark:border-blue-800/40">
                                     <Activity className="w-5 h-5" />
                                 </div>
                                 <div>
@@ -1146,7 +1146,7 @@ const FlowAnalyticsTab: React.FC<{
                             </div>
                             <button
                                 onClick={() => setIsSimulateModalOpen(true)}
-                                className="h-8 px-3 rounded-[10px] border border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] text-xs font-semibold text-[var(--color-text)] flex items-center gap-1.5 transition-colors shadow-xs"
+                                className="h-8 px-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] text-xs font-semibold text-[var(--color-text)] flex items-center gap-1.5 transition-colors shadow-xs"
                             >
                                 <Beaker className="w-3.5 h-3.5 text-blue-500" />
                                 <span>FLOW TEST</span>
@@ -1157,20 +1157,20 @@ const FlowAnalyticsTab: React.FC<{
                             <div className="flex justify-between items-end">
                                 <div>
                                     <p className="text-[10px] font-bold uppercase text-[var(--color-text-muted)] tracking-wider mb-0.5">Tỷ lệ hoàn tất</p>
-                                    <div className="flex items-baseline gap-2">
-                                        <span className="text-2xl font-black text-[var(--color-text)]">{completionRate}%</span>
+                                    <div className="flex items-baseline gap-2 tabular-nums">
+                                        <span className="text-2xl font-bold text-[var(--color-text)]">{completionRate}%</span>
                                         <span className="text-xs text-[var(--color-text-muted)] font-medium">({stats.completed}/{stats.enrolled})</span>
                                     </div>
                                 </div>
-                                <div className="text-right">
+                                <div className="text-right tabular-nums">
                                     <p className="text-[10px] font-bold uppercase text-[var(--color-text-muted)] tracking-wider mb-0.5">Tỷ lệ mở TB</p>
-                                    <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">{realOpenRate}%</span>
+                                    <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{realOpenRate}%</span>
                                 </div>
                             </div>
 
                             <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                                 <div
-                                    className="h-full rounded-full transition-all duration-1000"
+                                    className="h-full rounded-full transition-[width] duration-700"
                                     style={{ width: `${Math.min(100, Math.max(0, completionPct))}%`, backgroundColor: completionColor }}
                                 ></div>
                             </div>
@@ -1180,28 +1180,28 @@ const FlowAnalyticsTab: React.FC<{
                     {/* Middle: Key Figures & Link */}
                     <div className="lg:col-span-7 flex flex-col gap-4">
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            <div className="p-3 rounded-[14px] bg-[var(--color-bg)] border border-[var(--color-border-light)] text-center sm:text-left">
+                            <div className="p-3 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border-light)] text-center sm:text-left">
                                 <p className="text-[10px] font-bold uppercase text-[var(--color-text-muted)] tracking-wider mb-1">Đã gửi</p>
                                 <div className="flex items-center justify-center sm:justify-start gap-2">
-                                    <div className="w-7 h-7 rounded-[8px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 flex items-center justify-center shrink-0">
+                                    <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 flex items-center justify-center shrink-0">
                                         <Mail className="w-3.5 h-3.5" />
                                     </div>
                                     <span className="text-base font-bold text-[var(--color-text)] tabular-nums">{(stats.totalSent || 0).toLocaleString()}</span>
                                 </div>
                             </div>
-                            <div className="p-3 rounded-[14px] bg-[var(--color-bg)] border border-[var(--color-border-light)] text-center sm:text-left">
+                            <div className="p-3 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border-light)] text-center sm:text-left">
                                 <p className="text-[10px] font-bold uppercase text-[var(--color-text-muted)] tracking-wider mb-1">Đã mở</p>
                                 <div className="flex items-center justify-center sm:justify-start gap-2">
-                                    <div className="w-7 h-7 rounded-[8px] bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center shrink-0">
+                                    <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center shrink-0">
                                         <MailOpen className="w-3.5 h-3.5" />
                                     </div>
                                     <span className="text-base font-bold text-[var(--color-text)] tabular-nums">{(stats.totalOpened || 0).toLocaleString()}</span>
                                 </div>
                             </div>
-                            <div className="p-3 rounded-[14px] bg-[var(--color-bg)] border border-[var(--color-border-light)] text-center sm:text-left">
+                            <div className="p-3 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border-light)] text-center sm:text-left">
                                 <p className="text-[10px] font-bold uppercase text-[var(--color-text-muted)] tracking-wider mb-1">Gửi lỗi</p>
                                 <div className="flex items-center justify-center sm:justify-start gap-2">
-                                    <div className="w-7 h-7 rounded-[8px] bg-rose-50 dark:bg-rose-950/40 text-rose-600 flex items-center justify-center shrink-0">
+                                    <div className="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 flex items-center justify-center shrink-0">
                                         <AlertOctagon className="w-3.5 h-3.5" />
                                     </div>
                                     <span className={`text-base font-bold tabular-nums ${(stats.totalFailed || 0) > 0 ? 'text-rose-600' : 'text-[var(--color-text)]'}`}>
@@ -1209,10 +1209,10 @@ const FlowAnalyticsTab: React.FC<{
                                     </span>
                                 </div>
                             </div>
-                            <div className="p-3 rounded-[14px] bg-[var(--color-bg)] border border-[var(--color-border-light)] text-center sm:text-left">
+                            <div className="p-3 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border-light)] text-center sm:text-left">
                                 <p className="text-[10px] font-bold uppercase text-[var(--color-text-muted)] tracking-wider mb-1">Hủy đăng ký</p>
                                 <div className="flex items-center justify-center sm:justify-start gap-2">
-                                    <div className="w-7 h-7 rounded-[8px] bg-orange-50 dark:bg-orange-950/40 text-orange-600 flex items-center justify-center shrink-0">
+                                    <div className="w-7 h-7 rounded-lg bg-orange-50 dark:bg-orange-950/40 text-orange-600 flex items-center justify-center shrink-0">
                                         <UserMinus className="w-3.5 h-3.5" />
                                     </div>
                                     <span className={`text-base font-bold tabular-nums ${(stats.totalUnsubscribed || 0) > 0 ? 'text-orange-600' : 'text-[var(--color-text)]'}`}>
@@ -1224,8 +1224,8 @@ const FlowAnalyticsTab: React.FC<{
 
                         {/* Campaign Link */}
                         {triggerStep?.config?.type === 'campaign' && triggerStep.config.targetId && (
-                            <div className="flex items-center gap-3 p-3 bg-[var(--color-bg)] border border-[var(--color-border-light)] rounded-[14px]">
-                                <div className="w-9 h-9 bg-rose-50 dark:bg-rose-950/40 text-rose-600 rounded-[10px] flex items-center justify-center shrink-0">
+                            <div className="flex items-center gap-3 p-3 bg-[var(--color-bg)] border border-[var(--color-border-light)] rounded-xl">
+                                <div className="w-9 h-9 bg-rose-50 dark:bg-rose-950/40 text-rose-600 rounded-lg flex items-center justify-center shrink-0">
                                     <Send className="w-4 h-4" />
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -1234,7 +1234,7 @@ const FlowAnalyticsTab: React.FC<{
                                 </div>
                                 <button
                                     onClick={() => navigate('/marketing/campaigns', { state: { openCampaignId: triggerStep.config.targetId } })}
-                                    className="h-8 px-3 bg-[var(--color-surface)] border border-[var(--color-border)] hover:bg-[var(--color-bg)] rounded-[10px] text-xs font-semibold text-[var(--color-text)] transition-all flex items-center gap-1.5 shadow-xs"
+                                    className="h-8 px-3 bg-[var(--color-surface)] border border-[var(--color-border)] hover:bg-[var(--color-bg)] rounded-lg text-xs font-semibold text-[var(--color-text)] transition-colors flex items-center gap-1.5 shadow-xs"
                                 >
                                     <span>Báo cáo</span>
                                     <ExternalLink className="w-3.5 h-3.5" />
@@ -1264,7 +1264,7 @@ const FlowAnalyticsTab: React.FC<{
                     label="Lượt mở duy nhất"
                     value={(stats.uniqueOpened || 0).toLocaleString()}
                     icon={UserCheck}
-                    color="bg-indigo-600"
+                    color="bg-slate-700"
                     subText={
                         <span className="flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
@@ -1336,7 +1336,7 @@ const FlowAnalyticsTab: React.FC<{
                             </div>
                             <button
                                 onClick={() => fetchInactiveUsers()}
-                                className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 hover:border-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-300 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2"
+                                className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 hover:border-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-300 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-2"
                             >
                                 <UserMinus className="w-3.5 h-3.5 text-slate-400" />
                                 KHÔNG TƯƠNG TÁC
@@ -1357,12 +1357,12 @@ const FlowAnalyticsTab: React.FC<{
                                                 case 'zalo_zns': return 'bg-blue-500 dark:bg-blue-400';
                                                 case 'wait': return 'bg-amber-500 dark:bg-amber-400';
                                                 case 'condition':
-                                                case 'advanced_condition': return 'bg-indigo-500 dark:bg-indigo-400';
+                                                case 'advanced_condition': return 'bg-slate-700 dark:bg-slate-400';
                                                 case 'split_test': return 'bg-blue-500 dark:bg-blue-400';
                                                 case 'update_tag': return 'bg-emerald-500 dark:bg-emerald-400';
                                                 case 'list_action': return 'bg-orange-500 dark:bg-orange-400';
                                                 case 'remove_action': return 'bg-rose-500 dark:bg-rose-400';
-                                                default: return 'bg-indigo-500 dark:bg-indigo-400';
+                                                default: return 'bg-slate-700 dark:bg-slate-400';
                                             }
                                         })();
                                         return (
@@ -1388,7 +1388,7 @@ const FlowAnalyticsTab: React.FC<{
                                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between w-full gap-4">
 
                                                         <div className="flex items-center flex-1 min-w-0 gap-3 md:gap-4">
-                                                            <div className={`${item.type === 'wait' ? 'w-8 h-8' : 'w-10 h-10'} rounded-lg flex items-center justify-center shadow-none bg-gradient-to-br ${item.style.gradient} text-white shrink-0`} style={item.style.inlineGradient ? { background: item.style.inlineGradient } : undefined}>
+                                                            <div className={`${item.type === 'wait' ? 'w-8 h-8' : 'w-10 h-10'} rounded-lg flex items-center justify-center shadow-none ${item.style.gradient} text-white shrink-0`} style={item.style.inlineGradient ? { background: item.style.inlineGradient } : undefined}>
                                                                 <Icon className={`${item.type === 'wait' ? 'w-4 h-4' : 'w-5 h-5'}`} />
                                                             </div>
                                                             <div className="min-w-0 flex-1">
@@ -1397,7 +1397,7 @@ const FlowAnalyticsTab: React.FC<{
                                                                         {item.stepNumberLabel}: {item.style.label}
                                                                     </span>
                                                                     {item.waiting > 0 && (
-                                                                        <span className="flex items-center gap-1 text-[8px] md:text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded-md animate-pulse">
+                                                                        <span className="flex items-center gap-1 text-[8px] md:text-[9px] font-bold tabular-nums text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded-md">
                                                                             <div className="w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-amber-600 dark:bg-amber-400"></div>
                                                                             Chờ: {item.waiting}
                                                                         </span>
@@ -1419,7 +1419,7 @@ const FlowAnalyticsTab: React.FC<{
 
                                                         {/* Right: Stats */}
                                                         <div className="flex items-center shrink-0 justify-between sm:justify-end gap-4 md:gap-8 text-right">
-                                                            <div className="flex flex-col sm:flex-row gap-2 md:gap-3 items-end sm:items-center">
+                                                            <div className="flex flex-col sm:flex-row gap-2 md:gap-3 items-end sm:items-center tabular-nums">
                                                                 {item.type === 'completed' ? (
                                                                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 shadow-none">
                                                                         <CheckCircle2 size={13} className="text-emerald-500 dark:text-emerald-400" />
@@ -1430,7 +1430,7 @@ const FlowAnalyticsTab: React.FC<{
                                                                         <div className="flex items-center gap-1.5" title="Đang ở đây (Waiting)">
                                                                             <div
                                                                                 onClick={(e) => { e.stopPropagation(); handleStepClick(item.id, item.type, 'waiting'); }}
-                                                                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50/60 dark:bg-amber-500/5 border border-amber-200/40 dark:border-amber-500/20 transition-all hover:bg-amber-500 hover:border-amber-500 dark:hover:bg-amber-500 group/pill cursor-pointer text-amber-700 dark:text-amber-400 hover:text-white dark:hover:text-white"
+                                                                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50/60 dark:bg-amber-500/5 border border-amber-200/40 dark:border-amber-500/20 transition-colors hover:bg-amber-500 hover:border-amber-500 dark:hover:bg-amber-500 group/pill cursor-pointer text-amber-700 dark:text-amber-400 hover:text-white dark:hover:text-white"
                                                                             >
                                                                                 <Clock size={12} className="text-amber-500 dark:text-amber-400 group-hover/pill:text-white" />
                                                                                 <span className="text-[11px] md:text-xs font-bold group-hover/pill:text-white">
@@ -1441,7 +1441,7 @@ const FlowAnalyticsTab: React.FC<{
                                                                         <div className="flex items-center gap-1.5" title="Đã đi qua (Processed)">
                                                                             <div
                                                                                 onClick={(e) => { e.stopPropagation(); handleStepClick(item.id, item.type, 'all_touched'); }}
-                                                                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50/60 dark:bg-emerald-500/5 border border-emerald-200/40 dark:border-emerald-500/20 transition-all hover:bg-emerald-500 hover:border-emerald-500 dark:hover:bg-emerald-500 group/pill2 cursor-pointer text-emerald-700 dark:text-emerald-400 hover:text-white dark:hover:text-white"
+                                                                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50/60 dark:bg-emerald-500/5 border border-emerald-200/40 dark:border-emerald-500/20 transition-colors hover:bg-emerald-500 hover:border-emerald-500 dark:hover:bg-emerald-500 group/pill2 cursor-pointer text-emerald-700 dark:text-emerald-400 hover:text-white dark:hover:text-white"
                                                                             >
                                                                                 <FastForward size={12} className="text-emerald-500 dark:text-emerald-400 group-hover/pill2:text-white" />
                                                                                 <span className="text-[11px] md:text-xs font-bold group-hover/pill2:text-white">
@@ -1454,7 +1454,7 @@ const FlowAnalyticsTab: React.FC<{
                                                             </div>
 
                                                             {/* Contextual Metric based on Type */}
-                                                            <div className="w-16 md:w-20">
+                                                            <div className="w-16 md:w-20 tabular-nums">
                                                                 {item.type === 'action' && (
                                                                     <>
                                                                         <div className="flex justify-end items-center gap-1 mb-1">
@@ -1469,7 +1469,7 @@ const FlowAnalyticsTab: React.FC<{
                                                                         <div className="flex justify-end items-center gap-1 mb-1">
                                                                             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Wait: {item.config.waitDuration}{item.config.waitUnit === 'days' ? 'd' : (item.config.waitUnit === 'hours' ? 'h' : 'm')}</span>
                                                                         </div>
-                                                                        <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">{item.detailStat || '--'}</div>
+                                                                        <div className="text-[10px] font-bold text-slate-700 dark:text-slate-300">{item.detailStat || '--'}</div>
                                                                     </>
                                                                 )}
                                                                 {item.type === 'split_test' && (
@@ -1485,7 +1485,7 @@ const FlowAnalyticsTab: React.FC<{
                                                                         <div className="flex justify-end items-center gap-1 mb-1">
                                                                             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Results</span>
                                                                         </div>
-                                                                        <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 truncate max-w-[120px]" title={item.detailStat}>
+                                                                        <div className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]" title={item.detailStat}>
                                                                             {item.detailStat || '--'}
                                                                         </div>
                                                                     </>
@@ -1549,14 +1549,14 @@ const FlowAnalyticsTab: React.FC<{
 
                                                 {/* Branch Switching UI */}
                                                 {item.hasBranches && (
-                                                    <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex bg-white dark:bg-slate-950 rounded-lg shadow-none border border-slate-200 dark:border-slate-800 p-0.5 transition-all z-20">
+                                                    <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex bg-white dark:bg-slate-950 rounded-lg shadow-none border border-slate-200 dark:border-slate-800 p-0.5 transition-colors z-20">
                                                         {item.type === 'advanced_condition' ? (
                                                             <div className="flex items-center gap-1 px-2">
                                                                 {(item.config.branches || []).map((b: any, i: number) => (
                                                                     <button
                                                                         key={b.id || i}
                                                                         onClick={(e) => { e.stopPropagation(); setActiveBranches(prev => ({ ...prev, [item.id]: b.id })); }}
-                                                                        className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-colors whitespace-nowrap ${item.activeBranch === b.id || (!item.activeBranch && i === 0 && item.activeBranch !== 'fallback') ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400' : 'text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
+                                                                        className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-colors whitespace-nowrap ${item.activeBranch === b.id || (!item.activeBranch && i === 0 && item.activeBranch !== 'fallback') ? 'bg-rose-50 dark:bg-rose-500/20 text-[#BD1D2D] dark:text-rose-400' : 'text-slate-400 hover:text-[#BD1D2D] dark:hover:text-rose-400'}`}
                                                                     >
                                                                         {b.label || `Branch ${i + 1}`}
                                                                     </button>
@@ -1564,7 +1564,7 @@ const FlowAnalyticsTab: React.FC<{
                                                                 {/* Fallback Branch Button */}
                                                                 <button
                                                                     onClick={(e) => { e.stopPropagation(); setActiveBranches(prev => ({ ...prev, [item.id]: 'fallback' })); }}
-                                                                    className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-colors whitespace-nowrap ${item.activeBranch === 'fallback' ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200' : 'text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
+                                                                    className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-colors whitespace-nowrap ${item.activeBranch === 'fallback' ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200' : 'text-slate-400 hover:text-[#BD1D2D] dark:hover:text-rose-400'}`}
                                                                 >
                                                                     Mặc định (Fallback)
                                                                 </button>
@@ -1573,13 +1573,13 @@ const FlowAnalyticsTab: React.FC<{
                                                             <>
                                                                 <button
                                                                     onClick={(e) => { e.stopPropagation(); setActiveBranches(prev => ({ ...prev, [item.id]: item.type === 'split_test' ? 'A' : 'yes' })); }}
-                                                                    className={`px-3 min-w-[45px] py-0.5 text-[9px] font-bold rounded-md transition-all flex items-center justify-center ${item.activeBranch === 'yes' || item.activeBranch === 'A' || (!item.activeBranch) ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400' : 'text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
+                                                                    className={`px-3 min-w-[45px] py-0.5 text-[9px] font-bold rounded-md transition-colors flex items-center justify-center ${item.activeBranch === 'yes' || item.activeBranch === 'A' || (!item.activeBranch) ? 'bg-rose-50 dark:bg-rose-500/20 text-[#BD1D2D] dark:text-rose-400' : 'text-slate-400 hover:text-[#BD1D2D] dark:hover:text-rose-400'}`}
                                                                 >
                                                                     {item.type === 'split_test' ? 'Path A' : 'IF'}
                                                                 </button>
                                                                 <button
                                                                     onClick={(e) => { e.stopPropagation(); setActiveBranches(prev => ({ ...prev, [item.id]: item.type === 'split_test' ? 'B' : 'no' })); }}
-                                                                    className={`px-3 min-w-[45px] py-0.5 text-[9px] font-bold rounded-md transition-all flex items-center justify-center ${item.activeBranch === 'no' || item.activeBranch === 'B' ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400' : 'text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
+                                                                    className={`px-3 min-w-[45px] py-0.5 text-[9px] font-bold rounded-md transition-colors flex items-center justify-center ${item.activeBranch === 'no' || item.activeBranch === 'B' ? 'bg-rose-50 dark:bg-rose-500/20 text-[#BD1D2D] dark:text-rose-400' : 'text-slate-400 hover:text-[#BD1D2D] dark:hover:text-rose-400'}`}
                                                                 >
                                                                     {item.type === 'split_test' ? 'Path B' : 'ELSE'}
                                                                 </button>
@@ -1609,10 +1609,10 @@ const FlowAnalyticsTab: React.FC<{
                             <div className="px-4 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20 sticky top-0 z-10">
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2">
-                                        <div className="p-1 bg-indigo-50 text-indigo-600 rounded-lg">
+                                        <div className="p-1 bg-rose-50 text-[#BD1D2D] rounded-lg">
                                             <Activity className="w-3.5 h-3.5" />
                                         </div>
-                                        <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-widest">Nhật ký</span>
+                                        <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-widest">Nhật ký</span>
 
                                     </div>
                                     <div className="flex items-center gap-3">
@@ -1620,9 +1620,9 @@ const FlowAnalyticsTab: React.FC<{
                                             <button
                                                 onClick={() => setIsLogFilterOpen(!isLogFilterOpen)}
                                                 className={`
-                                                    flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all duration-300
+                                                    flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-colors duration-200
                                                     ${isLogFilterOpen 
-                                                        ? 'bg-white dark:bg-slate-800 border-indigo-400 shadow-none' 
+                                                        ? 'bg-white dark:bg-slate-800 border-[#BD1D2D] shadow-none' 
                                                         : 'bg-white/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700/60 hover:border-slate-300'}
                                                 `}
                                             >
@@ -1650,9 +1650,9 @@ const FlowAnalyticsTab: React.FC<{
                                                                         setIsLogFilterOpen(false);
                                                                     }}
                                                                     className={`
-                                                                        w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[9px] font-bold transition-all
+                                                                        w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[9px] font-bold transition-colors
                                                                         ${logTypeFilter === opt.id 
-                                                                            ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' 
+                                                                            ? 'bg-rose-50 dark:bg-rose-500/10 text-[#BD1D2D] dark:text-rose-400' 
                                                                             : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}
                                                                     `}
                                                                 >
@@ -1669,23 +1669,23 @@ const FlowAnalyticsTab: React.FC<{
                                             </AnimatePresence>
                                         </div>
                                         <div className="relative group/search">
-                                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-slate-400 group-focus-within/search:text-indigo-500 transition-colors" />
+                                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-slate-400 group-focus-within/search:text-[#BD1D2D] transition-colors" />
                                             <input
                                                 type="text"
                                                 placeholder="Tìm kiếm email..."
                                                 value={logSearchTerm}
                                                 onChange={(e) => setLogSearchTerm(e.target.value)}
-                                                className="pl-7 pr-3 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-lg text-[9px] w-28 focus:w-44 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-400 transition-all outline-none"
+                                                className="pl-7 pr-3 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-lg text-[9px] w-28 focus:w-44 focus:ring-4 focus:ring-rose-500/10 focus:border-[#BD1D2D] transition-[width,border-color] outline-none"
                                             />
                                         </div>
                                         <button 
                                             onClick={handleExportLogs} 
                                             title="Xuất nhật ký CSV"
-                                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-transparent hover:border-indigo-100 transition-all"
+                                            className="p-1.5 text-slate-400 hover:text-[#BD1D2D] hover:bg-rose-50 rounded-lg border border-transparent hover:border-rose-200 transition-colors"
                                         >
                                             <FileDown className="w-3 h-3" />
                                         </button>
-                                        <button onClick={handleRefreshLogs} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-transparent hover:border-indigo-100 transition-all">
+                                        <button onClick={handleRefreshLogs} className="p-1.5 text-slate-400 hover:text-[#BD1D2D] hover:bg-rose-50 rounded-lg border border-transparent hover:border-rose-200 transition-colors">
                                             <RefreshCcw className="w-3 h-3" />
                                         </button>
                                     </div>
@@ -1696,13 +1696,13 @@ const FlowAnalyticsTab: React.FC<{
                                     <div className="space-y-3 p-4">
                                         {Array.from({ length: 5 }).map((_, i) => (
                                             <div key={i} className="flex items-start gap-3">
-                                                <div className="w-7 h-7 animate-pulse bg-slate-200/70 rounded-[12px] shrink-0" />
+                                                <div className="w-7 h-7 animate-pulse bg-slate-200/70 rounded-lg shrink-0" />
                                                 <div className="flex-1 space-y-2">
                                                     <div className="flex justify-between gap-2">
-                                                        <div className="h-3 w-2/5 animate-pulse bg-slate-200/70 rounded-[12px]" />
-                                                        <div className="h-3 w-1/5 animate-pulse bg-slate-200/70 rounded-[12px]" />
+                                                        <div className="h-3 w-2/5 animate-pulse bg-slate-200/70 rounded-lg" />
+                                                        <div className="h-3 w-1/5 animate-pulse bg-slate-200/70 rounded-lg" />
                                                     </div>
-                                                    <div className="h-3.5 w-11/12 animate-pulse bg-slate-200/70 rounded-[12px]" />
+                                                    <div className="h-3.5 w-11/12 animate-pulse bg-slate-200/70 rounded-lg" />
                                                 </div>
                                             </div>
                                         ))}
@@ -1745,14 +1745,14 @@ const FlowAnalyticsTab: React.FC<{
                             {logs.length > 0 && logPagination.totalPages > 1 && (
                                 <div className="sticky bottom-0 px-4 py-3 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-950/30 shrink-0">
                                     <div className="flex items-center justify-between">
-                                        <div className="text-[9px] text-slate-500 dark:text-slate-400 font-bold">
+                                        <div className="text-[9px] text-slate-500 dark:text-slate-400 font-bold tabular-nums">
                                             Trang {logPagination.page} / {logPagination.totalPages} • Tổng {logPagination.total} sự kiện
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <button
                                                 onClick={() => fetchLogs(logPagination.page - 1, true, debouncedLogSearch)}
                                                 disabled={logPagination.page <= 1 || loadingLogs}
-                                                className="px-3 py-1.5 text-[9px] font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-lg hover:bg-slate-50 dark:bg-slate-950 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1"
+                                                className="px-3 py-1.5 text-[9px] font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-lg hover:bg-slate-50 dark:bg-slate-950 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
                                             >
                                                 <ChevronDown className="w-3 h-3 rotate-90" />
                                                 Trước
@@ -1760,7 +1760,7 @@ const FlowAnalyticsTab: React.FC<{
                                             <button
                                                 onClick={() => fetchLogs(logPagination.page + 1, true, debouncedLogSearch)}
                                                 disabled={logPagination.page >= logPagination.totalPages || loadingLogs}
-                                                className="px-3 py-1.5 text-[9px] font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-lg hover:bg-slate-50 dark:bg-slate-950 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1"
+                                                className="px-3 py-1.5 text-[9px] font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-lg hover:bg-slate-50 dark:bg-slate-950 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
                                             >
                                                 Sau
                                                 <ChevronDown className="w-3 h-3 -rotate-90" />
@@ -1956,7 +1956,7 @@ const LogItem: React.FC<{
     }
     if (type === 'enter_flow') {
         icon = <Play className="w-3.5 h-3.5 ml-0.5" />;
-        colorClass = 'text-indigo-600 bg-indigo-50 border-indigo-100';
+        colorClass = 'text-slate-700 bg-slate-100 border-slate-200';
     }
     if (type === 'unsubscribe') {
         icon = <UserMinus className="w-3.5 h-3.5" />;
@@ -2000,7 +2000,7 @@ const LogItem: React.FC<{
     const fullName = `${log.first_name || ''} ${log.last_name || ''}`.trim() || 'Chưa đặt tên';
 
     return (
-        <div className={`group px-3 py-3 hover:bg-slate-50 dark:bg-slate-950 transition-all cursor-default border-b border-slate-50/50 ${isGroupItem ? 'bg-slate-50 dark:bg-slate-950/40 ml-4 border-l border-slate-200 dark:border-slate-700/60' : ''}`}>
+        <div className={`group px-3 py-3 hover:bg-slate-50 dark:bg-slate-950 transition-colors cursor-default border-b border-slate-50/50 ${isGroupItem ? 'bg-slate-50 dark:bg-slate-950/40 ml-4 border-l border-slate-200 dark:border-slate-700/60' : ''}`}>
             <div className="flex items-center gap-2.5">
                 {/* Avatar / Icon Container */}
                 {!isGroupItem ? (
@@ -2018,7 +2018,7 @@ const LogItem: React.FC<{
                         </div>
                     </div>
                 ) : (
-                    <div className={`shrink-0 w-5 h-5 rounded-md flex items-center justify-center border shadow-none transition-transform group-hover:scale-105 ${colorClass.replace('bg-', 'bg-opacity-10 ')}`}>
+                    <div className={`shrink-0 w-5 h-5 rounded-md flex items-center justify-center border shadow-none ${colorClass.replace('bg-', 'bg-opacity-10 ')}`}>
                         {React.cloneElement(icon as React.ReactElement<any>, { className: "w-2.5 h-2.5 opacity-80" })}
                     </div>
                 )}
@@ -2051,7 +2051,7 @@ const LogItem: React.FC<{
                                 {log.email}
                             </span>
                         )}
-                        <span className={`text-[8px] font-black uppercase tracking-tight ${colorClass.split(' ')[0]} opacity-60 whitespace-nowrap self-start mt-0.5`}>
+                        <span className={`text-[8px] font-bold uppercase ${colorClass.split(' ')[0]} opacity-70 whitespace-nowrap self-start mt-0.5`}>
                             {type.replace(/_/g, ' ')}
                         </span>
                         {log.details && (
@@ -2066,7 +2066,7 @@ const LogItem: React.FC<{
                         {!isGroupItem && hasSubs && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); onToggle?.(); }}
-                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[8px] font-black transition-all ${isExpanded ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500 dark:text-slate-400 hover:bg-slate-200'}`}
+                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[8px] font-bold tabular-nums transition-colors ${isExpanded ? 'bg-[#BD1D2D] text-white shadow-sm' : 'bg-slate-100 text-slate-500 dark:text-slate-400 hover:bg-slate-200'}`}
                             >
                                 {subCount}
                                 {isExpanded ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}

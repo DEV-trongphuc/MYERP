@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Sparkles, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import Button from '../common/Button';
 
 interface FlowEmptyStateProps {
@@ -8,13 +8,38 @@ interface FlowEmptyStateProps {
 }
 
 const FlowEmptyState: React.FC<FlowEmptyStateProps> = ({ onCreateClick }) => (
-  <div className="flex flex-col items-center justify-center py-32 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-center animate-in fade-in zoom-in-95 duration-500">
-    <div className="w-20 h-20 bg-orange-50 rounded-full flex items-center justify-center mb-8">
-      <Sparkles className="w-10 h-10 text-orange-500" />
+  <div className="flex flex-col items-center justify-center py-20 px-6 bg-white rounded-2xl border border-slate-200 text-center">
+    {/* Quiet wireframe node preview (unslop visuals.md: product moment in palette) */}
+    <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50/70 px-5 py-4" aria-hidden="true">
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 shadow-xs">
+          <span className="h-2 w-2 rounded-full bg-[#BD1D2D]" />
+          <span className="h-1.5 w-10 rounded-full bg-slate-300" />
+        </div>
+        <div className="h-px w-4 bg-slate-300" />
+        <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 shadow-xs">
+          <span className="h-2 w-2 rounded-full bg-slate-400" />
+          <span className="h-1.5 w-12 rounded-full bg-slate-200" />
+        </div>
+        <div className="h-px w-4 bg-slate-300" />
+        <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 shadow-xs">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          <span className="h-1.5 w-9 rounded-full bg-slate-200" />
+        </div>
+      </div>
     </div>
-    <h3 className="text-xl font-bold text-slate-800 uppercase tracking-tight">Chưa có kịch bản automation</h3>
-    <p className="text-slate-400 mt-2 max-w-xs mx-auto">Bắt đầu tạo luồng làm việc tự động để tối ưu hóa quy trình chăm sóc Khách hàng của bạn.</p>
-    <Button icon={Plus} className="mt-8 shadow-xl shadow-amber-600/20 transition-all duration-500" onClick={onCreateClick}>Tạo ngay kịch bản đầu tiên</Button>
+
+    <h3 className="text-base font-semibold text-slate-900">Chưa có kịch bản automation</h3>
+    <p className="text-[13px] text-slate-500 mt-1.5 max-w-sm mx-auto leading-relaxed">
+      Thiết lập luồng chăm sóc tự động theo hành vi để gửi Email, Zalo và cập nhật trạng thái khách hàng.
+    </p>
+    <Button
+      icon={Plus}
+      className="mt-6 transition-colors duration-150"
+      onClick={onCreateClick}
+    >
+      Tạo kịch bản đầu tiên
+    </Button>
   </div>
 );
 

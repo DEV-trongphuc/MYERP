@@ -62,18 +62,18 @@ const AddStepModal: React.FC<AddStepModalProps> = ({
                             }}
                             disabled={isDisabled}
                             className={`
-                                flex flex-col items-center text-center p-5 rounded-[14px] border transition-all relative group cursor-pointer
+                                flex flex-col items-center text-center p-5 rounded-xl border transition-colors relative group cursor-pointer
                                 ${
                                     isDisabled
                                         ? 'bg-slate-50 border-slate-200/60 opacity-50 cursor-not-allowed'
-                                        : 'bg-white border-slate-200 hover:border-[var(--color-primary)] hover:shadow-lg hover:shadow-red-500/5 hover:-translate-y-0.5'
+                                        : 'bg-white border-slate-200 hover:border-[var(--color-primary)] hover:bg-red-50/10'
                                 }
                             `}
                         >
-                            <div className="mb-3 transition-transform duration-300 group-hover:scale-105">
+                            <div className="mb-3">
                                 {type.id === 'crm_action' ? (
-                                    <div className="w-12 h-12 rounded-[14px] bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center shadow-sm">
-                                        <IconComp className="w-6 h-6" />
+                                    <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center shadow-sm">
+                                        <IconComp className="w-6 h-6" strokeWidth={1.75} />
                                     </div>
                                 ) : (
                                     <AppIcon name={(type as any).iconName || type.id} size={50} />
@@ -82,7 +82,7 @@ const AddStepModal: React.FC<AddStepModalProps> = ({
 
                             <div className="space-y-1">
                                 <h4
-                                    className={`font-black text-sm uppercase tracking-tight ${
+                                    className={`font-bold text-sm uppercase ${
                                         isDisabled ? 'text-slate-400' : 'text-slate-800'
                                     }`}
                                 >
@@ -100,7 +100,7 @@ const AddStepModal: React.FC<AddStepModalProps> = ({
                             {isDisabled && (
                                 <div className="mt-3 bg-slate-100 px-3 py-1 rounded-full flex items-center gap-2 border border-slate-200">
                                     <AlertTriangle className="w-3 h-3 text-slate-400" />
-                                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">
                                         {disabledReason}
                                     </span>
                                 </div>

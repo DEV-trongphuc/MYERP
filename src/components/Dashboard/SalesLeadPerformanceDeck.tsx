@@ -1140,14 +1140,6 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
             })
           }
         >
-          <div className="decor-svg" style={{ color: 'var(--color-primary)' }}>
-            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-              <circle cx="30" cy="50" r="10" stroke="currentColor" strokeWidth="2" />
-              <circle cx="70" cy="30" r="10" stroke="currentColor" strokeWidth="2" />
-              <circle cx="70" cy="70" r="10" stroke="currentColor" strokeWidth="2" />
-              <path d="M40 50 H 55 V 30 H 60 M 55 50 V 70 H 60" stroke="currentColor" strokeWidth="2" />
-            </svg>
-          </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--color-text-muted)' }}>
               TỔNG LEAD
@@ -1158,8 +1150,8 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
-                background: 'var(--color-primary-light)',
-                color: 'var(--color-primary)',
+                background: 'rgba(189, 29, 45, 0.08)',
+                color: '#BD1D2D',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1171,7 +1163,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
           </div>
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)' }}>
+            <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '1.45rem', fontVariantNumeric: 'tabular-nums' }}>
               {summary.total_leads.toLocaleString('vi-VN')}
             </div>
             <div
@@ -1188,11 +1180,11 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
               }}
             >
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block', flexShrink: 0 }} />
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#334155', display: 'inline-block', flexShrink: 0 }} />
                 <span>Đã tương tác: {summary.contacted_leads}</span>
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'inline-block', flexShrink: 0 }} />
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#BD1D2D', display: 'inline-block', flexShrink: 0 }} />
                 <span>Chưa tương tác: {summary.uncontacted_leads}</span>
               </span>
               <span
@@ -1208,15 +1200,15 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                   alignItems: 'center',
                   gap: '5px',
                   padding: '2px 7px',
-                  borderRadius: '999px',
-                  background: 'rgba(124, 58, 237, 0.08)',
-                  border: '1px solid rgba(124, 58, 237, 0.2)',
-                  color: '#6d28d9',
+                  borderRadius: '6px',
+                  background: '#f1f5f9',
+                  border: '1px solid #e2e8f0',
+                  color: '#334155',
                   cursor: 'pointer'
                 }}
                 title={`Bấm để xem danh sách ${summary.duplicate_profile_count ?? 0} lead trùng hồ sơ (${summary.reassigned_profile_count ?? 0} hồ sơ cũ chia lại + ${summary.duplicate_blocked_count ?? 0} trùng bị chặn)`}
               >
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#7c3aed', display: 'inline-block', flexShrink: 0 }} />
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#64748b', display: 'inline-block', flexShrink: 0 }} />
                 <span>
                   Trùng hồ sơ: {summary.duplicate_profile_count ?? 0} ({summary.reassigned_profile_count ?? 0} chia lại • {summary.duplicate_blocked_count ?? 0} chặn)
                 </span>
@@ -1293,13 +1285,6 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
             })
           }
         >
-          <div className="decor-svg" style={{ color: '#3b82f6' }}>
-            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-              <circle cx="45" cy="35" r="15" stroke="currentColor" strokeWidth="2" />
-              <path d="M20 75 C 20 60, 31 50, 45 50 C 59 50, 70 60, 70 75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              <path d="M75 35 H 89 M 82 28 V 42" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--color-text-muted)' }}>
               ĐÃ TƯƠNG TÁC
@@ -1310,8 +1295,8 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
-                background: 'rgba(59, 130, 246, 0.08)',
-                color: '#3b82f6',
+                background: 'rgba(189, 29, 45, 0.08)',
+                color: '#BD1D2D',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1323,7 +1308,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
           </div>
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)' }}>
+            <div className="stat-value" style={{ fontWeight: 800, color: '#BD1D2D', fontSize: '1.45rem', fontVariantNumeric: 'tabular-nums' }}>
               {summary.contacted_leads.toLocaleString('vi-VN')}
             </div>
             <div
@@ -1340,7 +1325,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
               }}
             >
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block', flexShrink: 0 }} />
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#334155', display: 'inline-block', flexShrink: 0 }} />
                 <span>Tỷ lệ: {summary.connected_rate}%</span>
               </span>
               <span
@@ -1380,7 +1365,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 }}
                 title="Click để mở danh sách Lead Win"
               >
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ec4899', display: 'inline-block', flexShrink: 0 }} />
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#BD1D2D', display: 'inline-block', flexShrink: 0 }} />
                 <span>Win: {summary.win_funnel_leads ?? funnelAnalytics.winCount}</span>
               </span>
             </div>
@@ -1415,12 +1400,6 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
             })
           }
         >
-          <div className="decor-svg" style={{ color: '#f59e0b' }}>
-            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-              <path d="M50 20 L 85 80 H 15 Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-              <path d="M50 40 V 55 M 50 67 H 50.01" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-            </svg>
-          </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--color-text-muted)' }}>
               CHƯA TƯƠNG TÁC
@@ -1431,8 +1410,8 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
-                background: 'rgba(245, 158, 11, 0.08)',
-                color: '#f59e0b',
+                background: 'rgba(15, 23, 42, 0.06)',
+                color: '#334155',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1444,7 +1423,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
           </div>
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)' }}>
+            <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '1.45rem', fontVariantNumeric: 'tabular-nums' }}>
               {summary.uncontacted_leads.toLocaleString('vi-VN')}
             </div>
             <div
@@ -1507,11 +1486,6 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }}
         >
-          <div className="decor-svg" style={{ color: '#ef4444' }}>
-            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-              <path d="M55 15 L 25 55 H 50 L 45 85 L 75 45 H 50 Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-            </svg>
-          </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--color-text-muted)' }}>
               DOANH THU DỰ KIẾN &amp; THỰC THU
@@ -1522,8 +1496,8 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
-                background: 'rgba(16, 185, 129, 0.08)',
-                color: '#10b981',
+                background: 'rgba(15, 23, 42, 0.06)',
+                color: '#334155',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1535,7 +1509,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
           </div>
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '1.45rem', display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
+            <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '1.45rem', fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
               <span>{formatVND(summary.won_value)}</span>
               <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
                 (Dự kiến • {summary.won_deals} đơn SO)
@@ -1596,7 +1570,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                Bảng Xếp Hạng Hiệu Suất Đội Ngũ Sale
+                Bảng xếp hạng hiệu suất đội ngũ Sale
               </h3>
               <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-light)' }}>
                 Click vào số liệu bất kỳ để mở danh sách khách hàng chi tiết
@@ -1616,14 +1590,14 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
             <thead>
               <tr style={{ background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border-light)' }}>
                 <th style={{ padding: '11px 12px', textAlign: 'center', width: 52 }}>Hạng</th>
-                <th style={{ padding: '11px 12px', textAlign: 'left' }}>Chuyên Viên Sale</th>
+                <th style={{ padding: '11px 12px', textAlign: 'left' }}>Chuyên viên Sale</th>
                 <th style={{ padding: '11px 12px', textAlign: 'center' }}>Tổng Lead</th>
-                <th style={{ padding: '11px 12px', textAlign: 'left', minWidth: 160 }}>Đã Tương Tác</th>
-                <th style={{ padding: '11px 12px', textAlign: 'center' }}>Chưa Tương Tác</th>
+                <th style={{ padding: '11px 12px', textAlign: 'left', minWidth: 160 }}>Đã tương tác</th>
+                <th style={{ padding: '11px 12px', textAlign: 'center' }}>Chưa tương tác</th>
                 <th style={{ padding: '11px 12px', textAlign: 'center' }}>Qualified</th>
-                <th style={{ padding: '11px 12px', textAlign: 'center' }}>Đơn Hàng</th>
-                <th style={{ padding: '11px 12px', textAlign: 'right' }}>Doanh Thu Dự Kiến</th>
-                <th style={{ padding: '11px 12px', textAlign: 'right' }}>Thực Thu</th>
+                <th style={{ padding: '11px 12px', textAlign: 'center' }}>Đơn hàng</th>
+                <th style={{ padding: '11px 12px', textAlign: 'right' }}>Doanh thu dự kiến</th>
+                <th style={{ padding: '11px 12px', textAlign: 'right' }}>Thực thu</th>
               </tr>
             </thead>
             <tbody>
@@ -1960,12 +1934,12 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
           {/* Clean Single-Row Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(59, 130, 246, 0.08)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <Filter size={17} />
               </div>
               <div style={{ minWidth: 0 }}>
                 <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  Phễu Chuyển Đổi Giai Đoạn
+                  Phễu chuyển đổi giai đoạn
                 </h3>
                 <p style={{ margin: '2px 0 0 0', fontSize: '0.76rem', color: 'var(--color-text-light)' }}>
                   Tổng: <strong style={{ color: 'var(--color-text)' }}>{funnelAnalytics.total} lead</strong> • Click tầng phễu để mở danh sách
@@ -2035,11 +2009,11 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
               const middleTiers = [
                 {
                   key: 'unconnected',
-                  label: 'Chưa Connect',
+                  label: 'Chưa kết nối',
                   count: funnelAnalytics.unconnectedCount,
                   pct: funnelAnalytics.unconnectedPct,
-                  gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                  glow: '0 4px 12px rgba(245, 158, 11, 0.24)',
+                  gradient: '#64748B',
+                  glow: 'none',
                   onClick: () =>
                     openDrilldownModal({
                       type: 'unconnected',
@@ -2052,8 +2026,8 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                   label: 'Lead Qualified',
                   count: funnelAnalytics.qualifiedCount,
                   pct: funnelAnalytics.qualifiedPct,
-                  gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  glow: '0 4px 12px rgba(16, 185, 129, 0.24)',
+                  gradient: '#C6333D',
+                  glow: 'none',
                   onClick: () =>
                     openDrilldownModal({
                       type: 'qualified',
@@ -2069,8 +2043,8 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                     label: st.name,
                     count: st.count,
                     pct: st.conversion_rate,
-                    gradient: `linear-gradient(135deg, ${st.color || '#3b82f6'} 0%, ${st.color || '#2563eb'}dd 100%)`,
-                    glow: '0 2px 8px rgba(15, 23, 42, 0.1)',
+                    gradient: st.color || '#334155',
+                    glow: 'none',
                     onClick: () =>
                       openDrilldownModal({
                         type: 'stage',
@@ -2086,8 +2060,8 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                       label: 'Tổng Lead',
                       count: funnelAnalytics.total,
                       pct: funnelAnalytics.total > 0 ? 100 : 0,
-                      gradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                      glow: '0 4px 14px rgba(59, 130, 246, 0.26)',
+                      gradient: '#0F172A',
+                      glow: 'none',
                       onClick: () =>
                         openDrilldownModal({
                           type: 'all',
@@ -2097,11 +2071,11 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                     },
                     {
                       key: 'contacted',
-                      label: 'Đã Tương Tác',
+                      label: 'Đã tương tác',
                       count: contactedInFunnel,
                       pct: contactedPct,
-                      gradient: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                      glow: '0 4px 12px rgba(99, 102, 241, 0.24)',
+                      gradient: '#334155',
+                      glow: 'none',
                       onClick: () =>
                         openDrilldownModal({
                           type: 'contacted',
@@ -2115,8 +2089,8 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                       label: 'Win',
                       count: funnelAnalytics.winCount,
                       pct: funnelAnalytics.winPct,
-                      gradient: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)',
-                      glow: '0 4px 12px rgba(236, 72, 153, 0.26)',
+                      gradient: '#BD1D2D',
+                      glow: 'none',
                       onClick: () =>
                         openDrilldownModal({
                           type: 'win',
@@ -2246,15 +2220,15 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
           {/* Clean Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(16, 185, 129, 0.08)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <PieChart size={17} />
               </div>
               <div style={{ minWidth: 0 }}>
                 <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                  Đánh Giá Tỷ Lệ Chuyển Đổi Phễu
+                  Đánh giá tỷ lệ chuyển đổi phễu
                 </h3>
                 <p style={{ margin: '2px 0 0 0', fontSize: '0.76rem', color: 'var(--color-text-light)' }}>
-                  Tỷ lệ Lead Qualified, Win &amp; Chưa Connect
+                  Tỷ lệ Lead Qualified, Win &amp; chưa kết nối
                 </p>
               </div>
             </div>
@@ -2287,18 +2261,18 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                     stroke="var(--color-bg)"
                     strokeWidth="22"
                   />
-                  {/* Segment 3: Chưa Connect (Amber #f59e0b) */}
+                  {/* Segment 3: Chưa Connect (Muted Slate #94A3B8) */}
                   {funnelAnalytics.total > 0 && unconnArc > 0 && (
                     <circle
                       cx="106"
                       cy="106"
                       r={donutRadius}
                       fill="transparent"
-                      stroke="#f59e0b"
+                      stroke="#94A3B8"
                       strokeWidth="22"
                       strokeDasharray={`${unconnArc} ${donutCircumference}`}
                       strokeDashoffset={-(qualArc + winArc)}
-                      style={{ transition: 'stroke-dasharray 0.4s ease, stroke-dashoffset 0.4s ease', cursor: 'pointer' }}
+                      style={{ transition: 'stroke-dasharray 0.35s cubic-bezier(0.22, 1, 0.36, 1), stroke-dashoffset 0.35s cubic-bezier(0.22, 1, 0.36, 1)', cursor: 'pointer' }}
                       onClick={() =>
                         openDrilldownModal({
                           type: 'unconnected',
@@ -2308,18 +2282,18 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                       }
                     />
                   )}
-                  {/* Segment 2: Win (Pink #ec4899) */}
+                  {/* Segment 2: Win (Brand Crimson #BD1D2D) */}
                   {funnelAnalytics.total > 0 && winArc > 0 && (
                     <circle
                       cx="106"
                       cy="106"
                       r={donutRadius}
                       fill="transparent"
-                      stroke="#ec4899"
+                      stroke="#BD1D2D"
                       strokeWidth="22"
                       strokeDasharray={`${winArc} ${donutCircumference}`}
                       strokeDashoffset={-qualArc}
-                      style={{ transition: 'stroke-dasharray 0.4s ease, stroke-dashoffset 0.4s ease', cursor: 'pointer' }}
+                      style={{ transition: 'stroke-dasharray 0.35s cubic-bezier(0.22, 1, 0.36, 1), stroke-dashoffset 0.35s cubic-bezier(0.22, 1, 0.36, 1)', cursor: 'pointer' }}
                       onClick={() =>
                         openDrilldownModal({
                           type: 'win',
@@ -2329,18 +2303,18 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                       }
                     />
                   )}
-                  {/* Segment 1: Qualified (Emerald Green #10b981) */}
+                  {/* Segment 1: Qualified (Executive Slate #334155) */}
                   {funnelAnalytics.total > 0 && qualArc > 0 && (
                     <circle
                       cx="106"
                       cy="106"
                       r={donutRadius}
                       fill="transparent"
-                      stroke="#10b981"
+                      stroke="#334155"
                       strokeWidth="22"
                       strokeDasharray={`${qualArc} ${donutCircumference}`}
                       strokeDashoffset={0}
-                      style={{ transition: 'stroke-dasharray 0.4s ease', cursor: 'pointer' }}
+                      style={{ transition: 'stroke-dasharray 0.35s cubic-bezier(0.22, 1, 0.36, 1)', cursor: 'pointer' }}
                       onClick={() =>
                         openDrilldownModal({
                           type: 'qualified',
@@ -2379,7 +2353,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                   <span style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>
                     Tổng Lead
                   </span>
-                  <span style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1, marginTop: 2 }}>
+                  <span style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
                     {funnelAnalytics.total.toLocaleString('vi-VN')}
                   </span>
                 </div>
@@ -2412,7 +2386,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#334155', flexShrink: 0 }} />
                     <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
                       Lead Qualified
                     </span>
@@ -2420,17 +2394,17 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                       03–12
                     </span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                     <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--color-text)' }}>
                       {funnelAnalytics.qualifiedCount}
                     </span>
-                    <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#059669' }}>
+                    <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#334155' }}>
                       {funnelAnalytics.qualifiedPct}%
                     </span>
                   </div>
                 </div>
                 <div style={{ width: '100%', height: 5, background: 'var(--color-surface)', borderRadius: 4, overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.min(100, funnelAnalytics.qualifiedPct)}%`, height: '100%', background: '#10b981', borderRadius: 4 }} />
+                  <div style={{ width: `${Math.min(100, funnelAnalytics.qualifiedPct)}%`, height: '100%', background: '#334155', borderRadius: 4 }} />
                 </div>
               </div>
 
@@ -2458,7 +2432,7 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ec4899', flexShrink: 0 }} />
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#BD1D2D', flexShrink: 0 }} />
                     <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
                       Win
                     </span>
@@ -2466,17 +2440,17 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
                       13–14
                     </span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                     <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--color-text)' }}>
                       {funnelAnalytics.winCount}
                     </span>
-                    <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#db2777' }}>
+                    <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#BD1D2D' }}>
                       {funnelAnalytics.winPct}%
                     </span>
                   </div>
                 </div>
                 <div style={{ width: '100%', height: 5, background: 'var(--color-surface)', borderRadius: 4, overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.min(100, funnelAnalytics.winPct)}%`, height: '100%', background: '#ec4899', borderRadius: 4 }} />
+                  <div style={{ width: `${Math.min(100, funnelAnalytics.winPct)}%`, height: '100%', background: '#BD1D2D', borderRadius: 4 }} />
                 </div>
               </div>
 
@@ -2504,25 +2478,25 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', flexShrink: 0 }} />
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#94A3B8', flexShrink: 0 }} />
                     <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
-                      Chưa Connect
+                      Chưa kết nối
                     </span>
                     <span style={{ fontSize: '0.66rem', fontWeight: 600, padding: '1px 5px', borderRadius: 4, background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
                       01–02
                     </span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                     <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--color-text)' }}>
                       {funnelAnalytics.unconnectedCount}
                     </span>
-                    <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#d97706' }}>
+                    <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b' }}>
                       {funnelAnalytics.unconnectedPct}%
                     </span>
                   </div>
                 </div>
                 <div style={{ width: '100%', height: 5, background: 'var(--color-surface)', borderRadius: 4, overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.min(100, funnelAnalytics.unconnectedPct)}%`, height: '100%', background: '#f59e0b', borderRadius: 4 }} />
+                  <div style={{ width: `${Math.min(100, funnelAnalytics.unconnectedPct)}%`, height: '100%', background: '#94A3B8', borderRadius: 4 }} />
                 </div>
               </div>
             </div>
@@ -2682,12 +2656,12 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
       <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(16, 185, 129, 0.08)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Layers size={17} />
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                Hiệu Quả Theo Nguồn Marketing
+                Hiệu quả theo nguồn Marketing
               </h3>
               <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-light)' }}>
                 Đánh giá tỷ lệ tương tác, chưa tương tác, Lead Qualified, Doanh thu dự kiến và Thực thu theo từng kênh Marketing
@@ -2911,12 +2885,12 @@ export const SalesLeadPerformanceDeck: React.FC<Props> = ({
       <div id="sales-orders-revenue-section" className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(16, 185, 129, 0.08)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <FileCheck2 size={17} />
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                Chi Tiết Đơn Hàng &amp; Doanh Thu Dự Kiến / Thực Thu
+                Chi tiết đơn hàng &amp; doanh thu dự kiến / thực thu
               </h3>
               <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-light)' }}>
                 Doanh thu dự kiến: <strong style={{ color: 'var(--color-text)' }}>{formatVND(summary.won_value)}</strong> • Thực thu (đã duyệt): <strong style={{ color: '#059669' }}>{formatVND(summary.approved_value || 0)}</strong> • Còn phải thu: <strong style={{ color: '#d97706' }}>{formatVND(summary.pending_value || 0)}</strong>

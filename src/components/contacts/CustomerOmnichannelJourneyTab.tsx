@@ -16,7 +16,6 @@ import {
   Clock,
   ExternalLink,
   RefreshCw,
-  Sparkles,
   Flame,
   Eye,
   MousePointerClick,
@@ -33,6 +32,7 @@ import {
 import api from '../../api/axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { canViewOmnichannelJourney } from '../../utils/roleUtils';
+import { ensureArray, extractArray } from '../../utils/safeArray';
 
 interface CustomerOmnichannelJourneyTabProps {
   contact: any;
@@ -161,8 +161,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
     }
     try {
       const res = await api.get('/domation/flows');
-      const list = res.data?.data?.items || res.data?.data || res.data || [];
-      if (Array.isArray(list)) setAvailableFlows(list);
+      setAvailableFlows(extractArray(res?.data));
     } catch {
       // Fallback if endpoint returns empty
     }
@@ -176,8 +175,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
     }
     try {
       const res = await api.get('/domation/voucher_campaigns');
-      const list = res.data?.data?.items || res.data?.data || res.data || [];
-      if (Array.isArray(list)) setAvailableVouchers(list);
+      setAvailableVouchers(extractArray(res?.data));
     } catch {
       // Fallback if endpoint returns empty
     }
@@ -741,10 +739,10 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
       return { label: 'Website', color: '#0284c7', bg: 'rgba(2, 132, 199, 0.1)' };
     }
     if (ch.includes('email') || ch.includes('mail') || ch.includes('zns')) {
-      return { label: 'Email / ZNS', color: '#db2777', bg: 'rgba(219, 39, 119, 0.1)' };
+      return { label: 'Email / ZNS', color: '#BD1D2D', bg: 'rgba(189, 29, 45, 0.08)' };
     }
     if (ch.includes('flow') || ch.includes('automation')) {
-      return { label: 'Automation', color: '#4f46e5', bg: 'rgba(79, 70, 229, 0.1)' };
+      return { label: 'Automation', color: '#334155', bg: 'rgba(15, 23, 42, 0.06)' };
     }
     if (ch.includes('survey') || ch.includes('quiz')) {
       return { label: 'Khảo sát', color: '#d97706', bg: 'rgba(217, 119, 6, 0.1)' };
@@ -830,7 +828,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
             }}
           >
             <Plus size={13} style={{ color: '#BD1D2D' }} />
-            <span>+ Gán Kịch bản</span>
+            <span>Gán kịch bản</span>
           </button>
           <button
             type="button"
@@ -953,7 +951,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
               <Activity size={16} />
             </div>
           </div>
-          <div className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+          <div className="stat-value" style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
             {allTimelineEvents.length.toLocaleString('vi-VN')}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -1017,7 +1015,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
               <Mail size={16} />
             </div>
           </div>
-          <div className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums' }}>
+          <div className="stat-value" style={{ fontSize: '1.45rem', fontWeight: 800, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums' }}>
             {summary.stats_email_sent.toLocaleString('vi-VN')}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -1078,7 +1076,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
               <GitBranch size={16} />
             </div>
           </div>
-          <div className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+          <div className="stat-value" style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
             {summary.active_flow_count.toLocaleString('vi-VN')}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -1139,7 +1137,7 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
               <ClipboardCheck size={16} />
             </div>
           </div>
-          <div className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+          <div className="stat-value" style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
             {summary.survey_completed_count.toLocaleString('vi-VN')}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', fontWeight: 500, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -1170,8 +1168,8 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
         >
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
-                Thống Kê Điểm Chạm Theo Kênh Tương Tác
+              <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                Thống kê điểm chạm theo kênh tương tác
               </h3>
               <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
                 Tỷ trọng phân bổ các điểm chạm đa kênh của khách hàng
@@ -1359,8 +1357,8 @@ export const CustomerOmnichannelJourneyTab: React.FC<CustomerOmnichannelJourneyT
         >
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
-                Chất Lượng Tương Tác &amp; Nguồn Chuyển Đổi (Attribution)
+              <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                Chất lượng tương tác &amp; nguồn chuyển đổi
               </h3>
               <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
                 Nhận diện chiến dịch Meta Ads / UTM &amp; Chỉ số sức khỏe số

@@ -12,6 +12,7 @@ import Select from '../common/Select';
 import ConfirmModal from '../common/ConfirmModal';
 import toast from 'react-hot-toast';
 import { Subscriber } from '../../types';
+import { ensureArray, extractArray } from '../../../../utils/safeArray';
 
 interface GroupDetailModalProps {
     isOpen: boolean;
@@ -360,7 +361,7 @@ const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
         import('../../services/storageAdapter').then(({ api }) => {
             api.get<any>('lists.php').then(res => {
                 if (res.success) {
-                    setAllLists(res.data || []);
+                    setAllLists(extractArray(res));
                 }
             });
         });
@@ -740,14 +741,14 @@ const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
                                         <button
                                             onClick={handleAIAnalysis}
                                             disabled={isAnalyzing}
-                                            className={`flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:shadow-lg hover:shadow-amber-200 transition-all active:scale-95 disabled:opacity-70 ${isAnalyzing ? 'animate-pulse' : ''}`}
+                                            className="flex items-center gap-1.5 px-4 py-2 bg-[#BD1D2D] hover:bg-[#a61826] text-white rounded-xl text-[11px] font-semibold uppercase tracking-wider transition-colors duration-150 disabled:opacity-70"
                                         >
                                             {isAnalyzing ? (
                                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                             ) : (
-                                                <Sparkles className="w-3.5 h-3.5" />
+                                                <Sparkles strokeWidth={1.75} className="w-3.5 h-3.5" />
                                             )}
-                                            {isAnalyzing ? 'Đang phân tích...' : (analysisResult ? 'Phân tích ai' : 'Phân tích AI')}
+                                            {isAnalyzing ? 'Đang phân tích...' : (analysisResult ? 'Phân tích lại AI' : 'Phân tích AI')}
                                         </button>
 
                                         {analysisResult && !isAnalyzing && (
@@ -848,7 +849,7 @@ const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
                                                     {card.isPhone ? (
                                                         <Phone className={`w-4 h-4 ${isActive ? 'text-emerald-600' : 'text-emerald-500'}`} />
                                                     ) : (
-                                                        <div className={`w-2.5 h-2.5 rounded-full ${card.dotColor} ${isActive ? 'animate-pulse' : ''}`} />
+                                                        <div className={`w-2.5 h-2.5 rounded-full ${card.dotColor}`} />
                                                     )}
                                                     <div className="flex flex-col items-start leading-tight">
                                                         <span className={`text-[10px] font-black uppercase tracking-wider ${isActive ? 'text-slate-800' : 'text-slate-400'}`}>
@@ -908,7 +909,7 @@ const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
                                                     <button onClick={handleExportCSV} className="p-2 hover:bg-white rounded-lg text-slate-500 hover:text-emerald-600 hover:shadow-sm transition-all" title="Xuất CSV">
                                                         <Download className="w-4 h-4" />
                                                     </button>
-                                                    <button onClick={handleSendEmail} className="p-2 hover:bg-white rounded-lg text-slate-500 hover:text-indigo-600 hover:shadow-sm transition-all" title="Gửi Email">
+                                                    <button onClick={handleSendEmail} className="p-2 hover:bg-white rounded-lg text-slate-500 hover:text-[#BD1D2D] hover:shadow-xs transition-colors duration-150" title="Gửi Email">
                                                         <Mail className="w-4 h-4" />
                                                     </button>
                                                     {(group.type === 'segment' || group.type === 'list') && onSplit && (
@@ -1010,7 +1011,7 @@ const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
                                         <td className="px-6 py-3 text-center">
                                             <span className={`inline-flex w-2 h-2 rounded-full ${member.status === 'active' ? 'bg-emerald-500' :
                                                 member.status === 'lead' ? 'bg-blue-500' :
-                                                    member.status === 'customer' ? 'bg-indigo-500' :
+                                                    member.status === 'customer' ? 'bg-[#BD1D2D]' :
                                                         member.status === 'bounced' ? 'bg-rose-500' :
                                                             member.status === 'complained' ? 'bg-red-500' :
                                                                 'bg-slate-500'
@@ -1174,9 +1175,9 @@ const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
 
                         const tagMetas: Record<string, { label: string; bg: string; text: string; icon: any }> = {
                             INTRO: { label: 'Tổng quan & Tổng số', bg: 'bg-slate-100', text: 'text-slate-600', icon: Sparkles },
-                            SUMMARY: { label: 'Tóm tắt chiến lược AI', bg: 'bg-blue-50', text: 'text-blue-600', icon: Tags },
+                            SUMMARY: { label: 'Tóm tắt chiến lược AI', bg: 'bg-slate-100', text: 'text-slate-700', icon: Tags },
                             CHARACTERISTICS: { label: 'Đặc điểm & Hành vi', bg: 'bg-amber-50', text: 'text-amber-600', icon: BrainCircuit },
-                            PERSONAS: { label: 'Chân dung Khách hàng', bg: 'bg-purple-50', text: 'text-purple-600', icon: Mail },
+                            PERSONAS: { label: 'Chân dung Khách hàng', bg: 'bg-rose-50', text: 'text-[#BD1D2D]', icon: Mail },
                             STRATEGY: { label: 'Giải pháp tiếp cận', bg: 'bg-emerald-50', text: 'text-emerald-600', icon: Check },
                             SCENARIOS: { label: 'Kịch bản Campaign', bg: 'bg-rose-50', text: 'text-rose-600', icon: FileText },
                             SCORE_GROUPS: { label: 'Tối ưu hóa Lead Score', bg: 'bg-emerald-50', text: 'text-emerald-600', icon: Lightbulb }
@@ -1285,7 +1286,7 @@ const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
                                                                 {m.meta_psid && <div className="w-2.5 h-2.5 rounded-full bg-blue-600 shadow-sm" title="Meta" />}
                                                                 <div className={`w-2.5 h-2.5 rounded-full shadow-sm ${m.status === 'active' ? 'bg-emerald-500' :
                                                                     m.status === 'lead' ? 'bg-amber-600' :
-                                                                        m.status === 'customer' ? 'bg-pink-500' :
+                                                                        m.status === 'customer' ? 'bg-[#BD1D2D]' :
                                                                             'bg-slate-300'
                                                                     }`} title={m.status} />
                                                             </div>
@@ -1349,7 +1350,7 @@ const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
                                         <span className="w-2.5 h-2.5 rounded-full bg-amber-600 shadow-sm"></span> Lead
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                        <span className="w-2.5 h-2.5 rounded-full bg-pink-500 shadow-sm"></span> Qualified
+                                        <span className="w-2.5 h-2.5 rounded-full bg-[#BD1D2D] shadow-sm"></span> Qualified
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         <span className="w-2.5 h-2.5 rounded-full bg-slate-300 shadow-sm"></span> Inactive

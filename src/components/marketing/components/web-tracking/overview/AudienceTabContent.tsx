@@ -2,6 +2,7 @@ import React from 'react';
 import { Smartphone, Terminal, Globe } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { WebStats } from '../types';
+import { ensureArray, extractArray } from '../../../../../utils/safeArray';
 
 interface AudienceTabContentProps {
     stats: WebStats | null;
@@ -23,14 +24,14 @@ const AudienceTabContent: React.FC<AudienceTabContentProps> = ({ stats }) => {
                 {/* Device & OS Section - 5 cols */}
                 <div className="lg:col-span-5 space-y-8">
                     {/* Device Stats Card */}
-                    <div className="bg-white p-5 rounded-[14px] border border-slate-100 shadow-sm">
-                        <div className="flex items-center gap-2.5 mb-6">
-                            <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white bg-blue-500 border border-blue-500 shadow-lg shadow-blue-500/20">
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white bg-[#BD1D2D]">
                                 <Smartphone className="w-4 h-4" />
                             </div>
                             <div>
-                                <h3 className="text-sm font-bold text-slate-800">Thiết Bị</h3>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Phân bổ theo loại máy</p>
+                                <h3 className="text-sm font-bold text-slate-900">Thiết bị</h3>
+                                <p className="text-xs text-slate-500">Phân bổ theo loại máy</p>
                             </div>
                         </div>
 
@@ -49,7 +50,7 @@ const AudienceTabContent: React.FC<AudienceTabContentProps> = ({ stats }) => {
                                                     paddingAngle={8}
                                                     dataKey="value"
                                                 >
-                                                    {stats.deviceStats.map((entry, index) => (
+                                                    {ensureArray(stats?.deviceStats).map((entry, index) => (
                                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} strokeWidth={0} />
                                                     ))}
                                                 </Pie>
@@ -57,36 +58,36 @@ const AudienceTabContent: React.FC<AudienceTabContentProps> = ({ stats }) => {
                                         </ResponsiveContainer>
                                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                                             {(() => {
-                                                const total = stats.deviceStats.reduce((acc, curr) => acc + curr.value, 0);
+                                                const total = ensureArray(stats?.deviceStats).reduce((acc, curr) => acc + curr.value, 0);
                                                 const max = stats.deviceStats.reduce((prev, curr) => (prev.value > curr.value ? prev : curr), stats.deviceStats[0]);
                                                 const percent = total > 0 ? Math.round((max.value / total) * 100) : 0;
                                                 return (
                                                     <>
-                                                        <span className="text-2xl font-black text-slate-800 leading-none">{percent}%</span>
-                                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-1 text-center max-w-[60px] truncate">{max.name}</span>
+                                                        <span className="text-2xl font-bold text-slate-900 leading-none tabular-nums">{percent}%</span>
+                                                        <span className="text-[10px] font-semibold text-slate-500 uppercase mt-1 text-center max-w-[60px] truncate">{max.name}</span>
                                                     </>
                                                 );
                                             })()}
                                         </div>
                                     </>
                                 ) : (
-                                    <div className="h-full flex items-center justify-center text-slate-300 text-[10px] font-bold italic">No Data</div>
+                                    <div className="h-full flex items-center justify-center text-slate-400 text-[11px] font-semibold">Không có dữ liệu</div>
                                 )}
                             </div>
 
                             <div className="flex-1 space-y-4">
                                 {stats?.deviceStats?.map((entry, index) => {
-                                    const total = stats.deviceStats.reduce((acc, curr) => acc + curr.value, 0);
+                                    const total = ensureArray(stats?.deviceStats).reduce((acc, curr) => acc + curr.value, 0);
                                     const percent = total > 0 ? Math.round((entry.value / total) * 100) : 0;
                                     return (
                                         <div key={entry.name} className="flex items-center justify-between group">
                                             <div className="flex items-center gap-3 min-w-0">
                                                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
-                                                <span className="text-sm font-bold text-slate-600 capitalize truncate">{entry.name}</span>
+                                                <span className="text-sm font-semibold text-slate-700 capitalize truncate">{entry.name}</span>
                                             </div>
-                                            <div className="flex items-center gap-4 shrink-0">
-                                                <span className="text-sm font-black text-slate-800">{entry.value}</span>
-                                                <span className="text-xs font-bold text-slate-400 w-10 text-right">{percent}%</span>
+                                            <div className="flex items-center gap-4 shrink-0 tabular-nums">
+                                                <span className="text-sm font-bold text-slate-900">{entry.value.toLocaleString('vi-VN')}</span>
+                                                <span className="text-xs font-semibold text-slate-500 w-10 text-right">{percent}%</span>
                                             </div>
                                         </div>
                                     );
@@ -96,14 +97,14 @@ const AudienceTabContent: React.FC<AudienceTabContentProps> = ({ stats }) => {
                     </div>
 
                     {/* OS Stats Card */}
-                    <div className="bg-white p-5 rounded-[14px] border border-slate-100 shadow-sm">
-                        <div className="flex items-center gap-2.5 mb-6">
-                            <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white bg-slate-700 border border-slate-700 shadow-lg shadow-slate-700/20">
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white bg-slate-900">
                                 <Terminal className="w-4 h-4" />
                             </div>
                             <div>
-                                <h3 className="text-sm font-bold text-slate-800">Hệ Điều Hành</h3>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Phân bổ theo phần mềm</p>
+                                <h3 className="text-sm font-bold text-slate-900">Hệ điều hành</h3>
+                                <p className="text-xs text-slate-500">Phân bổ theo nền tảng</p>
                             </div>
                         </div>
 
@@ -122,7 +123,7 @@ const AudienceTabContent: React.FC<AudienceTabContentProps> = ({ stats }) => {
                                                     paddingAngle={6}
                                                     dataKey="value"
                                                 >
-                                                    {stats.osStats.map((entry, index) => (
+                                                    {ensureArray(stats?.osStats).map((entry, index) => (
                                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} strokeWidth={0} />
                                                     ))}
                                                 </Pie>
@@ -130,36 +131,36 @@ const AudienceTabContent: React.FC<AudienceTabContentProps> = ({ stats }) => {
                                         </ResponsiveContainer>
                                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                                             {(() => {
-                                                const total = stats.osStats.reduce((acc, curr) => acc + curr.value, 0);
+                                                const total = ensureArray(stats?.osStats).reduce((acc, curr) => acc + curr.value, 0);
                                                 const max = stats.osStats.reduce((prev, curr) => (prev.value > curr.value ? prev : curr), stats.osStats[0]);
                                                 const percent = total > 0 ? Math.round((max.value / total) * 100) : 0;
                                                 return (
                                                     <>
-                                                        <span className="text-2xl font-black text-slate-800 leading-none">{percent}%</span>
-                                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-1 text-center max-w-[60px] truncate">{max.name}</span>
+                                                        <span className="text-2xl font-bold text-slate-900 leading-none tabular-nums">{percent}%</span>
+                                                        <span className="text-[10px] font-semibold text-slate-500 uppercase mt-1 text-center max-w-[60px] truncate">{max.name}</span>
                                                     </>
                                                 );
                                             })()}
                                         </div>
                                     </>
                                 ) : (
-                                    <div className="h-full flex items-center justify-center text-slate-300 text-[10px] font-bold italic">No Data</div>
+                                    <div className="h-full flex items-center justify-center text-slate-400 text-[11px] font-semibold">Không có dữ liệu</div>
                                 )}
                             </div>
 
                             <div className="flex-1 space-y-4">
                                 {stats?.osStats?.slice(0, 5).map((entry, index) => {
-                                    const total = stats.osStats.reduce((acc, curr) => acc + curr.value, 0);
+                                    const total = ensureArray(stats?.osStats).reduce((acc, curr) => acc + curr.value, 0);
                                     const percent = total > 0 ? Math.round((entry.value / total) * 100) : 0;
                                     return (
                                         <div key={entry.name} className="flex items-center justify-between group">
                                             <div className="flex items-center gap-3 min-w-0">
                                                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
-                                                <span className="text-sm font-bold text-slate-600 truncate">{entry.name}</span>
+                                                <span className="text-sm font-semibold text-slate-700 truncate">{entry.name}</span>
                                             </div>
-                                            <div className="flex items-center gap-4 shrink-0">
-                                                <span className="text-sm font-black text-slate-800">{entry.value}</span>
-                                                <span className="text-xs font-bold text-slate-400 w-10 text-right">{percent}%</span>
+                                            <div className="flex items-center gap-4 shrink-0 tabular-nums">
+                                                <span className="text-sm font-bold text-slate-900">{entry.value.toLocaleString('vi-VN')}</span>
+                                                <span className="text-xs font-semibold text-slate-500 w-10 text-right">{percent}%</span>
                                             </div>
                                         </div>
                                     );
@@ -170,42 +171,42 @@ const AudienceTabContent: React.FC<AudienceTabContentProps> = ({ stats }) => {
                 </div>
 
                 {/* Location Ranking - 7 cols */}
-                <div className="lg:col-span-7 bg-white rounded-[14px] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
-                    <div className="px-6 py-4 border-b border-slate-50 flex items-center justify-between bg-slate-50/20">
-                        <div className="flex items-center gap-2.5">
-                            <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white bg-indigo-500 border border-indigo-500 shadow-lg shadow-indigo-500/20">
+                <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white bg-slate-700">
                                 <Globe className="w-4 h-4" />
                             </div>
                             <div>
-                                <h3 className="text-sm font-bold text-slate-800">Vị Trí Hàng Đầu</h3>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Phân bổ theo địa lý</p>
+                                <h3 className="text-sm font-bold text-slate-900">Vị trí hàng đầu</h3>
+                                <p className="text-xs text-slate-500">Phân bổ theo địa lý</p>
                             </div>
                         </div>
                         <div className="text-right">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Top 10 Cities</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Top 10 Cities</span>
                         </div>
                     </div>
 
                     <div className="p-6 flex-1 overflow-auto max-h-[500px] space-y-4">
                         {stats?.locationStats && stats.locationStats.length > 0 ? (
-                            stats.locationStats.map((loc, idx) => {
+                            ensureArray(stats?.locationStats).map((loc, idx) => {
                                 const maxVal = stats.locationStats[0]?.value || 1;
                                 const percent = Math.round((loc.value / maxVal) * 100);
                                 return (
                                     <div key={idx} className="group flex flex-col gap-2">
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-3 min-w-0">
-                                                <span className="text-[10px] font-black text-slate-300 group-hover:text-rose-500 transition-colors w-4">{idx + 1}</span>
-                                                <p className="text-sm font-bold text-slate-700 truncate group-hover:text-slate-900 transition-colors">{loc.name}</p>
+                                                <span className="text-xs font-bold text-slate-400 group-hover:text-[#BD1D2D] transition-colors w-4 tabular-nums">{idx + 1}</span>
+                                                <p className="text-sm font-semibold text-slate-800 truncate group-hover:text-slate-900 transition-colors">{loc.name}</p>
                                             </div>
-                                            <div className="flex items-center gap-3 shrink-0">
-                                                <span className="text-sm font-black text-slate-800">{loc.value.toLocaleString()}</span>
-                                                <span className="text-[10px] font-bold text-slate-400 tracking-tighter">Visitors</span>
+                                            <div className="flex items-center gap-2 shrink-0 tabular-nums">
+                                                <span className="text-sm font-bold text-slate-900">{loc.value.toLocaleString('vi-VN')}</span>
+                                                <span className="text-[11px] font-medium text-slate-400">Visitors</span>
                                             </div>
                                         </div>
-                                        <div className="w-full h-2 bg-slate-50 rounded-full overflow-hidden">
+                                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                                             <div
-                                                className="h-full bg-blue-600 rounded-full transition-all duration-1000 ease-out shadow-[0_0_8px_rgba(37,99,235,0.4)]"
+                                                className="h-full bg-[#C6333D] rounded-full transition-[width] duration-500 ease-out"
                                                 style={{ width: `${percent}%` }}
                                             />
                                         </div>
@@ -213,9 +214,9 @@ const AudienceTabContent: React.FC<AudienceTabContentProps> = ({ stats }) => {
                                 );
                             })
                         ) : (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-400 py-20 grayscale opacity-50">
-                                <Globe className="w-12 h-12 mb-4" />
-                                <p className="font-medium italic">Không có dữ liệu vị trí người dùng</p>
+                            <div className="h-full flex flex-col items-center justify-center text-slate-400 py-20">
+                                <Globe className="w-12 h-12 mb-4 text-slate-200" />
+                                <p className="font-medium">Không có dữ liệu vị trí người dùng</p>
                             </div>
                         )}
                     </div>

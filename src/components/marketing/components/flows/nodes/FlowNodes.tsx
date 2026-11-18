@@ -31,15 +31,15 @@ interface NodeProps {
 }
 
 const QuickEdit = ({ onClick }: { onClick: () => void }) => (
-    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50">
+    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50">
         <button
             onClick={e => {
                 e.stopPropagation();
                 onClick();
             }}
-            className="p-1.5 bg-white/80 backdrop-blur-md border border-slate-100 rounded-full shadow-sm text-slate-400 hover:text-[var(--color-primary)] hover:shadow-md transform hover:scale-110 transition-all"
+            className="p-1.5 bg-white/90 backdrop-blur-md border border-slate-200 rounded-full shadow-sm text-slate-400 hover:text-[var(--color-primary)] hover:shadow-md transition-colors"
         >
-            <MoreHorizontal className="w-4 h-4" />
+            <MoreHorizontal className="w-4 h-4" strokeWidth={1.75} />
         </button>
     </div>
 );
@@ -47,8 +47,8 @@ const QuickEdit = ({ onClick }: { onClick: () => void }) => (
 const ValidationBadge = ({ type, title }: { type: 'error' | 'warning'; title?: string }) => (
     <div
         title={title}
-        className={`absolute -top-2.5 -right-2.5 p-1.5 rounded-full shadow-xl z-[60] animate-bounce ring-4 ring-white ${
-            type === 'error' ? 'bg-rose-600 text-white' : 'bg-amber-400 text-white'
+        className={`absolute -top-2.5 -right-2.5 p-1.5 rounded-full shadow-md z-[60] ring-4 ring-white ${
+            type === 'error' ? 'bg-rose-600 text-white' : 'bg-amber-500 text-white'
         }`}
     >
         {type === 'error' ? <AlertOctagon className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
@@ -59,17 +59,17 @@ export const GhostNode = memo(
     ({ label, variant = 'default' }: { label: string; variant?: 'default' | 'link' | 'warning' }) => {
         if (variant === 'link') {
             return (
-                <div className="px-5 py-2 rounded-[18px] bg-blue-50/30 border border-blue-100/70 border-dashed text-blue-600 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm animate-in fade-in zoom-in duration-500">
-                    <ArrowRight className="w-3.5 h-3.5 animate-pulse" />
+                <div className="px-5 py-2 rounded-2xl bg-blue-50/60 border border-blue-200 border-dashed text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                    <ArrowRight className="w-3.5 h-3.5" strokeWidth={1.75} />
                     {label}
                 </div>
             );
         }
         return (
             <div
-                className={`px-5 py-2.5 rounded-[18px] border-2 border-dashed text-[10px] font-bold uppercase tracking-widest animate-in fade-in zoom-in duration-500 ${
+                className={`px-5 py-2.5 rounded-2xl border-2 border-dashed text-[10px] font-bold uppercase tracking-widest ${
                     variant === 'warning'
-                        ? 'bg-rose-50 border-rose-200 text-rose-500'
+                        ? 'bg-rose-50 border-rose-200 text-rose-600'
                         : 'bg-slate-50 border-slate-200 text-slate-400'
                 }`}
             >
@@ -84,25 +84,25 @@ const ReportOverlay = ({
 }: {
     stats: { total: number; waiting: number; processed: number; failed?: number };
 }) => (
-    <div className="absolute -bottom-[2px] left-[15%] right-[15%] translate-y-full flex items-center justify-center bg-white px-4 py-2 rounded-b-[18px] border-x border-b border-slate-100 shadow-[0_12px_30px_-5px_rgba(0,0,0,0.12)] z-[100] animate-in slide-in-from-top-1 duration-300">
-        <div className="flex items-center gap-6">
+    <div className="absolute -bottom-[2px] left-[15%] right-[15%] translate-y-full flex items-center justify-center bg-white px-4 py-2 rounded-b-2xl border-x border-b border-slate-200 shadow-md z-[100]">
+        <div className="flex items-center gap-6 tabular-nums">
             <div className="flex flex-col items-center">
                 <span className="text-[9px] font-bold text-slate-400 uppercase mb-0.5">Total</span>
-                <span className="text-[11px] font-black text-slate-800 leading-none">
+                <span className="text-[11px] font-bold text-slate-800 leading-none">
                     {stats.total.toLocaleString()}
                 </span>
             </div>
-            <div className="w-px h-5 bg-slate-50"></div>
+            <div className="w-px h-5 bg-slate-200"></div>
             <div className="flex flex-col items-center">
-                <span className="text-[9px] font-bold text-amber-500 uppercase mb-0.5">Wait</span>
-                <span className="text-[11px] font-black text-slate-800 leading-none">
+                <span className="text-[9px] font-bold text-amber-600 uppercase mb-0.5">Wait</span>
+                <span className="text-[11px] font-bold text-slate-800 leading-none">
                     {stats.waiting.toLocaleString()}
                 </span>
             </div>
-            <div className="w-px h-5 bg-slate-50"></div>
+            <div className="w-px h-5 bg-slate-200"></div>
             <div className="flex flex-col items-center">
-                <span className="text-[9px] font-bold text-rose-500 uppercase mb-0.5">Fail</span>
-                <span className="text-[11px] font-black text-slate-800 leading-none">
+                <span className="text-[9px] font-bold text-rose-600 uppercase mb-0.5">Fail</span>
+                <span className="text-[11px] font-bold text-slate-800 leading-none">
                     {(stats.failed ?? 0).toLocaleString()}
                 </span>
             </div>
@@ -130,28 +130,28 @@ export const TriggerNode: React.FC<NodeProps> = memo(
                 : false);
 
         const getTriggerStyle = () => {
-            if (isFormDeleted || isSurveyDeleted) return { icon: AlertOctagon, color: 'from-rose-500 to-red-700', label: 'LỖI LIÊN KẾT' };
+            if (isFormDeleted || isSurveyDeleted) return { icon: AlertOctagon, color: 'bg-rose-700 border-rose-800/40', label: 'LỖI LIÊN KẾT' };
             switch (triggerType) {
                 case 'erp_event':
-                    return { icon: Briefcase, color: 'from-indigo-600 to-blue-700', label: 'MYERP Event' };
+                    return { icon: Briefcase, color: 'bg-[#0F172A] border-slate-800', label: 'MYERP Event' };
                 case 'segment':
                     return step.config?.targetSubtype === 'list' || step.config?.targetSubtype === 'sync'
-                        ? { icon: ListPlus, color: 'from-emerald-500 to-teal-600', label: 'List Entry' }
-                        : { icon: Layers, color: 'from-[#BD1D2D] to-rose-700', label: 'Segment Entry' };
+                        ? { icon: ListPlus, color: 'bg-emerald-600 border-emerald-700/40', label: 'List Entry' }
+                        : { icon: Layers, color: 'bg-[#BD1D2D] border-rose-800/40', label: 'Segment Entry' };
                 case 'form':
-                    return { icon: FileInput, color: 'from-[#BD1D2D] to-rose-700', label: 'Form Submit' };
+                    return { icon: FileInput, color: 'bg-[#BD1D2D] border-rose-800/40', label: 'Form Submit' };
                 case 'survey':
-                    return { icon: ClipboardList, color: 'from-amber-400 to-yellow-600', label: 'Khảo sát' };
+                    return { icon: ClipboardList, color: 'bg-amber-600 border-amber-700/40', label: 'Khảo sát' };
                 case 'purchase':
-                    return { icon: ShoppingCart, color: 'from-pink-500 to-rose-600', label: 'Purchase Event' };
+                    return { icon: ShoppingCart, color: 'bg-[#BD1D2D] border-rose-800/40', label: 'Purchase Event' };
                 case 'tag':
-                    return { icon: Tag, color: 'from-emerald-500 to-teal-600', label: 'Tag Added' };
+                    return { icon: Tag, color: 'bg-emerald-600 border-emerald-700/40', label: 'Tag Added' };
                 case 'birthday':
-                    return { icon: Cake, color: 'from-pink-400 to-rose-500', label: 'Birthday Event' };
+                    return { icon: Cake, color: 'bg-rose-600 border-rose-700/40', label: 'Birthday Event' };
                 case 'colddown':
-                    return { icon: Snowflake, color: 'from-sky-400 to-blue-500', label: 'Cool-down Entry' };
+                    return { icon: Snowflake, color: 'bg-sky-600 border-sky-700/40', label: 'Cool-down Entry' };
                 default:
-                    return { icon: Zap, color: 'from-[#BD1D2D] to-rose-700', label: 'Trigger' };
+                    return { icon: Zap, color: 'bg-[#BD1D2D] border-rose-800/40', label: 'Trigger' };
             }
         };
 
@@ -238,29 +238,31 @@ export const TriggerNode: React.FC<NodeProps> = memo(
                 className={`flow-interactive relative z-20 group ${isViewMode ? 'cursor-default' : 'cursor-pointer'}`}
             >
                 <div
-                    className={`flex items-center gap-3.5 bg-gradient-to-br ${color} text-white rounded-[22px] px-5 py-4 shadow-xl ${
-                        !isViewMode ? 'transition-all hover:scale-105 hover:-translate-y-1' : ''
+                    className={`flex items-center gap-3.5 ${color} border text-white rounded-2xl px-5 py-4 shadow-md ${
+                        !isViewMode ? 'transition-[transform,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:shadow-lg' : ''
                     }`}
                 >
-                    <div className="w-11 h-11 rounded-[14px] bg-white/20 flex items-center justify-center shrink-0">
-                        <Icon className="w-5 h-5" />
+                    <div className="w-11 h-11 rounded-xl bg-white/15 border border-white/10 flex items-center justify-center shrink-0">
+                        <Icon className="w-5 h-5" strokeWidth={1.75} />
                     </div>
                     <div className="max-w-[230px]">
                         <p className="text-[9px] font-bold uppercase tracking-widest opacity-80 leading-none mb-1">
                             {label}
                         </p>
-                        <p className="text-sm font-black leading-tight">{displayLabel}</p>
+                        <p className="text-sm font-bold leading-tight">{displayLabel}</p>
                         {isFormDeleted && (
                             <div className="flex items-center gap-1 mt-1">
-                                <span className="text-[10px] font-bold bg-white/25 px-2 py-0.5 rounded backdrop-blur-sm">
-                                    ⚠️ Biểu mẫu đã bị xóa
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white/20 px-2 py-0.5 rounded">
+                                    <AlertTriangle className="w-3 h-3 shrink-0" />
+                                    Biểu mẫu đã bị xóa
                                 </span>
                             </div>
                         )}
                         {isSurveyDeleted && (
                             <div className="flex items-center gap-1 mt-1">
-                                <span className="text-[10px] font-bold bg-white/25 px-2 py-0.5 rounded backdrop-blur-sm">
-                                    ⚠️ Khảo sát đã bị xóa
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white/20 px-2 py-0.5 rounded">
+                                    <AlertTriangle className="w-3 h-3 shrink-0" />
+                                    Khảo sát đã bị xóa
                                 </span>
                             </div>
                         )}
@@ -325,21 +327,21 @@ export const ActionNode: React.FC<NodeProps> = memo(
                     e.stopPropagation();
                     if (!isViewMode) onClick?.();
                 }}
-                className={`flow-interactive relative w-[260px] p-5 rounded-[22px] bg-white z-20 group transition-all duration-300 border border-slate-100 ${
-                    isDragTarget ? 'scale-[1.04] !border-blue-400 ring-2 ring-blue-300 shadow-lg' : ''
-                } ${isViewMode ? 'shadow-sm' : 'hover:shadow-xl hover:-translate-y-1.5 cursor-pointer'}`}
+                className={`flow-interactive relative w-[260px] p-5 rounded-2xl bg-white z-20 group transition-[box-shadow,border-color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] border border-slate-200 ${
+                    isDragTarget ? '!border-blue-400 ring-2 ring-blue-300 shadow-lg' : ''
+                } ${isViewMode ? 'shadow-sm' : 'hover:shadow-md hover:border-slate-300 cursor-pointer'}`}
             >
                 <div className="flex items-start gap-4">
                     <div
-                        className={`w-12 h-12 rounded-[16px] flex items-center justify-center shrink-0 shadow-lg ${
+                        className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
                             isTag
                                 ? tagAction === 'remove'
-                                    ? 'bg-gradient-to-br from-rose-400 to-rose-600'
-                                    : 'bg-gradient-to-br from-emerald-400 to-emerald-600'
-                                : 'bg-gradient-to-br from-blue-400 to-indigo-500'
+                                    ? 'bg-rose-600'
+                                    : 'bg-emerald-600'
+                                : 'bg-blue-600'
                         } text-white`}
                     >
-                        {isTag ? <Tag className="w-5 h-5" /> : <Mail className="w-5 h-5" />}
+                        {isTag ? <Tag className="w-5 h-5" strokeWidth={1.75} /> : <Mail className="w-5 h-5" strokeWidth={1.75} />}
                     </div>
                     <div className="flex-1 overflow-hidden pt-0.5">
                         <p
@@ -353,10 +355,10 @@ export const ActionNode: React.FC<NodeProps> = memo(
                         {!isTag && (
                             <div className="space-y-1 mt-2">
                                 <div
-                                    className={`text-[10px] truncate px-2.5 py-1 rounded-[10px] border ${
+                                    className={`text-[10px] truncate px-2.5 py-1 rounded-lg border ${
                                         incomplete
-                                            ? 'bg-rose-50 border-rose-100 text-rose-600 font-bold'
-                                            : 'bg-slate-50 border-slate-100 text-slate-500'
+                                            ? 'bg-rose-50 border-rose-200 text-rose-600 font-bold'
+                                            : 'bg-slate-50 border-slate-200 text-slate-500'
                                     }`}
                                 >
                                     {step.config.subject || (isViewMode ? 'No Subject' : 'Chưa cấu hình')}
@@ -402,17 +404,17 @@ export const RemoveNode: React.FC<NodeProps> = memo(
                     e.stopPropagation();
                     if (!isViewMode) onClick?.();
                 }}
-                className={`flow-interactive relative w-[240px] p-4 rounded-[22px] bg-white z-20 group transition-all border border-rose-100 ${
-                    isDragTarget ? 'scale-[1.04] !border-blue-400' : ''
+                className={`flow-interactive relative w-[240px] p-4 rounded-2xl bg-white z-20 group transition-colors border border-rose-200 ${
+                    isDragTarget ? '!border-blue-400 ring-2 ring-blue-200' : ''
                 }`}
             >
                 <div className="flex items-center gap-3">
                     <div
-                        className={`w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0 shadow-lg ${
-                            isDelete ? 'bg-gradient-to-br from-rose-500 to-red-700 text-white' : 'bg-rose-50 text-rose-600'
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                            isDelete ? 'bg-rose-600 text-white' : 'bg-rose-50 border border-rose-200 text-rose-600'
                         }`}
                     >
-                        {isDelete ? <Trash2 className="w-5 h-5" /> : <UserMinus className="w-5 h-5" />}
+                        {isDelete ? <Trash2 className="w-5 h-5" strokeWidth={1.75} /> : <UserMinus className="w-5 h-5" strokeWidth={1.75} />}
                     </div>
                     <div>
                         <p className="text-[9px] font-bold text-rose-500 uppercase tracking-widest leading-none mb-1">
@@ -464,20 +466,20 @@ export const WaitNode: React.FC<NodeProps> = memo(
                 className={`flow-interactive relative z-20 group ${isViewMode ? 'cursor-default' : 'cursor-pointer'}`}
             >
                 <div
-                    className={`flex items-center gap-4 bg-white border rounded-full pl-2 pr-8 py-2 shadow-sm transition-all w-fit min-w-[200px] ${
+                    className={`flex items-center gap-4 bg-white border rounded-full pl-2 pr-8 py-2 shadow-sm transition-colors w-fit min-w-[200px] ${
                         incomplete
                             ? 'border-rose-200 ring-4 ring-rose-50'
-                            : 'border-slate-200/90 hover:border-slate-300 hover:shadow-md'
+                            : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
                     }`}
                 >
                     <div
                         className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
                             incomplete
                                 ? 'bg-rose-100 text-rose-600'
-                                : 'text-white bg-gradient-to-br from-amber-400 to-amber-500'
+                                : 'text-white bg-amber-500'
                         }`}
                     >
-                        <Clock className="w-6 h-6" />
+                        <Clock className="w-5 h-5" strokeWidth={1.75} />
                     </div>
                     <div className="flex flex-col overflow-hidden">
                         <span className={`text-[8px] font-bold uppercase tracking-[0.2em] leading-none mb-1.5 ${incomplete ? 'text-rose-400' : 'text-amber-600'}`}>
@@ -545,8 +547,8 @@ export const ConditionNode: React.FC<NodeProps> = memo(
                     e.stopPropagation();
                     if (!isViewMode) onClick?.();
                 }}
-                className={`flow-interactive relative z-20 group w-[240px] bg-white border rounded-[22px] shadow-lg overflow-hidden transition-all ${
-                    incomplete ? 'border-rose-200' : 'border-slate-100 hover:border-indigo-200'
+                className={`flow-interactive relative z-20 group w-[240px] bg-white border rounded-2xl shadow-md overflow-hidden transition-colors ${
+                    incomplete ? 'border-rose-200' : 'border-slate-200 hover:border-slate-300'
                 }`}
             >
                 <div className="p-1 bg-slate-50 border-b border-slate-100 flex gap-1">
@@ -555,16 +557,16 @@ export const ConditionNode: React.FC<NodeProps> = memo(
                 </div>
                 <div className="p-5">
                     <div className="flex items-center justify-between mb-4">
-                        <div className="w-10 h-10 rounded-[14px] bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg">
-                            <GitMerge className="w-5 h-5" />
+                        <div className="w-10 h-10 rounded-xl bg-[#0F172A] flex items-center justify-center text-white shadow-sm">
+                            <GitMerge className="w-5 h-5" strokeWidth={1.75} />
                         </div>
-                        <p className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest bg-indigo-50 px-2.5 py-1 rounded-[10px]">
+                        <p className="text-[9px] font-bold text-slate-700 uppercase tracking-widest bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg">
                             Logic
                         </p>
                     </div>
                     <p className="text-sm font-bold text-slate-800 leading-tight mb-3">{step.label}</p>
                     {!incomplete ? (
-                        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 bg-slate-50 px-3 py-2 rounded-[10px] border border-slate-100">
+                        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
                             <Icon className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" />
                             <span className="truncate">
                                 {isInstantCheck
@@ -573,7 +575,7 @@ export const ConditionNode: React.FC<NodeProps> = memo(
                             </span>
                         </div>
                     ) : (
-                        <div className="text-[10px] text-rose-600 font-bold bg-rose-50 px-3 py-2 rounded-[10px] text-center">
+                        <div className="text-[10px] text-rose-600 font-bold bg-rose-50 px-3 py-2 rounded-lg text-center">
                             Chưa cấu hình
                         </div>
                     )}
@@ -602,30 +604,30 @@ export const SplitTestNode: React.FC<NodeProps> = memo(
                     e.stopPropagation();
                     if (!isViewMode) onClick?.();
                 }}
-                className={`flow-interactive relative z-20 group w-[220px] bg-white border border-slate-100 rounded-[22px] shadow-lg overflow-hidden transition-all ${
-                    !isViewMode ? 'hover:border-blue-300 hover:-translate-y-1.5' : ''
+                className={`flow-interactive relative z-20 group w-[220px] bg-white border border-slate-200 rounded-2xl shadow-md overflow-hidden transition-[box-shadow,border-color] duration-200 ${
+                    !isViewMode ? 'hover:border-slate-300 hover:shadow-lg' : ''
                 }`}
             >
-                <div className="w-full h-1 bg-gradient-to-r from-blue-500 to-purple-400"></div>
+                <div className="w-full h-1 bg-blue-600"></div>
                 <div className="p-5">
                     <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 rounded-[14px] bg-gradient-to-br from-blue-500 to-fuchsia-600 flex items-center justify-center text-white shadow-lg">
-                            <Beaker className="w-5 h-5" />
+                        <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-sm">
+                            <Beaker className="w-5 h-5" strokeWidth={1.75} />
                         </div>
                         <div>
-                            <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest">A/B Test</p>
+                            <p className="text-[9px] font-bold text-blue-600 uppercase tracking-widest">A/B Test</p>
                             <p className="text-xs font-bold text-slate-800">Chia nhóm</p>
                         </div>
                     </div>
                     <div className="relative w-full h-3 bg-slate-100 rounded-full overflow-hidden mb-3">
                         <div
-                            className="absolute left-0 top-0 h-full bg-blue-500"
+                            className="absolute left-0 top-0 h-full bg-blue-600"
                             style={{ width: `${ratioA}%` }}
                         ></div>
                     </div>
-                    <div className="flex justify-between text-xs font-bold">
+                    <div className="flex justify-between text-xs font-bold tabular-nums">
                         <div className="text-blue-600">A: {ratioA}%</div>
-                        <div className="text-slate-400">B: {ratioB}%</div>
+                        <div className="text-slate-500">B: {ratioB}%</div>
                     </div>
                 </div>
                 {!isViewMode && hasWarning && (
@@ -655,30 +657,30 @@ export const LinkNode: React.FC<NodeProps> = memo(
                 className={`flow-interactive relative z-20 group ${isViewMode ? 'cursor-default' : 'cursor-pointer'}`}
             >
                 <div
-                    className={`pl-2 pr-6 py-2.5 rounded-full border flex items-center gap-3 transition-all duration-300 ${
+                    className={`pl-2 pr-6 py-2.5 rounded-full border flex items-center gap-3 transition-colors duration-200 ${
                         hasError
-                            ? 'bg-rose-50 border-rose-200 text-rose-600 shadow-lg shadow-rose-500/5 hover:-translate-y-0.5'
-                            : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-indigo-700 border-blue-500/30 text-white shadow-[0_10px_25px_-5px_rgba(99,102,241,0.35)] hover:shadow-[0_15px_30px_-5px_rgba(99,102,241,0.5)] hover:-translate-y-0.5 hover:scale-[1.03]'
+                            ? 'bg-rose-50 border-rose-200 text-rose-600 shadow-sm'
+                            : 'bg-[#0F172A] border-slate-800 text-white shadow-md hover:bg-slate-800'
                     }`}
                 >
                     <div
-                        className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${
+                        className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
                             hasError
                                 ? 'bg-rose-100 text-rose-600'
-                                : 'bg-white/15 text-white ring-2 ring-white/10 shadow-inner group-hover:bg-white/25 group-hover:scale-105'
+                                : 'bg-white/10 text-white border border-white/10 group-hover:bg-white/20'
                         }`}
                     >
-                        <LinkIcon className="w-4 h-4" />
+                        <LinkIcon className="w-4 h-4" strokeWidth={1.75} />
                     </div>
                     <div className="text-left">
                         <span
                             className={`text-[8px] font-bold uppercase tracking-widest block ${
-                                hasError ? 'text-rose-400' : 'text-blue-200/90'
+                                hasError ? 'text-rose-500' : 'text-slate-400'
                             }`}
                         >
                             Chuyển tiếp
                         </span>
-                        <span className="text-xs font-extrabold tracking-tight block max-w-[200px] truncate">
+                        <span className="text-xs font-bold block max-w-[200px] truncate">
                             {flowLabel}
                         </span>
                     </div>
@@ -717,13 +719,13 @@ export const ListActionNode: React.FC<NodeProps> = memo(
                     e.stopPropagation();
                     if (!isViewMode) onClick?.();
                 }}
-                className={`flow-interactive relative w-[260px] p-5 rounded-[22px] bg-white z-20 group transition-all border border-slate-100 ${
-                    isViewMode ? 'shadow-sm' : 'hover:shadow-xl hover:-translate-y-1.5 cursor-pointer'
+                className={`flow-interactive relative w-[260px] p-5 rounded-2xl bg-white z-20 group transition-[box-shadow,border-color] duration-200 border border-slate-200 ${
+                    isViewMode ? 'shadow-sm' : 'hover:shadow-md hover:border-slate-300 cursor-pointer'
                 }`}
             >
                 <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-[16px] bg-gradient-to-br from-amber-400 to-amber-600 text-white flex items-center justify-center shadow-lg">
-                        <List className="w-5 h-5" />
+                    <div className="w-12 h-12 rounded-xl bg-amber-600 text-white flex items-center justify-center shadow-sm">
+                        <List className="w-5 h-5" strokeWidth={1.75} />
                     </div>
                     <div className="flex-1 overflow-hidden pt-0.5">
                         <p className="text-[9px] font-bold uppercase tracking-widest leading-none mb-2 text-[var(--color-primary)]">
@@ -768,12 +770,12 @@ export const ZaloZNSNode: React.FC<NodeProps> = memo(
                     e.stopPropagation();
                     if (!isViewMode) onClick?.();
                 }}
-                className={`flow-interactive relative w-[260px] p-5 rounded-[22px] bg-white z-20 group transition-all border border-slate-100 ${
-                    isViewMode ? 'shadow-sm' : 'hover:shadow-xl hover:-translate-y-1.5 cursor-pointer'
+                className={`flow-interactive relative w-[260px] p-5 rounded-2xl bg-white z-20 group transition-[box-shadow,border-color] duration-200 border border-slate-200 ${
+                    isViewMode ? 'shadow-sm' : 'hover:shadow-md hover:border-slate-300 cursor-pointer'
                 }`}
             >
                 <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-[16px] bg-gradient-to-br from-blue-400 to-blue-600 text-white flex items-center justify-center shadow-lg">
+                    <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
                         <img src={`${EXTERNAL_ASSET_BASE}/imgs/zalolog.png`} alt="Zalo" className="w-6 h-6" />
                     </div>
                     <div className="flex-1 overflow-hidden pt-0.5">
@@ -785,10 +787,10 @@ export const ZaloZNSNode: React.FC<NodeProps> = memo(
                         </p>
                         <div className="space-y-1 mt-2">
                             <div
-                                className={`text-[10px] truncate px-2.5 py-1 rounded-[10px] border ${
+                                className={`text-[10px] truncate px-2.5 py-1 rounded-lg border ${
                                     incomplete
-                                        ? 'bg-rose-50 border-rose-100 text-rose-600 font-bold'
-                                        : 'bg-slate-50 border-slate-100 text-slate-500'
+                                        ? 'bg-rose-50 border-rose-200 text-rose-600 font-bold'
+                                        : 'bg-slate-50 border-slate-200 text-slate-500'
                                 }`}
                             >
                                 {step.config.template_id ? `Template: ${step.config.template_id}` : 'Chưa cấu hình'}
@@ -916,23 +918,23 @@ export const CrmActionNode: React.FC<NodeProps> = memo(
                     e.stopPropagation();
                     if (!isViewMode) onClick?.();
                 }}
-                className={`flow-interactive relative w-[260px] p-5 rounded-[22px] bg-white z-20 group transition-all border border-indigo-100 ${
-                    isDragTarget ? 'scale-[1.04] !border-indigo-400 ring-2 ring-indigo-300 shadow-lg' : ''
-                } ${isViewMode ? 'shadow-sm' : 'hover:shadow-xl hover:-translate-y-1.5 cursor-pointer'}`}
+                className={`flow-interactive relative w-[260px] p-5 rounded-2xl bg-white z-20 group transition-[box-shadow,border-color] duration-200 border border-slate-200 ${
+                    isDragTarget ? '!border-slate-400 ring-2 ring-slate-200 shadow-lg' : ''
+                } ${isViewMode ? 'shadow-sm' : 'hover:shadow-md hover:border-slate-300 cursor-pointer'}`}
             >
                 <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-[16px] bg-gradient-to-br from-indigo-600 to-slate-900 text-white flex items-center justify-center shrink-0 shadow-lg">
-                        <IconComp className="w-5 h-5" />
+                    <div className="w-12 h-12 rounded-xl bg-[#0F172A] text-white flex items-center justify-center shrink-0 shadow-sm">
+                        <IconComp className="w-5 h-5" strokeWidth={1.75} />
                     </div>
                     <div className="flex-1 overflow-hidden pt-0.5">
-                        <p className="text-[9px] font-black uppercase tracking-widest leading-none mb-2 text-indigo-700">
+                        <p className="text-[9px] font-bold uppercase tracking-widest leading-none mb-2 text-[#BD1D2D]">
                             {badge}
                         </p>
                         <p className="text-sm font-bold text-slate-800 truncate leading-tight">
                             {step.label === 'Bước mới' ? 'Tác vụ CRM (MYERP)' : step.label}
                         </p>
                         <div className="mt-2">
-                            <div className="text-[10px] truncate px-2.5 py-1 rounded-[10px] border bg-indigo-50/70 border-indigo-100 text-indigo-800 font-bold">
+                            <div className="text-[10px] truncate px-2.5 py-1 rounded-lg border bg-slate-50 border-slate-200 text-slate-700 font-semibold">
                                 {detail}
                             </div>
                         </div>
@@ -960,14 +962,14 @@ export const AdvancedConditionNode: React.FC<NodeProps> = memo(
                 {!isViewMode && <QuickEdit onClick={() => onClick?.()} />}
                 {hasWarning && <ValidationBadge type="warning" />}
                 <div
-                    className={`flex flex-col items-center justify-center w-16 h-16 rounded-[20px] shadow-xl transition-all bg-gradient-to-br from-blue-600 to-fuchsia-600 text-white ring-4 ring-white ${
-                        !isViewMode ? 'hover:scale-110' : ''
+                    className={`flex flex-col items-center justify-center w-16 h-16 rounded-2xl shadow-md transition-colors bg-[#0F172A] border border-slate-700 text-white ring-4 ring-white ${
+                        !isViewMode ? 'hover:bg-slate-800' : ''
                     }`}
                 >
-                    <GitMerge className="w-8 h-8 rotate-90" />
+                    <GitMerge className="w-7 h-7 rotate-90" strokeWidth={1.75} />
                 </div>
-                <div className="absolute top-0 left-16 ml-3 w-48 opacity-0 group-hover:opacity-100 transition-all pointer-events-none z-50">
-                    <div className="bg-slate-800 text-white text-[10px] p-2.5 rounded-[14px] font-bold shadow-xl">
+                <div className="absolute top-0 left-16 ml-3 w-48 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                    <div className="bg-slate-900 text-white text-[10px] p-2.5 rounded-xl font-semibold shadow-xl border border-slate-700">
                         <p className="uppercase tracking-widest text-slate-400 mb-1">Advanced Split</p>
                         {branches.map((b: any, i: number) => (
                             <div key={i} className="flex justify-between text-slate-300 gap-2">
@@ -978,7 +980,7 @@ export const AdvancedConditionNode: React.FC<NodeProps> = memo(
                     </div>
                 </div>
                 <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap">
-                    <span className="bg-white/90 backdrop-blur px-2 py-0.5 rounded-full text-[10px] font-black text-slate-600 shadow-sm border border-slate-100">
+                    <span className="bg-white/95 backdrop-blur px-2.5 py-0.5 rounded-full text-[10px] font-bold text-slate-700 shadow-sm border border-slate-200">
                         {step.label}
                     </span>
                 </div>

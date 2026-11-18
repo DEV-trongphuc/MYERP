@@ -71,21 +71,21 @@ const AutomationStatsModal: React.FC<AutomationStatsModalProps> = ({ scenario, o
                 onClick={onClose}
             />
             <div
-                style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-                className={`relative bg-white w-full max-w-4xl rounded-[18px] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col border border-slate-100 transform transition-all duration-500 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-8'}`}
+                style={{ transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)' }}
+                className={`relative bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col border border-slate-200 transform transition-[transform,opacity] duration-200 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-4'}`}
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-white relative z-10">
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white relative z-10">
                     <div>
-                        <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                        <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                             <span className="text-[var(--color-primary)]">
                                 Báo cáo hiệu quả
                             </span>
                         </h2>
-                        <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">Kịch bản: {scenario.title}</p>
+                        <p className="text-xs font-semibold text-slate-500 mt-1 uppercase tracking-wider">Kịch bản: {scenario.title}</p>
                     </div>
-                    <button onClick={onClose} className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-full transition-all">
+                    <button onClick={onClose} className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-full transition-colors">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
@@ -93,39 +93,39 @@ const AutomationStatsModal: React.FC<AutomationStatsModalProps> = ({ scenario, o
                 <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
                     {/* Summary Cards */}
                     <div className="grid grid-cols-3 gap-4 mb-8">
-                        <div className="bg-white p-5 rounded-[14px] border border-slate-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-[14px] bg-blue-50 text-blue-600 flex items-center justify-center">
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
                                 <Send className="w-6 h-6" />
                             </div>
                             <div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Đã gửi</p>
-                                <p className="text-2xl font-black text-slate-800">{summary.sent}</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Đã gửi</p>
+                                <p className="text-2xl font-bold text-slate-900 tabular-nums">{summary.sent}</p>
                             </div>
                         </div>
-                        <div className="bg-white p-5 rounded-[14px] border border-slate-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-[14px] bg-[var(--color-primary)]/10 text-[var(--color-primary)] flex items-center justify-center">
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-rose-50 text-[#BD1D2D] flex items-center justify-center">
                                 <MousePointer className="w-6 h-6" />
                             </div>
                             <div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Lượt Click</p>
-                                <p className="text-2xl font-black text-slate-800">{summary.clicks}</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Lượt Click</p>
+                                <p className="text-2xl font-bold text-slate-900 tabular-nums">{summary.clicks}</p>
                             </div>
                         </div>
-                        <div className="bg-white p-5 rounded-[14px] border border-slate-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-[14px] bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                                <span className="text-lg font-black">%</span>
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                                <span className="text-lg font-bold">%</span>
                             </div>
                             <div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tỷ lệ click (CTR)</p>
-                                <p className="text-2xl font-black text-slate-800">{summary.ctr}</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tỷ lệ click (CTR)</p>
+                                <p className="text-2xl font-bold text-slate-900 tabular-nums">{summary.ctr}</p>
                             </div>
                         </div>
                     </div>
 
                     {/* Button Stats Breakdown */}
                     {summary.button_stats && summary.button_stats.length > 0 && (
-                        <div className="bg-white rounded-[14px] border border-slate-100 shadow-sm overflow-hidden mb-8">
-                            <div className="p-4 border-b border-slate-50 bg-slate-50/30 flex justify-between items-center">
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden mb-8">
+                            <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                                 <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
                                     <MessageCircle className="w-4 h-4 text-slate-400" />
                                     Thống kê theo nút (Nhấn vào nút để lọc)
@@ -133,30 +133,30 @@ const AutomationStatsModal: React.FC<AutomationStatsModalProps> = ({ scenario, o
                                 {selectedBtn && (
                                     <button
                                         onClick={() => setSelectedBtn('')}
-                                        className="text-[10px] font-black text-rose-500 uppercase hover:underline"
+                                        className="text-[10px] font-bold text-[#BD1D2D] uppercase hover:underline"
                                     >
                                         Xóa lọc nút
                                     </button>
                                 )}
                             </div>
-                            <div className="divide-y divide-slate-50">
+                            <div className="divide-y divide-slate-100">
                                 {summary.button_stats.map((btn, idx) => (
                                     <div
                                         key={idx}
-                                        className={`p-4 flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${selectedBtn === btn.details ? 'bg-blue-50/50' : ''}`}
+                                        className={`p-4 flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${selectedBtn === btn.details ? 'bg-rose-50/50' : ''}`}
                                         onClick={() => setSelectedBtn(selectedBtn === btn.details ? '' : btn.details)}
                                     >
                                         <div className="flex items-center gap-3">
-                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${selectedBtn === btn.details ? 'bg-blue-500 text-white' : 'bg-blue-50 text-blue-600'}`}>
+                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs tabular-nums ${selectedBtn === btn.details ? 'bg-[#BD1D2D] text-white' : 'bg-slate-100 text-slate-700'}`}>
                                                 {idx + 1}
                                             </div>
-                                            <p className={`text-sm font-semibold ${selectedBtn === btn.details ? 'text-blue-600' : 'text-slate-700'}`}>
+                                            <p className={`text-sm font-semibold ${selectedBtn === btn.details ? 'text-[#BD1D2D]' : 'text-slate-700'}`}>
                                                 {btn.details.replace('Click Button: ', '').replace('Click Link: ', '')}
                                             </p>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Lượt nhấn:</span>
-                                            <span className="text-lg font-black text-slate-800">{btn.count}</span>
+                                            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Lượt nhấn:</span>
+                                            <span className="text-lg font-bold text-slate-900 tabular-nums">{btn.count}</span>
                                         </div>
                                     </div>
                                 ))}

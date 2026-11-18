@@ -323,7 +323,7 @@ const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
                                     {localTags.length > 0 && (
                                         <div className="flex flex-wrap gap-1.5 pt-1">
                                             {localTags.map(tagName => (
-                                                <div key={tagName} className="flex items-center gap-1 px-2 py-0.5 bg-[var(--color-primary-light)] text-[var(--color-primary)] rounded-md text-[10px] font-black uppercase tracking-tight">
+                                                <div key={tagName} className="flex items-center gap-1 px-2 py-0.5 bg-[var(--color-primary-light)] text-[var(--color-primary)] rounded-md text-[10px] font-bold uppercase">
                                                     {tagName}
                                                     <X className="w-2.5 h-2.5 cursor-pointer hover:text-[var(--color-primary)]" onClick={(e) => { e.stopPropagation(); toggleTag(tagName); }} />
                                                 </div>

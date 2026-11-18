@@ -15,6 +15,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import QRCodeStyling from '../shims/qrCodeStyling';
 import QRDesignerModal from '../components/links/QRDesignerModal';
 import { MktPanel, MktToolbar, MktEmpty, useDebouncedValue, usePageActive } from '../components/dashboard/MktLayout';
+import { ensureArray, extractArray } from '../../../utils/safeArray';
 
 const getProxiedUrl = (url: string | undefined): string | undefined => {
     if (!url) return url;
@@ -340,7 +341,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
 
     const fetchSurveys = async () => {
         const res = await api.get<any[]>('surveys');
-        if (res.success) setSurveys(res.data || []);
+        if (res.success) setSurveys(extractArray(res));
     };
 
     const fetchLinkStats = async (id: string) => {
@@ -376,7 +377,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
     const copyLink = (slug: string) => {
         const link = `${EXTERNAL_ASSET_BASE}/go/${slug}`;
         navigator.clipboard.writeText(link);
-        toast.success('Đã Copy Link!');
+        toast.success('Đã sao chép liên kết');
     };
 
     const updateQRConfig = (key: string, value: any) => {
@@ -510,7 +511,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                                         </span>
                                                     </div>
                                                     <span className="text-xs text-[var(--color-text-muted)] shrink-0">
-                                                        Tổng lượt click: <strong className="text-[var(--color-text)]">{totalClicks.toLocaleString()}</strong>
+                                                        Tổng lượt click: <strong className="text-[var(--color-text)] tabular-nums">{totalClicks.toLocaleString()}</strong>
                                                     </span>
                                                 </div>
 
@@ -518,7 +519,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                                     {groupedLinks.map(link => (
                                                         <div
                                                             key={link.id}
-                                                            className="group bg-[var(--color-surface)] rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4 flex flex-col hover:border-[var(--color-primary)] hover:shadow-[var(--shadow-md)] transition-all relative overflow-hidden"
+                                                            className="group bg-[var(--color-surface)] rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4 flex flex-col hover:border-[var(--color-primary)] hover:shadow-[var(--shadow-md)] transition-[border-color,box-shadow] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] relative overflow-hidden"
                                                         >
                                                             <div className="flex items-start gap-3 mb-4">
                                                                 <div className="w-10 h-10 rounded-[var(--radius-md)] bg-[var(--color-primary-light)] text-[var(--color-primary)] flex items-center justify-center shrink-0">
@@ -562,7 +563,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                                                 </div>
                                                                 <div className="flex justify-between items-center text-xs">
                                                                     <span className="font-medium text-[var(--color-text-muted)]">Lượt click</span>
-                                                                    <span className="font-bold text-[var(--color-text)]">
+                                                                    <span className="font-bold text-[var(--color-text)] tabular-nums">
                                                                         {(link.stats?.clicks || 0).toLocaleString()} lượt
                                                                     </span>
                                                                 </div>
@@ -571,7 +572,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                                                         <span className="font-medium text-[var(--color-text-muted)] inline-flex items-center gap-1">
                                                                             <FileText className="w-3 h-3 text-[var(--color-primary)]" /> Khảo sát
                                                                         </span>
-                                                                        <span className="font-bold text-[var(--color-primary)]">
+                                                                        <span className="font-bold text-[var(--color-primary)] tabular-nums">
                                                                             {(link.submit_count || 0).toLocaleString()} phản hồi
                                                                         </span>
                                                                     </div>
@@ -624,13 +625,13 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
             )}
 
             {view === 'report' && selectedLink && (
-                <div className="bg-[var(--color-surface)] rounded-[18px] p-6 lg:p-8 border border-[var(--color-border)] min-h-[700px] shadow-[var(--shadow-xs)]">
+                <div className="bg-[var(--color-surface)] rounded-2xl p-6 lg:p-8 border border-[var(--color-border)] min-h-[700px] shadow-[var(--shadow-xs)]">
                     <div className="flex items-start justify-between mb-8">
                         <div className="flex items-center gap-4">
                             <div>
                                 <button 
                                     onClick={() => setView('list')}
-                                    className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 hover:text-[var(--color-primary)] uppercase tracking-widest transition-colors mb-3 group"
+                                    className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 hover:text-[var(--color-primary)] uppercase tracking-wider transition-colors mb-3 group"
                                 >
                                     <div className="w-6 h-6 rounded-full bg-slate-100 group-hover:bg-[var(--color-primary-light)] flex items-center justify-center transition-colors">
                                         <ArrowRight className="w-3 h-3 rotate-180" />
@@ -646,12 +647,12 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                             onChange={e => setEditNameValue(e.target.value)} 
                                             onBlur={handleSaveName}
                                             onKeyDown={e => e.key === 'Enter' && handleSaveName()}
-                                            className="text-xl font-black text-slate-800 uppercase tracking-tight bg-slate-50 border border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 rounded-xl px-3 py-1 outline-none w-full min-w-[250px]"
+                                            className="text-xl font-bold text-slate-900 uppercase tracking-tight bg-slate-50 border border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 rounded-xl px-3 py-1 outline-none w-full min-w-[250px]"
                                             autoFocus
                                         />
                                     ) : (
                                         <>
-                                            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">{selectedLink.name || selectedLink.slug}</h2>
+                                            <h2 className="text-xl font-bold text-slate-900 uppercase tracking-tight">{selectedLink.name || selectedLink.slug}</h2>
                                             <button 
                                                 onClick={() => { setIsEditingName(true); setEditNameValue(selectedLink.name || selectedLink.slug); }} 
                                                 className="p-1.5 text-slate-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-light)] rounded-lg transition-colors border border-transparent hover:border-[var(--color-primary)]/20 shadow-sm"
@@ -664,16 +665,16 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                 </div>
 
                                 <div className="flex items-center gap-3 mt-2 flex-wrap">
-                                    <span className="px-3 py-1 bg-[var(--color-primary-light)] text-[var(--color-primary)] text-[10px] font-black rounded-full border border-[var(--color-primary)]/20 uppercase">/go/{selectedLink.slug}</span>
+                                    <span className="px-3 py-1 bg-[var(--color-primary-light)] text-[var(--color-primary)] text-[11px] font-bold rounded-full border border-[var(--color-primary)]/20 uppercase">/go/{selectedLink.slug}</span>
                                     <div className="w-1 h-1 bg-slate-300 rounded-full" />
-                                    <span className="text-[11px] text-slate-400 font-mono italic opacity-70">Domain Link Mapping</span>
+                                    <span className="text-[11px] text-slate-500 font-mono">Domain Link Mapping</span>
                                     
                                     {selectedLink.is_survey_checkin && selectedLink.survey_id && (
                                         <>
                                             <div className="w-1 h-1 bg-slate-300 rounded-full" />
-                                            <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-indigo-50 border border-indigo-200/60 text-indigo-700 rounded-lg shadow-sm">
-                                                <FileText className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
-                                                <span className="text-[10px] font-bold uppercase tracking-wider">
+                                            <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-slate-100 border border-slate-200 text-slate-700 rounded-lg">
+                                                <FileText className="w-3.5 h-3.5 text-[#BD1D2D] flex-shrink-0" />
+                                                <span className="text-[11px] font-semibold uppercase tracking-wider">
                                                     Khảo sát: {surveys.find(s => s.id === selectedLink.survey_id)?.name || 'Đã liên kết'}
                                                 </span>
                                             </div>
@@ -683,7 +684,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                             </div>
                         </div>
                         <div className="hidden md:flex flex-col items-end gap-2">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Target URL (Link gốc)</span>
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Target URL (Link gốc)</span>
                             <a 
                                 href={selectedLink.target_url} 
                                 target="_blank" 
@@ -691,11 +692,11 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                 className="px-4 py-1.5 bg-[var(--color-primary-light)] border border-[var(--color-primary)]/20 rounded-full flex items-center gap-2 max-w-sm cursor-pointer transition-colors group"
                                 title="Mở link"
                             >
-                                <Globe className="w-3.5 h-3.5 text-[var(--color-primary)] transition-transform group-hover:rotate-12" />
-                                <span className="text-[11px] font-bold text-[var(--color-primary)] truncate">{selectedLink.target_url}</span>
+                                <Globe className="w-3.5 h-3.5 text-[var(--color-primary)]" />
+                                <span className="text-[11px] font-semibold text-[var(--color-primary)] truncate">{selectedLink.target_url}</span>
                             </a>
                             {selectedLink.created_at && (
-                                <span className="text-[10px] font-bold text-slate-400 mt-1">
+                                <span className="text-[11px] font-medium text-slate-400 mt-1 tabular-nums">
                                     Tạo ngày: {new Date(selectedLink.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                                 </span>
                             )}
@@ -712,7 +713,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                         setPinLength(existingPin.length === 6 ? 6 : 4);
                                         setIsSettingsOpen(true);
                                     }}
-                                    className="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[10px] font-bold rounded-[var(--radius-md)] transition-colors flex items-center gap-1.5 shadow-sm"
+                                    className="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-semibold rounded-[var(--radius-md)] transition-colors flex items-center gap-1.5 shadow-sm"
                                 >
                                     <Target className="w-3.5 h-3.5" /> NÂNG CAO & BẢO MẬT
                                 </button>
@@ -724,34 +725,34 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10 items-stretch">
                         {/* Designer Tools */}
                         <div className="lg:col-span-5 flex flex-col">
-                            <div className="bg-slate-50 p-6 rounded-[18px] border border-slate-200 flex-1 flex flex-col justify-center">
-                                <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Tùy chỉnh QR</h3>
-                                <p className="text-xs text-slate-500 mt-1 font-medium">Thiết kế mã QR Campaign trở nên chuyên nghiệp và khác biệt.</p>
+                            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 flex-1 flex flex-col justify-center">
+                                <h3 className="text-base font-bold text-slate-900 uppercase tracking-tight">Tùy chỉnh QR</h3>
+                                <p className="text-xs text-slate-500 mt-1 font-medium">Thiết kế mã QR Campaign đồng bộ nhận diện thương hiệu</p>
                                 
                                 <div className="mt-6 space-y-4">
                                     <button 
                                         onClick={() => setIsDesignerOpen(true)}
-                                        className="w-full flex items-center justify-between p-4 bg-white border border-slate-200 rounded-[14px] hover:border-[var(--color-primary)] hover:shadow-md transition-all group"
+                                        className="w-full flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:border-[var(--color-primary)] hover:shadow-sm transition-[border-color,box-shadow] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] group"
                                     >
                                         <div className="flex items-center gap-3.5">
-                                            <div className="w-11 h-11 rounded-[12px] bg-[var(--color-primary)] text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+                                            <div className="w-11 h-11 rounded-lg bg-[var(--color-primary)] text-white flex items-center justify-center shadow-sm">
                                                 <Edit3 className="w-5 h-5" />
                                             </div>
                                             <div className="text-left">
-                                                <span className="block text-sm font-black text-slate-800 leading-tight">Chỉnh sửa Design</span>
-                                                <span className="text-[10px] font-black text-[var(--color-primary)] uppercase tracking-widest mt-0.5">Professional Designer</span>
+                                                <span className="block text-sm font-bold text-slate-900 leading-tight">Chỉnh sửa Design</span>
+                                                <span className="text-[10px] font-semibold text-[var(--color-primary)] uppercase tracking-wider mt-0.5">QR Designer</span>
                                             </div>
                                         </div>
-                                        <div className="w-8 h-8 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center group-hover:bg-[var(--color-primary)] group-hover:border-[var(--color-primary)] group-hover:text-white transition-all text-slate-400">
+                                        <div className="w-8 h-8 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center group-hover:bg-[var(--color-primary)] group-hover:border-[var(--color-primary)] group-hover:text-white transition-colors duration-150 text-slate-400">
                                             <ArrowRight className="w-4 h-4" />
                                         </div>
                                     </button>
 
-                                    <div className="p-4 bg-amber-50/50 rounded-[14px] border border-amber-100">
+                                    <div className="p-4 bg-amber-50/60 rounded-xl border border-amber-200/70">
                                         <div className="flex gap-3">
                                             <Lightbulb className="w-5 h-5 text-amber-600 shrink-0" />
-                                            <p className="text-[11px] text-amber-700/80 font-bold leading-relaxed">
-                                                Lưu ý quan trọng: Hãy chọn màu hoa văn có độ tương phản cao với màu nền để các thiết bị quét nhanh hơn.
+                                            <p className="text-xs text-amber-800 font-medium leading-relaxed">
+                                                Lưu ý: Chọn màu hoa văn có độ tương phản cao với màu nền để các thiết bị quét nhận diện chính xác
                                             </p>
                                         </div>
                                     </div>
@@ -761,10 +762,10 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
 
                         {/* Preview Window plain design */}
                         <div 
-                            className="lg:col-span-7 flex flex-col items-center justify-center p-8 bg-slate-50/40 rounded-[18px] border border-slate-200 relative overflow-hidden h-full min-h-[380px]"
+                            className="lg:col-span-7 flex flex-col items-center justify-center p-8 bg-slate-50/40 rounded-2xl border border-slate-200 relative overflow-hidden h-full min-h-[380px]"
                             style={{ backgroundImage: `radial-gradient(circle at 1px 1px, #cbd5e1 1px, transparent 0)`, backgroundSize: `24px 24px` }}
                         >
-                            <div className="bg-white p-8 rounded-[18px] shadow-md flex flex-col items-center border border-slate-100 z-10">
+                            <div className="bg-white p-8 rounded-2xl shadow-md flex flex-col items-center border border-slate-200/80 z-10">
                                 {(() => {
                                     const cfg = JSON.parse(selectedLink.qr_config_json || '{}');
                                     const hasFrame = cfg.frameId && cfg.frameId !== 'none';
@@ -772,16 +773,16 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                     
                                     return (
                                         <div 
-                                            className="transition-all duration-500"
+                                            className="transition-colors duration-200"
                                             style={{
-                                                border: hasFrame ? `10px solid ${cfg.frameColor || '#4f46e5'}` : 'none',
-                                                borderRadius: '18px',
+                                                border: hasFrame ? `10px solid ${cfg.frameColor || '#0F172A'}` : 'none',
+                                                borderRadius: '16px',
                                                 padding: hasFrame ? '20px 16px 40px' : '0',
-                                                background: hasFrame ? (cfg.frameColor || '#4f46e5') : 'transparent',
+                                                background: hasFrame ? (cfg.frameColor || '#0F172A') : 'transparent',
                                                 position: 'relative'
                                             }}
                                         >
-                                            <div className="bg-white p-3 rounded-[14px] shadow-sm border border-slate-100">
+                                            <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100">
                                                 <QRPreview 
                                                     configJson={selectedLink.qr_config_json}
                                                     value={qrValue}
@@ -790,7 +791,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                             </div>
                                             {hasFrame && (
                                                 <div className="absolute bottom-3 left-0 right-0 text-center">
-                                                    <span className="text-[10px] font-black text-white tracking-[0.3em] uppercase">{cfg.frameText || 'SCAN ME!'}</span>
+                                                    <span className="text-[10px] font-bold text-white tracking-[0.25em] uppercase">{cfg.frameText || 'SCAN ME'}</span>
                                                 </div>
                                             )}
                                         </div>
@@ -854,7 +855,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                                 console.error('Download QR err', e);
                                             }
                                         }}
-                                        className="w-full h-10 bg-[var(--color-primary)] hover:opacity-90 text-white rounded-[var(--radius-md)] text-xs font-semibold transition-all shadow-[var(--shadow-xs)] flex items-center justify-center gap-2"
+                                        className="w-full h-10 bg-[var(--color-primary)] hover:opacity-90 text-white rounded-[var(--radius-md)] text-xs font-semibold transition-opacity duration-150 shadow-[var(--shadow-xs)] flex items-center justify-center gap-2"
                                     >
                                         <Download className="w-4 h-4" /> Tải xuống mã QR
                                     </button>
@@ -904,9 +905,9 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                                         <XAxis type="number" hide />
                                                         <YAxis dataKey="device_type" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }} width={90} />
                                                         <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: 12, border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'}} />
-                                                        <Bar dataKey="clicks" radius={[0, 8, 8, 0]} barSize={20} label={{ position: 'right', fill: '#BD1D2D', fontSize: 11, fontWeight: 800 }}>
+                                                        <Bar dataKey="clicks" radius={[0, 8, 8, 0]} barSize={20} label={{ position: 'right', fill: '#BD1D2D', fontSize: 11, fontWeight: 700 }}>
                                                             {linkStats.devices.map((_, index) => (
-                                                                <Cell key={`cell-${index}`} fill={['#BD1D2D', '#dc2626', '#f43f5e'][index % 3]} />
+                                                                <Cell key={`cell-${index}`} fill={['#C6333D', '#334155', '#E11D48'][index % 3]} />
                                                             ))}
                                                         </Bar>
                                                     </RechartsBarChart>
@@ -923,9 +924,9 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                                         <XAxis type="number" hide />
                                                         <YAxis dataKey="os" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }} width={90} />
                                                         <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: 12, border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'}} />
-                                                        <Bar dataKey="clicks" radius={[0, 8, 8, 0]} barSize={20} label={{ position: 'right', fill: '#BD1D2D', fontSize: 11, fontWeight: 800 }}>
+                                                        <Bar dataKey="clicks" radius={[0, 8, 8, 0]} barSize={20} label={{ position: 'right', fill: '#BD1D2D', fontSize: 11, fontWeight: 700 }}>
                                                             {linkStats.os.map((_, index) => (
-                                                                <Cell key={`cell-${index}`} fill={['#BD1D2D', '#e11d48', '#fb7185', '#fda4af'][index % 4]} />
+                                                                <Cell key={`cell-${index}`} fill={['#C6333D', '#334155', '#E11D48', '#64748B'][index % 4]} />
                                                             ))}
                                                         </Bar>
                                                     </RechartsBarChart>
@@ -942,9 +943,9 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                                         <XAxis type="number" hide />
                                                         <YAxis dataKey="country" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }} width={90} />
                                                         <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: 12, border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'}} />
-                                                        <Bar dataKey="clicks" radius={[0, 8, 8, 0]} barSize={20} label={{ position: 'right', fill: '#0ea5e9', fontSize: 11, fontWeight: 800 }}>
+                                                        <Bar dataKey="clicks" radius={[0, 8, 8, 0]} barSize={20} label={{ position: 'right', fill: '#334155', fontSize: 11, fontWeight: 700 }}>
                                                             {linkStats.country.map((_, index) => (
-                                                                <Cell key={`cell-${index}`} fill={['#06b6d4', '#0ea5e9', '#3b82f6', '#14b8a6'][index % 4]} />
+                                                                <Cell key={`cell-${index}`} fill={['#C6333D', '#334155', '#E11D48', '#64748B'][index % 4]} />
                                                             ))}
                                                         </Bar>
                                                     </RechartsBarChart>
@@ -966,26 +967,26 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                     <Input label="Tên chiến dịch / Link" value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="VD: Link báo giá Tết..." autoFocus />
                     <Input label="URL Đích (Redirect)" value={formData.target_url || ''} onChange={e => setFormData({ ...formData, target_url: e.target.value })} placeholder="https://..." />
 
-                    <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 mt-6">
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mt-6">
                         <div className="flex justify-between items-center mb-4 cursor-pointer select-none" onClick={() => setFormData({ ...formData, is_survey_checkin: formData.is_survey_checkin ? 0 : 1 })}>
                             <div>
-                                <h5 className="text-sm font-bold text-indigo-900 flex items-center gap-2"><Scan className="w-4 h-4" />Bật "Cổng kiểm soát" (Gateway)</h5>
-                                <p className="text-[10px] text-indigo-700/70">Bắt buộc nhập form (Survey) trước khi đi đến Web đích.</p>
+                                <h5 className="text-sm font-bold text-slate-900 flex items-center gap-2"><Scan className="w-4 h-4 text-[#BD1D2D]" />Bật "Cổng kiểm soát" (Gateway)</h5>
+                                <p className="text-[11px] text-slate-500">Bắt buộc nhập form (Survey) trước khi đi đến Web đích</p>
                             </div>
-                            <div className={`w-10 h-5 rounded-full flex items-center p-0.5 transition-colors ${formData.is_survey_checkin ? 'bg-indigo-600 justify-end' : 'bg-slate-300 justify-start'}`}><div className="w-4 h-4 bg-white rounded-full"></div></div>
+                            <div className={`w-10 h-5 rounded-full flex items-center p-0.5 transition-colors ${formData.is_survey_checkin ? 'bg-[#BD1D2D] justify-end' : 'bg-slate-300 justify-start'}`}><div className="w-4 h-4 bg-white rounded-full"></div></div>
                         </div>
                         {!!formData.is_survey_checkin && (
-                            <div className={`animate-in fade-in slide-in-from-top-2 pt-2 transition-all ${isSurveyPickerOpen ? 'mb-[240px]' : ''}`}>
-                                <label className="text-[11px] font-bold text-indigo-900 uppercase tracking-widest block mb-2">Chọn Khảo sát (Form) hiển thị</label>
+                            <div className={`animate-in fade-in slide-in-from-top-2 pt-2 transition-[margin] duration-150 ${isSurveyPickerOpen ? 'mb-[240px]' : ''}`}>
+                                <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block mb-2">Chọn Khảo sát (Form) hiển thị</label>
                                 <div className="relative">
                                     <div 
-                                        className="w-full flex items-center justify-between p-3 bg-white border-2 border-indigo-200 rounded-2xl cursor-pointer hover:border-indigo-400 transition-colors"
+                                        className="w-full flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-[#BD1D2D] transition-colors"
                                         onClick={() => setIsSurveyPickerOpen(!isSurveyPickerOpen)}
                                     >
                                         {formData.survey_id && surveys.find(s => s.id === formData.survey_id) ? (
                                             <div className="flex items-center gap-3">
-                                                <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg"><FileText className="w-4 h-4" /></div>
-                                                <span className="text-sm font-bold text-slate-700">{surveys.find(s => s.id === formData.survey_id)?.name}</span>
+                                                <div className="p-1.5 bg-rose-50 text-[#BD1D2D] rounded-lg"><FileText className="w-4 h-4" /></div>
+                                                <span className="text-sm font-bold text-slate-800">{surveys.find(s => s.id === formData.survey_id)?.name}</span>
                                             </div>
                                         ) : (
                                             <div className="flex items-center gap-3 text-slate-400">
@@ -999,18 +1000,18 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                     {isSurveyPickerOpen && (
                                         <>
                                             <div className="fixed inset-0 z-40" onClick={() => setIsSurveyPickerOpen(false)}></div>
-                                            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in-95">
+                                            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden animate-in fade-in zoom-in-95">
                                                 <div className="p-2 border-b border-slate-100 flex gap-2 items-center bg-slate-50">
                                                     <div className="relative flex-1">
                                                         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                                         <input 
-                                                            className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
+                                                            className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-[#BD1D2D] focus:ring-1 focus:ring-[#BD1D2D]" 
                                                             placeholder="Tìm nhanh form..." 
                                                             value={surveySearch}
                                                             onChange={(e) => setSurveySearch(e.target.value)}
                                                         />
                                                     </div>
-                                                    <Button size="sm" variant="outline" icon={Plus} className="shrink-0 text-indigo-600 border-indigo-200 hover:bg-indigo-50" onClick={() => window.open('/', '_blank')}>Tạo Mới</Button>
+                                                    <Button size="sm" variant="outline" icon={Plus} className="shrink-0 text-[#BD1D2D] border-rose-200 hover:bg-rose-50" onClick={() => window.open('/', '_blank')}>Tạo Mới</Button>
                                                 </div>
                                                 <div className="max-h-56 overflow-y-auto custom-scrollbar p-2 space-y-1">
                                                     {surveys.filter(s => s.name.toLowerCase().includes(surveySearch.toLowerCase())).length > 0 ? (
@@ -1018,15 +1019,15 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                                             <div 
                                                                 key={s.id}
                                                                 onClick={() => { setFormData({...formData, survey_id: s.id}); setIsSurveyPickerOpen(false); }}
-                                                                className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${s.id === formData.survey_id ? 'bg-indigo-50' : 'hover:bg-slate-50'}`}
+                                                                className={`flex items-center justify-between p-2.5 rounded-lg cursor-pointer transition-colors ${s.id === formData.survey_id ? 'bg-rose-50/70' : 'hover:bg-slate-50'}`}
                                                             >
                                                                 <div className="flex items-center gap-3 max-w-[85%]">
-                                                                    <div className={`p-1.5 rounded-lg shrink-0 ${s.id === formData.survey_id ? 'bg-indigo-200 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>
+                                                                    <div className={`p-1.5 rounded-lg shrink-0 ${s.id === formData.survey_id ? 'bg-rose-100 text-[#BD1D2D]' : 'bg-slate-100 text-slate-500'}`}>
                                                                         <FileText className="w-4 h-4" />
                                                                     </div>
-                                                                    <span className={`text-sm truncate ${s.id === formData.survey_id ? 'font-bold text-indigo-900' : 'font-medium text-slate-600'}`}>{s.name}</span>
+                                                                    <span className={`text-sm truncate ${s.id === formData.survey_id ? 'font-bold text-slate-900' : 'font-medium text-slate-600'}`}>{s.name}</span>
                                                                 </div>
-                                                                {s.id === formData.survey_id && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
+                                                                {s.id === formData.survey_id && <Check className="w-4 h-4 text-[#BD1D2D] shrink-0" />}
                                                             </div>
                                                         ))
                                                     ) : (
@@ -1055,7 +1056,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
                         <div>
                             <h4 className="text-sm font-bold text-slate-800">Trạng thái hoạt động</h4>
-                            <p className="text-[11px] text-slate-500">Tạm dừng truy cập cho chiến dịch này.</p>
+                            <p className="text-[11px] text-slate-500">Tạm dừng truy cập cho chiến dịch này</p>
                         </div>
                         <div 
                             className={`w-12 h-6 rounded-full flex items-center p-1 cursor-pointer transition-colors ${settingsData.status !== 'paused' ? 'bg-emerald-500 justify-end' : 'bg-slate-300 justify-start'}`}
@@ -1072,7 +1073,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                 <div className="p-1.5 bg-amber-100 text-amber-600 rounded-lg"><Target className="w-4 h-4" /></div>
                                 <div>
                                     <h4 className="text-sm font-bold text-amber-900">Mật khẩu PIN Access</h4>
-                                    <p className="text-[11px] text-amber-700/80">Người quét QR phải nhập đúng PIN để mở.</p>
+                                    <p className="text-[11px] text-amber-700/80">Người quét QR phải nhập đúng PIN để mở</p>
                                 </div>
                             </div>
                             {/* Toggle switch */}
@@ -1102,7 +1103,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                                 const cur = (settingsData.access_pin || '').replace(/\D/g, '');
                                                 setSettingsData(sd => ({ ...sd, access_pin: cur.slice(0, len).padEnd(0, '') }));
                                             }}
-                                            className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${
+                                            className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors duration-150 ${
                                                 pinLength === len
                                                     ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)] shadow-sm'
                                                     : 'bg-white text-slate-700 border-slate-200 hover:border-[var(--color-primary)]'
@@ -1139,7 +1140,7 @@ const LinksQR = forwardRef<LinksQRHandle, LinksQRProps>(({ toolbarLeft }, handle
                                                     document.getElementById(`pin-box-${idx - 1}`)?.focus();
                                                 }
                                             }}
-                                            className="w-12 h-14 text-center text-2xl font-black text-slate-800 bg-white border-2 border-slate-200 rounded-xl outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 transition-all shadow-sm"
+                                            className="w-12 h-14 text-center text-2xl font-bold tabular-nums text-slate-900 bg-white border-2 border-slate-200 rounded-xl outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 transition-colors duration-150 shadow-sm"
                                         />
                                     ))}
                                 </div>

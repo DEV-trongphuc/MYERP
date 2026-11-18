@@ -159,13 +159,13 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
             <div className="flex bg-slate-100 p-1 rounded-lg">
               <button
                 onClick={() => setViewMode('desktop')}
-                className={`p-1.5 rounded-md transition-all ${viewMode === 'desktop' ? 'bg-white shadow text-[var(--color-primary)]' : 'text-slate-400'}`}
+                className={`p-1.5 rounded-md transition-colors ${viewMode === 'desktop' ? 'bg-white shadow text-[var(--color-primary)]' : 'text-slate-400'}`}
               >
                 <Monitor className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode('mobile')}
-                className={`p-1.5 rounded-md transition-all ${viewMode === 'mobile' ? 'bg-white shadow text-[var(--color-primary)]' : 'text-slate-400'}`}
+                className={`p-1.5 rounded-md transition-colors ${viewMode === 'mobile' ? 'bg-white shadow text-[var(--color-primary)]' : 'text-slate-400'}`}
               >
                 <Smartphone className="w-4 h-4" />
               </button>
@@ -174,7 +174,7 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
             {/* Quick Send Button */}
             <button
               onClick={() => setShowQuickSend(true)}
-              className="px-3.5 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-[var(--radius-md)] shadow-sm font-black text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+              className="px-3.5 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-[var(--radius-md)] shadow-sm font-bold text-xs uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer"
               title="Gửi email này nhanh cho danh sách khách hàng"
             >
               <Send className="w-3.5 h-3.5" />
@@ -184,7 +184,7 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
             {onDuplicate && (
               <button
                 onClick={onDuplicate}
-                className="p-2.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-500 hover:text-slate-700 rounded-xl shadow-sm transition-all flex items-center justify-center cursor-pointer"
+                className="p-2.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-500 hover:text-slate-700 rounded-xl shadow-sm transition-colors flex items-center justify-center cursor-pointer"
                 title="Nhân bản"
               >
                 <Copy className="w-5 h-5" />
@@ -194,7 +194,7 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
             {onEdit && (
               <button
                 onClick={onEdit}
-                className="p-2.5 bg-gradient-to-br from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-xl shadow-md transition-all flex items-center justify-center cursor-pointer"
+                className="p-2.5 bg-[#0F172A] hover:bg-slate-800 text-white rounded-xl shadow-sm transition-colors flex items-center justify-center cursor-pointer"
                 title="Chỉnh sửa"
               >
                 <Edit3 className="w-5 h-5" />
@@ -204,7 +204,7 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
             {onAction && actionLabel && !onEdit && !onDuplicate && (
               <button
                 onClick={onAction}
-                className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-[var(--radius-md)] text-xs font-bold uppercase tracking-wider shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+                className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-[var(--radius-md)] text-xs font-bold uppercase tracking-wider shadow-sm transition-colors flex items-center gap-2 cursor-pointer"
               >
                 <Check className="w-4 h-4" /> {actionLabel}
               </button>
@@ -215,7 +215,7 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-[var(--color-bg)]">
-          <div className={`bg-white shadow-2xl transition-all duration-500 rounded-lg overflow-hidden border border-slate-200 flex flex-col ${viewMode === 'mobile' ? 'w-[375px]' : 'w-full h-full'}`}>
+          <div className={`bg-white shadow-xl transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] rounded-lg overflow-hidden border border-slate-200 flex flex-col ${viewMode === 'mobile' ? 'w-[375px]' : 'w-full h-full'}`}>
             <div className="bg-slate-100 px-4 py-2 flex items-center gap-2 border-b border-slate-200 shrink-0">
               <div className="flex gap-1.5">
                 <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f56]" />
@@ -244,7 +244,7 @@ const EmailPreviewDrawer: React.FC<EmailPreviewDrawerProps> = ({ template, htmlC
                   <div className="w-16 h-16 bg-[#fff4e0] rounded-2xl mx-auto flex items-center justify-center text-[var(--color-primary)] mb-4">
                     <SmartphoneNfc className="w-8 h-8" />
                   </div>
-                  <h1 className="text-2xl font-black text-slate-800 mb-2">Chưa có nội dung</h1>
+                  <h1 className="text-2xl font-bold text-slate-800 mb-2">Chưa có nội dung</h1>
                   <p className="text-slate-500 text-sm max-w-md">Template này chưa được biên dịch HTML hoặc chưa có nội dung. Vui lòng kiểm tra lại trình editor.</p>
                 </div>
               ) : (

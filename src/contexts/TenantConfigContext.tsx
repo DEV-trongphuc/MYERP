@@ -126,7 +126,7 @@ export interface TenantBootstrapData {
   notification_rules: TenantNotificationRuleDef[];
 }
 
-const STORAGE_PREFIX = 'myerp_tenant_bootstrap_v1_';
+const STORAGE_PREFIX = 'myerp_tenant_bootstrap_v2_';
 let memoryBootstrap: TenantBootstrapData | null = null;
 let memoryBootstrapUid: string | null = null;
 
@@ -166,7 +166,7 @@ export function clearTenantBootstrapCache(): void {
   if (typeof window !== 'undefined') {
     try {
       Object.keys(sessionStorage).forEach((k) => {
-        if (k.startsWith(STORAGE_PREFIX)) {
+        if (k.startsWith(STORAGE_PREFIX) || k.startsWith('myerp_tenant_bootstrap_v1_')) {
           sessionStorage.removeItem(k);
         }
       });
@@ -393,7 +393,12 @@ function matchUsersByRolesAndDepartments(
     }
   });
 
-  const resultIds = new Set<number>(specificUserIds.map(Number).filter((n) => n > 0));
+  const validUserIdSet = new Set<number>(
+    usersList.map((u) => Number(u?.id || 0)).filter((n) => n > 0)
+  );
+  const resultIds = new Set<number>(
+    specificUserIds.map(Number).filter((n) => n > 0 && validUserIdSet.has(n))
+  );
   usersList.forEach((u) => {
     const uid = Number(u?.id || 0);
     if (uid <= 0) return;
@@ -458,12 +463,56 @@ export function resolveDynamicStageNotifyUserIds(
   if (!targetStage || !Array.isArray(usersList)) return [];
   const cfg = getCachedTenantBootstrap();
 
-  // 1. Direct notify_config on the stage record itself
-  const stageNotify = targetStage.notify_config || (typeof targetStage.notify_config_json === 'string' && targetStage.notify_config_json
-    ? (() => { try { return JSON.parse(targetStage.notify_config_json); } catch { return null; } })()
-    : null);
+  const parseNotifyCfg = (raw: any) => {
+    if (!raw) return null;
+    if (typeof raw === 'object') return raw;
+    if (typeof raw === 'string') {
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
 
-  if (stageNotify && (stageNotify.roles || stageNotify.departments || stageNotify.user_ids)) {
+  const hasExplicitStageNotify = (nc: any): boolean => {
+    if (!nc || typeof nc !== 'object') return false;
+    return Boolean(
+      (Array.isArray(nc.user_ids) && nc.user_ids.length > 0) ||
+      (Array.isArray(nc.roles) && nc.roles.length > 0) ||
+      (Array.isArray(nc.departments) && nc.departments.length > 0)
+    );
+  };
+
+  const stageSlug = String(targetStage.system_slug || '').toLowerCase().trim();
+  const stageDbId = Number(targetStage.db_id || (typeof targetStage.id === 'number' ? targetStage.id : 0));
+  const stageStrId = String(targetStage.id || '').toLowerCase().trim();
+  const stageOrder = Number(targetStage.order_index || 0);
+
+  const bootstrapStage = Array.isArray(cfg?.pipeline_stages)
+    ? cfg!.pipeline_stages.find((s: any) => {
+        const sSlug = String(s.system_slug || '').toLowerCase().trim();
+        const sId = Number(s.id || 0);
+        if (stageDbId > 0 && sId === stageDbId) return true;
+        if (stageSlug && sSlug === stageSlug) return true;
+        if (stageStrId && (sSlug === stageStrId || String(sId) === stageStrId)) return true;
+        if (!stageDbId && !stageSlug && !stageStrId && stageOrder > 0 && Number(s.order_index || 0) === stageOrder) return true;
+        return false;
+      })
+    : null;
+
+  const bootstrapNotify = bootstrapStage
+    ? (parseNotifyCfg(bootstrapStage.notify_config) || parseNotifyCfg(bootstrapStage.notify_config_json))
+    : null;
+  const directNotify = parseNotifyCfg(targetStage.notify_config) || parseNotifyCfg(targetStage.notify_config_json);
+
+  // 1. Prefer live bootstrap stage notify_config when configured, falling back to direct notify_config on targetStage
+  const stageNotify = bootstrapStage && bootstrapNotify && typeof bootstrapNotify === 'object'
+    ? (hasExplicitStageNotify(bootstrapNotify) ? bootstrapNotify : null)
+    : (hasExplicitStageNotify(directNotify) ? directNotify : null);
+
+  if (stageNotify) {
     const ids = matchUsersByRolesAndDepartments(
       usersList,
       stageNotify.roles || [],
@@ -475,7 +524,7 @@ export function resolveDynamicStageNotifyUserIds(
   }
 
   // 2. Fallback to notification_rules by canonical stage slug
-  const slug = String(targetStage.system_slug || '').toLowerCase();
+  const slug = stageSlug || String(bootstrapStage?.system_slug || '').toLowerCase().trim() || stageStrId;
   const slugToEvent: Record<string, string> = {
     application_started: 'PIPELINE_STAGE_APPLICATION_STARTED',
     nop_ho_so: 'PIPELINE_STAGE_APPLICATION_STARTED',
@@ -486,7 +535,7 @@ export function resolveDynamicStageNotifyUserIds(
     enrolled: 'PIPELINE_STAGE_ENROLLED',
     hoc_vien: 'PIPELINE_STAGE_ENROLLED',
   };
-  const evtKey = slugToEvent[slug] || (targetStage.is_won ? 'PIPELINE_STAGE_ENROLLED' : '');
+  const evtKey = slugToEvent[slug] || (targetStage.is_won || bootstrapStage?.is_won ? 'PIPELINE_STAGE_ENROLLED' : '');
   if (!evtKey) return [];
   return resolveDynamicNotificationUserIds(evtKey, usersList, { excludeUserId });
 }
@@ -513,9 +562,14 @@ export function resolveDefaultWorkflowParticipants(
     cfg?.teams
   ).filter((id) => id !== Number(currentUserId));
 
+  const effectiveWatcherRoles =
+    watcherRoles.length > 0
+      ? watcherRoles
+      : (watcherUserIds.length === 0 && moduleKey === 'deposit' ? ['director'] : []);
+
   const watcherIds = matchUsersByRolesAndDepartments(
     usersList,
-    watcherRoles.length > 0 ? watcherRoles : (moduleKey === 'deposit' ? ['director'] : []),
+    effectiveWatcherRoles,
     [],
     watcherUserIds,
     cfg?.teams

@@ -117,7 +117,7 @@ const ScenarioFlowModal: React.FC<{
             <div className={`absolute inset-0 bg-slate-900/40 transition-opacity duration-300 ${animateIn ? 'opacity-100' : 'opacity-0'}`} />
 
             {/* Main modal – true fullscreen */}
-            <div className={`relative flex flex-col inset-0 overflow-hidden shadow-2xl transition-all duration-300
+            <div className={`relative flex flex-col inset-0 overflow-hidden shadow-2xl transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]
                 ${isDark ? 'bg-slate-950' : 'bg-[#f4f6f9]'}
                 ${animateIn ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.98]'}`}
                 style={{ position: 'absolute', inset: 0 }}
@@ -129,7 +129,7 @@ const ScenarioFlowModal: React.FC<{
 
                     {/* Left: Title bar */}
                     <div className="flex items-center gap-4 flex-1 min-w-0">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-md shrink-0">
+                        <div className="w-9 h-9 rounded-xl bg-[#0F172A] flex items-center justify-center text-white shadow-sm shrink-0">
                             <GitBranch className="w-4 h-4" />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -141,7 +141,7 @@ const ScenarioFlowModal: React.FC<{
                                 className={`w-full max-w-md bg-transparent border-none outline-none text-base font-bold placeholder-slate-400
                                     ${isDark ? 'text-white' : 'text-slate-800'}`}
                             />
-                            <p className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+                            <p className={`text-[10px] font-semibold uppercase tracking-widest ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
                                 {isEditing ? 'Chỉnh sửa kịch bản' : 'Kịch bản mới'} · Luồng hội thoại đa tầng
                             </p>
                         </div>
@@ -155,7 +155,7 @@ const ScenarioFlowModal: React.FC<{
                             { v: 'regex'    as const, label: 'Regex', icon: RegexIcon },
                         ]).map(opt => (
                             <button key={opt.v} onClick={() => setMatchMode(opt.v)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors
                                     ${matchMode === opt.v
                                         ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
                                         : (isDark ? 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300')
@@ -169,8 +169,8 @@ const ScenarioFlowModal: React.FC<{
                         {/* Active toggle */}
                         <button
                             onClick={() => setIsActive(v => v ? 0 : 1)}
-                            className={`w-11 h-6 rounded-full transition-all duration-300 flex items-center px-1 shadow-inner ml-2
-                                ${isActive ? 'bg-emerald-400 justify-end' : (isDark ? 'bg-slate-700 justify-start' : 'bg-slate-200 justify-start')}`}
+                            className={`w-11 h-6 rounded-full transition-colors duration-200 flex items-center px-1 shadow-inner ml-2
+                                ${isActive ? 'bg-emerald-500 justify-end' : (isDark ? 'bg-slate-700 justify-start' : 'bg-slate-200 justify-start')}`}
                             title={isActive ? 'Đang bật' : 'Đang tắt'}
                         >
                             <div className="w-4 h-4 bg-white rounded-full shadow-md ring-1 ring-black/5" />
@@ -180,13 +180,13 @@ const ScenarioFlowModal: React.FC<{
                     {/* Right: actions */}
                     <div className="flex items-center gap-2 ml-4 shrink-0">
                         <button onClick={handleClose}
-                            className={`p-2 rounded-xl transition-all ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}>
+                            className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}>
                             <X className="w-5 h-5" />
                         </button>
                         <button
                             onClick={handleSave}
                             disabled={loading}
-                            className="flex items-center gap-2 h-9 px-5 rounded-xl text-sm font-bold text-white bg-[var(--color-primary)] hover:bg-[#9A1523] shadow-md shadow-[var(--color-primary)]/20 active:scale-95 transition-all disabled:opacity-50"
+                            className="flex items-center gap-2 h-9 px-5 rounded-xl text-sm font-semibold text-white bg-[#BD1D2D] hover:bg-[#9A1523] transition-colors disabled:opacity-50"
                         >
                             {loading ? (
                                 <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -202,7 +202,7 @@ const ScenarioFlowModal: React.FC<{
                 {/* ── Keywords bar ──────────────────────────────────── */}
                 <div className={`flex items-center gap-3 px-6 py-2.5 border-b shrink-0 z-10
                     ${isDark ? 'bg-slate-800/50 border-slate-800' : 'bg-slate-50/80 border-slate-100'}`}>
-                    <span className={`text-[10px] font-black uppercase tracking-widest shrink-0 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                    <span className={`text-[10px] font-semibold uppercase tracking-widest shrink-0 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                         Từ khóa kích hoạt:
                     </span>
                     <input
@@ -270,8 +270,8 @@ const ScenarioCard: React.FC<{
 
     return (
         <div
-            className={`rounded-[14px] transition-all duration-300 group relative flex flex-col md:flex-row md:items-center p-5 gap-5 border cursor-pointer hover:-translate-y-0.5
-                ${isDark ? 'bg-slate-800/60 border-slate-700 hover:border-blue-500/40 hover:shadow-[0_8px_30px_rgba(59,130,246,0.1)]' : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-[0_12px_30px_rgba(0,0,0,0.06)] shadow-sm'}
+            className={`rounded-xl transition-colors group relative flex flex-col md:flex-row md:items-center p-5 gap-5 border cursor-pointer
+                ${isDark ? 'bg-slate-800/60 border-slate-700 hover:border-slate-500' : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'}
                 ${!scenario.is_active ? 'opacity-60 saturate-50' : ''}`}
             onClick={onEdit}
         >
@@ -282,7 +282,7 @@ const ScenarioCard: React.FC<{
             </div>
 
             {/* Icon */}
-            <div className={`w-14 h-14 rounded-[14px] flex items-center justify-center shrink-0 shadow-inner ml-2 transition-all ${scenario.is_active ? 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] shadow-[var(--color-primary)]/20' : (isDark ? 'bg-slate-700' : 'bg-slate-200')}`}>
+            <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 ml-2 transition-colors ${scenario.is_active ? 'bg-[#BD1D2D]' : (isDark ? 'bg-slate-700' : 'bg-slate-200')}`}>
                 <PieChart className={`w-6 h-6 ${scenario.is_active ? 'text-white' : (isDark ? 'text-slate-500' : 'text-slate-400')}`} />
             </div>
 
@@ -292,16 +292,16 @@ const ScenarioCard: React.FC<{
                     <h4 className={`text-[15px] font-bold truncate ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>
                         {scenario.title || 'Kịch bản chưa đặt tên'}
                     </h4>
-                    <span className={`text-[9.5px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full border ${matchColor}`}>
+                    <span className={`text-[10px] font-semibold uppercase tracking-widest px-2.5 py-0.5 rounded-full border ${matchColor}`}>
                         {scenario.match_mode}
                     </span>
                     {nodeCount > 1 && (
-                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 ${isDark ? 'bg-slate-700/50 border-slate-600 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                        <span className={`text-[10px] font-semibold tabular-nums px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 ${isDark ? 'bg-slate-700/50 border-slate-600 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
                             <GitBranch className="w-3 h-3" /> {nodeCount} steps
                         </span>
                     )}
                     {!scenario.is_active && (
-                        <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-rose-100 border border-rose-200 text-rose-500">ĐÃ TẮT</span>
+                        <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-rose-100 border border-rose-200 text-rose-500">ĐÃ TẮT</span>
                     )}
                 </div>
 
@@ -313,42 +313,42 @@ const ScenarioCard: React.FC<{
                                 {kw}
                             </span>
                         ))}
-                        {keywords.length > 4 && <span className={`text-[10px] font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>+{keywords.length - 4}</span>}
+                        {keywords.length > 4 && <span className={`text-[10px] font-bold tabular-nums ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>+{keywords.length - 4}</span>}
                     </div>
                 </div>
 
                 <p className={`text-sm line-clamp-1 pr-4 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                    {scenario.reply_text || <span className="italic opacity-50">Chưa thiết lập nội dung trả lời đầu tiên</span>}
+                    {scenario.reply_text || <span className="opacity-50">Chưa thiết lập nội dung trả lời đầu tiên</span>}
                 </p>
             </div>
 
             {/* Actions (Right) */}
             <div className="flex md:flex-col items-center justify-between gap-3 shrink-0 md:pl-5 md:border-l border-slate-100/10">
                 <div className="flex items-center gap-1.5 w-full justify-end" onClick={e => e.stopPropagation()}>
-                    <button onClick={onMoveUp} className={`p-1.5 rounded-lg transition-all ${isDark ? 'hover:bg-slate-700 text-slate-500 hover:text-slate-300' : 'hover:bg-slate-100 text-slate-400 hover:text-slate-600'}`}>
+                    <button onClick={onMoveUp} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-slate-700 text-slate-500 hover:text-slate-300' : 'hover:bg-slate-100 text-slate-400 hover:text-slate-600'}`}>
                         <ArrowUp className="w-4 h-4" />
                     </button>
-                    <button onClick={onMoveDown} className={`p-1.5 rounded-lg transition-all ${isDark ? 'hover:bg-slate-700 text-slate-500 hover:text-slate-300' : 'hover:bg-slate-100 text-slate-400 hover:text-slate-600'}`}>
+                    <button onClick={onMoveDown} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-slate-700 text-slate-500 hover:text-slate-300' : 'hover:bg-slate-100 text-slate-400 hover:text-slate-600'}`}>
                         <ArrowDown className="w-4 h-4" />
                     </button>
                     
                     <div className="w-2" /> {/* Space */}
                     
-                    <button onClick={onClone} title="Nhân bản" className={`p-1.5 rounded-lg transition-all ${isDark ? 'hover:bg-slate-700 text-slate-400 hover:text-slate-200' : 'hover:bg-slate-100 text-slate-400 hover:text-slate-700'}`}>
+                    <button onClick={onClone} title="Nhân bản" className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-slate-700 text-slate-400 hover:text-slate-200' : 'hover:bg-slate-100 text-slate-400 hover:text-slate-700'}`}>
                         <Copy className="w-4 h-4" />
                     </button>
-                    <button onClick={onEdit} title="Sửa Canvas" className={`p-1.5 rounded-lg transition-all ${isDark ? 'hover:bg-slate-700 text-slate-400 hover:text-blue-400' : 'hover:bg-blue-50 text-slate-400 hover:text-blue-600'}`}>
+                    <button onClick={onEdit} title="Sửa Canvas" className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-slate-700 text-slate-400 hover:text-blue-400' : 'hover:bg-blue-50 text-slate-400 hover:text-blue-600'}`}>
                         <Edit2 className="w-4 h-4" />
                     </button>
                     <button onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Xóa"
-                        className={`p-1.5 rounded-lg transition-all ${isDark ? 'hover:bg-rose-500/20 text-slate-500 hover:text-rose-400' : 'hover:bg-rose-50 text-slate-400 hover:text-rose-500'}`}>
+                        className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-rose-500/20 text-slate-500 hover:text-rose-400' : 'hover:bg-rose-50 text-slate-400 hover:text-rose-500'}`}>
                         <Trash2 className="w-4 h-4" />
                     </button>
                 </div>
                 
                 <div className="w-full flex justify-end" onClick={e => e.stopPropagation()}>
                     <button onClick={onToggle}
-                        className={`w-11 h-6 rounded-full p-1 transition-all duration-300 flex items-center shrink-0 shadow-inner ${scenario.is_active ? 'bg-emerald-500 justify-end' : (isDark ? 'bg-slate-700 justify-start' : 'bg-slate-200 justify-start')}`}>
+                        className={`w-11 h-6 rounded-full p-1 transition-colors duration-200 flex items-center shrink-0 shadow-inner ${scenario.is_active ? 'bg-emerald-500 justify-end' : (isDark ? 'bg-slate-700 justify-start' : 'bg-slate-200 justify-start')}`}>
                         <div className="w-4 h-4 bg-white rounded-full shadow border-black/5" />
                     </button>
                 </div>
@@ -475,9 +475,9 @@ const ScenarioManager: React.FC<Props> = ({ propertyId, isDarkTheme, brandColor 
                             if (res.success) { toast.success('Đã xóa kịch bản'); fetchScenarios(); }
                         } catch { toast.error('Lỗi kết nối'); }
                     }}
-                    className="px-3 py-1.5 text-xs font-bold bg-rose-500 hover:bg-rose-600 text-white rounded-lg transition-all"
+                    className="px-3 py-1.5 text-xs font-semibold bg-rose-500 hover:bg-rose-600 text-white rounded-lg transition-colors"
                 >Xóa ngay</button>
-                <button onClick={() => toast.dismiss(t.id)} className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all">Hủy</button>
+                <button onClick={() => toast.dismiss(t.id)} className="px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors">Hủy</button>
             </div>
         ), { duration: 6000, position: 'top-center' });
     };
@@ -576,13 +576,13 @@ const ScenarioManager: React.FC<Props> = ({ propertyId, isDarkTheme, brandColor 
             )}
 
             {/* Header */}
-            <div className={`flex flex-col md:flex-row md:items-start justify-between gap-5 p-6 rounded-[18px] ${isDark ? 'bg-slate-800' : 'bg-slate-50 border border-slate-100 shadow-sm'}`}>
+            <div className={`flex flex-col md:flex-row md:items-start justify-between gap-5 p-6 rounded-2xl ${isDark ? 'bg-slate-800' : 'bg-slate-50 border border-slate-100 shadow-sm'}`}>
                 <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 shadow-sm border ${isDark ? 'bg-slate-700 border-slate-600' : 'bg-white border-slate-200'}`}>
                         <Play className={`w-5 h-5 ml-0.5 ${isDark ? 'fill-amber-500 text-[var(--color-primary)]' : 'fill-amber-600 text-[var(--color-primary)]'}`} />
                     </div>
                     <div>
-                        <h3 className={`text-lg font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-800'}`}>Kịch Bản Trả Lời Tự Động</h3>
+                        <h3 className={`text-lg font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-800'}`}>Kịch Bản Trả Lời Tự Động</h3>
                         <div className={`text-[12px] font-medium mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                             Xây dựng luồng tin nhắn tư vấn tự động
                         </div>
@@ -591,18 +591,18 @@ const ScenarioManager: React.FC<Props> = ({ propertyId, isDarkTheme, brandColor 
 
                 <div className="flex items-center gap-2.5 flex-wrap">
                     <input ref={csvInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportCSV} />
-                    <div className="flex items-center p-1 rounded-[16px] bg-white border border-slate-200 shadow-sm">
-                        <button onClick={handleDownloadTemplate} className={`flex items-center gap-1.5 h-10 px-4 rounded-xl text-[12px] font-bold transition-all ${isDark ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
+                    <div className="flex items-center p-1 rounded-2xl bg-white border border-slate-200 shadow-sm">
+                        <button onClick={handleDownloadTemplate} className={`flex items-center gap-1.5 h-10 px-4 rounded-xl text-[12px] font-semibold transition-colors ${isDark ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
                             <FileText className="w-4 h-4" /> Mẫu CSV
                         </button>
                         <div className="w-px h-5 bg-slate-200 mx-1" />
-                        <button onClick={() => csvInputRef.current?.click()} disabled={importing} className={`flex items-center gap-1.5 h-10 px-4 rounded-xl text-[12px] font-bold transition-all ${isDark ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
+                        <button onClick={() => csvInputRef.current?.click()} disabled={importing} className={`flex items-center gap-1.5 h-10 px-4 rounded-xl text-[12px] font-semibold transition-colors ${isDark ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
                             <Upload className="w-4 h-4" /> {importing ? 'Đang import...' : 'Import CSV'}
                         </button>
                         {scenarios.length > 0 && (
                             <>
                                 <div className="w-px h-5 bg-slate-200 mx-1" />
-                                <button onClick={handleExportCSV} className={`flex items-center gap-1.5 h-10 px-4 rounded-xl text-[12px] font-bold transition-all ${isDark ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
+                                <button onClick={handleExportCSV} className={`flex items-center gap-1.5 h-10 px-4 rounded-xl text-[12px] font-semibold transition-colors ${isDark ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
                                     <Download className="w-4 h-4" /> Export
                                 </button>
                             </>
@@ -611,17 +611,17 @@ const ScenarioManager: React.FC<Props> = ({ propertyId, isDarkTheme, brandColor 
 
                     <div className="w-px h-6 bg-slate-200 mx-1 hidden md:block" />
 
-                    <div className={`flex items-center gap-3 px-5 py-2.5 rounded-[16px] border cursor-pointer select-none transition-all ${isDark ? 'bg-slate-800 border-slate-700 hover:border-slate-600' : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'}`} onClick={handleToggleGlobal}>
-                        <span className={`text-[11px] font-black uppercase tracking-widest ${globalEnabled ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : (isDark ? 'text-slate-500' : 'text-slate-400')}`}>
+                    <div className={`flex items-center gap-3 px-5 py-2.5 rounded-2xl border cursor-pointer select-none transition-colors ${isDark ? 'bg-slate-800 border-slate-700 hover:border-slate-600' : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'}`} onClick={handleToggleGlobal}>
+                        <span className={`text-[11px] font-semibold uppercase tracking-widest ${globalEnabled ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : (isDark ? 'text-slate-500' : 'text-slate-400')}`}>
                             {globalEnabled ? 'Trạng thái Bật' : 'Đã tắt toàn bộ'}
                         </span>
-                        <div className={`w-11 h-6 rounded-full p-1 transition-all duration-300 flex items-center shadow-inner ${globalEnabled ? 'bg-emerald-500 justify-end' : (isDark ? 'bg-slate-700 justify-start' : 'bg-slate-200 justify-start')}`}>
+                        <div className={`w-11 h-6 rounded-full p-1 transition-colors duration-200 flex items-center shadow-inner ${globalEnabled ? 'bg-emerald-500 justify-end' : (isDark ? 'bg-slate-700 justify-start' : 'bg-slate-200 justify-start')}`}>
                             <div className="w-4 h-4 bg-white rounded-full shadow border border-black/5" />
                         </div>
                     </div>
                     
                     <button onClick={openCreate}
-                        className="flex items-center gap-2 h-11 px-5 rounded-[16px] text-[13px] font-bold bg-[var(--color-primary)] hover:bg-[#9A1523] text-white shadow-lg shadow-[var(--color-primary)]/30 active:scale-95 transition-all ml-1">
+                        className="flex items-center gap-2 h-11 px-5 rounded-xl text-[13px] font-semibold bg-[#BD1D2D] hover:bg-[#9A1523] text-white transition-colors ml-1">
                         <Plus className="w-4 h-4" /> Tạo Kịch Bản
                     </button>
                 </div>
@@ -640,21 +640,21 @@ const ScenarioManager: React.FC<Props> = ({ propertyId, isDarkTheme, brandColor 
             {/* Loading */}
             {loading && (
                 <div className="space-y-3">
-                    {[1, 2, 3].map(i => <div key={i} className={`h-24 rounded-[14px] animate-pulse ${isDark ? 'bg-slate-800/50' : 'bg-slate-100'}`} />)}
+                    {[1, 2, 3].map(i => <div key={i} className={`h-24 rounded-xl animate-pulse ${isDark ? 'bg-slate-800/50' : 'bg-slate-100'}`} />)}
                 </div>
             )}
 
             {/* Empty state */}
             {!loading && scenarios.length === 0 && (
-                <div className={`flex flex-col items-center justify-center py-20 px-6 rounded-[18px] border border-dashed text-center ${isDark ? 'border-slate-700 bg-slate-800/10' : 'border-slate-200 bg-slate-50/50'}`}>
-                    <div className={`w-20 h-20 rounded-[18px] flex items-center justify-center mb-6 shadow-sm border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
-                        <Bot className={`w-10 h-10 ${isDark ? 'text-slate-600' : 'text-blue-300'}`} />
+                <div className={`flex flex-col items-center justify-center py-20 px-6 rounded-2xl border border-dashed text-center ${isDark ? 'border-slate-700 bg-slate-800/10' : 'border-slate-200 bg-slate-50/50'}`}>
+                    <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mb-6 shadow-sm border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+                        <Bot className={`w-10 h-10 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
                     </div>
-                    <h4 className={`text-lg font-black mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Chưa có kịch bản mẫu nào</h4>
+                    <h4 className={`text-lg font-bold mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Chưa có kịch bản mẫu nào</h4>
                     <p className={`text-sm font-medium mb-8 max-w-sm leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
                         Tạo luồng tư vấn với canvas thả-nối nhánh chuyên nghiệp, giúp chốt sales tự nhiên và dễ cấu hình.
                     </p>
-                    <button onClick={openCreate} className="flex items-center gap-2 h-12 px-8 rounded-[14px] text-[14px] font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xl shadow-blue-500/20 active:scale-95 transition-all">
+                    <button onClick={openCreate} className="flex items-center gap-2 h-12 px-8 rounded-xl text-[14px] font-semibold bg-[#BD1D2D] hover:bg-[#9A1523] text-white transition-colors">
                         <Plus className="w-5 h-5" /> Bắt đầu tạo ngay
                     </button>
                 </div>
@@ -664,11 +664,11 @@ const ScenarioManager: React.FC<Props> = ({ propertyId, isDarkTheme, brandColor 
             {!loading && scenarios.length > 0 && (
                 <div className="space-y-3">
                     <div className="flex items-center justify-between px-1">
-                        <p className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                            {scenarios.length} kịch bản · Click card để mở canvas chỉnh sửa
+                        <p className={`text-[10px] font-semibold tabular-nums uppercase tracking-widest ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                            {scenarios.length} kịch bản · Nhấn card để mở canvas chỉnh sửa
                         </p>
-                        <div className={`flex items-center gap-1.5 text-[10px] font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <div className={`flex items-center gap-1.5 text-[10px] font-semibold tabular-nums ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                             {activeCount} đang hoạt động
                         </div>
                     </div>

@@ -42,6 +42,7 @@ import TemplateAccessModal, {
 
 import AIEmailModal from '../../components/marketing/components/templates/EmailEditor/AIEmailGeneratorModal';
 import ImageLibraryModal, { preloadImageLibrary } from '../../components/marketing/components/templates/EmailEditor/components/Properties/ImageLibraryModal';
+import { ensureArray, extractArray } from '../../utils/safeArray';
 
 // [PERF] Lazy-load secondary drawers
 const EmailPreviewDrawer = lazy(() => import('../../components/marketing/components/flows/config/EmailPreviewDrawer'));
@@ -267,7 +268,7 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
 
     return (
         <div
-            className={`bg-[var(--color-surface)] rounded-[18px] border overflow-hidden group transition-all duration-200 flex flex-col h-[340px] relative shadow-[var(--shadow-xs)] hover:shadow-md ${
+            className={`bg-[var(--color-surface)] rounded-2xl border overflow-hidden group transition-[border-color,box-shadow] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] flex flex-col h-[340px] relative shadow-[var(--shadow-xs)] hover:shadow-md ${
                 isSelected
                     ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary-light)]'
                     : 'border-[var(--color-border)] hover:border-[var(--color-primary)]'
@@ -278,7 +279,7 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
                 <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onToggleSelect(template.id); }}
-                    className={`absolute top-3 left-3 z-20 w-7 h-7 rounded-[var(--radius-md)] border flex items-center justify-center transition-all outline-none focus:outline-none cursor-pointer ${
+                    className={`absolute top-3 left-3 z-20 w-7 h-7 rounded-[var(--radius-md)] border flex items-center justify-center transition-colors duration-150 outline-none focus:outline-none cursor-pointer ${
                         isSelected
                             ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-white shadow-sm'
                             : 'bg-[var(--color-surface)]/95 border-[var(--color-border)] text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 hover:border-[var(--color-primary)]'
@@ -294,7 +295,7 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
                 className="relative aspect-[16/10] w-full bg-[var(--color-bg)] border-b border-[var(--color-border-light)] overflow-hidden cursor-pointer shrink-0"
                 onClick={() => onPreview(template)}
             >
-                <div className="w-full h-full bg-white dark:bg-slate-900 flex items-center justify-center group-hover:scale-[1.03] transition-transform duration-500 ease-out overflow-hidden relative">
+                <div className="w-full h-full bg-white dark:bg-slate-900 flex items-center justify-center overflow-hidden relative">
                     {hasValidThumb ? (
                         <img
                             src={template.thumbnail}
@@ -382,8 +383,8 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
                                 if (canModify) onOpenAccessModal(template);
                             }}
                             title={canModify ? 'Bấm để thay đổi phân quyền & chia sẻ' : undefined}
-                            className={`px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] font-semibold shadow-xs inline-flex items-center gap-1 outline-none focus:outline-none transition-transform ${
-                                canModify ? 'pointer-events-auto cursor-pointer hover:scale-105' : ''
+                            className={`px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] font-semibold shadow-xs inline-flex items-center gap-1 outline-none focus:outline-none transition-opacity ${
+                                canModify ? 'pointer-events-auto cursor-pointer hover:opacity-90' : ''
                             } ${
                                 visibility === 'personal'
                                     ? 'bg-amber-500/95 text-white'
@@ -408,7 +409,7 @@ const TemplateCard: React.FC<TemplateCardProps> = memo(({
                     )}
                     <span className="bg-[var(--color-surface)]/95 backdrop-blur px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] font-semibold text-[var(--color-text-secondary)] shadow-xs inline-flex items-center gap-1 border border-[var(--color-border)]">
                         {isEditorBlock ? (
-                            <><Sparkles className="w-3 h-3 text-[var(--color-primary)]" /> Kéo thả</>
+                            <><Layout className="w-3 h-3 text-[var(--color-primary)]" /> Kéo thả</>
                         ) : (
                             <><Layout className="w-3 h-3 text-[var(--color-text-muted)]" /> HTML</>
                         )}
@@ -1323,7 +1324,7 @@ const Templates: React.FC = () => {
                                 icon: Sparkles,
                                 onClick: () => { setAiModalMounted(true); setIsAIModalOpen(true); },
                                 primary: false,
-                                customClass: '!bg-rose-50 !text-[#BD1D2D] !border-rose-200/90 hover:!bg-[#BD1D2D] hover:!text-white hover:!border-[#BD1D2D] font-bold transition-all'
+                                customClass: '!bg-rose-50 !text-[#BD1D2D] !border-rose-200/90 hover:!bg-[#BD1D2D] hover:!text-white hover:!border-[#BD1D2D] font-bold transition-colors duration-150'
                             },
                             {
                                 label: 'Thiết kế mới',
@@ -1335,7 +1336,7 @@ const Templates: React.FC = () => {
                     />
 
                     {/* Main panel */}
-                    <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-[var(--shadow-xs)] relative">
+                    <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl shadow-[var(--shadow-xs)] relative">
                         {/* Single-row Toolbar: Core scope pills on left, Folder Modal + Sort + SearchBox on right */}
                         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-[var(--color-border)]">
                             <div className="flex items-center gap-2 max-w-full overflow-x-auto no-scrollbar">
@@ -1402,7 +1403,7 @@ const Templates: React.FC = () => {
                                         onClick={() => handleFilterGroupChange('system')}
                                         style={subTabBtnStyle(filterGroupId === 'system')}
                                     >
-                                        <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                                        <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
                                         <span>Hệ thống</span>
                                         <span style={{
                                             fontSize: '11px',
@@ -1470,7 +1471,7 @@ const Templates: React.FC = () => {
                                     </button>
 
                                     {isFolderPopoverOpen && (
-                                        <div className="absolute top-full mt-1.5 left-0 sm:left-auto sm:right-0 w-[560px] sm:w-[640px] max-w-[calc(100vw-2rem)] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-2xl z-50 p-3.5 flex flex-col gap-3">
+                                        <div className="absolute top-full mt-1.5 left-0 sm:left-auto sm:right-0 w-[560px] sm:w-[640px] max-w-[calc(100vw-2rem)] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl shadow-2xl z-50 p-3.5 flex flex-col gap-3">
                                             {/* Header & Search */}
                                             <div className="flex items-center justify-between gap-2">
                                                 <div className="relative flex-1">
@@ -1581,9 +1582,9 @@ const Templates: React.FC = () => {
                                                             : 'bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-transparent hover:border-[var(--color-border)] hover:text-[var(--color-text)]'
                                                     }`}
                                                 >
-                                                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                                                    <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
                                                     <span>Mẫu hệ thống</span>
-                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${filterGroupId === 'system' ? 'bg-white/20 text-white' : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]'}`}>
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full tabular-nums ${filterGroupId === 'system' ? 'bg-white/20 text-white' : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]'}`}>
                                                         {SYSTEM_TEMPLATES.length}
                                                     </span>
                                                 </button>
@@ -1606,7 +1607,7 @@ const Templates: React.FC = () => {
                                                                     handleFilterGroupChange(group.id);
                                                                     setIsFolderPopoverOpen(false);
                                                                 }}
-                                                                className={`group/fld h-11 px-2.5 rounded-[var(--radius-md)] border text-left text-xs font-medium flex items-center justify-between gap-1.5 transition-all cursor-pointer ${
+                                                                className={`group/fld h-11 px-2.5 rounded-[var(--radius-md)] border text-left text-xs font-medium flex items-center justify-between gap-1.5 transition-colors duration-150 cursor-pointer ${
                                                                     isSelected
                                                                         ? 'bg-[var(--color-primary)]/10 border-[var(--color-primary)] text-[var(--color-primary)] font-semibold shadow-xs'
                                                                         : 'bg-[var(--color-bg)] border-[var(--color-border)] text-[var(--color-text)] hover:border-[var(--color-primary)]/50 hover:bg-[var(--color-surface)]'
@@ -1776,7 +1777,7 @@ const Templates: React.FC = () => {
                     {/* Bulk Action Bar */}
                     {selectedIds.length > 0 && (
                         <div className="fixed bottom-6 left-4 right-4 lg:left-1/2 lg:-translate-x-1/2 lg:w-auto z-50">
-                            <div className="bg-slate-900/95 backdrop-blur-md border border-white/10 px-4 py-3 rounded-[18px] shadow-xl flex flex-wrap items-center gap-3 lg:min-w-[520px]">
+                            <div className="bg-slate-900/95 backdrop-blur-md border border-white/10 px-4 py-3 rounded-2xl shadow-xl flex flex-wrap items-center gap-3 lg:min-w-[520px]">
                                 <div className="flex items-center gap-2.5 pr-3 border-r border-white/10">
                                     <span className="w-7 h-7 bg-[var(--color-primary)] rounded-[var(--radius-md)] flex items-center justify-center font-bold text-white text-xs">
                                         {selectedIds.length}
@@ -1942,7 +1943,7 @@ const Templates: React.FC = () => {
                     </div>
                     <div className="space-y-2">
                         <p className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">Đang được dùng tại:</p>
-                        {usageBlockModal.errors.map((err, i) => (
+                        {ensureArray(usageBlockModal?.errors).map((err, i) => (
                             <div key={i} className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-[var(--radius-md)]">
                                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                                 <p className="text-xs text-amber-800 font-medium">{err}</p>

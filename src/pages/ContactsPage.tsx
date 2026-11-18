@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Upload, ChevronDown, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap, SlidersHorizontal, RotateCcw, Sparkles, BarChart3, MessageSquare, Globe, GitBranch, Ticket, ClipboardList, Flame, Bell, CreditCard, FileText } from 'lucide-react';
+import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Upload, ChevronDown, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap, SlidersHorizontal, RotateCcw, BarChart3, MessageSquare, Globe, GitBranch, Ticket, ClipboardList, Flame, Bell, CreditCard, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, getColorFromName } from '../components/ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -225,8 +225,8 @@ const renderInteractionInfo = (c: any, onReportClick?: (c: any) => void) => {
           fontWeight: 700, 
           padding: '1px 5px', 
           borderRadius: '4px', 
-          background: 'rgba(236, 72, 153, 0.14)', 
-          color: '#db2777',
+          background: 'rgba(245, 158, 11, 0.14)', 
+          color: '#d97706',
           lineHeight: '1.2'
         }}>
           Nhắc lại
@@ -285,8 +285,8 @@ const getContactStage = (c: any, stages: any[]) => {
   if (isEnrolled) {
     return {
       name: c.stage_name || targetStage?.name || '14 – Enrolled',
-      color: '#db2777',
-      bgColor: '#db277712',
+      color: '#BD1D2D',
+      bgColor: '#BD1D2D14',
       isEnrolled: true,
       isNewLead: false
     };
@@ -562,18 +562,18 @@ const AGO_DAYS = (d: string) => d ? Math.floor((Date.now()-new Date(d).getTime()
 const DEFAULT_PIPELINE_STAGES = [
   { id: '31', name: '01 – New Lead', system_slug: 'new_lead', color: '#f97316', order_index: 1 },
   { id: '32', name: '02 – Contact Attempted', system_slug: 'contact_attempted', color: '#eab308', order_index: 2 },
-  { id: '33', name: '03 – Connected', system_slug: 'connected', color: '#8b5cf6', order_index: 3 },
+  { id: '33', name: '03 – Connected', system_slug: 'connected', color: '#0ea5e9', order_index: 3 },
   { id: '34', name: '04 – Needed', system_slug: 'needed', color: '#ef4444', order_index: 4 },
   { id: '35', name: '05 – Discovery Completed', system_slug: 'discovery_completed', color: '#0d9488', order_index: 5 },
   { id: '36', name: '06 – Program Matched', system_slug: 'program_matched', color: '#0284c7', order_index: 6 },
   { id: '37', name: '07 – Proposal Sent', system_slug: 'proposal_sent', color: '#d97706', order_index: 7 },
   { id: '38', name: '08 – Evaluation / Objection', system_slug: 'evaluation_objection', color: '#ea580c', order_index: 8 },
   { id: '39', name: '09 – Application Started', system_slug: 'application_started', color: '#f59e0b', order_index: 9 },
-  { id: '40', name: '10 – Application Completed', system_slug: 'application_completed', color: '#4338ca', order_index: 10 },
+  { id: '40', name: '10 – Application Completed', system_slug: 'application_completed', color: '#2563eb', order_index: 10 },
   { id: '41', name: '11 – Admission Approved', system_slug: 'admission_approved', color: '#65a30d', order_index: 11 },
   { id: '42', name: '12 – Offer / Scholarship Accepted', system_slug: 'offer_accepted', color: '#16a34a', order_index: 12 },
   { id: '43', name: '13 – Deposit / Tuition Payment', system_slug: 'deposit_tuition_payment', color: '#059669', order_index: 13 },
-  { id: '44', name: '14 – Enrolled', system_slug: 'enrolled', color: '#db2777', order_index: 14 }
+  { id: '44', name: '14 – Enrolled', system_slug: 'enrolled', color: '#BD1D2D', order_index: 14 }
 ];
 
 const ContactsFloatingTooltip = React.memo(({
@@ -1808,7 +1808,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         const result = res?.data?.data || res?.data || {};
         const updCount = Number(result.updated_count || 0);
         if (updCount > 0) {
-          addToast(`✨ AI đã tự động dò tìm & bổ sung thông tin hồ sơ cho ${updCount} học viên!`, 'success');
+          addToast(`AI đã tự động dò tìm và bổ sung thông tin hồ sơ cho ${updCount} học viên`, 'success');
           fetchDataRef.current(true);
         }
       })
@@ -3391,10 +3391,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     gap: '6px',
                     boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
                     whiteSpace: 'nowrap',
-                    transition: 'all 0.15s ease'
+                    transition: 'background-color 0.15s ease, border-color 0.15s ease'
                   }}
                 >
-                  <UserCheck size={14} style={{ color: '#7c3aed' }} />
+                  <UserCheck size={14} style={{ color: '#BD1D2D' }} />
                   <span>Mời giảng viên</span>
                 </button>
               </div>
@@ -3919,7 +3919,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
           {[
             { id: '', label: 'Tất cả', color: '#BD1D2D', countKey: 'study_all' },
             { id: 'enrolled', label: 'Enrolled', color: '#0284c7', countKey: 'study_enrolled' },
-            { id: 'training', label: 'Tranning', color: '#4f46e5', countKey: 'study_training' },
+            { id: 'training', label: 'Tranning', color: '#0d9488', countKey: 'study_training' },
             { id: 'studying', label: 'Studying', color: '#16a34a', countKey: 'study_studying' },
             { id: 'postpone', label: 'Postpone', color: '#d97706', countKey: 'study_postpone' },
             { id: 'withdraw', label: 'Withdraw', color: '#dc2626', countKey: 'study_withdraw' },
@@ -4292,7 +4292,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               padding: '8px 12px',
                               border: 'none',
                               background: 'transparent',
-                              color: '#be185d',
+                              color: '#BD1D2D',
                               borderRadius: '8px',
                               fontSize: '0.75rem',
                               fontWeight: 700,
@@ -4986,9 +4986,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Stage tag */}
           {activeFilters.status && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.1)', color: '#7c3aed', fontWeight: 600, fontSize: '0.75rem' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', fontWeight: 600, fontSize: '0.75rem' }}>
               <span>{activeFilters.stageOp === 'not_in' ? 'Loại trừ giai đoạn: ' : 'Giai đoạn: '} {getStageName(activeFilters.status)}</span>
-              <button type="button" onClick={() => removeActiveFilterTag('status')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#7c3aed' }}><X size={12} /></button>
+              <button type="button" onClick={() => removeActiveFilterTag('status')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#BD1D2D' }}><X size={12} /></button>
             </span>
           )}
 
@@ -5032,7 +5032,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Project tag */}
           {activeFilters.projectId && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(236, 72, 153, 0.1)', color: '#db2777', fontWeight: 600, fontSize: '0.75rem' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(51, 65, 85, 0.08)', color: '#334155', fontWeight: 600, fontSize: '0.75rem' }}>
               <Building2 size={13} />
               <span>
                 Dự án:{' '}
@@ -5041,13 +5041,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   .map(id => projects.find(p => String(p.id) === id.trim())?.name || id)
                   .join(', ')}
               </span>
-              <button type="button" onClick={() => removeActiveFilterTag('projectId')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#db2777' }}><X size={12} /></button>
+              <button type="button" onClick={() => removeActiveFilterTag('projectId')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#334155' }}><X size={12} /></button>
             </span>
           )}
 
           {/* Campaign tag */}
           {activeFilters.campaignId && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(236, 72, 153, 0.1)', color: '#db2777', fontWeight: 600, fontSize: '0.75rem' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(51, 65, 85, 0.08)', color: '#334155', fontWeight: 600, fontSize: '0.75rem' }}>
               <span>
                 Chiến dịch:{' '}
                 {activeFilters.campaignId
@@ -5055,7 +5055,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   .map(id => campaigns.find(c => String(c.id) === id.trim())?.name || id)
                   .join(', ')}
               </span>
-              <button type="button" onClick={() => removeActiveFilterTag('campaignId')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#db2777' }}><X size={12} /></button>
+              <button type="button" onClick={() => removeActiveFilterTag('campaignId')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#334155' }}><X size={12} /></button>
             </span>
           )}
 
@@ -5144,25 +5144,25 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Gender */}
           {activeFilters.gender && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.1)', color: '#7c3aed', fontWeight: 600, fontSize: '0.75rem' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(71, 85, 105, 0.08)', color: '#475569', fontWeight: 600, fontSize: '0.75rem' }}>
               <span>Giới tính: {activeFilters.gender === 'unknown' ? 'Chưa rõ' : activeFilters.gender}</span>
-              <button type="button" onClick={() => removeActiveFilterTag('gender')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#7c3aed' }}><X size={12} /></button>
+              <button type="button" onClick={() => removeActiveFilterTag('gender')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#475569' }}><X size={12} /></button>
             </span>
           )}
 
           {/* City */}
           {activeFilters.city && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.1)', color: '#7c3aed', fontWeight: 600, fontSize: '0.75rem' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(71, 85, 105, 0.08)', color: '#475569', fontWeight: 600, fontSize: '0.75rem' }}>
               <span>Tỉnh/Thành: {activeFilters.city}</span>
-              <button type="button" onClick={() => removeActiveFilterTag('city')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#7c3aed' }}><X size={12} /></button>
+              <button type="button" onClick={() => removeActiveFilterTag('city')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#475569' }}><X size={12} /></button>
             </span>
           )}
 
           {/* Age */}
           {(activeFilters.ageMin || activeFilters.ageMax) && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.1)', color: '#7c3aed', fontWeight: 600, fontSize: '0.75rem' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(71, 85, 105, 0.08)', color: '#475569', fontWeight: 600, fontSize: '0.75rem' }}>
               <span>Độ tuổi: {activeFilters.ageMin || '0'} - {activeFilters.ageMax || '∞'}</span>
-              <button type="button" onClick={() => removeActiveFilterTag('age')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#7c3aed' }}><X size={12} /></button>
+              <button type="button" onClick={() => removeActiveFilterTag('age')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#475569' }}><X size={12} /></button>
             </span>
           )}
 
@@ -5247,10 +5247,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
           {/* Multi program tag */}
           {activeFilters.multiProgram && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.1)', color: '#4f46e5', fontWeight: 600, fontSize: '0.75rem' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', fontWeight: 600, fontSize: '0.75rem' }}>
               <Layers size={13} />
               <span>Đa chương trình (≥2)</span>
-              <button type="button" onClick={() => removeActiveFilterTag('multiProgram')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#4f46e5' }}><X size={12} /></button>
+              <button type="button" onClick={() => removeActiveFilterTag('multiProgram')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#BD1D2D' }}><X size={12} /></button>
             </span>
           )}
 
@@ -6628,13 +6628,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 <div style={{
                   display: (activeFilterTab === 'advanced' || activeFilterTab === 'all') ? 'block' : 'none',
                   padding: '1.1rem',
-                  borderRadius: '14px',
+                  borderRadius: '16px',
                   background: 'var(--color-surface, #ffffff)',
                   border: '1px solid var(--color-border-light)',
                   boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
-                    <Sparkles size={15} color="#2563eb" /> Hành trình số & Automation 360°
+                    <GitBranch size={15} color="#2563eb" /> Hành trình số & Automation 360°
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '0.75rem' }}>
@@ -7317,7 +7317,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   Thiếu Ngày NH
                                 </span>
                               ) : (
-                                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa có ngày NH</span>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Chưa có ngày NH</span>
                               )}
                             </div>
                           </td>
@@ -7361,10 +7361,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                         marginLeft: '6px', 
                                         padding: '1px 5px', 
                                         borderRadius: '4px', 
-                                        background: 'rgba(139, 92, 246, 0.12)', 
-                                        color: '#7c3aed', 
+                                        background: 'rgba(189, 29, 45, 0.08)', 
+                                        color: '#BD1D2D', 
                                         fontSize: '0.625rem', 
                                         fontWeight: 700, 
+                                        fontVariantNumeric: 'tabular-nums',
                                         flexShrink: 0,
                                         lineHeight: 1.2
                                       }}
@@ -7549,7 +7550,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 );
                               })()}
                               {!hasPhone && !hasEmail && !isReferred && (
-                                <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>
+                                <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>—</span>
                               )}
                             </div>
                           </td>
@@ -7586,7 +7587,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                             {(() => {
                               const uniqueTags = normalizeContactTagList(c.tags, dbTagsByIdMap);
 
-                              if (uniqueTags.length === 0) return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>;
+                              if (uniqueTags.length === 0) return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>—</span>;
                               
                               return (
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '175px' }}>
@@ -7654,7 +7655,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               }
 
                               if (!displayProg) {
-                                return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>;
+                                return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>—</span>;
                               }
 
                               return (
@@ -7697,7 +7698,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               const rawNote = cleanInteractionText(latestNotesSegment);
                               const noteText = rawNote ? rawNote.replace(/\s*\r?\n\s*/g, ' • ').replace(/\s{2,}/g, ' ').trim() : '';
                               if (!noteText) {
-                                return <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa có nhật ký</span>;
+                                return <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Chưa có nhật ký</span>;
                               }
                               return (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: '190px', maxWidth: '268px', whiteSpace: 'normal' }}>
@@ -7748,7 +7749,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 </div>
                               );
                             })() : (
-                              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>
+                              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>—</span>
                             )}
                           </td>
                         )}
@@ -7854,8 +7855,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 const stMap: Record<string, { label: string; color: string; bg: string }> = {
                                   enrolled: { label: 'Enrolled', color: '#0284c7', bg: '#e0f2fe' },
                                   moi_nhap_hoc: { label: 'Enrolled', color: '#0284c7', bg: '#e0f2fe' },
-                                  training: { label: 'Tranning', color: '#4f46e5', bg: '#e0e7ff' },
-                                  tranning: { label: 'Tranning', color: '#4f46e5', bg: '#e0e7ff' },
+                                  training: { label: 'Tranning', color: '#0d9488', bg: '#ccfbf1' },
+                                  tranning: { label: 'Tranning', color: '#0d9488', bg: '#ccfbf1' },
                                   studying: { label: 'Studying', color: '#16a34a', bg: '#dcfce7' },
                                   dang_hoc: { label: 'Studying', color: '#16a34a', bg: '#dcfce7' },
                                   postpone: { label: 'Postpone', color: '#d97706', bg: '#fef3c7' },
@@ -8033,7 +8034,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   <User size={16} />
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-                                  <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa giao</span>
+                                  <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>Chưa giao</span>
                                   {renderInteractionInfo(c, setReportingContact)}
                                   {!visibleColsMap['last_note'] && cleanInteractionText(c.last_interaction || c.notes || '') && (
                                     <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', maxWidth: '165px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
@@ -8089,7 +8090,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 </span>
                               </div>
                             ) : (
-                              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
                                 {c.dl_status === 'databank_claim' ? 'Claim Databank' : 'Cá nhân'}
                               </span>
                             )}
@@ -8126,7 +8127,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 )}
                               </div>
                             ) : (
-                              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>
+                              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>—</span>
                             )}
                           </td>
                         )}
@@ -8198,7 +8199,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 )}
                               </div>
                             ) : (
-                              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>
+                              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>—</span>
                             )}
                           </td>
                         )}
@@ -8400,10 +8401,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                       gap: '2px', 
                                       padding: '1px 5px', 
                                       borderRadius: '4px', 
-                                      background: 'rgba(139, 92, 246, 0.12)', 
-                                      color: '#7c3aed', 
+                                      background: 'rgba(189, 29, 45, 0.08)', 
+                                      color: '#BD1D2D', 
                                       fontSize: '0.625rem', 
                                       fontWeight: 700, 
+                                      fontVariantNumeric: 'tabular-nums',
                                       lineHeight: 1.2
                                     }}
                                   >
@@ -8430,7 +8432,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                             left: 0,
                             right: 0,
                             height: '4px',
-                            background: (c.pipeline_status === 'hoc_vien' || c.stage_name === 'Học viên') ? '#ec4899' : (c.stage_color || (
+                            background: (c.pipeline_status === 'hoc_vien' || c.stage_name === 'Học viên') ? '#BD1D2D' : (c.stage_color || (
                                         c.status === 'lead' ? 'var(--color-primary)' :
                                         c.status === 'qualified' ? 'var(--color-warning)' :
                                         c.status === 'customer' ? 'var(--color-success)' :
@@ -8444,7 +8446,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
                                 <Avatar name={fullName} size={42} />
                                 <div>
-                                  <h3 style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--color-text)', marginBottom: '2px', lineHeight: 1.2, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                                  <h3 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--color-text)', marginBottom: '2px', lineHeight: 1.2, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
                                     <span>{fullName}</span>
                                     {c.dl_status === 'databank_claim' || c.source === 'databank' ? (
                                       <span title="Khách hàng từ Databank" style={{ display: 'inline-flex', color: 'var(--color-text-muted)', flexShrink: 0 }}>
@@ -8464,10 +8466,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                           gap: '2px', 
                                           padding: '1px 5px', 
                                           borderRadius: '4px', 
-                                          background: 'rgba(139, 92, 246, 0.12)', 
-                                          color: '#7c3aed', 
+                                          background: 'rgba(189, 29, 45, 0.08)', 
+                                          color: '#BD1D2D', 
                                           fontSize: '0.625rem', 
                                           fontWeight: 700, 
+                                          fontVariantNumeric: 'tabular-nums',
                                           lineHeight: 1.2
                                         }}
                                       >

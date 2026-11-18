@@ -22,7 +22,7 @@ const typeIcon: Record<string, React.ReactNode> = {
   warning:       <AlertTriangle size={14} color="#f59e0b" />,
   error:         <XCircle size={14} color="#ef4444" />,
   post_comment:  <MessageSquare size={14} color="#0284c7" />,
-  comment_reply: <MessageCircle size={14} color="#8b5cf6" />,
+  comment_reply: <MessageCircle size={14} color="#334155" />,
   mention:       <AtSign size={14} color="#f59e0b" />,
   post_reaction: <Heart size={14} color="#ec4899" />,
 };

@@ -30,7 +30,7 @@ const SurveyGuideModal = React.lazy(() => import('../../components/marketing/com
 // ─── Status config ───────────────────────────────────────────────────────────
 const STATUS = {
     draft:  { label: 'Bản nháp',   dotClass: 'bg-amber-500',                 badgeClass: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/50', iconBg: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/80 dark:border-amber-800/40' },
-    active: { label: 'Đang chạy',  dotClass: 'bg-emerald-500 animate-pulse', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/50', iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/40' },
+    active: { label: 'Đang chạy',  dotClass: 'bg-emerald-500', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/50', iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/40' },
     paused: { label: 'Tạm dừng',   dotClass: 'bg-rose-500',                  badgeClass: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/50', iconBg: 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/40' },
     closed: { label: 'Đã đóng',    dotClass: 'bg-slate-400',                 badgeClass: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700', iconBg: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700' },
 };
@@ -246,9 +246,9 @@ const CreateSurveyModal: React.FC<{
                               svg: (<svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>) },
                             { label: 'Đánh giá dịch vụ', desc: 'Chất lượng dịch vụ sau mua', color: '#10b981', bg: '#ecfdf5',
                               svg: (<svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth="1.8"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>) },
-                            { label: 'Khảo sát thị trường', desc: 'Nghiên cứu thói quen người dùng', color: '#8b5cf6', bg: '#f5f3ff',
+                            { label: 'Khảo sát thị trường', desc: 'Nghiên cứu thói quen người dùng', color: '#334155', bg: '#f1f5f9',
                               svg: (<svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth="1.8"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>) },
-                            { label: 'Mẫu Quiz (Trắc nghiệm)', desc: 'Kiểm tra kiến thức, đánh giá', color: '#ec4899', bg: '#fdf2f8',
+                            { label: 'Mẫu Quiz (Trắc nghiệm)', desc: 'Kiểm tra kiến thức, đánh giá', color: '#C6333D', bg: '#fef2f2',
                               svg: (<svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>) },
                             { label: 'Mẫu Check-in Event', desc: 'Đăng ký tham gia sự kiện, quét QR', color: '#14b8a6', bg: '#f0fdfa',
                               svg: (<svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>) },
@@ -363,7 +363,7 @@ const SurveyCard: React.FC<{
                             <Copy className="w-3 h-3 ml-1 opacity-60" />
                         </div>
                     ) : (
-                        <span className="text-xs text-[var(--color-text-muted)] italic">Chưa xuất bản</span>
+                        <span className="text-xs text-[var(--color-text-muted)]">Chưa xuất bản</span>
                     )}
                 </td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -392,7 +392,7 @@ const SurveyCard: React.FC<{
                                 checked={survey.status === 'active'}
                                 onChange={onTogglePause}
                             />
-                            <div className="w-8 h-4.5 bg-slate-200 dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-3.5 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-emerald-500" />
+                            <div className="w-8 h-4.5 bg-slate-200 dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-3.5 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3.5 after:w-3.5 after:transition-transform after:duration-150 peer-checked:bg-emerald-500" />
                         </label>
                         <button
                             type="button"
@@ -450,7 +450,7 @@ const SurveyCard: React.FC<{
                                 checked={survey.status === 'active'}
                                 onChange={onTogglePause}
                             />
-                            <div className="w-8 h-4.5 bg-slate-200 dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-3.5 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-emerald-500" />
+                            <div className="w-8 h-4.5 bg-slate-200 dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-3.5 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3.5 after:w-3.5 after:transition-transform after:duration-150 peer-checked:bg-emerald-500" />
                         </label>
                         <button
                             type="button"
@@ -491,7 +491,7 @@ const SurveyCard: React.FC<{
                             <Copy className="w-3 h-3 ml-auto opacity-60 group-hover/chip:opacity-100 shrink-0" />
                         </div>
                     ) : (
-                        <span className="inline-block text-xs text-slate-500 dark:text-slate-400 italic py-1">
+                        <span className="inline-block text-xs text-slate-500 dark:text-slate-400 py-1">
                             Chưa xuất bản
                         </span>
                     )}

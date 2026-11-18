@@ -105,34 +105,32 @@ export const NetworkStatusIndicator: React.FC = () => {
               pointerEvents: 'auto',
               maxWidth: 'min(580px, 94vw)',
               width: '100%',
-              background: 'linear-gradient(135deg, #7f1d1d 0%, #b91c1c 100%)',
+              background: '#B91C1C',
               color: '#ffffff',
-              padding: '9px 16px',
-              borderRadius: '14px',
-              boxShadow: '0 12px 32px rgba(185, 28, 28, 0.42), 0 4px 12px rgba(0, 0, 0, 0.2)',
+              padding: '8px 16px',
+              borderRadius: '12px',
+              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.25)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '12px',
-              border: '1px solid rgba(255, 255, 255, 0.25)',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
               <div
                 style={{
                   width: '32px',
                   height: '32px',
                   borderRadius: '8px',
-                  background: 'rgba(255, 255, 255, 0.18)',
+                  background: 'rgba(255, 255, 255, 0.16)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0
                 }}
               >
-                <WifiOff size={18} className="animate-pulse" />
+                <WifiOff size={18} strokeWidth={1.75} />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', minWidth: 0 }}>
@@ -183,16 +181,16 @@ export const NetworkStatusIndicator: React.FC = () => {
               cursor: 'pointer',
               maxWidth: 'min(520px, 94vw)',
               width: '100%',
-              background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+              background: '#059669',
               color: '#ffffff',
-              padding: '9px 16px',
-              borderRadius: '14px',
-              boxShadow: '0 12px 32px rgba(16, 185, 129, 0.42), 0 4px 12px rgba(0, 0, 0, 0.2)',
+              padding: '8px 16px',
+              borderRadius: '12px',
+              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.2)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              gap: '10px',
-              border: '1px solid rgba(255, 255, 255, 0.28)',
+              gap: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
               backdropFilter: 'blur(10px)',
               WebkitBackdropFilter: 'blur(10px)',
             }}

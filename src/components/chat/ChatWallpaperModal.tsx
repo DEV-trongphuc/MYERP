@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  X, Check, Upload, Sparkles, RefreshCw, 
+  X, Check, Upload, RefreshCw, 
   Sliders, Palette, Trash2, Eye, ShieldCheck, 
-  Smile, Send, Paperclip, CheckCheck, Smartphone
+  Smile, Send, Paperclip
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { WALLPAPER_PRESETS, resolveChatFileUrl, type WallpaperPreset } from '../../utils/chatWallpapers';
+import { motion } from 'framer-motion';
+import { WALLPAPER_PRESETS, resolveChatFileUrl } from '../../utils/chatWallpapers';
 import type { ChatWallpaperConfig } from '../../types/chat';
 import { compressImageFile } from '../../utils/imageCompressor';
 import api from '../../api/axios';
@@ -108,7 +108,7 @@ export const ChatWallpaperModal: React.FC<Props> = ({
       setSelectedPresetId('');
       setOverlayOpacity(1); // Default 100% overlay
       toast.dismiss(loadingToast);
-      toast.success('Đã tải lên ảnh nền thành công!');
+      toast.success('Đã tải lên ảnh nền');
     } catch (err: any) {
       console.error('Lỗi tải ảnh nền:', err);
       toast.error(err.response?.data?.message || err.message || 'Không thể tải ảnh lên');
@@ -140,7 +140,7 @@ export const ChatWallpaperModal: React.FC<Props> = ({
         // Reset to default clean white
         await onSaveWallpaper(null);
       }
-      toast.success('Đã lưu ảnh nền cho cuộc trò chuyện!');
+      toast.success('Đã lưu ảnh nền cho cuộc trò chuyện');
       onClose();
     } catch (e: any) {
       console.error('Lỗi lưu hình nền:', e);
@@ -157,7 +157,7 @@ export const ChatWallpaperModal: React.FC<Props> = ({
       setSelectedPresetId('default');
       setCustomUrl('');
       setOverlayOpacity(1);
-      toast.success('Đã khôi phục ảnh nền mặc định!');
+      toast.success('Đã khôi phục ảnh nền mặc định');
       onClose();
     } catch (e) {
       toast.error('Lỗi khôi phục mặc định');
@@ -265,16 +265,16 @@ export const ChatWallpaperModal: React.FC<Props> = ({
           zIndex: 2
         }}>
           <div style={{
-            padding: compact ? '5px 9px' : '8px 12px',
-            borderRadius: '12px 12px 12px 3px',
+            padding: compact ? '4px 8px' : '8px 12px',
+            borderRadius: '12px 12px 12px 4px',
             background: '#ffffff',
-            color: '#0f172a',
+            color: '#0F172A',
             fontSize: compact ? '0.72rem' : '0.78rem',
             fontWeight: 600,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-            lineHeight: 1.3
+            boxShadow: '0 1px 4px rgba(15, 23, 42, 0.06)',
+            lineHeight: 1.35
           }}>
-            Ảnh nền trực quan, chữ siêu nét ✨
+            Ảnh nền trực quan, chữ rõ nét
           </div>
         </div>
 
@@ -285,20 +285,20 @@ export const ChatWallpaperModal: React.FC<Props> = ({
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'flex-end',
-          gap: '2px',
+          gap: '4px',
           zIndex: 2
         }}>
           <div style={{
-            padding: compact ? '5px 9px' : '8px 12px',
-            borderRadius: '12px 12px 3px 12px',
-            background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+            padding: compact ? '4px 8px' : '8px 12px',
+            borderRadius: '12px 12px 4px 12px',
+            background: '#BD1D2D',
             color: '#ffffff',
             fontSize: compact ? '0.72rem' : '0.78rem',
             fontWeight: 600,
-            boxShadow: '0 3px 10px rgba(220, 38, 38, 0.28)',
-            lineHeight: 1.3
+            boxShadow: '0 1px 4px rgba(15, 23, 42, 0.08)',
+            lineHeight: 1.35
           }}>
-            Đã đồng bộ realtime tức thì 👍
+            Đã đồng bộ theo thời gian thực
           </div>
         </div>
       </div>
@@ -403,19 +403,18 @@ export const ChatWallpaperModal: React.FC<Props> = ({
             <div style={{
               width: isMobile ? 32 : 36,
               height: isMobile ? 32 : 36,
-              borderRadius: '10px',
-              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+              borderRadius: '8px',
+              background: '#BD1D2D',
               color: '#ffffff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.28)',
               flexShrink: 0
             }}>
-              <Palette size={isMobile ? 16 : 18} />
+              <Palette size={isMobile ? 16 : 18} strokeWidth={1.75} />
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <h3 style={{ margin: 0, fontSize: isMobile ? '0.9rem' : '0.98rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <h3 style={{ margin: 0, fontSize: isMobile ? '0.9rem' : '0.98rem', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 Ảnh nền cuộc trò chuyện
               </h3>
               <p style={{ margin: 0, fontSize: isMobile ? '0.68rem' : '0.73rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -551,8 +550,8 @@ export const ChatWallpaperModal: React.FC<Props> = ({
                 justifyContent: 'space-between',
                 marginBottom: '8px'
               }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 750, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Sparkles size={13} color="#ef4444" />
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Palette size={13} color="#BD1D2D" strokeWidth={1.75} />
                   <span>Kho hình nền ({filteredPresets.length})</span>
                 </span>
 
@@ -783,15 +782,15 @@ export const ChatWallpaperModal: React.FC<Props> = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  marginBottom: '10px'
+                  marginBottom: '12px'
                 }}>
-                  <span style={{ fontSize: '0.82rem', fontWeight: 750, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <Sparkles size={14} color="#ef4444" />
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Palette size={14} color="#BD1D2D" strokeWidth={1.75} />
                     <span>Kho mẫu hình nền ({filteredPresets.length})</span>
                   </span>
 
                   {/* Category Filter Pills */}
-                  <div style={{ display: 'flex', gap: '3px' }}>
+                  <div style={{ display: 'flex', gap: '4px' }}>
                     {[
                       { id: 'all', label: 'Tất cả' },
                       { id: 'gradient', label: 'Gradient' },
@@ -803,15 +802,15 @@ export const ChatWallpaperModal: React.FC<Props> = ({
                         type="button"
                         onClick={() => setActiveTab(cat.id as any)}
                         style={{
-                          padding: '2px 8px',
+                          padding: '4px 8px',
                           borderRadius: '6px',
                           fontSize: '0.68rem',
-                          fontWeight: activeTab === cat.id ? 700 : 500,
+                          fontWeight: activeTab === cat.id ? 600 : 500,
                           border: 'none',
-                          background: activeTab === cat.id ? '#0f172a' : '#f1f5f9',
-                          color: activeTab === cat.id ? '#ffffff' : '#64748b',
+                          background: activeTab === cat.id ? '#0F172A' : '#F1F5F9',
+                          color: activeTab === cat.id ? '#FFFFFF' : '#64748B',
                           cursor: 'pointer',
-                          transition: 'all 0.15s ease'
+                          transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
                         }}
                       >
                         {cat.label}
@@ -824,7 +823,7 @@ export const ChatWallpaperModal: React.FC<Props> = ({
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
-                  gap: '10px'
+                  gap: '12px'
                 }}>
                   {filteredPresets.map((preset) => {
                     const isSelected = selectedPresetId === preset.id && !customUrl;
@@ -837,13 +836,13 @@ export const ChatWallpaperModal: React.FC<Props> = ({
                           setOverlayOpacity(preset.defaultOpacity);
                         }}
                         style={{
-                          borderRadius: '11px',
+                          borderRadius: '10px',
                           boxSizing: 'border-box',
-                          border: isSelected ? '2px solid #ef4444' : '2px solid #e2e8f0',
+                          border: isSelected ? '2px solid #BD1D2D' : '1px solid #E2E8F0',
                           overflow: 'hidden',
                           cursor: 'pointer',
-                          transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-                          boxShadow: isSelected ? '0 4px 14px rgba(239, 68, 68, 0.25), 0 0 0 1px #ef4444' : '0 1px 2px rgba(0,0,0,0.03)'
+                          transition: 'border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
+                          boxShadow: isSelected ? '0 2px 8px rgba(15, 23, 42, 0.08)' : '0 1px 2px rgba(15, 23, 42, 0.03)'
                         }}
                       >
                         <div style={{
@@ -860,23 +859,23 @@ export const ChatWallpaperModal: React.FC<Props> = ({
                               width: 20,
                               height: 20,
                               borderRadius: '50%',
-                              background: '#ef4444',
-                              color: '#ffffff',
+                              background: '#BD1D2D',
+                              color: '#FFFFFF',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+                              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.2)'
                             }}>
-                              <Check size={12} strokeWidth={3} />
+                              <Check size={12} strokeWidth={2.5} />
                             </div>
                           )}
                         </div>
                         <div style={{
-                          padding: '5px 6px',
-                          background: '#ffffff',
+                          padding: '6px 8px',
+                          background: '#FFFFFF',
                           fontSize: '0.7rem',
-                          fontWeight: isSelected ? 800 : 600,
-                          color: isSelected ? '#ef4444' : '#334155',
+                          fontWeight: isSelected ? 700 : 500,
+                          color: isSelected ? '#BD1D2D' : '#334155',
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -892,20 +891,20 @@ export const ChatWallpaperModal: React.FC<Props> = ({
 
               {/* 3. Readability & Opacity Slider */}
               <div style={{
-                padding: '12px 14px',
-                borderRadius: '13px',
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
+                padding: '12px',
+                borderRadius: '12px',
+                background: '#F8FAFC',
+                border: '1px solid #E2E8F0',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '6px'
+                gap: '8px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>
-                    <Sliders size={14} color="#64748b" />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', fontWeight: 600, color: '#0F172A' }}>
+                    <Sliders size={14} color="#64748B" strokeWidth={1.75} />
                     <span>Độ tương phản bong bóng tin nhắn</span>
                   </div>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#ef4444' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums' }}>
                     {Math.round(overlayOpacity * 100)}%
                   </span>
                 </div>
@@ -919,13 +918,13 @@ export const ChatWallpaperModal: React.FC<Props> = ({
                   onChange={(e) => setOverlayOpacity(parseFloat(e.target.value))}
                   style={{
                     width: '100%',
-                    accentColor: '#ef4444',
+                    accentColor: '#BD1D2D',
                     cursor: 'pointer'
                   }}
                 />
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.67rem', color: '#64748b' }}>
-                  <ShieldCheck size={12} color="#10b981" />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem', color: '#64748B' }}>
+                  <ShieldCheck size={12} color="#10B981" strokeWidth={1.75} />
                   <span>Tự động tối ưu chữ và bong bóng chat dễ đọc, êm mắt.</span>
                 </div>
               </div>
@@ -1026,24 +1025,24 @@ export const ChatWallpaperModal: React.FC<Props> = ({
               onClick={handleSave}
               disabled={isSaving}
               style={{
-                padding: isMobile ? '8px 14px' : '8px 18px',
-                borderRadius: '9px',
+                padding: isMobile ? '8px 16px' : '8px 20px',
+                borderRadius: '8px',
                 border: 'none',
-                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                background: '#BD1D2D',
                 color: '#ffffff',
-                fontSize: '0.75rem',
-                fontWeight: 700,
+                fontSize: '0.78rem',
+                fontWeight: 600,
                 cursor: isSaving ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '5px',
-                boxShadow: '0 4px 12px rgba(239, 68, 68, 0.28)',
+                gap: '8px',
                 opacity: isSaving ? 0.7 : 1,
-                flex: isMobile ? 1 : 'none'
+                flex: isMobile ? 1 : 'none',
+                transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
               }}
             >
-              {isSaving ? <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={13} />}
+              {isSaving ? <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={13} strokeWidth={2} />}
               <span>{isSaving ? 'Đang lưu...' : 'Áp dụng'}</span>
             </button>
           </div>

@@ -290,9 +290,9 @@ const EmailTopBar: React.FC<EmailTopBarProps> = ({
             type="button"
             onClick={onOpenAIModal}
             title="Thiết kế & Tinh chỉnh Email bằng AI"
-            className="flex items-center gap-1.5 h-9 px-3.5 rounded-[12px] border border-rose-200/90 bg-rose-50/80 text-[#BD1D2D] hover:bg-[#BD1D2D] hover:text-white hover:border-[#BD1D2D] text-xs font-bold transition-all shadow-2xs outline-none focus:outline-none cursor-pointer"
+            className="flex items-center gap-1.5 h-9 px-3.5 rounded-[12px] border border-rose-200/90 bg-rose-50/80 text-[#BD1D2D] hover:bg-[#BD1D2D] hover:text-white hover:border-[#BD1D2D] text-xs font-bold transition-colors shadow-2xs outline-none focus:outline-none cursor-pointer"
           >
-            <Sparkles className="w-3.5 h-3.5 shrink-0" />
+            <Sparkles className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
             <span className="hidden sm:inline">Tạo bằng AI</span>
           </button>
         )}

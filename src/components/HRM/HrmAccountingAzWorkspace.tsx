@@ -4764,8 +4764,8 @@ export const HrmAccountingAzWorkspace: React.FC<{
           <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
-                  Dòng Tiền Thực Thu - Thực Chi &amp; Nghĩa Vụ Thuế
+                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                  Dòng tiền thực thu - thực chi &amp; nghĩa vụ thuế
                 </h3>
                 <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
                   Biểu đồ nghĩa vụ thuế GTGT, TNCN, TNDN kỳ {selectedMonth}
@@ -4805,11 +4805,22 @@ export const HrmAccountingAzWorkspace: React.FC<{
                   margin={{ top: 22, right: 6, left: -20, bottom: 0 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#475569', fontWeight: 600 }} />
-                  <YAxis tick={{ fontSize: 10.5, fill: '#64748b' }} tickFormatter={(v) => FMT_COMPACT(v)} />
-                  <Tooltip formatter={(val: any) => [`${FMT(val)} đ`, 'Số tiền']} />
-                  <Bar dataKey="amount" barSize={28} radius={[6, 6, 2, 2]}>
-                    <LabelList dataKey="amount" position="top" style={{ fontSize: '10px', fontWeight: 800, fill: '#0f172a' }} formatter={(v: any) => FMT_COMPACT(v)} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#475569', fontWeight: 500 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={(v) => FMT_COMPACT(v)} />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(15, 23, 42, 0.04)' }}
+                    contentStyle={{
+                      borderRadius: 8,
+                      border: '1px solid #e2e8f0',
+                      fontSize: '0.75rem',
+                      background: '#ffffff',
+                      boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)',
+                      fontVariantNumeric: 'tabular-nums'
+                    }}
+                    formatter={(val: any) => [`${FMT(val)} đ`, 'Số tiền']}
+                  />
+                  <Bar dataKey="amount" barSize={28} radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="amount" position="top" style={{ fontSize: '11px', fontWeight: 600, fill: '#334155', fontVariantNumeric: 'tabular-nums' }} formatter={(v: any) => FMT_COMPACT(v)} />
                     {['#C6333D', '#334155', '#64748b', '#0f172a'].map((c, index) => (
                       <Cell key={`cell-${index}`} fill={c} />
                     ))}
@@ -4828,8 +4839,8 @@ export const HrmAccountingAzWorkspace: React.FC<{
         <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
-                Sổ Nhật Ký Chung Điện Tử (General Journal TT200)
+              <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                Sổ nhật ký chung điện tử (TT200)
               </h3>
               <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
                 Tự động hạch toán kép toàn bộ lương 334, BHXH 338, thuế TNCN 3335, doanh thu 511 và chi phí 642 kỳ {selectedMonth}

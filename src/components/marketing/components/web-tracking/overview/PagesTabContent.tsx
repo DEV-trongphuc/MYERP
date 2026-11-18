@@ -46,12 +46,12 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                 <div className="lg:col-span-8 space-y-2">
                     <div className="flex flex-col md:flex-row md:items-center justify-between mb-2 gap-3">
                         <div className="flex items-center gap-2.5">
-                            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[var(--color-primary)] text-white shadow-lg shadow-[var(--color-primary)]/20">
+                            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[var(--color-primary)] text-white">
                                 <FileText className="w-4 h-4" />
                             </div>
                             <div>
-                                <h3 className="text-sm font-black text-slate-800 tracking-tight">Trang Phổ Biến</h3>
-                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Nội dung thu hút người dùng</p>
+                                <h3 className="text-sm font-bold text-slate-900">Trang phổ biến</h3>
+                                <p className="text-[11px] text-slate-500 font-medium">Nội dung thu hút người dùng</p>
                             </div>
                         </div>
 
@@ -103,9 +103,9 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                                                     </div>
                                                     <div className="flex-1 max-w-[200px] h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                                         <div
-                                                            className={`h-full rounded-full transition-all duration-1000 ease-out ${scrollPercent >= 50 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]' :
-                                                                scrollPercent >= 25 ? 'bg-[var(--color-primary)] shadow-[0_0_8px_rgba(245,158,11,0.3)]' :
-                                                                    'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.3)]'
+                                                            className={`h-full rounded-full transition-[width] duration-500 ease-out ${scrollPercent >= 50 ? 'bg-emerald-500' :
+                                                                scrollPercent >= 25 ? 'bg-[var(--color-primary)]' :
+                                                                    'bg-rose-500'
                                                                 }`}
                                                             style={{ width: `${scrollPercent}%` }}
                                                         />
@@ -114,21 +114,20 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-6 shrink-0">
+                                        <div className="flex items-center gap-6 shrink-0 tabular-nums">
                                             <div className="w-14 text-right">
                                                 {(() => {
                                                     const br = page.bounceRate || 0;
-                                                    const colorClass = 'text-slate-800';
-                                                    return <span className={`text-[11px] font-black ${colorClass}`}>{Math.round(br)}%</span>
+                                                    return <span className="text-xs font-bold text-slate-800">{Math.round(br)}%</span>
                                                 })()}
                                             </div>
                                             <div className="w-14 text-right">
-                                                <span className="text-[11px] font-bold text-slate-600">
+                                                <span className="text-xs font-semibold text-slate-600">
                                                     {formatDuration(Math.round(page.avgTime || 0))}
                                                 </span>
                                             </div>
                                             <div className="w-14 text-right">
-                                                <span className="text-[13px] font-bold text-slate-700">{page.count.toLocaleString()}</span>
+                                                <span className="text-[13px] font-bold text-slate-900">{page.count.toLocaleString()}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -136,7 +135,7 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                             );
                         })}
                         {(!displayedPages || displayedPages.length === 0) && (
-                            <div className="py-20 text-center text-slate-400 text-sm italic font-medium bg-white rounded-[14px] border border-slate-100">Không tìm thấy trang nào</div>
+                            <div className="py-20 text-center text-slate-400 text-sm font-medium bg-white rounded-2xl border border-slate-200">Không tìm thấy trang nào</div>
                         )}
                     </div>
 
@@ -144,7 +143,7 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                     {filteredPages.length > 10 && (
                         <button
                             onClick={() => setShowAll(!showAll)}
-                            className="w-full py-3 px-4 bg-white hover:bg-slate-50 border border-slate-200 hover:border-blue-300 rounded-[14px] transition-all flex items-center justify-center gap-2 text-sm font-semibold text-slate-600 hover:text-blue-600 group"
+                            className="w-full py-3 px-4 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm font-semibold text-slate-700 hover:text-[#BD1D2D] group"
                         >
                             <span>{showAll ? 'Thu gọn' : `Xem thêm ${filteredPages.length - 10} trang`}</span>
                             <ChevronDown className={`w-4 h-4 transition-transform ${showAll ? 'rotate-180' : ''}`} />
@@ -155,12 +154,12 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                 {/* Interactions - 4 cols */}
                 <div className="lg:col-span-4 space-y-2">
                     <div className="flex items-center gap-2.5 mb-2">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-500 text-white shadow-lg shadow-blue-500/20">
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-slate-900 text-white">
                             <MousePointer2 className="w-4 h-4" />
                         </div>
                         <div>
-                            <h3 className="text-sm font-black text-slate-800 tracking-tight">Tương Tác</h3>
-                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Hành vi người dùng</p>
+                            <h3 className="text-sm font-bold text-slate-900">Tương tác</h3>
+                            <p className="text-[11px] text-slate-500 font-medium">Hành vi người dùng</p>
                         </div>
                     </div>
 
@@ -168,22 +167,22 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                         {stats?.topEvents.slice(0, 10).map((event, idx) => {
                             const isUnknown = !event.target || event.target === 'N/A' || event.target === 'Unknown';
                             return (
-                                <div key={idx} className="group flex items-center justify-between p-2.5 bg-white hover:bg-slate-50/80 rounded-lg transition-all border border-slate-100/50 hover:border-slate-200">
+                                <div key={idx} className="group flex items-center justify-between p-2.5 bg-white hover:bg-slate-50/80 rounded-lg transition-colors border border-slate-200/70">
                                     <div className="flex items-center gap-2.5 min-w-0">
-                                        <div className={`w-7 h-7 rounded-md flex items-center justify-center transition-all shrink-0 ${event.type === 'click' ? 'bg-blue-50 text-blue-600' :
+                                        <div className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors shrink-0 ${event.type === 'click' ? 'bg-rose-50 text-[#BD1D2D]' :
                                             event.type === 'form' ? 'bg-emerald-50 text-emerald-600' :
-                                                event.type === 'select' ? 'bg-blue-50 text-blue-600' :
+                                                event.type === 'select' ? 'bg-slate-100 text-slate-700' :
                                                     'bg-slate-50 text-slate-400'
                                             }`}>
                                             {renderEventIcon(event.type)}
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <p className={`text-[11px] font-semibold truncate mb-0.5 ${isUnknown ? 'text-slate-300 italic' : 'text-slate-600 group-hover:text-slate-900'}`} title={event.target}>
+                                            <p className={`text-[11px] font-semibold truncate mb-0.5 ${isUnknown ? 'text-slate-400' : 'text-slate-700 group-hover:text-slate-900'}`} title={event.target}>
                                                 {isUnknown ? 'Không rõ' : event.target}
                                             </p>
                                             <div className="flex items-center gap-2">
-                                                <span className={`text-[8px] font-bold uppercase tracking-widest transition-colors ${event.type === 'click' ? 'text-blue-500 group-hover:text-blue-600' :
-                                                    event.type === 'form' ? 'text-emerald-500 group-hover:text-emerald-600' :
+                                                <span className={`text-[9px] font-bold uppercase tracking-wider transition-colors ${event.type === 'click' ? 'text-[#BD1D2D]' :
+                                                    event.type === 'form' ? 'text-emerald-600' :
                                                         'text-slate-400 group-hover:text-slate-600'
                                                     }`}>
                                                     {event.type.replace('_', ' ')}
@@ -191,7 +190,7 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                                                 {event.url && (
                                                     <>
                                                         <span className="text-slate-300">·</span>
-                                                        <span className="text-[8px] text-slate-400 truncate max-w-[150px]" title={event.url}>
+                                                        <span className="text-[10px] text-slate-400 truncate max-w-[150px]" title={event.url}>
                                                             {shortenUrl(event.url)}
                                                         </span>
                                                     </>
@@ -200,18 +199,15 @@ const PagesTabContent: React.FC<PagesTabContentProps> = ({
                                         </div>
                                     </div>
                                     <div className="text-right ml-4">
-                                        <span className={`text-[11px] font-bold transition-all ${event.type === 'click' ? 'text-slate-600 group-hover:text-blue-600' :
-                                            event.type === 'form' ? 'text-slate-600 group-hover:text-emerald-600' :
-                                                'text-slate-600 group-hover:text-slate-900'
-                                            }`}>
-                                            {event.count}
+                                        <span className="text-xs font-bold text-slate-700 group-hover:text-slate-900 tabular-nums">
+                                            {event.count.toLocaleString('vi-VN')}
                                         </span>
                                     </div>
                                 </div>
                             );
                         })}
                         {(!stats?.topEvents || stats.topEvents.length === 0) && (
-                            <div className="py-20 text-center text-slate-400 text-sm italic font-medium bg-white rounded-xl border border-slate-100">Chưa có dữ liệu</div>
+                            <div className="py-20 text-center text-slate-400 text-sm font-medium bg-white rounded-xl border border-slate-200">Chưa có dữ liệu</div>
                         )}
                     </div>
                 </div>

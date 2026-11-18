@@ -51,15 +51,15 @@ const LinkFlowConfig: React.FC<LinkFlowConfigProps> = ({ config, onChange, curre
           <GitMerge className="w-5 h-5 flex-shrink-0 mt-0.5" />
           <p className="text-xs font-medium leading-relaxed">
              Hành động này sẽ ngắt kịch bản hiện tại và đưa Khách hàng sang một quy trình mới.
-             <br/><span className="text-[10px] opacity-70 italic">*Chỉ hiển thị các Flow đang hoạt động (Active) và không phụ thuộc vào Chiến dịch.</span>
+             <br/><span className="text-[10px] opacity-80">*Chỉ hiển thị các Flow đang hoạt động (Active) và không phụ thuộc vào Chiến dịch.</span>
           </p>
        </div>
 
        {config.linkedFlowId && !selectedFlow && !loading && !disabled && (
-           <div className="p-4 bg-rose-50 border-2 border-rose-200 rounded-2xl flex items-center gap-3">
+           <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3">
                <AlertOctagon className="w-5 h-5 text-rose-600" />
                <div>
-                    <p className="text-xs font-black text-rose-800 uppercase tracking-tight">Lỗi liên kết</p>
+                    <p className="text-xs font-bold text-rose-800 uppercase">Lỗi liên kết</p>
                     <p className="text-[10px] text-rose-700 font-medium">Flow đã chọn không còn hợp lệ (có thể đã bị tắt hoặc chuyển sang Campaign mode).</p>
                </div>
            </div>
@@ -91,8 +91,8 @@ const LinkFlowConfig: React.FC<LinkFlowConfigProps> = ({ config, onChange, curre
                    key={flow.id}
                    onClick={() => { if (!disabled) onChange({ ...config, linkedFlowId: flow.id }); }}
                    className={`
-                      flex items-center justify-between p-4 rounded-2xl border-2 cursor-pointer transition-all group
-                      ${config.linkedFlowId === flow.id ? 'border-blue-500 bg-blue-50 ring-4 ring-blue-500/10 shadow-lg' : 'border-slate-50 bg-white hover:border-blue-100'}
+                      flex items-center justify-between p-4 rounded-2xl border cursor-pointer transition-colors group
+                      ${config.linkedFlowId === flow.id ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500/15 shadow-sm' : 'border-slate-200/80 bg-white hover:border-blue-200'}
                       ${disabled ? 'opacity-60 cursor-not-allowed' : ''}
                    `}
                 >
@@ -101,9 +101,9 @@ const LinkFlowConfig: React.FC<LinkFlowConfigProps> = ({ config, onChange, curre
                          {config.linkedFlowId === flow.id && <div className="w-2 h-2 bg-white rounded-full"></div>}
                       </div>
                       <div>
-                         <p className="text-sm font-black text-slate-800">{flow.name}</p>
+                         <p className="text-sm font-bold text-slate-800">{flow.name}</p>
                          <div className="flex items-center gap-2 mt-1">
-                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{flow.steps?.length || 0} BƯỚC</span>
+                             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest tabular-nums">{flow.steps?.length || 0} BƯỚC</span>
                              <Badge variant="success" className="text-[7px] py-0 px-1.5 h-3.5 uppercase">ACTIVE</Badge>
                          </div>
                       </div>

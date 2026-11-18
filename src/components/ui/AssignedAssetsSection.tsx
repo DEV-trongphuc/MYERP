@@ -144,13 +144,13 @@ export const AssignedAssetsSection: React.FC<AssignedAssetsSectionProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{
             width: 28, height: 28, borderRadius: '6px',
-            background: '#8b5cf6', color: '#ffffff',
+            background: '#0F172A', color: '#ffffff',
             display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
-            <Package size={15} />
+            <Package size={15} strokeWidth={1.75} />
           </div>
           <div>
-            <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text)' }}>
+            <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
               TÀI SẢN ĐƯỢC CẤP PHÁT ({assets.length})
             </h4>
             <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
@@ -196,10 +196,10 @@ export const AssignedAssetsSection: React.FC<AssignedAssetsSectionProps> = ({
           }}>
             <div style={{
               width: 44, height: 44, borderRadius: '50%',
-              background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6',
+              background: 'rgba(15, 23, 42, 0.06)', color: '#334155',
               display: 'flex', alignItems: 'center', justifyContent: 'center'
             }}>
-              <ShieldCheck size={22} />
+              <ShieldCheck size={22} strokeWidth={1.75} />
             </div>
             <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
               Chưa có tài sản nào được cấp phát
@@ -238,29 +238,28 @@ export const AssignedAssetsSection: React.FC<AssignedAssetsSectionProps> = ({
                     background: 'var(--color-surface)',
                     border: '1px solid var(--color-border)',
                     borderRadius: '12px',
-                    padding: '1rem',
+                    padding: '16px',
                     boxShadow: 'var(--shadow-xs)',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
-                    gap: '10px',
-                    transition: 'all 0.2s ease'
+                    gap: '12px',
+                    transition: 'border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
                   }}
-                  className="hover-lift"
                 >
                   {/* Top: Icon + Name + Status */}
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
                       <div style={{
-                        width: 36, height: 36, borderRadius: '10px',
-                        background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6',
+                        width: 36, height: 36, borderRadius: '8px',
+                        background: 'rgba(15, 23, 42, 0.06)', color: '#334155',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         flexShrink: 0
                       }}>
-                        <CatIcon size={18} />
+                        <CatIcon size={18} strokeWidth={1.75} />
                       </div>
                       <div style={{ minWidth: 0 }}>
-                        <h5 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <h5 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {asset.name}
                         </h5>
                         <span style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 600, fontFamily: 'monospace' }}>
@@ -271,20 +270,20 @@ export const AssignedAssetsSection: React.FC<AssignedAssetsSectionProps> = ({
 
                     <div style={{
                       display: 'inline-flex', alignItems: 'center', gap: '4px',
-                      padding: '3px 8px', borderRadius: '12px',
-                      fontSize: '0.68rem', fontWeight: 700,
+                      padding: '4px 8px', borderRadius: '6px',
+                      fontSize: '0.68rem', fontWeight: 600,
                       color: badge.color, backgroundColor: badge.bg,
                       flexShrink: 0
                     }}>
-                      <BadgeIcon size={11} />
+                      <BadgeIcon size={11} strokeWidth={1.75} />
                       <span>{badge.label}</span>
                     </div>
                   </div>
 
                   {/* Mid: Info Table */}
                   <div style={{
-                    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px',
-                    padding: '8px 10px', borderRadius: '8px',
+                    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px',
+                    padding: '8px 12px', borderRadius: '8px',
                     background: 'var(--color-bg)',
                     fontSize: '0.72rem'
                   }}>
@@ -294,14 +293,14 @@ export const AssignedAssetsSection: React.FC<AssignedAssetsSectionProps> = ({
                     </div>
                     <div>
                       <span style={{ color: 'var(--color-text-muted)' }}>Ngày giao: </span>
-                      <strong style={{ color: 'var(--color-text)' }}>{asset.assignedDate}</strong>
+                      <strong style={{ color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>{asset.assignedDate}</strong>
                     </div>
                     <div style={{ gridColumn: 'span 2' }}>
                       <span style={{ color: 'var(--color-text-muted)' }}>Tình trạng: </span>
                       <strong style={{ color: 'var(--color-text)' }}>{asset.condition}</strong>
                     </div>
                     {asset.note && (
-                      <div style={{ gridColumn: 'span 2', color: 'var(--color-text-muted)', fontStyle: 'italic', borderTop: '1px solid var(--color-border-light)', paddingTop: '4px', marginTop: '2px' }}>
+                      <div style={{ gridColumn: 'span 2', color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border-light)', paddingTop: '4px', marginTop: '2px' }}>
                         "{asset.note}"
                       </div>
                     )}
@@ -371,8 +370,8 @@ export const AssignedAssetsSection: React.FC<AssignedAssetsSectionProps> = ({
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Package size={18} style={{ color: '#8b5cf6' }} />
-                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>
+                  <Package size={18} style={{ color: '#BD1D2D' }} strokeWidth={1.75} />
+                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>
                     {editingAsset ? 'Cập nhật thông tin cấp phát' : 'Khai báo cấp phát tài sản mới'}
                   </h3>
                 </div>
@@ -488,9 +487,9 @@ export const AssignedAssetsSection: React.FC<AssignedAssetsSectionProps> = ({
                   <button
                     type="submit"
                     className="btn primary sm"
-                    style={{ background: '#8b5cf6', borderColor: '#8b5cf6', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    style={{ background: '#BD1D2D', borderColor: '#BD1D2D', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}
                   >
-                    <Save size={14} />
+                    <Save size={14} strokeWidth={1.75} />
                     <span>Lưu thông tin</span>
                   </button>
                 </div>

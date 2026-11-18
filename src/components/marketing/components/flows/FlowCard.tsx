@@ -115,10 +115,10 @@ const FlowCard = React.memo<FlowCardProps>((
             return {
                 icon: Cake,
                 appIconKey: 'flow_birthday',
-                accent: 'pink' as const,
-                gradientMain: 'from-pink-400 to-rose-500',
-                iconBg: 'bg-pink-50 text-pink-600 dark:bg-pink-950/40 dark:text-pink-400 border border-pink-200/80 dark:border-pink-800/40',
-                chipBg: 'bg-pink-50 text-pink-700 border-pink-200 dark:bg-pink-950/30 dark:text-pink-300 dark:border-pink-800/40',
+                accent: 'rose' as const,
+                gradientMain: 'bg-rose-600',
+                iconBg: 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/40',
+                chipBg: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800/40',
                 label: 'Sinh nhật'
             };
         }
@@ -136,15 +136,15 @@ const FlowCard = React.memo<FlowCardProps>((
             return {
                 icon: BellRing,
                 appIconKey: 'flow_custom_event',
-                accent: 'purple' as const,
-                gradientMain: 'from-purple-500 to-indigo-600',
-                iconBg: 'bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400 border border-purple-200/80 dark:border-purple-800/40',
-                chipBg: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800/40',
+                accent: 'slate' as const,
+                gradientMain: 'bg-[#0F172A]',
+                iconBg: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700',
+                chipBg: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
                 label: offsetLabel
             };
         }
 
-        // 5. Purchase Success / Cart (Theme: pink #ec4899)
+        // 5. Purchase Success / Cart (Theme: brand crimson)
         if (
             rawTriggerType === 'purchase' ||
             flowNameLower.includes('mua hàng') ||
@@ -161,14 +161,14 @@ const FlowCard = React.memo<FlowCardProps>((
             return {
                 icon: ShoppingCart,
                 appIconKey: 'flow_purchase',
-                accent: 'pink' as any,
-                gradientMain: 'from-pink-400 to-rose-500',
+                accent: 'rose' as any,
+                gradientMain: 'bg-[#BD1D2D]',
                 iconBg: isDeleted
                     ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/40'
-                    : 'bg-pink-50 text-pink-600 dark:bg-pink-950/40 dark:text-pink-400 border border-pink-200/80 dark:border-pink-800/40',
+                    : 'bg-rose-50 text-[#BD1D2D] dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/40',
                 chipBg: isDeleted
                     ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800/40'
-                    : 'bg-pink-50 text-pink-700 border-pink-200 dark:bg-pink-950/30 dark:text-pink-300 dark:border-pink-800/40',
+                    : 'bg-rose-50 text-[#BD1D2D] border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800/40',
                 label: label,
                 isLink: !!linkedPurchaseEvent,
                 onLinkClick: () => linkedPurchaseEvent && onOpenPurchase?.(linkedPurchaseEvent)
@@ -261,14 +261,14 @@ const FlowCard = React.memo<FlowCardProps>((
             return {
                 icon: Zap,
                 appIconKey: 'flow_custom_event',
-                accent: 'violet' as any,
-                gradientMain: 'from-purple-500 to-indigo-600',
+                accent: 'slate' as any,
+                gradientMain: 'bg-[#0F172A]',
                 iconBg: isDeleted
                     ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/40'
-                    : 'bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400 border border-purple-200/80 dark:border-purple-800/40',
+                    : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700',
                 chipBg: isDeleted
                     ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800/40'
-                    : 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800/40',
+                    : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
                 label: label,
                 isLink: !!linkedCustomEvent,
                 onLinkClick: () => linkedCustomEvent && onOpenCustomEvent?.(linkedCustomEvent)
@@ -281,7 +281,7 @@ const FlowCard = React.memo<FlowCardProps>((
                 icon: Tag,
                 appIconKey: 'flow_tag',
                 accent: 'emerald' as const,
-                gradientMain: 'from-emerald-500 to-teal-600',
+                gradientMain: 'bg-emerald-600',
                 iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/40',
                 chipBg: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800/40',
                 label: `Tag: ${linkedTag || triggerConfig.targetId || (triggerConfig.tags ? triggerConfig.tags.join(', ') : 'Gắn nhãn')}`,
@@ -290,16 +290,16 @@ const FlowCard = React.memo<FlowCardProps>((
             };
         }
 
-        // 11. Campaign Tracking (Theme: violet #8b5cf6, Send)
+        // 11. Campaign Tracking (Theme: brand crimson, Send)
         if (rawTriggerType === 'campaign') {
             const campaignName = linkedCampaign ? linkedCampaign.name : (triggerConfig.targetId ? 'Chiến dịch đã xóa' : 'Chưa chọn chiến dịch');
             return {
                 icon: Send,
                 appIconKey: 'flow_mail',
-                accent: 'violet' as const,
-                gradientMain: 'from-purple-500 to-indigo-600',
-                iconBg: 'bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400 border border-purple-200/80 dark:border-purple-800/40',
-                chipBg: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800/40',
+                accent: 'rose' as const,
+                gradientMain: 'bg-[#BD1D2D]',
+                iconBg: 'bg-rose-50 text-[#BD1D2D] dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/40',
+                chipBg: 'bg-rose-50 text-[#BD1D2D] border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800/40',
                 label: campaignName,
                 isLink: !!linkedCampaign,
                 onLinkClick: () => linkedCampaign && onOpenCampaign?.(linkedCampaign)
@@ -325,10 +325,10 @@ const FlowCard = React.memo<FlowCardProps>((
             return {
                 icon: ListPlus,
                 appIconKey: 'flow_list',
-                accent: 'indigo' as const,
-                gradientMain: 'from-indigo-500 to-blue-600',
-                iconBg: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800/40',
-                chipBg: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800/40',
+                accent: 'blue' as const,
+                gradientMain: 'bg-blue-600',
+                iconBg: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200/80 dark:border-blue-800/40',
+                chipBg: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800/40',
                 label,
                 isLink: hasTarget,
                 onLinkClick: () => {
@@ -356,7 +356,7 @@ const FlowCard = React.memo<FlowCardProps>((
                 icon: Layers,
                 appIconKey: 'flow_smart_segment',
                 accent: 'orange' as const,
-                gradientMain: 'from-orange-500 to-amber-600',
+                gradientMain: 'bg-amber-600',
                 iconBg: 'bg-orange-50 text-orange-600 dark:bg-orange-950/40 dark:text-orange-400 border border-orange-200/80 dark:border-orange-800/40',
                 chipBg: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800/40',
                 label,
@@ -382,10 +382,10 @@ const FlowCard = React.memo<FlowCardProps>((
             return {
                 icon: Mail,
                 appIconKey: 'flow_mail',
-                accent: 'indigo' as const,
-                gradientMain: 'from-indigo-500 to-blue-600',
-                iconBg: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800/40',
-                chipBg: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800/40',
+                accent: 'blue' as const,
+                gradientMain: 'bg-blue-600',
+                iconBg: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200/80 dark:border-blue-800/40',
+                chipBg: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800/40',
                 label: 'Email tự động'
             };
         }
@@ -446,7 +446,7 @@ const FlowCard = React.memo<FlowCardProps>((
                 )}
                 <td className="px-4 py-3 min-w-[240px]">
                     <div className="flex items-center gap-3 min-w-0">
-                        <AppIcon name={theme.appIconKey} size={36} className="shrink-0 rounded-[10px] shadow-2xs" />
+                        <AppIcon name={theme.appIconKey} size={36} className="shrink-0 rounded-lg shadow-2xs" />
                         <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 min-w-0">
                                 <span className="font-semibold text-[var(--color-text)] truncate">{flow.name}</span>
@@ -461,13 +461,13 @@ const FlowCard = React.memo<FlowCardProps>((
                                     <button
                                         type="button"
                                         onClick={(e) => { e.stopPropagation(); (theme as any).onLinkClick?.(); }}
-                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-[8px] border transition-colors cursor-pointer font-medium truncate max-w-[240px] hover:opacity-90 ${theme.chipBg}`}
+                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border transition-colors cursor-pointer font-medium truncate max-w-[240px] hover:opacity-90 ${theme.chipBg}`}
                                     >
                                         <Link className="w-3 h-3 shrink-0" />
                                         <span className="truncate">{theme.label}</span>
                                     </button>
                                 ) : (
-                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-[8px] border text-xs truncate max-w-[240px] ${theme.chipBg}`}>{theme.label}</span>
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-xs truncate max-w-[240px] ${theme.chipBg}`}>{theme.label}</span>
                                 )}
                             </div>
                         </div>
@@ -486,7 +486,7 @@ const FlowCard = React.memo<FlowCardProps>((
                     <div className="flex items-center gap-2">
                         <div className="w-20 h-1.5 bg-[var(--color-border-light)] rounded-full overflow-hidden">
                             <div
-                                className="h-full bg-emerald-500 rounded-full transition-all"
+                                className="h-full bg-emerald-500 rounded-full transition-[width] duration-300"
                                 style={{ width: `${Math.min(100, completionRate)}%` }}
                             />
                         </div>
@@ -552,7 +552,7 @@ const FlowCard = React.memo<FlowCardProps>((
     return (
         <div
             onClick={onClick}
-            className={`hover-lift group relative bg-[var(--color-surface)] border rounded-xl p-5 shadow-[0_2px_8px_rgba(0,0,0,0.02)] h-full flex flex-col justify-between transition-all duration-300 cursor-pointer overflow-hidden ${
+            className={`hover-lift group relative bg-[var(--color-surface)] border rounded-xl p-5 shadow-[0_2px_8px_rgba(0,0,0,0.02)] h-full flex flex-col justify-between transition-[box-shadow,border-color,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer overflow-hidden ${
                 isArchived
                     ? selected
                         ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary-light)]'
@@ -575,7 +575,7 @@ const FlowCard = React.memo<FlowCardProps>((
                                 />
                             </div>
                         )}
-                        <AppIcon name={theme.appIconKey} size={42} className="shrink-0 rounded-[12px] shadow-xs group-hover:scale-105 transition-transform duration-300" />
+                        <AppIcon name={theme.appIconKey} size={42} className="shrink-0 rounded-xl shadow-xs" />
                     </div>
                     <div className="flex items-center gap-1.5">
                         {hasWarning && !isArchived && (
@@ -597,14 +597,14 @@ const FlowCard = React.memo<FlowCardProps>((
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); (theme as any).onLinkClick?.(); }}
-                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[10px] border transition-colors cursor-pointer font-medium max-w-full hover:opacity-90 ${theme.chipBg}`}
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors cursor-pointer font-medium max-w-full hover:opacity-90 ${theme.chipBg}`}
                                 title="Nhấn để xem chi tiết liên kết"
                             >
                                 <Link className="w-3 h-3 shrink-0" />
                                 <span className="truncate max-w-[200px]">{theme.label}</span>
                             </button>
                         ) : (
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-[10px] border text-xs font-medium max-w-[220px] truncate ${theme.chipBg}`}>
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-medium max-w-[220px] truncate ${theme.chipBg}`}>
                                 {theme.label}
                             </span>
                         )}
@@ -613,7 +613,7 @@ const FlowCard = React.memo<FlowCardProps>((
             </div>
 
             <div className="pt-3 mt-3 space-y-3">
-                <div className="grid grid-cols-3 gap-1 p-1 bg-[var(--color-bg)] rounded-[14px] border border-[var(--color-border-light)]">
+                <div className="grid grid-cols-3 gap-1 p-1 bg-[var(--color-bg)] rounded-xl border border-[var(--color-border-light)]">
                     <div className="flex flex-col items-center justify-center py-1.5 px-1">
                         <div className="flex items-center gap-1 mb-0.5">
                             <Layers className="w-3 h-3 text-[var(--color-text-muted)]" />
@@ -657,7 +657,7 @@ const FlowCard = React.memo<FlowCardProps>((
                                 <button
                                     type="button"
                                     onClick={() => onRestore?.()}
-                                    className="w-7 h-7 flex items-center justify-center rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] text-emerald-600 hover:bg-emerald-50 transition-colors"
+                                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-emerald-600 hover:bg-emerald-50 transition-colors"
                                     title="Khôi phục"
                                 >
                                     <RotateCcw className="w-3.5 h-3.5" />
@@ -665,7 +665,7 @@ const FlowCard = React.memo<FlowCardProps>((
                                 <button
                                     type="button"
                                     onClick={() => onDelete(true)}
-                                    className="w-7 h-7 flex items-center justify-center rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] text-rose-600 hover:bg-rose-50 transition-colors"
+                                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-rose-600 hover:bg-rose-50 transition-colors"
                                     title="Xóa vĩnh viễn"
                                 >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -676,7 +676,7 @@ const FlowCard = React.memo<FlowCardProps>((
                                 <button
                                     type="button"
                                     onClick={() => onDuplicate?.(flow)}
-                                    className="w-7 h-7 flex items-center justify-center rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-primary)] hover:bg-[var(--color-bg)] transition-colors"
+                                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-primary)] hover:bg-[var(--color-bg)] transition-colors"
                                     title="Nhân bản"
                                 >
                                     <Copy className="w-3.5 h-3.5" />
@@ -684,7 +684,7 @@ const FlowCard = React.memo<FlowCardProps>((
                                 <button
                                     type="button"
                                     onClick={() => onDelete(false)}
-                                    className="w-7 h-7 flex items-center justify-center rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 transition-colors"
                                     title="Thùng rác"
                                 >
                                     <Trash2 className="w-3.5 h-3.5" />

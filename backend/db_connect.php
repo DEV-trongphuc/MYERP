@@ -6,10 +6,13 @@ date_default_timezone_set('Asia/Ho_Chi_Minh');
 if (!defined('MYERP_SKIP_DB_CONNECT') || !MYERP_SKIP_DB_CONNECT) {
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-    $servername = $_ENV['DB_HOST'] ?? "localhost";
-    $username = $_ENV['DB_USER'] ?? "vhvxoigh_mail_auto";
-    $password = $_ENV['DB_PASS'] ?? "Ideas@812";
-    $dbname = $_ENV['DB_NAME'] ?? "vhvxoigh_myerp";
+    $servername = $_ENV['DB_HOST'] ?? (getenv('DB_HOST') ?: "localhost");
+    $username = $_ENV['DB_USER'] ?? (getenv('DB_USER') ?: "");
+    $password = $_ENV['DB_PASS'] ?? (getenv('DB_PASS') !== false ? getenv('DB_PASS') : "");
+    $dbname = $_ENV['DB_NAME'] ?? (getenv('DB_NAME') ?: "");
+    if ($username === "" || $dbname === "") {
+        throw new \RuntimeException("Missing DB_USER or DB_NAME configuration in backend/.env");
+    }
 
     $conn = new mysqli($servername, $username, $password, $dbname);
 

@@ -335,7 +335,7 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
       setInputText('');
       useChatStore.getState().clearComposerDraft(activeConversation.id);
       setShowSlashMenu(false);
-      toast.success('Đã làm sạch lịch sử hội thoại tạm thời!');
+      toast.success('Đã làm sạch lịch sử hội thoại tạm thời');
       return;
     }
 
@@ -748,28 +748,28 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
             background: '#ffffff',
             borderTop: '1px solid #e2e8f0',
             boxShadow: '0 -6px 20px rgba(0,0,0,0.12)',
-            borderRadius: '14px 14px 0 0',
+            borderRadius: '12px 12px 0 0',
             zIndex: 45
           }}
         >
           <div style={{
-            padding: '7px 14px',
+            padding: '8px 16px',
             fontSize: '0.7rem',
-            fontWeight: 800,
+            fontWeight: 700,
             textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            color: '#6b21a8',
-            background: 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)',
-            borderBottom: '1px solid #f3e8ff',
+            letterSpacing: '0.04em',
+            color: '#0F172A',
+            background: '#F8FAFC',
+            borderBottom: '1px solid #E2E8F0',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Sparkles size={13} color="#9333ea" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Sparkles size={13} color="#BD1D2D" strokeWidth={1.75} />
               <span>Gợi ý Lệnh Nhanh & Mẫu Điều Hành (Gõ hoặc bấm để chọn)</span>
             </div>
-            <span style={{ fontSize: '0.65rem', color: '#9333ea', fontWeight: 600 }}>Phím [↑] [↓] [Enter]</span>
+            <span style={{ fontSize: '0.68rem', color: '#64748B', fontWeight: 600 }}>Phím [↑] [↓] [Enter]</span>
           </div>
 
           <div style={{ padding: '4px' }}>
@@ -785,28 +785,28 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px',
-                    backgroundColor: isSelected ? '#f5f3ff' : 'transparent',
-                    border: isSelected ? '1px solid #ddd6fe' : '1px solid transparent',
-                    transition: 'all 0.12s ease'
+                    gap: '12px',
+                    backgroundColor: isSelected ? 'rgba(189, 29, 45, 0.06)' : 'transparent',
+                    border: isSelected ? '1px solid rgba(189, 29, 45, 0.2)' : '1px solid transparent',
+                    transition: 'background-color 0.12s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.12s cubic-bezier(0.22, 1, 0.36, 1)'
                   }}
                   onMouseEnter={() => setSelectedSlashIndex(idx)}
                 >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: isSelected ? '#7c3aed' : '#64748b', flexShrink: 0 }}>{cmd.icon}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: isSelected ? '#BD1D2D' : '#64748B', flexShrink: 0 }}>{cmd.icon}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{
                         fontSize: '0.78rem',
-                        fontWeight: 800,
-                        color: isSelected ? '#7c3aed' : '#1e293b',
+                        fontWeight: 700,
+                        color: isSelected ? '#BD1D2D' : '#0F172A',
                         fontFamily: 'monospace',
-                        background: isSelected ? '#ede9fe' : '#f1f5f9',
-                        padding: '1px 6px',
+                        background: isSelected ? 'rgba(189, 29, 45, 0.1)' : '#F1F5F9',
+                        padding: '2px 6px',
                         borderRadius: '4px'
                       }}>
                         {cmd.command}
                       </span>
-                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155' }}>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#334155' }}>
                         {cmd.label}
                       </span>
                     </div>
@@ -1137,19 +1137,19 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
             type="button"
             onClick={onOpenStickerPicker}
             style={{
-              background: showStickerPicker ? '#ede9fe' : 'none',
+              background: showStickerPicker ? 'rgba(189, 29, 45, 0.08)' : 'none',
               border: 'none',
-              color: showStickerPicker ? '#7c3aed' : '#64748b',
+              color: showStickerPicker ? '#BD1D2D' : '#64748B',
               cursor: 'pointer',
               padding: '4px',
               borderRadius: '6px',
               display: 'flex',
               alignItems: 'center',
-              transition: 'all 0.15s ease'
+              transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
             }}
             title="Bộ Sticker Doanh nghiệp"
           >
-            <Sparkles size={18} color={showStickerPicker ? '#7c3aed' : '#8b5cf6'} />
+            <Sparkles size={18} strokeWidth={1.75} color={showStickerPicker ? '#BD1D2D' : '#475569'} />
           </button>
 
           <button
@@ -1190,26 +1190,35 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
             }}
             style={{
               marginLeft: 'auto',
-              marginRight: '6px',
-              background: isSlashActive ? 'linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)' : '#f8fafc',
-              border: isSlashActive ? '1px solid #c084fc' : '1px solid #e2e8f0',
-              borderRadius: '7px',
-              color: isSlashActive ? '#7e22ce' : '#6b21a8',
+              marginRight: '8px',
+              background: isSlashActive ? 'rgba(189, 29, 45, 0.08)' : '#F8FAFC',
+              border: isSlashActive ? '1px solid rgba(189, 29, 45, 0.35)' : '1px solid #E2E8F0',
+              borderRadius: '8px',
+              color: isSlashActive ? '#BD1D2D' : '#334155',
               cursor: 'pointer',
-              padding: '4px 9px',
+              padding: '4px 10px',
               display: 'flex',
               alignItems: 'center',
               gap: '4px',
-              fontSize: '0.74rem',
-              fontWeight: 800,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-              transition: 'all 0.15s ease'
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.04)')}
-            onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+            onMouseEnter={(e) => {
+              if (!isSlashActive) {
+                e.currentTarget.style.background = '#F1F5F9';
+                e.currentTarget.style.borderColor = '#CBD5E1';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isSlashActive) {
+                e.currentTarget.style.background = '#F8FAFC';
+                e.currentTarget.style.borderColor = '#E2E8F0';
+              }
+            }}
             title="Mở bảng Lệnh nhanh AI Copilot (Phím tắt: Gõ '/')"
           >
-            <Sparkles size={13} color="#9333ea" />
+            <Sparkles size={13} strokeWidth={1.75} color={isSlashActive ? '#BD1D2D' : '#475569'} />
             <span>LỆNH AI</span>
           </button>
 
@@ -1217,25 +1226,24 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
             type="button"
             onClick={onOpenErpModal}
             style={{
-              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+              background: '#BD1D2D',
               border: 'none',
-              borderRadius: '7px',
-              color: '#ffffff',
+              borderRadius: '8px',
+              color: '#FFFFFF',
               cursor: 'pointer',
               padding: '4px 10px',
               display: 'flex',
               alignItems: 'center',
-              gap: '5px',
-              fontSize: '0.74rem',
-              fontWeight: 800,
-              boxShadow: '0 2px 6px rgba(220, 38, 38, 0.35)',
-              transition: 'transform 0.15s ease'
+              gap: '4px',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
             }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.04)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#A31422')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#BD1D2D')}
             title="Gắn thẻ Task công việc, Đơn cọc SO, Phiếu chi PO, Khách hàng"
           >
-            <Briefcase size={13} />
+            <Briefcase size={13} strokeWidth={1.75} />
             <span>ERP TAG</span>
           </button>
 
@@ -1375,18 +1383,14 @@ export const ChatComposer = forwardRef<ChatComposerRef, ChatComposerProps>(({
                 borderRadius: '50%',
                 border: 'none',
                 background: (inputText.trim() || pendingAttachments.length > 0)
-                  ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
-                  : '#e2e8f0',
-                color: (inputText.trim() || pendingAttachments.length > 0) ? '#ffffff' : '#94a3b8',
+                  ? '#BD1D2D'
+                  : '#E2E8F0',
+                color: (inputText.trim() || pendingAttachments.length > 0) ? '#FFFFFF' : '#94A3B8',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: (inputText.trim() || pendingAttachments.length > 0) ? 'pointer' : 'not-allowed',
-                transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
-                boxShadow: (inputText.trim() || pendingAttachments.length > 0)
-                  ? '0 3px 10px rgba(220, 38, 38, 0.35)'
-                  : 'none',
-                transform: (inputText.trim() || pendingAttachments.length > 0) ? 'scale(1)' : 'scale(0.92)'
+                transition: 'background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), color 0.18s cubic-bezier(0.22, 1, 0.36, 1)'
               }}
               title="Gửi tin nhắn (Enter)"
             >

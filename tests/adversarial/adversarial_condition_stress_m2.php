@@ -16,10 +16,19 @@
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
+require_once __DIR__ . '/../../backend/env.php';
 require_once __DIR__ . '/../../backend/automation/flow_helpers.php';
 
-// Database setup
-$pdo = new PDO("mysql:host=127.0.0.1;dbname=vhvxoigh_myerp;charset=utf8mb4", "vhvxoigh_mail_auto", "Ideas@812", [
+// Database setup from backend/.env or environment
+$dbHost = $_ENV['DB_HOST'] ?? getenv('DB_HOST') ?: '127.0.0.1';
+$dbName = $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'vhvxoigh_myerp';
+$dbUser = $_ENV['DB_USER'] ?? getenv('DB_USER') ?: '';
+$dbPass = $_ENV['DB_PASS'] ?? getenv('DB_PASS') ?: '';
+if ($dbUser === '' || $dbPass === '') {
+    fwrite(STDERR, "Missing DB_USER / DB_PASS in backend/.env or environment.\n");
+    exit(1);
+}
+$pdo = new PDO("mysql:host={$dbHost};dbname={$dbName};charset=utf8mb4", $dbUser, $dbPass, [
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
 ]);

@@ -12,6 +12,58 @@ interface CleanupModalProps {
     onSuccess: () => void;
 }
 
+const CLEANUP_COLOR_MAP: Record<string, {
+    card: string;
+    checkbox: string;
+    title: string;
+    badge: string;
+    icon: string;
+    actionTitle: string;
+    radioBorder: string;
+    radioDot: string;
+}> = {
+    crimson: {
+        card: 'border-[#BD1D2D] bg-rose-50/50',
+        checkbox: 'bg-[#BD1D2D] border-[#BD1D2D]',
+        title: 'text-[#BD1D2D]',
+        badge: 'bg-rose-100 text-[#BD1D2D]',
+        icon: 'bg-[#BD1D2D] text-white shadow-xs',
+        actionTitle: 'text-slate-900',
+        radioBorder: 'border-[#BD1D2D]',
+        radioDot: 'bg-[#BD1D2D]',
+    },
+    rose: {
+        card: 'border-rose-500 bg-rose-50/50',
+        checkbox: 'bg-rose-500 border-rose-500',
+        title: 'text-rose-700',
+        badge: 'bg-rose-100 text-rose-700',
+        icon: 'bg-rose-500 text-white shadow-xs',
+        actionTitle: 'text-rose-900',
+        radioBorder: 'border-rose-500',
+        radioDot: 'bg-rose-500',
+    },
+    amber: {
+        card: 'border-amber-500 bg-amber-50/50',
+        checkbox: 'bg-amber-500 border-amber-500',
+        title: 'text-amber-700',
+        badge: 'bg-amber-100 text-amber-700',
+        icon: 'bg-amber-500 text-white shadow-xs',
+        actionTitle: 'text-amber-900',
+        radioBorder: 'border-amber-500',
+        radioDot: 'bg-amber-500',
+    },
+    slate: {
+        card: 'border-slate-700 bg-slate-50',
+        checkbox: 'bg-slate-700 border-slate-700',
+        title: 'text-slate-800',
+        badge: 'bg-slate-100 text-slate-700',
+        icon: 'bg-slate-800 text-white shadow-xs',
+        actionTitle: 'text-slate-900',
+        radioBorder: 'border-slate-700',
+        radioDot: 'bg-slate-700',
+    },
+};
+
 // Custom Checkbox Card - Compact
 const CheckboxCard = ({
     checked,
@@ -28,22 +80,23 @@ const CheckboxCard = ({
     colorClass: string;
     icon: any;
 }) => {
+    const tone = CLEANUP_COLOR_MAP[colorClass] || CLEANUP_COLOR_MAP.crimson;
     return (
         <div
             onClick={onChange}
-            className={`cursor-pointer p-3 rounded-lg border transition-all flex items-start gap-3 group ${checked
-                ? `border-${colorClass}-500 bg-${colorClass}-50/50`
+            className={`cursor-pointer p-3 rounded-lg border transition-colors duration-150 flex items-start gap-3 group ${checked
+                ? tone.card
                 : 'border-slate-200 bg-white hover:border-slate-300'
                 }`}
         >
-            <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all mt-0.5 ${checked
-                ? `bg-${colorClass}-500 border-${colorClass}-500`
+            <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors mt-0.5 ${checked
+                ? tone.checkbox
                 : 'bg-white border-slate-300 group-hover:border-slate-400'
                 }`}>
                 {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
             </div>
             <div className="flex-1">
-                <div className={`font-bold text-xs mb-0.5 ${checked ? `text-${colorClass}-700` : 'text-slate-700'}`}>{title}</div>
+                <div className={`font-bold text-xs mb-0.5 ${checked ? tone.title : 'text-slate-700'}`}>{title}</div>
                 <div className="text-[10px] text-slate-500 leading-snug">{description}</div>
             </div>
         </div>
@@ -83,14 +136,14 @@ const CustomSelect = ({
         <div className="relative" ref={containerRef}>
             <div
                 onClick={() => setIsOpen(!isOpen)}
-                className={`w-full px-3 py-2 rounded-lg border cursor-pointer flex items-center justify-between transition-all ${isOpen || value ? 'border-indigo-500 ring-2 ring-indigo-500/10' : 'border-slate-200 hover:border-slate-300'
-                    } bg-white shadow-sm text-xs`}
+                className={`w-full px-3 py-2 rounded-lg border cursor-pointer flex items-center justify-between transition-colors ${isOpen || value ? 'border-[#BD1D2D] ring-2 ring-[#BD1D2D]/10' : 'border-slate-200 hover:border-slate-300'
+                    } bg-white shadow-xs text-xs`}
             >
                 <div className="flex items-center gap-2 overflow-hidden">
                     {selectedOption ? (
                         <div className="flex items-center gap-2">
                             <span className="font-bold text-slate-800 truncate">{selectedOption.name}</span>
-                            <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{selectedOption.count?.toLocaleString() || 0}</span>
+                            <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full tabular-nums">{selectedOption.count?.toLocaleString() || 0}</span>
                         </div>
                     ) : (
                         <span className="text-slate-400 font-medium">{placeholder}</span>
@@ -104,7 +157,7 @@ const CustomSelect = ({
                     {onCreateNew && (
                         <div
                             onClick={() => { onCreateNew(); setIsOpen(false); }}
-                            className="px-3 py-2 hover:bg-slate-50 cursor-pointer flex items-center gap-2 text-indigo-600 font-bold text-xs border-b border-slate-100"
+                            className="px-3 py-2 hover:bg-slate-50 cursor-pointer flex items-center gap-2 text-[#BD1D2D] font-bold text-xs border-b border-slate-100"
                         >
                             <Plus className="w-3.5 h-3.5" />
                             Tạo danh sách mới...
@@ -114,10 +167,10 @@ const CustomSelect = ({
                         <div
                             key={opt.id}
                             onClick={() => { onChange(opt.id); setIsOpen(false); }}
-                            className={`px-3 py-2 hover:bg-slate-50 cursor-pointer flex items-center justify-between group ${value === opt.id ? 'bg-indigo-50' : ''}`}
+                            className={`px-3 py-2 hover:bg-slate-50 cursor-pointer flex items-center justify-between group ${value === opt.id ? 'bg-rose-50/70' : ''}`}
                         >
-                            <span className={`text-xs font-medium ${value === opt.id ? 'text-indigo-700' : 'text-slate-700'}`}>{opt.name}</span>
-                            <span className="text-[10px] text-slate-400 group-hover:text-slate-500">{opt.count?.toLocaleString()}</span>
+                            <span className={`text-xs font-medium ${value === opt.id ? 'text-[#BD1D2D] font-bold' : 'text-slate-700'}`}>{opt.name}</span>
+                            <span className="text-[10px] text-slate-400 group-hover:text-slate-500 tabular-nums">{opt.count?.toLocaleString()}</span>
                         </div>
                     )) : (
                         <div className="px-3 py-2 text-xs text-slate-400 text-center">Không có danh sách nào</div>
@@ -145,37 +198,40 @@ const ActionCard = ({
     description: string;
     colorClass: string;
     recommended?: boolean;
-}) => (
-    <div
-        onClick={onSelect}
-        className={`relative p-3.5 rounded-xl border transition-all duration-200 flex items-start gap-3 group ${selected
-            ? `border-${colorClass}-500 bg-${colorClass}-50/30`
-            : 'border-slate-100 bg-white hover:border-slate-200 hover:shadow-sm'
-            }`}
-    >
-        {recommended && (
-            <div className={`absolute -top-2 right-3 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-${colorClass}-100 text-${colorClass}-700 ring-1 ring-white shadow-sm`}>
-                Recommended
+}) => {
+    const tone = CLEANUP_COLOR_MAP[colorClass] || CLEANUP_COLOR_MAP.crimson;
+    return (
+        <div
+            onClick={onSelect}
+            className={`relative p-3.5 rounded-xl border transition-colors duration-150 flex items-start gap-3 group cursor-pointer ${selected
+                ? tone.card
+                : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+        >
+            {recommended && (
+                <div className={`absolute -top-2 right-3 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${tone.badge} ring-1 ring-white shadow-xs`}>
+                    Recommended
+                </div>
+            )}
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${selected
+                ? tone.icon
+                : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'
+                }`}>
+                <Icon className="w-4 h-4" />
             </div>
-        )}
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${selected
-            ? `bg-${colorClass}-500 text-white shadow-sm`
-            : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'
-            }`}>
-            <Icon className="w-4 h-4" />
+            <div className="flex-1">
+                <h4 className={`font-bold text-xs mb-0.5 ${selected ? tone.actionTitle : 'text-slate-800'}`}>{title}</h4>
+                <p className="text-[10px] text-slate-500 leading-snug">{description}</p>
+            </div>
+            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 mt-1 transition-colors ${selected
+                ? tone.radioBorder
+                : 'border-slate-300'
+                }`}>
+                <div className={`w-2 h-2 rounded-full transition-transform duration-150 ${selected ? tone.radioDot : 'scale-0'}`} />
+            </div>
         </div>
-        <div className="flex-1">
-            <h4 className={`font-bold text-xs mb-0.5 ${selected ? `text-${colorClass}-900` : 'text-slate-800'}`}>{title}</h4>
-            <p className="text-[10px] text-slate-500 leading-snug">{description}</p>
-        </div>
-        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 mt-1 transition-colors ${selected
-            ? `border-${colorClass}-500`
-            : 'border-slate-300'
-            }`}>
-            <div className={`w-2 h-2 rounded-full transition-all ${selected ? `bg-${colorClass}-500` : 'scale-0'}`} />
-        </div>
-    </div>
-);
+    );
+};
 
 
 const CleanupModal: React.FC<CleanupModalProps> = ({ target, onClose: _onClose, onSuccess }) => {
@@ -332,7 +388,7 @@ const CleanupModal: React.FC<CleanupModalProps> = ({ target, onClose: _onClose, 
                     <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-50 flex items-center justify-center">
                         <div className="flex flex-col items-center gap-2">
                             <Loader2 className="w-8 h-8 text-[var(--color-primary)] animate-spin" />
-                            <p className="text-xs font-bold text-slate-500 animate-pulse">Đang xử lý...</p>
+                            <p className="text-xs font-semibold text-slate-500">Đang xử lý...</p>
                         </div>
                     </div>
                 )}
@@ -360,14 +416,14 @@ const CleanupModal: React.FC<CleanupModalProps> = ({ target, onClose: _onClose, 
                     <div className="bg-slate-100 p-1 rounded-xl flex gap-1 shadow-inner text-xs font-bold">
                         <button
                             onClick={() => { setActiveTab('junk'); setAction('remove'); setEstimateCount(null); }}
-                            className={`flex-1 py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-2 ${activeTab === 'junk' ? 'bg-white text-rose-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+                            className={`flex-1 py-2 px-3 rounded-lg transition-colors duration-150 flex items-center justify-center gap-2 ${activeTab === 'junk' ? 'bg-white text-[#BD1D2D] shadow-xs ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
                         >
                             <Trash2 className="w-3.5 h-3.5" />
                             Dọn rác (Junk)
                         </button>
                         <button
                             onClick={() => { setActiveTab('dormant'); setAction('move'); setEstimateCount(null); }}
-                            className={`flex-1 py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-2 ${activeTab === 'dormant' ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+                            className={`flex-1 py-2 px-3 rounded-lg transition-colors duration-150 flex items-center justify-center gap-2 ${activeTab === 'dormant' ? 'bg-white text-slate-900 shadow-xs ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
                         >
                             <Moon className="w-3.5 h-3.5" />
                             Ngủ đông (Dormant)
@@ -410,9 +466,9 @@ const CleanupModal: React.FC<CleanupModalProps> = ({ target, onClose: _onClose, 
                             )}
 
                             {activeTab === 'dormant' && (
-                                <div className="p-4 rounded-xl border border-indigo-100 bg-indigo-50/50 space-y-4">
+                                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-4">
                                     <div className="flex items-start gap-3">
-                                        <div className="p-2 bg-white rounded-lg shadow-sm ring-1 ring-black/5 text-indigo-600">
+                                        <div className="p-2 bg-white rounded-lg shadow-xs border border-slate-200 text-slate-700">
                                             <Moon className="w-4 h-4" />
                                         </div>
                                         <div className="flex-1">
@@ -421,10 +477,10 @@ const CleanupModal: React.FC<CleanupModalProps> = ({ target, onClose: _onClose, 
                                         </div>
                                     </div>
 
-                                    <div className="pt-3 border-t border-indigo-100/50">
+                                    <div className="pt-3 border-t border-slate-200/70">
                                         <div className="flex items-center justify-between mb-2">
                                             <label className="text-xs font-bold text-slate-600">Không tương tác quá</label>
-                                            <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[10px] font-bold">{dormantDays} ngày</span>
+                                            <span className="px-2 py-0.5 bg-rose-50 text-[#BD1D2D] border border-rose-200/60 rounded text-[10px] font-bold tabular-nums">{dormantDays} ngày</span>
                                         </div>
                                         <input
                                             type="range"
@@ -433,9 +489,9 @@ const CleanupModal: React.FC<CleanupModalProps> = ({ target, onClose: _onClose, 
                                             step="30"
                                             value={dormantDays}
                                             onChange={(e) => setDormantDays(parseInt(e.target.value))}
-                                            className="w-full h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 hover:accent-indigo-700 transition-all"
+                                            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#BD1D2D] transition-colors"
                                         />
-                                        <div className="flex justify-between text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+                                        <div className="flex justify-between text-[10px] font-semibold text-slate-400 mt-1 uppercase tracking-wider tabular-nums">
                                             <span>30d</span>
                                             <span>180d</span>
                                             <span>365d</span>
@@ -446,22 +502,22 @@ const CleanupModal: React.FC<CleanupModalProps> = ({ target, onClose: _onClose, 
                         </div>
 
                         {/* Estimate Bar - Light Theme */}
-                        <div className="bg-white border border-slate-200 rounded-xl p-1 flex items-center justify-between shadow-sm">
+                        <div className="bg-white border border-slate-200 rounded-xl p-1 flex items-center justify-between shadow-xs">
                             <div className="px-3 py-1.5">
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Tìm thấy</p>
+                                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Tìm thấy</p>
                                 <div className="flex items-baseline gap-1.5">
                                     {isEstimating ? (
                                         <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
                                     ) : (
-                                        <span className="text-lg font-black text-slate-800 tracking-tight">{estimateCount !== null ? estimateCount.toLocaleString() : '0'}</span>
+                                        <span className="text-lg font-bold text-slate-900 tracking-tight tabular-nums">{estimateCount !== null ? estimateCount.toLocaleString() : '0'}</span>
                                     )}
-                                    <span className="text-[10px] font-bold text-slate-400">users</span>
+                                    <span className="text-[10px] font-semibold text-slate-400">users</span>
                                 </div>
                             </div>
                             <button
                                 onClick={handleEstimate}
                                 disabled={isEstimating}
-                                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-[10px] font-bold text-slate-600 flex items-center gap-1.5 transition-all h-full border border-slate-200/50"
+                                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 flex items-center gap-1.5 transition-colors h-full border border-slate-200/60"
                             >
                                 <Calculator className="w-3 h-3" />
                                 Kiểm tra
@@ -477,23 +533,23 @@ const CleanupModal: React.FC<CleanupModalProps> = ({ target, onClose: _onClose, 
                                     title="Lưu trữ (Archive)"
                                     description="Di chuyển sang danh sách riêng."
                                     icon={ArrowRight}
-                                    colorClass="indigo"
+                                    colorClass="slate"
                                     selected={action === 'move'}
                                     onSelect={() => setAction('move')}
                                     recommended={activeTab === 'dormant'}
                                 />
                                 {action === 'move' && (
-                                    <div className="ml-4 sm:ml-12 animate-in slide-in-from-top-2 fade-in duration-300 space-y-2 p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs">
+                                    <div className="ml-4 sm:ml-12 animate-in slide-in-from-top-2 fade-in duration-300 space-y-2 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
                                         <div className="flex gap-1 bg-white border border-slate-200 p-0.5 rounded-lg w-fit">
                                             <button
                                                 onClick={() => setIsCreatingNewList(false)}
-                                                className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${!isCreatingNewList ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
+                                                className={`px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${!isCreatingNewList ? 'bg-rose-50 text-[#BD1D2D]' : 'text-slate-500 hover:text-slate-700'}`}
                                             >
                                                 Có sẵn
                                             </button>
                                             <button
                                                 onClick={() => setIsCreatingNewList(true)}
-                                                className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${isCreatingNewList ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
+                                                className={`px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${isCreatingNewList ? 'bg-rose-50 text-[#BD1D2D]' : 'text-slate-500 hover:text-slate-700'}`}
                                             >
                                                 Tạo mới +
                                             </button>
@@ -506,7 +562,7 @@ const CleanupModal: React.FC<CleanupModalProps> = ({ target, onClose: _onClose, 
                                                 value={newListName}
                                                 onChange={(e) => setNewListName(e.target.value)}
                                                 placeholder="Nhập tên danh sách mới..."
-                                                className="w-full px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 font-medium text-slate-700 bg-white"
+                                                className="w-full px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-[#BD1D2D] focus:ring-2 focus:ring-[#BD1D2D]/10 font-medium text-slate-700 bg-white"
                                             />
                                         ) : (
                                             <CustomSelect

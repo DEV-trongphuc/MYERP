@@ -1,9 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { 
-  Sparkles, Check, X, Loader2, Calendar, DollarSign, 
-  CheckSquare, User, ArrowRight, ExternalLink, AlertCircle, Clock,
-  Package, RefreshCw, FileText, FileSpreadsheet, Download, ClipboardList,
-  Users
+  Sparkles, Check, X, Loader2, DollarSign, 
+  CheckSquare, User, ExternalLink, AlertCircle, Clock,
+  Package, FileText, FileSpreadsheet, Download, ClipboardList
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -369,7 +368,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             related_id: targetContactId ? Number(targetContactId) : (p.related_id ? Number(p.related_id) : undefined),
             from_customer_drawer: Boolean(targetContactId)
           });
-          toast.success('Đã mở Công việc (Task) và điền sẵn thông tin!');
+          toast.success('Đã mở Công việc (Task) và điền sẵn thông tin');
           break;
         }
 
@@ -393,7 +392,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
               bulk_leads: Array.isArray(p.bulk_leads) ? p.bulk_leads : undefined,
             }
           }));
-          toast.success('Đã mở Form thêm học viên và điền sẵn thông tin!');
+          toast.success('Đã mở Form thêm học viên và điền sẵn thông tin');
           break;
         }
 
@@ -415,7 +414,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           setTimeout(() => {
             window.dispatchEvent(new CustomEvent('open-create-leave-modal', { detail: leaveDetail }));
           }, 120);
-          toast.success('Đã mở Đơn xin nghỉ phép và điền sẵn thông tin!');
+          toast.success('Đã mở Đơn xin nghỉ phép và điền sẵn thông tin');
           break;
         }
 
@@ -436,7 +435,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           setTimeout(() => {
             window.dispatchEvent(new CustomEvent('open-create-leave-modal', { detail: suppDetail }));
           }, 120);
-          toast.success('Đã mở Đơn giải trình bổ sung công và điền sẵn thông tin!');
+          toast.success('Đã mở Đơn giải trình bổ sung công và điền sẵn thông tin');
           break;
         }
 
@@ -451,7 +450,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
               approver_id_2: p.approver_id_2
             }
           }));
-          toast.success('Đã mở Đề xuất tạm ứng và điền sẵn thông tin!');
+          toast.success('Đã mở Đề xuất tạm ứng và điền sẵn thông tin');
           break;
         }
 
@@ -468,7 +467,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           } else {
             navigate('/inventory?tab=purchase_orders&create_po=1');
           }
-          toast.success('Đã mở Phiếu nhập kho (PO) và điền sẵn thông tin!');
+          toast.success('Đã mở Phiếu nhập kho (PO) và điền sẵn thông tin');
           break;
         }
 
@@ -489,7 +488,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           setTimeout(() => {
             window.dispatchEvent(new CustomEvent('open-create-leave-modal', { detail: swapDetail }));
           }, 120);
-          toast.success('Đã mở Đề xuất đổi ca trực và điền sẵn thông tin!');
+          toast.success('Đã mở Đề xuất đổi ca trực và điền sẵn thông tin');
           break;
         }
 
@@ -500,7 +499,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           } else {
             navigate('/contacts');
           }
-          toast.success('Đã mở Hồ sơ học viên để kiểm tra và tải tài liệu thẩm định!');
+          toast.success('Đã mở Hồ sơ học viên để kiểm tra và tải tài liệu thẩm định');
           break;
         }
 
@@ -511,13 +510,13 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           } else {
             navigate('/deposits');
           }
-          toast.success('Đã mở mục Quản lý Hợp đồng & Cam kết đào tạo!');
+          toast.success('Đã mở mục Quản lý Hợp đồng & Cam kết đào tạo');
           break;
         }
 
         case 'asset_handover': {
           navigate('/hrm?tab=profiles');
-          toast.success('Đã mở Hồ sơ Nhân sự & Tài sản (HRM) để lập biên bản bàn giao!');
+          toast.success('Đã mở Hồ sơ Nhân sự & Tài sản (HRM) để lập biên bản bàn giao');
           break;
         }
 
@@ -531,7 +530,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             ? '/marketing/vouchers'
             : '/marketing/campaigns';
           navigate(targetTab);
-          toast.success('Đã mở phân hệ Marketing Automation & Đa kênh!');
+          toast.success('Đã mở phân hệ Marketing Automation & Đa kênh');
           break;
         }
 
@@ -546,7 +545,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           };
           sessionStorage.setItem('pending_ticket_draft', JSON.stringify(ticketDraft));
           navigate('/support-tickets?create=1');
-          toast.success('Đã mở Phiếu hỗ trợ / Khiếu nại (Ticket) và điền sẵn thông tin!');
+          toast.success('Đã mở Phiếu hỗ trợ / Khiếu nại (Ticket) và điền sẵn thông tin');
           break;
         }
 
@@ -561,7 +560,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           };
           sessionStorage.setItem('pending_quote_draft', JSON.stringify(quoteDraft));
           navigate('/quotes?create=1');
-          toast.success('Đã mở Báo giá (Quote) và điền sẵn thông tin!');
+          toast.success('Đã mở Báo giá (Quote) và điền sẵn thông tin');
           break;
         }
 
@@ -574,7 +573,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           setTimeout(() => {
             window.dispatchEvent(new CustomEvent('open-create-deal-modal', { detail: p }));
           }, 120);
-          toast.success('Đã mở Cơ hội tuyển sinh / Deal và điền sẵn thông tin!');
+          toast.success('Đã mở Cơ hội tuyển sinh / Deal và điền sẵn thông tin');
           break;
         }
 
@@ -671,7 +670,7 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             params: paramsObj,
             defaultFilename: fileName,
             onSuccess: () => {
-              toast.success('Đã tải tệp Excel thành công!', { id: 'export-action-toast' });
+              toast.success('Đã tải tệp Excel', { id: 'export-action-toast' });
             },
             onError: (err: any) => {
               const errTxt = err?.message || 'Không thể tải file xuất dữ liệu';
@@ -733,76 +732,76 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
       case 'export_data':
       case 'export':
         return {
-          bg: '#f5f3ff',
-          text: '#6d28d9',
-          border: '#ddd6fe',
-          accent: '#7c3aed',
+          bg: '#F8FAFC',
+          text: '#334155',
+          border: '#E2E8F0',
+          accent: '#0F172A',
           label: 'XUẤT DỮ LIỆU',
-          icon: <FileSpreadsheet size={13} color="#7c3aed" />
+          icon: <FileSpreadsheet size={13} color="#334155" strokeWidth={1.75} />
         };
       case 'task':
         return {
-          bg: '#eff6ff',
-          text: '#1d4ed8',
-          border: '#bfdbfe',
-          accent: '#2563eb',
+          bg: '#EFF6FF',
+          text: '#1D4ED8',
+          border: '#BFDBFE',
+          accent: '#2563EB',
           label: 'CÔNG VIỆC',
-          icon: <CheckSquare size={13} color="#2563eb" />
+          icon: <CheckSquare size={13} color="#2563EB" strokeWidth={1.75} />
         };
       case 'sales_order':
         return {
-          bg: '#ecfdf5',
+          bg: '#ECFDF5',
           text: '#047857',
-          border: '#a7f3d0',
+          border: '#A7F3D0',
           accent: '#059669',
           label: 'ĐƠN HÀNG (SO)',
-          icon: <FileText size={13} color="#059669" />
+          icon: <FileText size={13} color="#059669" strokeWidth={1.75} />
         };
       case 'deposit':
         return {
-          bg: '#ecfdf5',
+          bg: '#ECFDF5',
           text: '#047857',
-          border: '#a7f3d0',
+          border: '#A7F3D0',
           accent: '#059669',
           label: 'ĐẶT CỌC',
-          icon: <DollarSign size={13} color="#059669" />
+          icon: <DollarSign size={13} color="#059669" strokeWidth={1.75} />
         };
       case 'lead':
         return {
-          bg: '#f0f9ff',
-          text: '#0369a1',
-          border: '#bae6fd',
-          accent: '#0284c7',
+          bg: '#F0F9FF',
+          text: '#0369A1',
+          border: '#BAE6FD',
+          accent: '#0284C7',
           label: 'KHÁCH HÀNG CRM',
-          icon: <User size={13} color="#0284c7" />
+          icon: <User size={13} color="#0284C7" strokeWidth={1.75} />
         };
       case 'inventory_receipt':
         return {
-          bg: '#fffbeb',
-          text: '#b45309',
-          border: '#fde68a',
-          accent: '#d97706',
+          bg: '#FFFBEB',
+          text: '#B45309',
+          border: '#FDE68A',
+          accent: '#D97706',
           label: 'KHO VẬT TƯ',
-          icon: <Package size={13} color="#d97706" />
+          icon: <Package size={13} color="#D97706" strokeWidth={1.75} />
         };
       case 'asset_handover':
         return {
-          bg: '#fffbeb',
-          text: '#b45309',
-          border: '#fde68a',
-          accent: '#d97706',
+          bg: '#FFFBEB',
+          text: '#B45309',
+          border: '#FDE68A',
+          accent: '#D97706',
           label: 'TÀI SẢN',
-          icon: <Package size={13} color="#d97706" />
+          icon: <Package size={13} color="#D97706" strokeWidth={1.75} />
         };
       case 'marketing_campaign':
       case 'automation_flow':
       case 'voucher_issue':
       case 'sync_match_only':
         return {
-          bg: '#fdf2f8',
-          text: '#be185d',
-          border: '#fbcfe8',
-          accent: '#db2777',
+          bg: 'rgba(189, 29, 45, 0.08)',
+          text: '#BD1D2D',
+          border: 'rgba(189, 29, 45, 0.25)',
+          accent: '#BD1D2D',
           label: proposal.action_type === 'automation_flow'
             ? 'AUTOMATION FLOW'
             : proposal.action_type === 'voucher_issue'
@@ -810,34 +809,34 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             : proposal.action_type === 'sync_match_only'
             ? 'ĐỒNG BỘ MATCH-ONLY'
             : 'MARKETING',
-          icon: <Sparkles size={13} color="#db2777" />
+          icon: <Sparkles size={13} color="#BD1D2D" strokeWidth={1.75} />
         };
       case 'ticket':
         return {
-          bg: '#fef2f2',
-          text: '#dc2626',
-          border: '#fecaca',
-          accent: '#ef4444',
+          bg: '#FEF2F2',
+          text: '#BD1D2D',
+          border: '#FECACA',
+          accent: '#BD1D2D',
           label: 'TICKET CSKH',
-          icon: <AlertCircle size={13} color="#ef4444" />
+          icon: <AlertCircle size={13} color="#BD1D2D" strokeWidth={1.75} />
         };
       case 'quote':
         return {
-          bg: '#f0f9ff',
-          text: '#0369a1',
-          border: '#bae6fd',
-          accent: '#0284c7',
+          bg: '#F0F9FF',
+          text: '#0369A1',
+          border: '#BAE6FD',
+          accent: '#0284C7',
           label: 'BÁO GIÁ',
-          icon: <FileText size={13} color="#0284c7" />
+          icon: <FileText size={13} color="#0284C7" strokeWidth={1.75} />
         };
       case 'deal':
         return {
-          bg: '#fdf4ff',
-          text: '#a21caf',
-          border: '#f5d0fe',
-          accent: '#c026d3',
+          bg: 'rgba(189, 29, 45, 0.08)',
+          text: '#BD1D2D',
+          border: 'rgba(189, 29, 45, 0.25)',
+          accent: '#BD1D2D',
           label: 'DEAL CRM',
-          icon: <Sparkles size={13} color="#c026d3" />
+          icon: <DollarSign size={13} color="#BD1D2D" strokeWidth={1.75} />
         };
       case 'leave':
       case 'expense':
@@ -848,12 +847,12 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
       case 'legal_contract':
       default:
         return {
-          bg: '#f5f3ff',
-          text: '#6d28d9',
-          border: '#ddd6fe',
-          accent: '#7c3aed',
+          bg: '#F1F5F9',
+          text: '#334155',
+          border: '#E2E8F0',
+          accent: '#334155',
           label: 'QUY TRÌNH',
-          icon: <ClipboardList size={13} color="#7c3aed" />
+          icon: <ClipboardList size={13} color="#334155" strokeWidth={1.75} />
         };
     }
   };
@@ -992,42 +991,42 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
       onClick={handleOpenAndPrefill}
       style={{
         marginTop: '8px',
-        marginBottom: '6px',
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
+        marginBottom: '8px',
+        background: '#FFFFFF',
+        border: '1px solid #E2E8F0',
         borderRadius: '12px',
-        padding: '10px 12px',
-        boxShadow: '0 3px 10px rgba(0, 0, 0, 0.06)',
+        padding: '12px',
+        boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
         minWidth: '240px',
         maxWidth: '300px',
-        color: '#0f172a',
+        color: '#0F172A',
         textAlign: 'left',
         cursor: 'pointer',
-        transition: 'all 0.15s ease'
+        transition: 'border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.boxShadow = '0 5px 14px rgba(0, 0, 0, 0.09)';
-        e.currentTarget.style.transform = 'translateY(-1px)';
+        e.currentTarget.style.borderColor = '#CBD5E1';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(15, 23, 42, 0.08)';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.boxShadow = '0 3px 10px rgba(0, 0, 0, 0.06)';
-        e.currentTarget.style.transform = 'none';
+        e.currentTarget.style.borderColor = '#E2E8F0';
+        e.currentTarget.style.boxShadow = '0 1px 3px rgba(15, 23, 42, 0.04)';
       }}
     >
       {/* Top Header Tags */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', gap: '6px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', gap: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
             gap: '4px',
-            fontSize: '0.62rem',
-            fontWeight: 700,
-            padding: '1.5px 6px',
+            fontSize: '0.65rem',
+            fontWeight: 600,
+            padding: '2px 8px',
             borderRadius: '4px',
             background: theme.bg,
             color: theme.text,
-            border: 'none',
+            border: `1px solid ${theme.border}`,
             whiteSpace: 'nowrap'
           }}>
             {theme.icon}
@@ -1035,9 +1034,9 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           </div>
           {statBadge && (
             <span style={{
-              fontSize: '0.62rem',
-              fontWeight: 700,
-              padding: '1.5px 5px',
+              fontSize: '0.65rem',
+              fontWeight: 600,
+              padding: '2px 6px',
               borderRadius: '4px',
               background: statBadge.bg,
               color: statBadge.text,
@@ -1047,58 +1046,58 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             </span>
           )}
         </div>
-        <span style={{ fontSize: '0.64rem', color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>
+        <span style={{ fontSize: '0.65rem', color: '#94A3B8', fontWeight: 600, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
           #{idTag}
         </span>
       </div>
 
       {/* Card Title */}
       <div style={{
-        fontWeight: 700,
-        fontSize: '0.80rem',
-        color: '#0f172a',
-        lineHeight: 1.3,
-        marginBottom: '6px'
+        fontWeight: 600,
+        fontSize: '0.82rem',
+        color: '#0F172A',
+        lineHeight: 1.35,
+        marginBottom: '8px'
       }}>
         {proposal.title || 'Đề xuất Khởi tạo Quy trình'}
       </div>
 
       {/* Metadata rows */}
-      <div style={{ fontSize: '0.74rem', color: '#64748b', display: 'flex', flexDirection: 'column', gap: '5px', marginBottom: '8px' }}>
+      <div style={{ fontSize: '0.75rem', color: '#64748B', display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px', fontVariantNumeric: 'tabular-nums' }}>
         {/* Row 1: Sender */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Avatar src={senderAvatar} name={senderName} size={18} />
           <span>
-            Người gửi: <strong style={{ color: '#334155' }}>{senderName}</strong> {createdAtStr ? <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>({createdAtStr})</span> : ''}
+            Người gửi: <strong style={{ color: '#334155', fontWeight: 600 }}>{senderName}</strong> {createdAtStr ? <span style={{ color: '#94A3B8', fontSize: '0.7rem' }}>({createdAtStr})</span> : ''}
           </span>
         </div>
 
         {/* Row 2: Approver / Assignee */}
         {approverOrAssigneeName && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Avatar src={approverAvatar} name={approverOrAssigneeName} size={18} />
             <span>
-              {approverLabel}: <strong style={{ color: '#334155' }}>{approverOrAssigneeName}</strong>
+              {approverLabel}: <strong style={{ color: '#334155', fontWeight: 600 }}>{approverOrAssigneeName}</strong>
             </span>
           </div>
         )}
 
         {/* Lead-specific Program / Personal badges */}
         {proposal.action_type === 'lead' && (p.program || p.type) && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ color: '#64748b' }}>Chương trình: <strong style={{ color: '#334155' }}>{p.program || p.type}</strong></span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ color: '#64748B' }}>Chương trình: <strong style={{ color: '#334155', fontWeight: 600 }}>{p.program || p.type}</strong></span>
           </div>
         )}
         {proposal.action_type === 'lead' && (p.is_personal || p.source === 'ca_nhan') && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ color: '#64748b' }}>Phân loại: <strong style={{ color: '#0284c7' }}>Data cá nhân</strong></span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ color: '#64748B' }}>Phân loại: <strong style={{ color: '#0284C7', fontWeight: 600 }}>Data cá nhân</strong></span>
           </div>
         )}
 
         {/* Row 3: Summary / Filter details */}
         {summaryRowText && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Clock size={13} color="#64748b" style={{ flexShrink: 0 }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Clock size={13} color="#64748B" strokeWidth={1.75} style={{ flexShrink: 0 }} />
             <span style={{ wordBreak: 'break-word', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {summaryRowText}
             </span>
@@ -1109,24 +1108,24 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
       {/* Error message if any */}
       {errorMsg && (
         <div style={{
-          marginBottom: '6px',
+          marginBottom: '8px',
           padding: '4px 8px',
-          background: '#fef2f2',
-          border: '1px solid #fecaca',
-          borderRadius: '5px',
-          color: '#991b1b',
-          fontSize: '0.70rem',
+          background: '#FEF2F2',
+          border: '1px solid #FECACA',
+          borderRadius: '6px',
+          color: '#991B1B',
+          fontSize: '0.72rem',
           display: 'flex',
           alignItems: 'center',
-          gap: '5px'
+          gap: '4px'
         }}>
-          <AlertCircle size={12} className="flex-shrink-0" />
+          <AlertCircle size={12} className="flex-shrink-0" strokeWidth={1.75} />
           <span>{errorMsg}</span>
         </div>
       )}
 
       {/* Action Button */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         {status === 'idle' && (
           <button
             type="button"
@@ -1136,21 +1135,21 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
             }}
             title="Hủy bỏ"
             style={{
-              padding: '6px 8px',
-              borderRadius: '7px',
-              border: '1px solid #e2e8f0',
-              background: '#f8fafc',
-              color: '#94a3b8',
+              padding: '8px',
+              borderRadius: '8px',
+              border: '1px solid #E2E8F0',
+              background: '#F8FAFC',
+              color: '#64748B',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transition: 'all 0.15s ease'
+              transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = '#fef2f2'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = '#f8fafc'; }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#BD1D2D'; e.currentTarget.style.background = '#FEF2F2'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#64748B'; e.currentTarget.style.background = '#F8FAFC'; }}
           >
-            <X size={12} />
+            <X size={12} strokeWidth={1.75} />
           </button>
         )}
         <button
@@ -1162,20 +1161,19 @@ export const ActionProposalCard: React.FC<ActionProposalCardProps> = ({
           }}
           style={{
             flex: 1,
-            padding: '6px 10px',
-            borderRadius: '7px',
+            padding: '8px 12px',
+            borderRadius: '8px',
             border: 'none',
-            background: status === 'success' ? '#10b981' : (status === 'cancelled' ? '#94a3b8' : theme.accent),
-            color: '#ffffff',
-            fontSize: '0.74rem',
-            fontWeight: 700,
+            background: status === 'success' ? '#10B981' : (status === 'cancelled' ? '#94A3B8' : theme.accent),
+            color: '#FFFFFF',
+            fontSize: '0.75rem',
+            fontWeight: 600,
             cursor: (status === 'submitting' || status === 'success' || status === 'cancelled') ? 'default' : 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '5px',
-            boxShadow: status === 'success' ? '0 1.5px 5px rgba(16, 185, 129, 0.3)' : `0 1.5px 5px ${theme.border}`,
-            transition: 'opacity 0.15s ease'
+            gap: '8px',
+            transition: 'opacity 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
           }}
           onMouseEnter={(e) => { if (status === 'idle') e.currentTarget.style.opacity = '0.9'; }}
           onMouseLeave={(e) => { if (status === 'idle') e.currentTarget.style.opacity = '1'; }}

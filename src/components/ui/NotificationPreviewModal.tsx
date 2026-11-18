@@ -170,7 +170,7 @@ export const NotificationPreviewModal: React.FC<NotificationPreviewModalProps> =
         `  ${parsedActualNote || displayNote}\n\n` +
         `📜 LỊCH SỬ PHÂN BỔ GẦN NHẤT:\n` +
         `  • ${sentAt || 'Vừa xong'} - Đã bàn giao (Vòng: ${displayRound} | Sale: ${assignedToName})\n\n` +
-        `⚡ Vui lòng liên hệ lại với khách hàng sớm nhất có thể!\n` +
+        `Vui lòng liên hệ lại với khách hàng sớm nhất có thể.\n` +
         `━━━━━━━━━━━━━━━━━━━━━`;
     } else {
       const roundTitle = displayRound ? ` - ${displayRound.toUpperCase()}` : "";
@@ -411,13 +411,13 @@ export const NotificationPreviewModal: React.FC<NotificationPreviewModalProps> =
             </table>
           </div>
 
-          {/* AI Block (purple background, purple left border) */}
+          {/* AI Block */}
           {aiStatus === 'passed' && aiEvaluation && (
-            <div style={{ backgroundColor: '#fff5f6', borderLeft: '4px solid #a31422', padding: '24px', margin: '30px 0', borderRadius: '0 12px 12px 0' }}>
-              <p style={{ color: '#8a0f1b', fontSize: '16px', margin: '0 0 12px 0', fontWeight: 'bold', lineHeight: 1.6, borderBottom: '1px solid #ddd6fe', paddingBottom: '8px' }}>
-                🤖 Đánh giá AI:
+            <div style={{ backgroundColor: '#fff5f6', borderLeft: '4px solid #BD1D2D', padding: '20px 24px', margin: '24px 0', borderRadius: '0 12px 12px 0' }}>
+              <p style={{ color: '#8a0f1b', fontSize: '16px', margin: '0 0 12px 0', fontWeight: 700, lineHeight: 1.5, borderBottom: '1px solid #fecaca', paddingBottom: '8px' }}>
+                Đánh giá AI:
               </p>
-              <p style={{ color: '#5b21b6', fontSize: '15px', lineHeight: 1.6, margin: 0, fontWeight: 500 }}>
+              <p style={{ color: '#0f172a', fontSize: '15px', lineHeight: 1.6, margin: 0, fontWeight: 500 }}>
                 {aiEvaluation}
               </p>
             </div>
@@ -536,9 +536,9 @@ export const NotificationPreviewModal: React.FC<NotificationPreviewModalProps> =
                         <img src={`${import.meta.env.VITE_API_URL || '/backend'}/Compress_ICON.png`} alt="IDEAS Logo" style={{ width: '28px', height: '28px', verticalAlign: 'middle', display: 'inline-block', borderRadius: '50%' }} />
                       </div>
                     </div>
-                    <h1 style={{ color: '#ffffff', fontSize: '24px', margin: 0, fontWeight: 900, letterSpacing: '2px', textAlign: 'center', fontFamily: "'Inter', Helvetica, Arial, sans-serif" }}>IDEAS</h1>
+                    <h1 style={{ color: '#ffffff', fontSize: '24px', margin: 0, fontWeight: 700, letterSpacing: '2px', textAlign: 'center', fontFamily: "'Inter', Helvetica, Arial, sans-serif" }}>IDEAS</h1>
                     <p style={{ color: 'rgba(255,255,255,0.95)', fontSize: '12px', margin: '4px 0 0', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 700, textAlign: 'center' }}>
-                      {isReminder ? 'DATA ROUTING ENGINE' : 'CÓ DATA MỚI VỀ!'}
+                      {isReminder ? 'DATA ROUTING ENGINE' : 'CÓ DATA MỚI VỀ'}
                     </p>
                   </div>
 

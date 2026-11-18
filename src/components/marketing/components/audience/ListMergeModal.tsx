@@ -84,13 +84,13 @@ const ListMergeModal: React.FC<ListMergeModalProps> = ({ lists, onClose: _onClos
 
             {/* Modal Content */}
             <div
-                style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-                className={`relative bg-white rounded-[18px] shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden border border-slate-100 transform transition-all duration-500 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-8'}`}>
+                style={{ transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)' }}
+                className={`relative bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden border border-slate-200 transform transition-[transform,opacity] duration-200 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-4'}`}>
                 {isLoading && (
-                    <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-50 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] z-50 flex items-center justify-center">
                         <div className="flex flex-col items-center gap-2">
                             <Loader2 className="w-8 h-8 text-[var(--color-primary)] animate-spin" />
-                            <p className="text-xs font-bold text-slate-500 animate-pulse">Đang gộp...</p>
+                            <p className="text-xs font-semibold text-slate-600">Đang gộp...</p>
                         </div>
                     </div>
                 )}

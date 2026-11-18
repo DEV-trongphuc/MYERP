@@ -726,78 +726,78 @@ const MisaSetup: React.FC<MisaSetupProps> = ({ onBack, onComplete, initialData }
                             <div className="grid grid-cols-4 gap-3">
                                 <div
                                     onClick={() => setConfig({ ...config, syncInterval: '5' })}
-                                    className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 ${config.syncInterval === '5' ? 'bg-white border-blue-500 shadow-lg shadow-blue-500/10 transform -translate-y-1' : 'bg-white border-slate-100 hover:border-slate-300 hover:bg-slate-50'}`}
+                                    className={`relative p-4 rounded-xl border-2 cursor-pointer transition-colors ${config.syncInterval === '5' ? 'bg-rose-50/30 border-[#BD1D2D] shadow-sm' : 'bg-white border-slate-200/80 hover:border-slate-300 hover:bg-slate-50'}`}
                                 >
                                     <div className="flex flex-col items-center gap-2 text-center">
-                                        <Zap className={`w-5 h-5 ${config.syncInterval === '5' ? 'text-blue-500' : 'text-slate-300'}`} />
+                                        <Zap className={`w-5 h-5 ${config.syncInterval === '5' ? 'text-[#BD1D2D]' : 'text-slate-300'}`} />
                                         <div>
-                                            <div className={`text-sm font-black ${config.syncInterval === '5' ? 'text-slate-800' : 'text-slate-500'}`}>5p</div>
-                                            <div className="text-[9px] font-bold text-slate-300 uppercase tracking-wider">Nhanh</div>
+                                            <div className={`text-sm font-bold tabular-nums ${config.syncInterval === '5' ? 'text-slate-900' : 'text-slate-500'}`}>5p</div>
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Nhanh</div>
                                         </div>
                                     </div>
-                                    {config.syncInterval === '5' && <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-blue-500 animate-pulse" />}
+                                    {config.syncInterval === '5' && <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#BD1D2D]" />}
                                 </div>
 
                                 <div
                                     onClick={() => setConfig({ ...config, syncInterval: '15' })}
-                                    className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 ${config.syncInterval === '15' ? 'bg-white border-blue-500 shadow-lg shadow-blue-500/10 transform -translate-y-1' : 'bg-white border-slate-100 hover:border-slate-300 hover:bg-slate-50'}`}
+                                    className={`relative p-4 rounded-xl border-2 cursor-pointer transition-colors ${config.syncInterval === '15' ? 'bg-rose-50/30 border-[#BD1D2D] shadow-sm' : 'bg-white border-slate-200/80 hover:border-slate-300 hover:bg-slate-50'}`}
                                 >
                                     <div className="flex flex-col items-center gap-2 text-center">
-                                        <Clock className={`w-5 h-5 ${config.syncInterval === '15' ? 'text-blue-500' : 'text-slate-300'}`} />
+                                        <Clock className={`w-5 h-5 ${config.syncInterval === '15' ? 'text-[#BD1D2D]' : 'text-slate-300'}`} />
                                         <div>
-                                            <div className={`text-sm font-black ${config.syncInterval === '15' ? 'text-slate-800' : 'text-slate-500'}`}>15p</div>
-                                            <div className="text-[9px] font-bold text-slate-300 uppercase tracking-wider">Chuẩn</div>
+                                            <div className={`text-sm font-bold tabular-nums ${config.syncInterval === '15' ? 'text-slate-900' : 'text-slate-500'}`}>15p</div>
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Chuẩn</div>
                                         </div>
                                     </div>
-                                    {config.syncInterval === '15' && <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-blue-500 animate-pulse" />}
+                                    {config.syncInterval === '15' && <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#BD1D2D]" />}
                                 </div>
 
                                 <div
                                     onClick={() => setConfig({ ...config, syncInterval: '60' })}
-                                    className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 ${config.syncInterval === '60' ? 'bg-white border-blue-500 shadow-lg shadow-blue-500/10 transform -translate-y-1' : 'bg-white border-slate-100 hover:border-slate-300 hover:bg-slate-50'}`}
+                                    className={`relative p-4 rounded-xl border-2 cursor-pointer transition-colors ${config.syncInterval === '60' ? 'bg-rose-50/30 border-[#BD1D2D] shadow-sm' : 'bg-white border-slate-200/80 hover:border-slate-300 hover:bg-slate-50'}`}
                                 >
                                     <div className="flex flex-col items-center gap-2 text-center">
-                                        <Clock className={`w-5 h-5 ${config.syncInterval === '60' ? 'text-blue-500' : 'text-slate-300'}`} />
+                                        <Clock className={`w-5 h-5 ${config.syncInterval === '60' ? 'text-[#BD1D2D]' : 'text-slate-300'}`} />
                                         <div>
-                                            <div className={`text-sm font-black ${config.syncInterval === '60' ? 'text-slate-800' : 'text-slate-500'}`}>1h</div>
-                                            <div className="text-[9px] font-bold text-slate-300 uppercase tracking-wider">Ổn định</div>
+                                            <div className={`text-sm font-bold tabular-nums ${config.syncInterval === '60' ? 'text-slate-900' : 'text-slate-500'}`}>1h</div>
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Ổn định</div>
                                         </div>
                                     </div>
-                                    {config.syncInterval === '60' && <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-blue-500 animate-pulse" />}
+                                    {config.syncInterval === '60' && <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#BD1D2D]" />}
                                 </div>
 
                                 <div
                                     onClick={() => setConfig({ ...config, syncInterval: '1440' })}
-                                    className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 ${config.syncInterval === '1440' ? 'bg-white border-[#2563eb] shadow-lg shadow-[#2563eb]/10 transform -translate-y-1' : 'bg-white border-slate-100 hover:border-slate-300 hover:bg-slate-50'}`}
+                                    className={`relative p-4 rounded-xl border-2 cursor-pointer transition-colors ${config.syncInterval === '1440' ? 'bg-rose-50/30 border-[#BD1D2D] shadow-sm' : 'bg-white border-slate-200/80 hover:border-slate-300 hover:bg-slate-50'}`}
                                 >
                                     <div className="flex flex-col items-center gap-2 text-center">
-                                        <Target className={`w-5 h-5 ${config.syncInterval === '1440' ? 'text-[#2563eb]' : 'text-slate-300'}`} />
+                                        <Target className={`w-5 h-5 ${config.syncInterval === '1440' ? 'text-[#BD1D2D]' : 'text-slate-300'}`} />
                                         <div>
-                                            <div className={`text-sm font-black ${config.syncInterval === '1440' ? 'text-slate-800' : 'text-slate-500'}`}>1 ngày</div>
-                                            <div className={`text-[9px] font-bold uppercase tracking-wider ${config.syncInterval === '1440' ? 'text-[#2563eb]' : 'text-slate-300'}`}>Tiết kiệm</div>
+                                            <div className={`text-sm font-bold tabular-nums ${config.syncInterval === '1440' ? 'text-slate-900' : 'text-slate-500'}`}>1 ngày</div>
+                                            <div className={`text-[9px] font-bold uppercase tracking-wider ${config.syncInterval === '1440' ? 'text-[#BD1D2D]' : 'text-slate-400'}`}>Tiết kiệm</div>
                                         </div>
                                     </div>
-                                    {config.syncInterval === '1440' && <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#2563eb] animate-pulse" />}
+                                    {config.syncInterval === '1440' && <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#BD1D2D]" />}
                                 </div>
                             </div>
                         </div>
 
                         {/* Virtual Email Toggle */}
                         <div className="space-y-4">
-                            <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest pl-1">Nhận diện nâng cao</h4>
-                            <div className="bg-orange-50/30 border border-orange-100 p-6 rounded-[18px] space-y-4">
+                            <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest pl-1">Nhận diện nâng cao</h4>
+                            <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl space-y-4">
                                 <label className="flex items-center justify-between cursor-pointer group">
                                     <div className="flex-1 pr-8">
-                                        <h5 className="text-sm font-bold text-slate-800 group-hover:text-orange-700 transition-colors">Tạo Email ảo cho người chỉ có SĐT</h5>
+                                        <h5 className="text-sm font-bold text-slate-800 group-hover:text-[#BD1D2D] transition-colors">Tạo Email ảo cho người chỉ có SĐT</h5>
                                         <p className="text-[11px] text-slate-500 font-medium leading-relaxed mt-1">
                                             Nếu một liên hệ từ MISA không có Email nhưng có Số điện thoại, hệ thống sẽ tự động tạo Email ảo dạng <code>phone@no-email.domation</code> để định danh và cho phép tham gia Flow (ZNS/Zalo).
                                         </p>
                                     </div>
                                     <div 
                                         onClick={() => setConfig({ ...config, createVirtualEmail: !config.createVirtualEmail })}
-                                        className={`relative w-14 h-8 rounded-full transition-all duration-300 ${config.createVirtualEmail ? 'bg-[var(--color-primary)]' : 'bg-slate-200'}`}
+                                        className={`relative w-14 h-8 rounded-full transition-colors duration-200 ${config.createVirtualEmail ? 'bg-[var(--color-primary)]' : 'bg-slate-200'}`}
                                     >
-                                        <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-sm transition-all duration-300 ${config.createVirtualEmail ? 'translate-x-6' : ''}`} />
+                                        <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-sm transition-transform duration-200 ${config.createVirtualEmail ? 'translate-x-6' : ''}`} />
                                     </div>
                                 </label>
                             </div>
@@ -808,12 +808,12 @@ const MisaSetup: React.FC<MisaSetupProps> = ({ onBack, onComplete, initialData }
             case 4:
                 return (
                     <div className="space-y-6">
-                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-[18px] border border-blue-100">
+                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
                             <div className="flex items-center gap-3 mb-2">
-                                <Eye className="w-6 h-6 text-blue-600" />
-                                <h4 className="text-lg font-bold text-blue-900">Xem trước kết quả mapping</h4>
+                                <Eye className="w-6 h-6 text-[#BD1D2D]" />
+                                <h4 className="text-lg font-bold text-slate-900">Xem trước kết quả mapping</h4>
                             </div>
-                            <p className="text-sm text-blue-700">Dữ liệu mẫu từ MISA CRM của bạn sau khi được mapping</p>
+                            <p className="text-sm text-slate-600">Dữ liệu mẫu từ MISA CRM của bạn sau khi được mapping</p>
                         </div>
 
                         {sampleContact && (
@@ -992,9 +992,9 @@ const MisaSetup: React.FC<MisaSetupProps> = ({ onBack, onComplete, initialData }
                         </div>
 
                         {/* Footer */}
-                        <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-[18px]">
+                        <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
                             <p className="text-xs text-slate-500 text-center">
-                                💡 <b>Mẹo:</b> Sử dụng dữ liệu này để kiểm tra tên trường chính xác từ MISA API
+                                <strong className="text-slate-700">Mẹo:</strong> Sử dụng dữ liệu này để kiểm tra tên trường chính xác từ MISA API
                             </p>
                         </div>
                     </div>

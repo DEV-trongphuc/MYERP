@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import { StatRowSkeleton } from '../components/ui/Skeleton';
 import { withRouterFreezer } from '../components/RouterFreezer';
 import styles from './EntityDrawer.module.css';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 const PersonalAccountInner = () => {
   const { t } = useLanguage();
@@ -154,7 +155,7 @@ const PersonalAccountInner = () => {
         try {
           const res = await fetchAPI('get_my_activity_logs');
           if (res.success) {
-            setActivityLogs(res.data || []);
+            setActivityLogs(extractArray(res));
           }
         } catch (err) {
           console.error(t('Lỗi khi tải lịch sử hoạt động:'), err);
@@ -316,29 +317,29 @@ const PersonalAccountInner = () => {
   const getRoleBadge = (role: string) => {
     switch (role?.toLowerCase()) {
       case 'superadmin':
-        return { label: 'Super Admin', color: 'var(--color-primary)', bg: 'rgba(189, 29, 45, 0.1)' };
+        return { label: 'Super Admin', color: 'var(--color-primary)', bg: 'rgba(189, 29, 45, 0.08)' };
       case 'admin':
-        return { label: 'Admin', color: '#dc2626', bg: 'rgba(220, 38, 38, 0.1)' };
+        return { label: 'Admin', color: '#BD1D2D', bg: 'rgba(189, 29, 45, 0.08)' };
       case 'director':
-        return { label: 'Director', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.1)' };
+        return { label: 'Director', color: '#0f172a', bg: 'rgba(15, 23, 42, 0.07)' };
       case 'manager':
-        return { label: 'Manager', color: '#2563eb', bg: 'rgba(37, 99, 235, 0.1)' };
+        return { label: 'Manager', color: '#334155', bg: 'rgba(51, 65, 85, 0.08)' };
       case 'assistant':
-        return { label: 'Assistant', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' };
+        return { label: 'Assistant', color: '#059669', bg: 'rgba(16, 185, 129, 0.08)' };
       case 'sale_admin':
       case 'saleadmin':
-        return { label: 'Sale Admin', color: '#4f46e5', bg: 'rgba(79, 70, 229, 0.1)' };
+        return { label: 'Sale Admin', color: '#0284c7', bg: 'rgba(2, 132, 199, 0.08)' };
       case 'sale':
       case 'sales':
-        return { label: 'Sales', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' };
+        return { label: 'Sales', color: '#334155', bg: 'rgba(51, 65, 85, 0.08)' };
       case 'hr':
-        return { label: 'HR', color: '#ec4899', bg: 'rgba(236, 72, 153, 0.1)' };
+        return { label: 'HR', color: '#b45309', bg: 'rgba(217, 119, 6, 0.08)' };
       case 'accountant':
-        return { label: 'Accountant', color: '#0ea5e9', bg: 'rgba(14, 165, 233, 0.1)' };
+        return { label: 'Accountant', color: '#0284c7', bg: 'rgba(2, 132, 199, 0.08)' };
       case 'marketing':
-        return { label: 'Marketing', color: '#4f46e5', bg: 'rgba(79, 70, 229, 0.1)' };
+        return { label: 'Marketing', color: '#BD1D2D', bg: 'rgba(189, 29, 45, 0.08)' };
       default:
-        return { label: role || 'User', color: '#4b5563', bg: 'rgba(75, 85, 99, 0.1)' };
+        return { label: role || 'User', color: '#475569', bg: 'rgba(71, 85, 105, 0.08)' };
     }
   };
 

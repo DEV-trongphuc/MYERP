@@ -125,9 +125,9 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
 
     return (
 
-        <TabTransition className="space-y-8">
+        <TabTransition className="space-y-6">
             {/* Filters Row */}
-            <div className="bg-slate-50/50 p-6 rounded-[18px] border border-slate-100 flex flex-wrap items-center gap-6">
+            <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200 flex flex-wrap items-center gap-4">
                 <div className="shrink-0 min-w-[250px]">
                     <Select
                         value={selectedOA}
@@ -148,13 +148,13 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
                     />
                 </div>
 
-                <button onClick={fetchReport} className="p-3 bg-white hover:bg-slate-50 rounded-[14px] border border-slate-100 shadow-sm transition-all group ml-auto">
-                    <RefreshCw className={`w-5 h-5 text-slate-400 group-hover:text-indigo-600 ${loading ? 'animate-spin' : ''}`} />
+                <button onClick={fetchReport} className="p-2.5 bg-white hover:bg-slate-50 rounded-xl border border-slate-200 shadow-xs transition-colors group ml-auto">
+                    <RefreshCw className={`w-4 h-4 text-slate-400 group-hover:text-[#C6333D] ${loading ? 'animate-spin' : ''}`} />
                 </button>
             </div>
 
             {/* Redesigned Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {stats.map((stat, idx) => (
                     <StatCard
                         key={idx}
@@ -169,16 +169,16 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
             </div>
 
             {/* Charts Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-white p-8 rounded-[18px] border border-slate-100 shadow-sm">
-                    <div className="flex items-center justify-between mb-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+                    <div className="flex items-center justify-between mb-6">
                         <div>
-                            <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Tăng trưởng & Quan tâm</h3>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Số lượng người quan tâm tích lũy</p>
+                            <h3 className="text-sm font-bold text-slate-900">Tăng trưởng & Quan tâm</h3>
+                            <p className="text-xs text-slate-500 mt-0.5">Số lượng người quan tâm tích lũy</p>
                         </div>
                         <TrendingUp className="w-5 h-5 text-[#C6333D]" />
                     </div>
-                    <div className="h-[300px]">
+                    <div className="h-[280px]">
                         {loading ? (
                             <div className="w-full h-full flex items-end gap-3 p-4 animate-pulse">
                                 {[...Array(14)].map((_, i) => (
@@ -187,33 +187,36 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
                             </div>
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                <AreaChart data={data} margin={{ top: 10, right: 10, left: -16, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="colorNew" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#C6333D" stopOpacity={0.18} />
+                                            <stop offset="5%" stopColor="#C6333D" stopOpacity={0.16} />
                                             <stop offset="95%" stopColor="#C6333D" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} />
-                                    <Tooltip contentStyle={{ border: 'none', borderRadius: '24px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', padding: '16px' }} />
-                                    <Area type="monotone" dataKey="new_followers" name="Mới" stroke="#C6333D" strokeWidth={3} fill="url(#colorNew)" />
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} dy={8} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} />
+                                    <Tooltip
+                                        contentStyle={{ border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.06)', padding: '10px 14px', fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}
+                                        formatter={(value: any) => typeof value === 'number' ? value.toLocaleString('vi-VN') : value}
+                                    />
+                                    <Area type="monotone" dataKey="new_followers" name="Mới" stroke="#C6333D" strokeWidth={2.25} fill="url(#colorNew)" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         )}
                     </div>
                 </div>
 
-                <div className="bg-white p-8 rounded-[18px] border border-slate-100 shadow-sm">
-                    <div className="flex items-center justify-between mb-8">
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+                    <div className="flex items-center justify-between mb-6">
                         <div>
-                            <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Tương tác khách lạ</h3>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Khách chưa nhấn quan tâm nhưng có nhắn tin</p>
+                            <h3 className="text-sm font-bold text-slate-900">Tương tác khách lạ</h3>
+                            <p className="text-xs text-slate-500 mt-0.5">Khách chưa nhấn quan tâm nhưng có nhắn tin</p>
                         </div>
                         <MessageSquare className="w-5 h-5 text-[#334155]" />
                     </div>
-                    <div className="h-[300px]">
+                    <div className="h-[280px]">
                         {loading ? (
                             <div className="w-full h-full flex items-end gap-3 p-4 animate-pulse">
                                 {[...Array(14)].map((_, i) => (
@@ -222,27 +225,31 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
                             </div>
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} />
-                                    <Tooltip contentStyle={{ border: 'none', borderRadius: '24px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', padding: '16px' }} cursor={{ fill: '#f8fafc' }} />
-                                    <Bar dataKey="non_follower_interactions" name="Tương tác" fill="#0f172a" radius={[6, 6, 0, 0]} barSize={20} />
+                                <BarChart data={data} margin={{ top: 10, right: 10, left: -16, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} dy={8} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} />
+                                    <Tooltip
+                                        contentStyle={{ border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.06)', padding: '10px 14px', fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}
+                                        cursor={{ fill: 'rgba(15, 23, 42, 0.03)' }}
+                                        formatter={(value: any) => typeof value === 'number' ? value.toLocaleString('vi-VN') : value}
+                                    />
+                                    <Bar dataKey="non_follower_interactions" name="Tương tác" fill="#334155" radius={[4, 4, 0, 0]} barSize={22} />
                                 </BarChart>
                             </ResponsiveContainer>
                         )}
                     </div>
                 </div>
 
-                <div className="lg:col-span-2 bg-white p-8 rounded-[18px] border border-slate-100 shadow-sm">
-                    <div className="flex items-center justify-between mb-8">
+                <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+                    <div className="flex items-center justify-between mb-6">
                         <div>
-                            <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Vận hành Automation</h3>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Số lượt kích hoạt kịch bản tự động</p>
+                            <h3 className="text-sm font-bold text-slate-900">Vận hành Automation</h3>
+                            <p className="text-xs text-slate-500 mt-0.5">Số lượt kích hoạt kịch bản tự động</p>
                         </div>
                         <Zap className="w-5 h-5 text-[#C6333D]" />
                     </div>
-                    <div className="h-[350px]">
+                    <div className="h-[320px]">
                         {loading ? (
                             <div className="w-full h-full flex items-end gap-3 p-4 animate-pulse">
                                 {[...Array(14)].map((_, i) => (
@@ -251,11 +258,15 @@ const ZaloReportTab: React.FC<ZaloReportProps> = ({ dateRange }) => {
                             </div>
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} />
-                                    <Tooltip contentStyle={{ border: 'none', borderRadius: '24px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', padding: '16px' }} />
-                                    <Area type="monotone" dataKey="automation" name="Kích hoạt" stroke="#C6333D" strokeWidth={3} fill="none" />
+                                <AreaChart data={data} margin={{ top: 10, right: 10, left: -16, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} dy={8} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} />
+                                    <Tooltip
+                                        contentStyle={{ border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.06)', padding: '10px 14px', fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}
+                                        formatter={(value: any) => typeof value === 'number' ? value.toLocaleString('vi-VN') : value}
+                                    />
+                                    <Area type="monotone" dataKey="automation" name="Kích hoạt" stroke="#C6333D" strokeWidth={2.25} fillOpacity={0.08} fill="#C6333D" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         )}

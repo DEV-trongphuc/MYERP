@@ -19,7 +19,7 @@ export const FlowHistoryList: React.FC<{ logs: HistoryLog[] }> = ({ logs }) => {
       ) : (
         logs.map((log, idx) => (
           <div key={log.id} className="flex gap-4 group relative">
-            <div className="w-1.5 h-1.5 bg-[#2563eb] rounded-full mt-1.5 shrink-0 z-10 shadow-[0_0_8px_rgba(255,169,0,0.5)]" />
+            <div className="w-1.5 h-1.5 bg-[#2563eb] rounded-full mt-1.5 shrink-0 z-10" />
             {idx < logs.length - 1 && <div className="absolute left-[2.5px] top-4 bottom-[-24px] w-px bg-slate-100" />}
             <div>
               <p className="text-[11px] font-bold text-slate-800 leading-tight">
@@ -28,7 +28,7 @@ export const FlowHistoryList: React.FC<{ logs: HistoryLog[] }> = ({ logs }) => {
               <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
                 {log.details}
               </p>
-              <span className="flex items-center gap-1 text-[9px] text-slate-300 font-black mt-2 uppercase tracking-tighter">
+              <span className="flex items-center gap-1 text-[10px] text-slate-400 font-semibold tabular-nums mt-2 uppercase">
                 <Clock className="w-2.5 h-2.5" /> {formatTime(log.timestamp)}
               </span>
             </div>

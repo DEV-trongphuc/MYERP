@@ -2,7 +2,7 @@
 /**
  * Verification of campaigns.php parameter fallback hardening
  */
-$phpBin = 'C:\\Users\\LENOVO\\AppData\\Local\\Microsoft\\WinGet\\Packages\\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\\php.exe';
+$phpBin = getenv('PHP_BIN') ?: PHP_BINARY;
 
 // 1. Test PUT ID fallback logic
 $testCases = [

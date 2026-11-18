@@ -2,11 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Search, X, LayoutGrid } from 'lucide-react';
+import { Search, X } from 'lucide-react';
+import { AppIcon } from '../common/AppIcons';
+import { ensureArray } from '../../utils/safeArray';
 
 interface NavItem {
   to: string;
   icon: any;
+  iconKey?: string;
   label: string;
 }
 
@@ -46,8 +49,8 @@ export const AppLauncherModal: React.FC<AppLauncherModalProps> = ({ isOpen, onCl
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  const filteredItems = items.filter(item => 
-    item.label.toLowerCase().includes(search.toLowerCase())
+  const filteredItems = ensureArray(items).filter(item =>
+    String(item?.label || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const handleSelect = (to: string) => {
@@ -145,8 +148,7 @@ export const AppLauncherModal: React.FC<AppLauncherModalProps> = ({ isOpen, onCl
             {/* Grid Area */}
             <div style={{ padding: isMobile ? '1rem 1.25rem 1.25rem' : '1.5rem 2.5rem 2.5rem', maxHeight: isMobile ? '55vh' : '70vh', overflowY: 'auto' }} className="no-scrollbar">
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(90px, 1fr))' : 'repeat(auto-fill, minmax(140px, 1fr))', gap: isMobile ? '0.75rem' : '1.25rem' }}>
-                {filteredItems.map((item, idx) => {
-                  const Icon = item.icon;
+                {filteredItems.map((item) => {
                   return (
                     <motion.button
                       key={item.to}
@@ -169,18 +171,15 @@ export const AppLauncherModal: React.FC<AppLauncherModalProps> = ({ isOpen, onCl
                       }}
                     >
                       <div style={{ 
-                        width: isMobile ? 38 : 44, 
-                        height: isMobile ? 38 : 44, 
-                        borderRadius: isMobile ? '10px' : '14px', 
-                        background: 'linear-gradient(135deg, var(--color-primary), #a31422)', 
+                        width: isMobile ? 42 : 48, 
+                        height: isMobile ? 42 : 48, 
                         display: 'flex', 
                         alignItems: 'center', 
                         justifyContent: 'center', 
-                        color: 'white',
-                        boxShadow: '0 4px 12px rgba(163, 20, 34, 0.25)',
+                        filter: 'drop-shadow(0 6px 12px rgba(15, 23, 42, 0.14))',
                         flexShrink: 0
                       }}>
-                        <Icon size={isMobile ? 18 : 22} />
+                        <AppIcon name={item.iconKey || item.label || item.to} size={isMobile ? 42 : 48} />
                       </div>
                       <span style={{ fontSize: isMobile ? '0.75rem' : '0.8125rem', fontWeight: 600, color: 'var(--color-text)', textAlign: 'center', wordBreak: 'break-word' }}>{item.label}</span>
                     </motion.button>

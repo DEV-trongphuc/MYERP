@@ -25,9 +25,9 @@ export const AIChatbot: React.FC = () => {
     else if (hour >= 18) timeStr = 'Chào buổi tối';
 
     const greetings = [
-      `${timeStr}${name}! 🌟 Tôi là Trợ lý AI IDEAS. Hôm nay tôi có thể hỗ trợ gì cho bạn về dữ liệu, hệ thống CRM hay cấu hình Zalo/Telegram?`,
-      `Xin chào${name}! 👋 Rất vui được đồng hành cùng bạn. Bạn cần tra cứu chỉ số data hôm nay, kiểm tra ticket hay giải đáp thắc mắc nghiệp vụ nào không?`,
-      `${timeStr}${name}! ✨ Tôi đã sẵn sàng hỗ trợ. Hãy đặt câu hỏi về quy tắc chia số, blacklist, báo cáo hoặc thông tin dự án nhé!`
+      `${timeStr}${name}. Tôi là Trợ lý AI IDEAS. Hôm nay tôi có thể hỗ trợ gì cho bạn về dữ liệu, hệ thống CRM hay cấu hình Zalo/Telegram?`,
+      `Xin chào${name}. Bạn cần tra cứu chỉ số data hôm nay, kiểm tra ticket hay giải đáp thắc mắc nghiệp vụ nào không?`,
+      `${timeStr}${name}. Tôi đã sẵn sàng hỗ trợ. Hãy đặt câu hỏi về quy tắc chia số, blacklist, báo cáo hoặc thông tin dự án.`
     ];
     return greetings[Math.floor(Math.random() * greetings.length)];
   };
@@ -35,9 +35,9 @@ export const AIChatbot: React.FC = () => {
   const getEntityWelcomeMessage = (entity: { name: string; type: 'project' | 'campaign' }, docCount: number) => {
     const docInfo = docCount > 0 ? ` (đã tìm thấy **${docCount} tài liệu** đính kèm)` : '';
     if (entity.type === 'project') {
-      return `🏢 **Tôi đã nạp dữ liệu cho Dự án ${entity.name}!**${docInfo}\n\nBạn có thể hỏi tôi về vị trí, tiến độ, pháp lý, chủ đầu tư hoặc chọn **Tài liệu cụ thể** ở menu bên trên để tôi trả lời chính xác nhất nhé!`;
+      return `**Tôi đã nạp dữ liệu cho Dự án ${entity.name}.**${docInfo}\n\nBạn có thể hỏi về vị trí, tiến độ, pháp lý, chủ đầu tư hoặc chọn **Tài liệu cụ thể** ở menu bên trên để tôi trả lời chính xác nhất.`;
     } else {
-      return `🎯 **Tôi đã sẵn sàng giải đáp về Chiến dịch ${entity.name}!**${docInfo}\n\nHãy đặt câu hỏi về ngân sách, mục tiêu, thời gian chạy hoặc tài liệu thuộc chiến dịch này!`;
+      return `**Tôi đã sẵn sàng giải đáp về Chiến dịch ${entity.name}.**${docInfo}\n\nHãy đặt câu hỏi về ngân sách, mục tiêu, thời gian chạy hoặc tài liệu thuộc chiến dịch này.`;
     }
   };
 
@@ -701,57 +701,40 @@ Bạn có thể gõ rõ từ khóa hoặc click vào các gợi ý bên dưới 
         }
         
         .pulse-chatbot {
-          animation: pulse-ring-chatbot 2.5s infinite;
-        }
-        @keyframes pulse-ring-chatbot {
-          0% {
-            box-shadow: 0 0 0 0 rgba(163, 20, 34, 0.4);
-            transform: scale(1);
-          }
-          50% {
-            transform: scale(1.03);
-          }
-          70% {
-            box-shadow: 0 0 0 15px rgba(163, 20, 34, 0);
-          }
-          100% {
-            box-shadow: 0 0 0 0 rgba(163, 20, 34, 0);
-            transform: scale(1);
-          }
+          box-shadow: 0 4px 16px rgba(15, 23, 42, 0.18);
         }
         
         .message-appear {
-          animation: slide-up-fade 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+          animation: slide-up-fade 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
           opacity: 0;
         }
         @keyframes slide-up-fade {
           0% {
             opacity: 0;
-            transform: translateY(12px) scale(0.97);
+            transform: translateY(8px);
           }
           100% {
             opacity: 1;
-            transform: translateY(0) scale(1);
+            transform: translateY(0);
           }
         }
         
         .chatbot-stats-card {
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-          animation: stats-card-fade 0.4s ease-out forwards;
+          transition: background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+          animation: stats-card-fade 0.3s ease-out forwards;
           opacity: 0;
         }
         @keyframes stats-card-fade {
-          from { opacity: 0; transform: translateX(-10px); }
+          from { opacity: 0; transform: translateX(-8px); }
           to { opacity: 1; transform: translateX(0); }
         }
         .chatbot-stats-card:hover {
-          transform: translateY(-2px) scale(1.02);
           background: var(--chatbot-card-hover-bg) !important;
-          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08) !important;
-          border-color: rgba(163, 20, 34, 0.15) !important;
+          box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08) !important;
+          border-color: rgba(189, 29, 45, 0.25) !important;
         }
         .chatbot-stats-card:active {
-          transform: translateY(0) scale(0.98);
+          opacity: 0.92;
         }
         
         .dot-typing {
@@ -780,36 +763,33 @@ Bạn có thể gõ rõ từ khóa hoặc click vào các gợi ý bên dưới 
           scrollbar-width: none;
         }
         .quick-prompt-chip {
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          transition: background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), color 0.18s cubic-bezier(0.22, 1, 0.36, 1);
         }
         .quick-prompt-chip:hover {
           border-color: var(--color-primary) !important;
           color: white !important;
           background: var(--color-primary) !important;
-          transform: translateY(-2px);
-          box-shadow: var(--shadow-primary) !important;
         }
         .quick-prompt-chip:active {
-          transform: translateY(0);
+          opacity: 0.9;
         }
         
         .chatbot-input-field {
-          transition: all 0.25s ease;
+          transition: border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1);
         }
         .chatbot-input-field:focus {
           border-color: var(--color-primary) !important;
-          box-shadow: 0 0 0 3px rgba(163, 20, 34, 0.15) !important;
+          box-shadow: 0 0 0 3px rgba(189, 29, 45, 0.14) !important;
           background: var(--color-surface) !important;
         }
         .chatbot-send-button {
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          transition: background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s cubic-bezier(0.22, 1, 0.36, 1);
         }
         .chatbot-send-button:not([disabled]):hover {
-          transform: scale(1.1) rotate(-5deg);
-          box-shadow: var(--shadow-primary);
+          opacity: 0.9;
         }
         .chatbot-send-button:not([disabled]):active {
-          transform: scale(0.95);
+          opacity: 0.85;
         }
         
         /* Premium custom scrollbar */
@@ -975,22 +955,21 @@ Bạn có thể gõ rõ từ khóa hoặc click vào các gợi ý bên dưới 
           {/* Header */}
           <div
             style={{
-              padding: '14px 20px',
-              background: 'linear-gradient(135deg, #a31422 0%, #a31422 100%)',
+              padding: '16px 20px',
+              background: '#BD1D2D',
               color: 'white',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              boxShadow: '0 4px 15px rgba(163, 20, 34, 0.15)',
               zIndex: 10
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               {renderBotAvatar(34, true)}
               <div>
-                <div style={{ fontSize: '0.9rem', fontWeight: 800, letterSpacing: '0.01em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ fontSize: '0.9rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
                   {t('Trợ lý AI IDEAS')}
-                  <Sparkles size={12} style={{ color: '#fcd34d' }} />
+                  <Sparkles size={13} strokeWidth={1.75} style={{ color: 'rgba(255, 255, 255, 0.9)' }} />
                 </div>
                 <div style={{ fontSize: '0.6875rem', opacity: 0.85, display: 'flex', alignItems: 'center', gap: 4 }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
@@ -1118,7 +1097,7 @@ Bạn có thể gõ rõ từ khóa hoặc click vào các gợi ý bên dưới 
                       </h5>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         {filteredProjects.length === 0 ? (
-                          <div style={{ padding: '8px', color: 'var(--chatbot-text-muted)', fontSize: '0.75rem', fontStyle: 'italic' }}>
+                          <div style={{ padding: '8px', color: 'var(--chatbot-text-muted)', fontSize: '0.75rem' }}>
                             {t('Không có dự án nào')}
                           </div>
                         ) : (
@@ -1159,7 +1138,7 @@ Bạn có thể gõ rõ từ khóa hoặc click vào các gợi ý bên dưới 
                       </h5>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         {filteredCampaigns.length === 0 ? (
-                          <div style={{ padding: '8px', color: 'var(--chatbot-text-muted)', fontSize: '0.75rem', fontStyle: 'italic' }}>
+                          <div style={{ padding: '8px', color: 'var(--chatbot-text-muted)', fontSize: '0.75rem' }}>
                             {t('Không có chiến dịch nào')}
                           </div>
                         ) : (

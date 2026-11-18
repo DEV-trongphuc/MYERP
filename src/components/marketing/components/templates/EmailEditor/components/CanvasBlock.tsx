@@ -649,8 +649,8 @@ const CanvasBlock: React.FC<CanvasBlockProps> = (props) => {
                                         }}
                                         className="w-full bg-gradient-to-br from-[#BD1D2D]/5 via-rose-50/40 to-[#BD1D2D]/10 border-2 border-dashed border-[#BD1D2D]/40 rounded-[14px] flex flex-col items-center justify-center p-6 text-center shadow-xs"
                                     >
-                                        <div className="w-12 h-12 bg-[#BD1D2D]/10 border border-[#BD1D2D]/20 rounded-[14px] flex items-center justify-center mb-2 shadow-xs">
-                                            <LucideIcons.Sparkles className="text-[#BD1D2D] w-6 h-6 animate-pulse" />
+                                        <div className="w-12 h-12 bg-[#BD1D2D]/10 border border-[#BD1D2D]/20 rounded-xl flex items-center justify-center mb-2">
+                                            <LucideIcons.Sparkles className="text-[#BD1D2D] w-6 h-6" strokeWidth={1.75} />
                                         </div>
                                         <div className="font-mono text-xs font-bold text-[#BD1D2D] bg-[#BD1D2D]/10 px-2.5 py-1 rounded-lg border border-[#BD1D2D]/30 mb-1">
                                             {block.content}

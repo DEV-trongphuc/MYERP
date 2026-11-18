@@ -379,7 +379,7 @@ const handleErpLinkClick = (e: React.MouseEvent, url: string) => {
         params,
         defaultFilename: defaultFileMap[params.type] || 'danh_sach_du_lieu.csv',
         onSuccess: () => {
-          toast.success('Tải file dữ liệu thành công!', { id: 'chat-export-loading' });
+          toast.success('Tải file dữ liệu thành công', { id: 'chat-export-loading' });
         },
         onError: (err) => {
           toast.error(err?.message || 'Không thể tải file xuất dữ liệu', { id: 'chat-export-loading' });
@@ -3859,10 +3859,10 @@ export const WorkChatModal: React.FC = () => {
                       ))}
                     </div>
                   ) : currentMessages.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '60px 20px', color: '#94a3b8' }}>
-                      <Sparkles size={32} color="#cbd5e1" style={{ marginBottom: '8px' }} />
-                      <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600 }}>Chưa có tin nhắn nào</p>
-                      <p style={{ margin: '4px 0 0', fontSize: '0.78rem' }}>Gửi lời chào hoặc chia sẻ công việc để bắt đầu trò chuyện!</p>
+                    <div style={{ textAlign: 'center', padding: '64px 20px', color: '#94A3B8' }}>
+                      <Send size={28} color="#CBD5E1" strokeWidth={1.75} style={{ margin: '0 auto 8px' }} />
+                      <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: '#475569' }}>Chưa có tin nhắn nào</p>
+                      <p style={{ margin: '4px 0 0', fontSize: '0.78rem' }}>Gửi lời chào hoặc chia sẻ công việc để bắt đầu trò chuyện.</p>
                     </div>
                   ) : (
                     visibleMessages.map((msg, index) => {
@@ -4213,7 +4213,7 @@ export const WorkChatModal: React.FC = () => {
                                       if (!textToCopy) return;
                                       const ok = await copyTextSafely(textToCopy);
                                       if (ok) {
-                                        toast.success('Đã sao chép nội dung tin nhắn!');
+                                        toast.success('Đã sao chép nội dung tin nhắn');
                                       } else {
                                         toast.error('Không thể sao chép, vui lòng cấp quyền clipboard cho trình duyệt.');
                                       }
@@ -4758,12 +4758,12 @@ export const WorkChatModal: React.FC = () => {
                                     const eType = meta.entity_type || 'task';
                                     
                                     const themeMap: Record<string, { bg: string; text: string; border: string; accent: string; label: string; icon: any }> = {
-                                      task: { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe', accent: '#2563eb', label: 'TASK', icon: <CheckSquare size={13} color="#2563eb" /> },
-                                      workflow: { bg: '#f5f3ff', text: '#6d28d9', border: '#ddd6fe', accent: '#7c3aed', label: 'QUY TRÌNH', icon: <Clipboard size={13} color="#7c3aed" /> },
-                                      so: { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0', accent: '#059669', label: 'ĐƠN CỌC SO', icon: <Receipt size={13} color="#059669" /> },
-                                      po: { bg: '#fffbeb', text: '#b45309', border: '#fde68a', accent: '#d97706', label: 'CHI PHÍ PO', icon: <CreditCard size={13} color="#d97706" /> },
-                                      contact: { bg: '#f0f9ff', text: '#0369a1', border: '#bae6fd', accent: '#0284c7', label: 'KHÁCH HÀNG', icon: <Users size={13} color="#0284c7" /> },
-                                      employee: { bg: '#f5f3ff', text: '#6d28d9', border: '#ddd6fe', accent: '#7c3aed', label: 'NHÂN SỰ', icon: <Users size={13} color="#7c3aed" /> }
+                                      task: { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe', accent: '#2563eb', label: 'TASK', icon: <CheckSquare size={13} color="#2563eb" strokeWidth={1.75} /> },
+                                      workflow: { bg: '#F8FAFC', text: '#334155', border: '#E2E8F0', accent: '#0F172A', label: 'QUY TRÌNH', icon: <Clipboard size={13} color="#334155" strokeWidth={1.75} /> },
+                                      so: { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0', accent: '#059669', label: 'ĐƠN CỌC SO', icon: <Receipt size={13} color="#059669" strokeWidth={1.75} /> },
+                                      po: { bg: '#fffbeb', text: '#b45309', border: '#fde68a', accent: '#d97706', label: 'CHI PHÍ PO', icon: <CreditCard size={13} color="#d97706" strokeWidth={1.75} /> },
+                                      contact: { bg: '#f0f9ff', text: '#0369a1', border: '#bae6fd', accent: '#0284c7', label: 'KHÁCH HÀNG', icon: <Users size={13} color="#0284c7" strokeWidth={1.75} /> },
+                                      employee: { bg: '#F1F5F9', text: '#334155', border: '#CBD5E1', accent: '#334155', label: 'NHÂN SỰ', icon: <Users size={13} color="#334155" strokeWidth={1.75} /> }
                                     };
                                     const theme = themeMap[eType] || themeMap.task;
 
@@ -4938,9 +4938,9 @@ export const WorkChatModal: React.FC = () => {
                                                 </div>
                                               )}
                                               {Boolean(Number(meta.amount) > 0) && (
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                  <DollarSign size={13} color="#7c3aed" />
-                                                  <span>Số tiền: <strong style={{ color: '#7c3aed', fontSize: '0.82rem' }}>{Number(meta.amount).toLocaleString('vi-VN')} VNĐ</strong></span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                  <DollarSign size={13} color="#BD1D2D" strokeWidth={1.75} />
+                                                  <span>Số tiền: <strong style={{ color: '#0F172A', fontSize: '0.82rem', fontVariantNumeric: 'tabular-nums' }}>{Number(meta.amount).toLocaleString('vi-VN')} VNĐ</strong></span>
                                                 </div>
                                               )}
                                               {meta.date && (

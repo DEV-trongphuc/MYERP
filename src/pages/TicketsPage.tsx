@@ -584,28 +584,27 @@ export const TicketsPage: React.FC = () => {
           {TICKET_STATUSES.map(col => {
             const colTickets = filteredTickets.filter(t => t.status === col.id);
             return (
-              <div key={col.id} style={{ flex: '0 0 300px', background: 'var(--color-bg)', borderRadius: '16px', padding: '1rem', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h3 style={{ fontWeight: 800, fontSize: '0.9rem', color: col.color }}>{col.label}</h3>
-                  <span style={{ background: 'var(--color-surface)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, border: '1px solid var(--color-border)' }}>{colTickets.length}</span>
+              <div key={col.id} style={{ flex: '0 0 300px', background: 'var(--color-bg)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ fontWeight: 700, fontSize: '0.9rem', color: col.color }}>{col.label}</h3>
+                  <span style={{ background: 'var(--color-surface)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', border: '1px solid var(--color-border)' }}>{colTickets.length}</span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
                   {colTickets.map(t => (
                     <motion.div 
                       key={t.id} 
                       layout
-                      whileHover={{ y: -2 }}
                       onClick={() => setSelectedTicket(t)}
-                      style={{ background: 'var(--color-surface)', padding: '1rem', borderRadius: '12px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--color-border-light)', cursor: 'pointer', borderLeft: `3px solid ${PRIORITIES.find(p => p.id === t.priority)?.color}` }}
+                      style={{ background: 'var(--color-surface)', padding: '16px', borderRadius: '12px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--color-border-light)', cursor: 'pointer', borderLeft: `3px solid ${PRIORITIES.find(p => p.id === t.priority)?.color}` }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)' }}>#{t.id}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'var(--color-text-muted)' }}>#{t.id}</span>
                         <Avatar name={t.assignee_name} src={t.assignee_avatar} size={20} title={t.assignee_name || 'Chưa phân công'} />
                       </div>
-                      <p style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.5rem', lineHeight: 1.4 }}>{t.subject}</p>
+                      <p style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '8px', lineHeight: 1.4 }}>{t.subject}</p>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', fontWeight: 600 }}>{t.customer_name}</span>
-                        <span style={{ fontSize: '0.7rem', color: isSlaOverdue(t.due_date) ? 'var(--color-danger)' : 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '0.7rem', fontVariantNumeric: 'tabular-nums', color: isSlaOverdue(t.due_date) ? 'var(--color-danger)' : 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <Clock size={12} /> {formatSlaDate(t.due_date)}
                         </span>
                       </div>
@@ -913,9 +912,9 @@ export const TicketsPage: React.FC = () => {
                   )}
                 </div>
               </div>
-              <div className="modal-footer" style={{ padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid var(--color-border)' }}>
-                <button className="btn outline hover-lift" onClick={() => setShowCreateModal(false)} disabled={saving}>Hủy bỏ</button>
-                <button className="btn primary hover-lift" onClick={handleCreateTicket} disabled={saving}>
+              <div className="modal-footer" style={{ padding: '20px 24px', display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid var(--color-border)' }}>
+                <button className="btn outline" onClick={() => setShowCreateModal(false)} disabled={saving}>Hủy bỏ</button>
+                <button className="btn primary" onClick={handleCreateTicket} disabled={saving}>
                   {saving ? <Loader2 size={14} className="spin" /> : <Save size={14} />}
                   <span>{saving ? 'Đang tạo...' : 'Tạo Ticket'}</span>
                 </button>

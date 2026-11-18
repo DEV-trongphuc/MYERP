@@ -74,14 +74,14 @@ export const LeadscoreSetupModal: React.FC<Props> = ({ isOpen, onClose }) => {
     if (!isOpen) return null;
 
     const scoringRules = [
-        { key: 'leadscore_email_open', label: 'Mở Email', description: 'Cộng điểm khi Khách hàng mở email', icon: Mail, color: 'text-white', bg: 'bg-gradient-to-tr from-cyan-500 to-blue-500 shadow-lg shadow-blue-500/30' },
-        { key: 'leadscore_email_click', label: 'Click Link Email', description: 'Cộng điểm khi click link trong email', icon: MousePointerClick, color: 'text-white', bg: 'bg-gradient-to-tr from-blue-500 to-purple-500 shadow-lg shadow-purple-500/30' },
-        { key: 'leadscore_form_submit', label: 'Điền Form', description: 'Cộng điểm khi hoàn tất gửi Form đăng ký', icon: FileText, color: 'text-white', bg: 'bg-gradient-to-tr from-emerald-500 to-teal-400 shadow-lg shadow-emerald-500/30' },
-        { key: 'leadscore_web_visit', label: 'Truy cập Website', description: 'Cộng điểm tự động khi truy cập (đã định danh)', icon: Globe, color: 'text-white', bg: 'bg-gradient-to-tr from-sky-400 to-blue-600 shadow-lg shadow-blue-500/30' },
-        { key: 'leadscore_zalo_interact', label: 'Tương tác Zalo', description: 'Cộng điểm khi khách hàng chat/quan tâm Zalo OA', icon: MessageSquare, color: 'text-white', bg: 'bg-gradient-to-tr from-blue-600 to-indigo-600 shadow-lg shadow-indigo-500/30' },
-        { key: 'leadscore_ai_chat', label: 'Tương tác AI Chat', description: 'Cộng điểm khi gửi tin nhắn cho AI Chatbot', icon: Bot, color: 'text-white', bg: 'bg-[var(--color-primary)] shadow-lg shadow-[var(--color-primary)]/30' },
-        { key: 'leadscore_purchase', label: 'Sự kiện Mua Hàng', description: 'Cộng điểm khi khách hàng mua hàng (Purchase)', icon: ShoppingBag, color: 'text-white', bg: 'bg-gradient-to-tr from-pink-500 to-rose-500 shadow-lg shadow-rose-500/30' },
-        { key: 'leadscore_custom_event', label: 'Sự kiện Tùy Chỉnh', description: 'Cộng điểm khi có thao tác API Custom Event', icon: Zap, color: 'text-white', bg: 'bg-gradient-to-tr from-fuchsia-500 to-pink-500 shadow-lg shadow-pink-500/30' },
+        { key: 'leadscore_email_open', label: 'Mở Email', description: 'Cộng điểm khi Khách hàng mở email', icon: Mail, color: 'text-white', bg: 'bg-slate-800' },
+        { key: 'leadscore_email_click', label: 'Click Link Email', description: 'Cộng điểm khi click link trong email', icon: MousePointerClick, color: 'text-white', bg: 'bg-[#BD1D2D]' },
+        { key: 'leadscore_form_submit', label: 'Điền Form', description: 'Cộng điểm khi hoàn tất gửi Form đăng ký', icon: FileText, color: 'text-white', bg: 'bg-emerald-600' },
+        { key: 'leadscore_web_visit', label: 'Truy cập Website', description: 'Cộng điểm tự động khi truy cập (đã định danh)', icon: Globe, color: 'text-white', bg: 'bg-slate-700' },
+        { key: 'leadscore_zalo_interact', label: 'Tương tác Zalo', description: 'Cộng điểm khi khách hàng chat/quan tâm Zalo OA', icon: MessageSquare, color: 'text-white', bg: 'bg-slate-900' },
+        { key: 'leadscore_ai_chat', label: 'Tương tác AI Chat', description: 'Cộng điểm khi gửi tin nhắn cho AI Chatbot', icon: Bot, color: 'text-white', bg: 'bg-[#BD1D2D]' },
+        { key: 'leadscore_purchase', label: 'Sự kiện Mua Hàng', description: 'Cộng điểm khi khách hàng mua hàng (Purchase)', icon: ShoppingBag, color: 'text-white', bg: 'bg-emerald-700' },
+        { key: 'leadscore_custom_event', label: 'Sự kiện Tùy Chỉnh', description: 'Cộng điểm khi có thao tác API Custom Event', icon: Zap, color: 'text-white', bg: 'bg-amber-600' },
     ];
 
     return createPortal(

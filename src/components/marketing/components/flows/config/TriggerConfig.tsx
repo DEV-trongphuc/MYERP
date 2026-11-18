@@ -259,18 +259,18 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
     const triggerOptions = [
         { id: 'segment', label: 'Danh sách & Phân khúc', icon: Layers, color: 'orange', desc: 'Bộ lọc thông minh' },
-        { id: 'erp_event', label: 'Sự kiện MYERP & Học vụ', icon: CheckCircle2, color: 'indigo', desc: 'Vòng chia, Sale, Đặt cọc, SLA' },
+        { id: 'erp_event', label: 'Sự kiện MYERP & Học vụ', icon: CheckCircle2, color: 'slate', desc: 'Vòng chia, Sale, Đặt cọc, SLA' },
         { id: 'form', label: 'Gửi Biểu mẫu', icon: FileInput, color: 'yellow', desc: 'Từ Landing Page' },
         { id: 'survey', label: 'Làm Khảo sát', icon: ClipboardList, color: 'emerald', desc: 'Hoàn thành Survey' },
-        { id: 'purchase', label: 'Khách hàng Mua', icon: ShoppingCart, color: 'pink', desc: 'Sự kiện API' },
+        { id: 'purchase', label: 'Khách hàng Mua', icon: ShoppingCart, color: 'rose', desc: 'Sự kiện API' },
         { id: 'inbound_message', label: 'Tin nhắn đến', icon: MessageSquare, color: 'blue', desc: 'Meta / Zalo OA / Keyword' },
         { id: 'zalo_follow', label: 'Quan tâm Zalo', icon: UserPlus, color: 'cyan', desc: 'Khi khách nhấn Follow' },
-        { id: 'custom_event', label: 'Custom Event', icon: Zap, color: 'violet', desc: 'Sự kiện tùy chọn' },
+        { id: 'custom_event', label: 'Custom Event', icon: Zap, color: 'slate', desc: 'Sự kiện tùy chọn' },
         { id: 'voucher', label: 'Nhận Voucher', icon: Ticket, color: 'amber', desc: 'Mã giảm giá/Khuyến mãi' },
         { id: 'voucher_redeem', label: 'Sử dụng Voucher', icon: PartyPopper, color: 'emerald', desc: 'Khi khách gạch mã' },
         { id: 'tag', label: 'Được gắn nhãn', icon: Tag, color: 'emerald', desc: 'Phân loại thủ công' },
         { id: 'date', label: 'Ngày / Sự kiện', icon: Calendar, color: 'blue', desc: 'Sinh nhật, Ngủ đông' },
-        { id: 'campaign', label: 'Sau Chiến dịch', icon: Send, color: 'indigo', desc: 'Tương tác Email' },
+        { id: 'campaign', label: 'Sau Chiến dịch', icon: Send, color: 'rose', desc: 'Tương tác Email' },
         { id: 'ai_capture', label: 'Lead từ AI Chatbot', icon: Bot, color: 'rose', desc: 'AI lấy Email/SDT' },
         { id: 'unsubscribe', label: 'Hủy đăng ký', icon: UserMinus, color: 'red', desc: 'Khi khách nhấn Unsub' },
     ];
@@ -412,12 +412,10 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
             orange: isSelected ? 'border-[var(--color-primary)] bg-red-50 ring-red-50' : 'hover:border-red-200',
             amber: isSelected ? 'border-[var(--color-primary)] bg-red-50 ring-red-50' : 'hover:border-red-200',
             yellow: isSelected ? 'border-yellow-500 bg-yellow-50 ring-yellow-50' : 'hover:border-yellow-200',
-            pink: isSelected ? 'border-pink-500 bg-pink-50 ring-pink-50' : 'hover:border-pink-200',
             emerald: isSelected ? 'border-emerald-500 bg-emerald-50 ring-emerald-50' : 'hover:border-emerald-200',
             blue: isSelected ? 'border-blue-500 bg-blue-50 ring-blue-50' : 'hover:border-blue-200',
             cyan: isSelected ? 'border-cyan-500 bg-cyan-50 ring-cyan-50' : 'hover:border-cyan-200',
-            violet: isSelected ? 'border-blue-500 bg-blue-50 ring-blue-50' : 'hover:border-blue-200',
-            indigo: isSelected ? 'border-indigo-500 bg-indigo-50 ring-indigo-50' : 'hover:border-indigo-200',
+            slate: isSelected ? 'border-slate-700 bg-slate-100 ring-slate-100' : 'hover:border-slate-300',
             rose: isSelected ? 'border-rose-500 bg-rose-50 ring-rose-50' : 'hover:border-rose-200',
             red: isSelected ? 'border-red-500 bg-red-50 ring-red-50' : 'hover:border-red-200',
         };
@@ -429,13 +427,11 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
             orange: isSelected ? 'bg-[var(--color-primary)] text-white' : 'bg-red-50 text-[var(--color-primary)]',
             amber: isSelected ? 'bg-[var(--color-primary)] text-white' : 'bg-red-50 text-[var(--color-primary)]',
             yellow: isSelected ? 'bg-yellow-500 text-white' : 'bg-yellow-50 text-yellow-600',
-            pink: isSelected ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-500',
             emerald: isSelected ? 'bg-emerald-500 text-white' : 'bg-emerald-50 text-emerald-500',
             blue: isSelected ? 'bg-blue-500 text-white' : 'bg-blue-50 text-blue-500',
             cyan: isSelected ? 'bg-cyan-500 text-white' : 'bg-cyan-50 text-cyan-600',
-            violet: isSelected ? 'bg-blue-500 text-white' : 'bg-blue-50 text-blue-500',
-            indigo: isSelected ? 'bg-indigo-500 text-white' : 'bg-indigo-50 text-indigo-500',
-            rose: isSelected ? 'bg-rose-500 text-white' : 'bg-rose-50 text-rose-500',
+            slate: isSelected ? 'bg-[#0F172A] text-white' : 'bg-slate-100 text-slate-700',
+            rose: isSelected ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-600',
             red: isSelected ? 'bg-red-500 text-white' : 'bg-red-50 text-red-500',
         };
         return colors[color] || '';
@@ -445,22 +441,22 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
         <button
             onClick={onClick}
             disabled={disabled}
-            className={`w-full flex items-center justify-between p-4 rounded-[14px] border-2 transition-all duration-300 group relative overflow-hidden
+            className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-colors duration-200 group relative overflow-hidden
         ${isSelected
-                    ? 'border-emerald-500 bg-emerald-50 shadow-md ring-4 ring-emerald-500/5'
-                    : 'border-transparent bg-slate-50 hover:bg-white hover:border-slate-200 hover:shadow-sm'}
+                    ? 'border-emerald-500 bg-emerald-50 shadow-sm ring-4 ring-emerald-500/5'
+                    : 'border-transparent bg-slate-50 hover:bg-white hover:border-slate-200 hover:shadow-xs'}
         ${disabled ? 'opacity-50 cursor-not-allowed grayscale' : 'cursor-pointer'}`}
         >
             <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-[var(--radius-md)] transition-all duration-500 ${isSelected ? 'bg-emerald-500 text-white shadow-lg' : 'bg-white text-slate-400 group-hover:text-slate-600 shadow-sm'}`}>
+                <div className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-[var(--radius-md)] transition-colors duration-200 ${isSelected ? 'bg-emerald-500 text-white shadow-sm' : 'bg-white text-slate-400 group-hover:text-slate-600 shadow-xs'}`}>
                     <Icon className="w-5 h-5" />
                 </div>
                 <div className="text-left overflow-hidden">
-                    <p className={`text-[13px] font-black tracking-tight transition-colors ${isSelected ? 'text-slate-900' : 'text-slate-700'}`}>{label}</p>
-                    {desc && <p className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 transition-colors ${isSelected ? 'text-emerald-600/70' : 'text-slate-400'}`}>{desc}</p>}
+                    <p className={`text-[13px] font-bold transition-colors ${isSelected ? 'text-slate-900' : 'text-slate-700'}`}>{label}</p>
+                    {desc && <p className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 transition-colors ${isSelected ? 'text-emerald-600/80' : 'text-slate-400'}`}>{desc}</p>}
                 </div>
             </div>
-            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'border-emerald-500 bg-emerald-500 text-white scale-110 shadow-sm' : 'border-slate-200 bg-white group-hover:border-slate-400'}`}>
+            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-emerald-500 bg-emerald-500 text-white shadow-xs' : 'border-slate-200 bg-white group-hover:border-slate-400'}`}>
                 {isSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
             </div>
         </button>
@@ -471,10 +467,10 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
     return (
         <div className="space-y-6 animate-in fade-in duration-500 pb-32">
             {locked && (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-[14px] flex items-center gap-4 shadow-sm animate-in zoom-in-95 mb-4">
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-4 shadow-sm mb-4">
                     <div className="p-2.5 bg-white rounded-[var(--radius-md)] text-amber-600 shadow-sm"><Lock className="w-4.5 h-4.5" /></div>
                     <div>
-                        <p className="text-[11px] font-bold text-amber-800 uppercase tracking-tight">Trigger đã bị khóa</p>
+                        <p className="text-[11px] font-bold text-amber-800 uppercase">Trigger đã bị khóa</p>
                         <p className="text-[10px] font-medium text-amber-700 leading-tight">Quy trình đã có khách tham gia, không thể thay đổi điểm bắt đầu.</p>
                     </div>
                 </div>
@@ -482,7 +478,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
             {/* 1. TINH TÚY: EVENT SELECTOR (GRID 2 CỘT) */}
             <div className="space-y-4">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Chọn sự kiện khởi đầu</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Chọn sự kiện khởi đầu</label>
                 <div className="grid grid-cols-2 gap-3">
                     {triggerOptions.map((opt) => {
                         const isSelected = triggerType === opt.id;
@@ -491,17 +487,17 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                 key={opt.id}
                                 disabled={disabled || locked}
                                 onClick={() => handleTypeChange(opt.id)}
-                                className={`flex items-center gap-4 p-4 rounded-[14px] border-2 transition-all duration-500 relative group overflow-hidden
+                                className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-colors duration-200 relative group overflow-hidden
                         ${getOptionClasses(opt.color, isSelected)} 
-                        ${isSelected ? 'shadow-md ring-4 ring-offset-0 ring-opacity-10' : 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm'}
+                        ${isSelected ? 'shadow-sm ring-4 ring-offset-0 ring-opacity-10' : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-xs'}
                         ${disabled || locked ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
                             >
-                                <div className={`w-11 h-11 rounded-[var(--radius-md)] flex items-center justify-center shrink-0 transition-all duration-500 ${getIconClasses(opt.color, isSelected)} ${isSelected ? 'shadow-lg scale-110' : 'group-hover:bg-white group-hover:shadow-sm'}`}>
-                                    <opt.icon className={`transition-transform duration-500 ${isSelected ? 'w-5 h-5' : 'w-5 h-5 group-hover:scale-110'}`} />
+                                <div className={`w-11 h-11 rounded-[var(--radius-md)] flex items-center justify-center shrink-0 transition-colors duration-200 ${getIconClasses(opt.color, isSelected)} ${isSelected ? 'shadow-sm' : 'group-hover:bg-white group-hover:shadow-xs'}`}>
+                                    <opt.icon className="w-5 h-5" strokeWidth={1.75} />
                                 </div>
                                 <div className="text-left overflow-hidden relative z-10">
-                                    <p className={`text-xs font-black leading-tight mb-1 tracking-tight ${isSelected ? 'text-slate-950' : 'text-slate-700'}`}>{opt.label}</p>
-                                    <p className={`text-[10px] font-bold uppercase tracking-widest truncate ${isSelected ? 'opacity-80' : 'text-slate-400'}`}>{opt.desc}</p>
+                                    <p className={`text-xs font-bold leading-tight mb-1 ${isSelected ? 'text-slate-950' : 'text-slate-700'}`}>{opt.label}</p>
+                                    <p className={`text-[10px] font-semibold uppercase tracking-wider truncate ${isSelected ? 'opacity-80' : 'text-slate-400'}`}>{opt.desc}</p>
                                 </div>
                                 {isSelected && (
                                     <div className="absolute top-2 right-2">
@@ -526,22 +522,22 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                 </div>
 
                 {loading ? (
-                    <div className="py-20 text-center animate-pulse"><Loader2 className="w-6 h-6 animate-spin text-slate-200 mx-auto" /></div>
+                    <div className="py-20 text-center"><Loader2 className="w-6 h-6 animate-spin text-slate-300 mx-auto" /></div>
                 ) : (
-                    <div className="space-y-3.5 animate-in slide-in-from-bottom-2 duration-300">
+                    <div className="space-y-3.5">
 
                         {/* SUB-TAB FOR SEGMENT/LIST/SYNC */}
                         {triggerType === 'segment' && (
                             <div className="flex bg-slate-100 p-0.5 rounded-lg w-full mb-1">
                                 <button
                                     onClick={() => { setTargetSubtype('list'); handleTargetChange(''); }}
-                                    className={`flex-1 py-1.5 rounded-md text-[9px] font-bold uppercase transition-all flex items-center justify-center gap-1.5 ${targetSubtype === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                    className={`flex-1 py-1.5 rounded-md text-[9px] font-bold uppercase transition-colors flex items-center justify-center gap-1.5 ${targetSubtype === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                                 >
                                     <List className="w-3 h-3" /> Danh sách
                                 </button>
                                 <button
                                     onClick={() => { setTargetSubtype('sync' as any); handleTargetChange(''); }}
-                                    className={`flex-1 py-1.5 rounded-md text-[9px] font-bold uppercase transition-all flex items-center justify-center gap-1.5 ${targetSubtype === 'sync' ? 'bg-white shadow-sm text-green-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                    className={`flex-1 py-1.5 rounded-md text-[9px] font-bold uppercase transition-colors flex items-center justify-center gap-1.5 ${targetSubtype === 'sync' ? 'bg-white shadow-sm text-green-600' : 'text-slate-400 hover:text-slate-600'}`}
                                 >
                                     <div className="flex items-center space-x-1">
                                         <GoogleSheetsIcon className="w-3 h-3" />
@@ -552,7 +548,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                 </button>
                                 <button
                                     onClick={() => { setTargetSubtype('segment'); handleTargetChange(''); }}
-                                    className={`flex-1 py-1.5 rounded-md text-[9px] font-bold uppercase transition-all flex items-center justify-center gap-1.5 ${targetSubtype === 'segment' ? 'bg-white shadow-sm text-orange-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                    className={`flex-1 py-1.5 rounded-md text-[9px] font-bold uppercase transition-colors flex items-center justify-center gap-1.5 ${targetSubtype === 'segment' ? 'bg-white shadow-sm text-orange-600' : 'text-slate-400 hover:text-slate-600'}`}
                                 >
                                     <Layers className="w-3 h-3" /> Phân khúc
                                 </button>
@@ -563,7 +559,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                         {triggerType !== 'date' && (
                             <div className="relative group">
                                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300 group-focus-within:text-slate-500 transition-colors" />
-                                <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Tìm kiếm nhanh..." className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all" />
+                                <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Tìm kiếm nhanh..." className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-colors" />
                             </div>
                         )}
 
@@ -612,7 +608,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                             }
 
                             {triggerType === 'segment' && config.targetId && (
-                                <div className="p-5 bg-white border border-slate-200 rounded-[14px] space-y-4 shadow-sm mt-4 animate-in slide-in-from-bottom-2">
+                                <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-4 shadow-sm mt-4">
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <h4 className="text-sm font-bold text-slate-800">Cơ chế gửi & Enrollment</h4>
@@ -624,7 +620,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                     </div>
                                     
                                     <div className="space-y-3 pt-2">
-                                        <label className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${config.enrollStrategy !== 'new_only' ? 'border-emerald-500 bg-emerald-50 shadow-sm' : 'border-slate-100 hover:border-slate-200 bg-white'}`}>
+                                        <label className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${config.enrollStrategy !== 'new_only' ? 'border-emerald-500 bg-emerald-50 shadow-sm' : 'border-slate-200 hover:border-slate-300 bg-white'}`}>
                                             <input 
                                                 type="radio" 
                                                 name="enrollStrategy" 
@@ -639,7 +635,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                             </div>
                                         </label>
                                         
-                                        <label className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${config.enrollStrategy === 'new_only' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-100 hover:border-slate-200 bg-white'}`}>
+                                        <label className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${config.enrollStrategy === 'new_only' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 hover:border-slate-300 bg-white'}`}>
                                             <input 
                                                 type="radio" 
                                                 name="enrollStrategy" 
@@ -744,14 +740,14 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                     </div>
 
                                     {config.targetId && (
-                                        <div className="p-5 bg-white border border-indigo-200/80 rounded-[16px] space-y-4 shadow-sm animate-in slide-in-from-bottom-2">
+                                        <div className="p-5 bg-white border border-slate-200 rounded-2xl space-y-4 shadow-sm">
                                             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                                                 <div className="flex items-center gap-2.5">
-                                                    <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600">
+                                                    <div className="p-2 bg-slate-100 rounded-xl text-slate-700">
                                                         <Filter className="w-4 h-4" />
                                                     </div>
                                                     <div>
-                                                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">Bộ lọc Điều kiện Sự kiện MYERP</h4>
+                                                        <h4 className="text-xs font-bold text-slate-800 uppercase">Bộ lọc Điều kiện Sự kiện MYERP</h4>
                                                         <p className="text-[10px] text-slate-500 font-medium">Chỉ kích hoạt Flow khi hồ sơ thỏa mãn các tiêu chí chuyên sâu dưới đây</p>
                                                     </div>
                                                 </div>
@@ -774,16 +770,16 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                                             {/* 1. Vòng chia / Hàng đợi (round_distributed | lead_held_queue) */}
                                             {(config.targetId === 'round_distributed' || config.targetId === 'lead_held_queue') && (
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-indigo-50/40 p-3.5 rounded-xl border border-indigo-100">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                                                     <div className="space-y-1.5">
-                                                        <label className="text-[10px] font-black text-indigo-900 uppercase tracking-wider block">
+                                                        <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
                                                             Vòng chia / Team Sale
                                                         </label>
                                                         <select
                                                             value={config.erpFilters?.round_id || config.erpFilters?.team_id || ''}
                                                             onChange={(e) => handleErpFilterChange({ round_id: e.target.value, team_id: e.target.value })}
                                                             disabled={disabled}
-                                                            className="w-full h-10 px-3 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                                                            className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-[#BD1D2D]"
                                                         >
                                                             <option value="">Tất cả Vòng chia (Mọi Team)</option>
                                                             {erpMeta.teams.map(t => (
@@ -792,14 +788,14 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                         </select>
                                                     </div>
                                                     <div className="space-y-1.5">
-                                                        <label className="text-[10px] font-black text-indigo-900 uppercase tracking-wider block">
+                                                        <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
                                                             Trạng thái phân bổ
                                                         </label>
                                                         <select
                                                             value={config.erpFilters?.distribution_status || 'all'}
                                                             onChange={(e) => handleErpFilterChange({ distribution_status: e.target.value })}
                                                             disabled={disabled}
-                                                            className="w-full h-10 px-3 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                                                            className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-[#BD1D2D]"
                                                         >
                                                             <option value="all">Tất cả trạng thái</option>
                                                             <option value="success">Đã giao Sale thành công</option>
@@ -814,14 +810,14 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                 <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
                                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                         <div className="space-y-1.5">
-                                                            <label className="text-[10px] font-black text-slate-700 uppercase tracking-wider block">
+                                                            <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
                                                                 Tư vấn viên nhận Lead (Sale)
                                                             </label>
                                                             <select
                                                                 value={config.erpFilters?.owner_id || ''}
                                                                 onChange={(e) => handleErpFilterChange({ owner_id: e.target.value })}
                                                                 disabled={disabled}
-                                                                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                                                                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-[#BD1D2D]"
                                                             >
                                                                 <option value="">Bất kỳ Tư vấn viên nào</option>
                                                                 {erpMeta.users.map(u => (
@@ -834,14 +830,14 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                                                         {config.targetId !== 'round_distributed' && (
                                                             <div className="space-y-1.5">
-                                                                <label className="text-[10px] font-black text-slate-700 uppercase tracking-wider block">
+                                                                <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
                                                                     Thuộc Vòng chia / Team Sale
                                                                 </label>
                                                                 <select
                                                                     value={config.erpFilters?.team_id || ''}
                                                                     onChange={(e) => handleErpFilterChange({ team_id: e.target.value })}
                                                                     disabled={disabled}
-                                                                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                                                                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-[#BD1D2D]"
                                                                 >
                                                                     <option value="">Tất cả Team Sale</option>
                                                                     {erpMeta.teams.map(t => (
@@ -853,14 +849,14 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                                                         {config.targetId === 'lead_assigned' && (
                                                             <div className="space-y-1.5 sm:col-span-2">
-                                                                <label className="text-[10px] font-black text-slate-700 uppercase tracking-wider block">
+                                                                <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
                                                                     Loại phân công
                                                                 </label>
                                                                 <select
                                                                     value={config.erpFilters?.assignment_type || 'all'}
                                                                     onChange={(e) => handleErpFilterChange({ assignment_type: e.target.value })}
                                                                     disabled={disabled}
-                                                                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                                                                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-[#BD1D2D]"
                                                                 >
                                                                     <option value="all">Tất cả (Giao mới & Chuyển giao)</option>
                                                                     <option value="initial">Giao lần đầu (New Lead)</option>
@@ -873,7 +869,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                     {/* Multi-select Sale chips (optional when no single owner_id selected) */}
                                                     {!config.erpFilters?.owner_id && erpMeta.users.length > 0 && (
                                                         <div className="space-y-1.5 pt-1">
-                                                            <label className="text-[10px] font-bold text-slate-500 block">
+                                                            <label className="text-[10px] font-bold text-slate-500 block tabular-nums">
                                                                 Hoặc chọn nhóm nhiều Sale cụ thể ({Array.isArray(config.erpFilters?.owner_ids) ? config.erpFilters.owner_ids.length : 0} đã chọn):
                                                             </label>
                                                             <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1">
@@ -891,10 +887,10 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                                                     : [...selectedIds, String(u.id)];
                                                                                 handleErpFilterChange({ owner_ids: next });
                                                                             }}
-                                                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                                                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
                                                                                 isChecked
-                                                                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                                                                                    : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                                                                                    ? 'bg-[#BD1D2D] text-white border-[#BD1D2D] shadow-xs'
+                                                                                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
                                                                             }`}
                                                                         >
                                                                             {u.name}
@@ -909,16 +905,16 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                                             {/* 3. Chuyển giai đoạn Pipeline (stage_changed) */}
                                             {config.targetId === 'stage_changed' && (
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-purple-50/40 p-3.5 rounded-xl border border-purple-100">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                                                     <div className="space-y-1.5">
-                                                        <label className="text-[10px] font-black text-purple-900 uppercase tracking-wider block">
+                                                        <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
                                                             Từ giai đoạn (From Stage)
                                                         </label>
                                                         <select
                                                             value={config.erpFilters?.from_stage_id || ''}
                                                             onChange={(e) => handleErpFilterChange({ from_stage_id: e.target.value })}
                                                             disabled={disabled}
-                                                            className="w-full h-10 px-3 bg-white border border-purple-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500"
+                                                            className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-[#BD1D2D]"
                                                         >
                                                             <option value="">Bất kỳ giai đoạn nào</option>
                                                             {erpMeta.stages.map(st => (
@@ -927,14 +923,14 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                         </select>
                                                     </div>
                                                     <div className="space-y-1.5">
-                                                        <label className="text-[10px] font-black text-purple-900 uppercase tracking-wider block">
+                                                        <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
                                                             Sang giai đoạn (To Stage)
                                                         </label>
                                                         <select
                                                             value={config.erpFilters?.to_stage_id || ''}
                                                             onChange={(e) => handleErpFilterChange({ to_stage_id: e.target.value })}
                                                             disabled={disabled}
-                                                            className="w-full h-10 px-3 bg-white border border-purple-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500"
+                                                            className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-[#BD1D2D]"
                                                         >
                                                             <option value="">Bất kỳ giai đoạn nào</option>
                                                             {erpMeta.stages.map(st => (
@@ -947,8 +943,8 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                                             {/* 4. Thay đổi độ nóng Lead (temperature_changed) */}
                                             {config.targetId === 'temperature_changed' && (
-                                                <div className="space-y-1.5 bg-amber-50/40 p-3.5 rounded-xl border border-amber-100">
-                                                    <label className="text-[10px] font-black text-amber-900 uppercase tracking-wider block">
+                                                <div className="space-y-1.5 bg-amber-50/40 p-3.5 rounded-xl border border-amber-200">
+                                                    <label className="text-[10px] font-bold text-amber-900 uppercase tracking-wider block">
                                                         Mức nhiệt độ mới
                                                     </label>
                                                     <select
@@ -958,17 +954,17 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                         className="w-full h-10 px-3 bg-white border border-amber-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-amber-500"
                                                     >
                                                         <option value="all">Tất cả mức nhiệt độ</option>
-                                                        <option value="hot">🔥 Nóng (Hot)</option>
-                                                        <option value="warm">🌤️ Ấm (Warm)</option>
-                                                        <option value="cold">❄️ Lạnh (Cold)</option>
+                                                        <option value="hot">Nóng (Hot)</option>
+                                                        <option value="warm">Ấm (Warm)</option>
+                                                        <option value="cold">Lạnh (Cold)</option>
                                                     </select>
                                                 </div>
                                             )}
 
                                             {/* 5. Vi phạm SLA / Lead ngủ đông (sla_uncontacted | lead_stale_14d) */}
                                             {(config.targetId === 'sla_uncontacted' || config.targetId === 'lead_stale_14d') && (
-                                                <div className="space-y-1.5 bg-rose-50/40 p-3.5 rounded-xl border border-rose-100">
-                                                    <label className="text-[10px] font-black text-rose-900 uppercase tracking-wider block">
+                                                <div className="space-y-1.5 bg-rose-50/40 p-3.5 rounded-xl border border-rose-200">
+                                                    <label className="text-[10px] font-bold text-rose-900 uppercase tracking-wider block">
                                                         {config.targetId === 'sla_uncontacted'
                                                             ? 'Thời gian quá hạn chưa liên hệ (Số giờ SLA)'
                                                             : 'Số ngày không có lịch sử chăm sóc mới'}
@@ -991,7 +987,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                                 }
                                                             }}
                                                             disabled={disabled}
-                                                            className="w-28 h-10 px-3 bg-white border border-rose-200 rounded-xl text-xs font-black text-slate-800 outline-none focus:border-rose-500"
+                                                            className="w-28 h-10 px-3 bg-white border border-rose-200 rounded-xl text-xs font-bold tabular-nums text-slate-800 outline-none focus:border-rose-500"
                                                         />
                                                         <span className="text-xs font-bold text-rose-700">
                                                             {config.targetId === 'sla_uncontacted' ? 'Giờ (Hours)' : 'Ngày (Days)'}
@@ -1002,7 +998,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                                             {/* 6. Bộ lọc điều kiện bổ sung chung cho MỌI sự kiện MYERP */}
                                             <div className="pt-2 border-t border-slate-100 space-y-3">
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                                                     Bộ lọc điều kiện bổ sung (Tùy chọn)
                                                 </p>
                                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1014,7 +1010,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                             value={config.erpFilters?.program || ''}
                                                             onChange={(e) => handleErpFilterChange({ program: e.target.value })}
                                                             disabled={disabled}
-                                                            className="w-full h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-indigo-400"
+                                                            className="w-full h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#BD1D2D]"
                                                         />
                                                     </div>
                                                     <div className="space-y-1">
@@ -1023,7 +1019,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                             value={config.erpFilters?.branch_id || ''}
                                                             onChange={(e) => handleErpFilterChange({ branch_id: e.target.value })}
                                                             disabled={disabled}
-                                                            className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-indigo-400"
+                                                            className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#BD1D2D]"
                                                         >
                                                             <option value="">Tất cả chi nhánh</option>
                                                             {erpMeta.branches.map(b => (
@@ -1037,7 +1033,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                             value={config.erpFilters?.source || ''}
                                                             onChange={(e) => handleErpFilterChange({ source: e.target.value })}
                                                             disabled={disabled}
-                                                            className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-indigo-400"
+                                                            className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#BD1D2D]"
                                                         >
                                                             <option value="">Tất cả nguồn</option>
                                                             <option value="Facebook">Facebook</option>
@@ -1133,8 +1129,8 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                             {/* CASE: INBOUND MESSAGE KEYWORD */}
                             {triggerType === 'inbound_message' && (
-                                <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300 p-1">
-                                    <div className="p-5 bg-white border border-slate-200 rounded-[14px] space-y-4 shadow-sm">
+                                <div className="space-y-4 p-1">
+                                    <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-4 shadow-sm">
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 bg-blue-50 rounded-lg text-blue-500"><MessageSquare className="w-4 h-4" /></div>
                                             <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Từ khóa kích hoạt (Tùy chọn)</span>
@@ -1142,15 +1138,15 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                         <div className="space-y-2">
                                             <input
                                                 type="text"
-                                                placeholder="Ví dụ: GIÁ, TƯ VẤN, BÁO GIÁ"
-                                                className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:border-slate-400 focus:bg-white outline-none transition-all"
+                                                placeholder="Ví dụ: GIÁ, TƯ VN, BÁO GIÁ"
+                                                className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:border-slate-400 focus:bg-white outline-none transition-colors"
                                                 value={config.targetId || ''}
                                                 onChange={(e) => handleTargetChange(e.target.value)}
                                             />
                                             <p className="text-[10px] text-slate-400 font-medium">Nhập từ khóa khách đã gửi. Để trống nếu muốn kích hoạt cho MỌI tin nhắn.</p>
                                         </div>
                                     </div>
-                                    <div className="p-4 bg-blue-50/30 rounded-[14px] border border-blue-100 flex items-start gap-3">
+                                    <div className="p-4 bg-blue-50/30 rounded-xl border border-blue-200 flex items-start gap-3">
                                         <AlertCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
                                         <p className="text-[11px] text-blue-600 font-medium leading-relaxed">
                                             Hệ thống sẽ kiểm tra tin nhắn của khách trên Meta (Messenger) và Zalo OA.
@@ -1162,7 +1158,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                             {/* CASE: ZALO FOLLOW */}
                             {triggerType === 'zalo_follow' && (
-                                <div className="p-8 text-center space-y-4 animate-in zoom-in-95 duration-300">
+                                <div className="p-8 text-center space-y-4">
                                     <div className="w-20 h-20 bg-cyan-50 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-cyan-100/50">
                                         <UserPlus className="w-10 h-10 text-cyan-500" />
                                     </div>
@@ -1178,7 +1174,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                             {/* CASE: BUNSUBSCRIBE */}
                             {triggerType === 'unsubscribe' && (
-                                <div className="p-8 text-center space-y-4 animate-in zoom-in-95 duration-300">
+                                <div className="p-8 text-center space-y-4">
                                     <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-red-100/50">
                                         <UserMinus className="w-10 h-10 text-red-500" />
                                     </div>
@@ -1194,10 +1190,10 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                             {/* CASE: AI CAPTURE */}
                             {triggerType === 'ai_capture' && (
-                                <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300 p-1">
-                                    <div className="p-8 text-center space-y-4 bg-white border border-slate-200 rounded-[14px] shadow-sm">
-                                        <div className="w-16 h-16 bg-rose-50 rounded-[14px] flex items-center justify-center mx-auto mb-2 border-2 border-rose-100/50">
-                                            <Bot className="w-8 h-8 text-rose-500" />
+                                <div className="space-y-4 p-1">
+                                    <div className="p-8 text-center space-y-4 bg-white border border-slate-200 rounded-xl shadow-sm">
+                                        <div className="w-16 h-16 bg-rose-50 rounded-xl flex items-center justify-center mx-auto mb-2 border border-rose-200">
+                                            <Bot className="w-8 h-8 text-[#BD1D2D]" strokeWidth={1.75} />
                                         </div>
                                         <h3 className="text-sm font-bold text-slate-800">Kích hoạt khi AI lấy được Lead</h3>
                                         <p className="text-[11px] text-slate-500 max-w-[280px] mx-auto leading-relaxed">
@@ -1249,7 +1245,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                     />
 
                                     {config.dateField === 'lastActivity' && (
-                                        <div className="p-5 bg-white border border-slate-200 rounded-[14px] space-y-4 animate-in slide-in-from-top-2 shadow-sm mb-4">
+                                        <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-4 shadow-sm mb-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="p-2 bg-slate-100 rounded-lg text-slate-500"><History className="w-4 h-4" /></div>
                                                 <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Thời gian không tương tác</span>
@@ -1257,16 +1253,16 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                             <div className="flex gap-4 items-center">
                                                 <input
                                                     type="number"
-                                                    className="w-24 h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg font-bold text-base text-slate-800 focus:border-slate-400 focus:bg-white outline-none transition-all"
+                                                    className="w-24 h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg font-bold tabular-nums text-base text-slate-800 focus:border-slate-400 focus:bg-white outline-none transition-colors"
                                                     value={config.inactiveAmount || 30}
                                                     onChange={(e) => onChange({ ...config, inactiveAmount: parseInt(e.target.value) || 30 })}
                                                     disabled={disabled}
                                                 />
                                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ngày liên tục</span>
                                             </div>
-                                            <div className="p-3.5 bg-blue-50/50 rounded-xl flex items-start gap-2.5 border border-blue-100/50">
+                                            <div className="p-3.5 bg-blue-50/50 rounded-xl flex items-start gap-2.5 border border-blue-200/70">
                                                 <Info className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
-                                                <p className="text-[10px] text-blue-700 font-medium leading-relaxed italic">Hệ thống sẽ quét định kỳ những Khách hàng không Mở hoặc Click link trong {config.inactiveAmount || 30} ngày để đưa vào luồng.</p>
+                                                <p className="text-[10px] text-blue-700 font-medium leading-relaxed">Hệ thống sẽ quét định kỳ những Khách hàng không Mở hoặc Click link trong {config.inactiveAmount || 30} ngày để đưa vào luồng.</p>
                                             </div>
                                         </div>
                                     )}
@@ -1320,7 +1316,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                     />
 
                                     {config.dateField === 'specificDate' && (
-                                        <div className="p-5 bg-white border border-slate-200 rounded-[14px] space-y-4 animate-in slide-in-from-top-2 shadow-sm mb-4">
+                                        <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-4 shadow-sm mb-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="p-2 bg-blue-50 rounded-lg text-blue-500"><Calendar className="w-4 h-4" /></div>
                                                 <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Chọn ngày diễn ra sự kiện</span>
@@ -1328,7 +1324,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                             <div className="flex gap-4 items-center">
                                                 <input
                                                     type="date"
-                                                    className="flex-1 h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:border-slate-400 focus:bg-white outline-none transition-all"
+                                                    className="flex-1 h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:border-slate-400 focus:bg-white outline-none transition-colors"
                                                     value={config.specificDate || ''}
                                                     onChange={(e) => {
                                                         const newCfg = { ...config, specificDate: e.target.value };
@@ -1337,9 +1333,9 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                     disabled={disabled}
                                                 />
                                             </div>
-                                            <div className="p-3.5 bg-blue-50/50 rounded-xl flex items-start gap-2.5 border border-blue-100/50">
+                                            <div className="p-3.5 bg-blue-50/50 rounded-xl flex items-start gap-2.5 border border-blue-200/70">
                                                 <Info className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
-                                                <p className="text-[10px] text-blue-700 font-medium leading-relaxed italic">Ví dụ: Thiết lập ngày 14/02 để bắt đầu chương trình Valentine cho toàn bộ khách hàng được chọn.</p>
+                                                <p className="text-[10px] text-blue-700 font-medium leading-relaxed">Ví dụ: Thiết lập ngày 14/02 để bắt đầu chương trình Valentine cho toàn bộ khách hàng được chọn.</p>
                                             </div>
                                         </div>
                                     )}
@@ -1357,7 +1353,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                     />
 
                                     {config.dateField === 'custom_field_date' && (
-                                        <div className="p-5 bg-white border border-blue-200 rounded-[14px] space-y-4 animate-in slide-in-from-top-2 shadow-sm mb-4">
+                                        <div className="p-5 bg-white border border-blue-200 rounded-xl space-y-4 shadow-sm mb-4">
                                             {/* Field Key */}
                                             <div className="space-y-2">
                                                 <div className="flex items-center gap-2">
@@ -1366,7 +1362,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                 </div>
                                                 {customFieldDefs.length > 0 ? (
                                                     <select
-                                                        className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:border-blue-400 outline-none transition-all"
+                                                        className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:border-blue-400 outline-none transition-colors"
                                                         value={config.customFieldKey || ''}
                                                         onChange={e => onChange({ ...config, customFieldKey: e.target.value }, getLabelForType('date', '', undefined, 'custom_field_date'))}
                                                         disabled={disabled}
@@ -1380,7 +1376,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                     <input
                                                         type="text"
                                                         placeholder="Nhập key, ví dụ: ngày_dat_lich"
-                                                        className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:border-blue-400 focus:bg-white outline-none transition-all"
+                                                        className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:border-blue-400 focus:bg-white outline-none transition-colors"
                                                         value={config.customFieldKey || ''}
                                                         onChange={e => onChange({ ...config, customFieldKey: e.target.value }, getLabelForType('date', '', undefined, 'custom_field_date'))}
                                                         disabled={disabled}
@@ -1392,7 +1388,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                             {/* Offset Config */}
                                             <div className="space-y-2">
                                                 <div className="flex items-center gap-2">
-                                                    <div className="p-1.5 bg-pink-50 rounded-lg text-pink-500"><Clock className="w-3.5 h-3.5" /></div>
+                                                    <div className="p-1.5 bg-rose-50 rounded-lg text-[#BD1D2D]"><Clock className="w-3.5 h-3.5" /></div>
                                                     <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Thời điểm kích hoạt</span>
                                                 </div>
                                                 <div className="grid grid-cols-4 gap-2">
@@ -1427,7 +1423,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                         onChange={e => onChange({ ...config, triggerMinute: Math.min(59, Math.max(0, parseInt(e.target.value) || 0)) })}
                                                     />
                                                 </div>
-                                                <p className="text-[9px] italic text-slate-400 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                                <p className="text-[9px] text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-200 tabular-nums">
                                                     {(() => {
                                                         const hh = String(config.triggerHour ?? 8).padStart(2, '0');
                                                         const mm = String(config.triggerMinute ?? 0).padStart(2, '0');
@@ -1440,7 +1436,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                 </p>
                                             </div>
 
-                                            <div className="p-3 bg-blue-50/50 rounded-[var(--radius-md)] flex items-start gap-2.5 border border-blue-100">
+                                            <div className="p-3 bg-blue-50/50 rounded-[var(--radius-md)] flex items-start gap-2.5 border border-blue-200">
                                                 <Info className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
                                                 <p className="text-[10px] text-blue-700 font-medium leading-relaxed">
                                                     Cron job hàng ngày quét subscriber có field <b>{config.customFieldKey || 'ngày'}</b> khớp điều kiện và tự động enroll vào flow.
@@ -1450,9 +1446,9 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                     )}
 
                                     {(config.dateField === 'dateOfBirth' || config.dateField === 'anniversaryDate' || config.dateField === 'joinedAt' || config.dateField === 'specificDate') && (
-                                        <div className="p-5 bg-white border border-slate-200 rounded-[14px] space-y-4 animate-in slide-in-from-top-2 shadow-sm mb-4">
+                                        <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-4 shadow-sm mb-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="p-2 bg-pink-50 rounded-[var(--radius-md)] text-pink-500"><Clock className="w-4 h-4" /></div>
+                                                <div className="p-2 bg-rose-50 rounded-[var(--radius-md)] text-[#BD1D2D]"><Clock className="w-4 h-4" /></div>
                                                 <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Thời điểm kích hoạt</span>
                                             </div>
                                             <div className="grid grid-cols-2 gap-3">
@@ -1485,7 +1481,7 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                     )}
 
                                     {(config.dateField === 'dateOfBirth' || config.dateField === 'anniversaryDate' || config.dateField === 'joinedAt' || config.dateField === 'specificDate' || config.dateField === 'lastActivity' || config.dateField === 'custom_field_date') && (
-                                        <div className="p-5 bg-white border border-slate-200 rounded-[14px] space-y-4 animate-in slide-in-from-top-2 shadow-sm">
+                                        <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-4 shadow-sm">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-3">
                                                     <div className="p-2 bg-rose-50 rounded-[var(--radius-md)] text-rose-500"><Target className="w-4 h-4" /></div>
@@ -1496,13 +1492,13 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                             <div className="flex bg-slate-100 p-0.5 rounded-[var(--radius-md)] w-full">
                                                 <button
                                                     onClick={() => onChange({ ...config, targetLists: 'all', targetListIds: [], targetSegmentIds: [] })}
-                                                    className={`flex-1 py-1.5 rounded-[var(--radius-md)] text-[10px] font-bold uppercase transition-all ${!config.targetLists || config.targetLists === 'all' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
+                                                    className={`flex-1 py-1.5 rounded-[var(--radius-md)] text-[10px] font-bold uppercase transition-colors ${!config.targetLists || config.targetLists === 'all' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
                                                 >
                                                     Tất cả
                                                 </button>
                                                 <button
                                                     onClick={() => onChange({ ...config, targetLists: 'specific', targetListIds: [] })}
-                                                    className={`flex-1 py-1.5 rounded-[var(--radius-md)] text-[10px] font-bold uppercase transition-all ${config.targetLists === 'specific' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
+                                                    className={`flex-1 py-1.5 rounded-[var(--radius-md)] text-[10px] font-bold uppercase transition-colors ${config.targetLists === 'specific' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
                                                 >
                                                     Danh sách cụ thể
                                                 </button>
@@ -1510,29 +1506,29 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
 
                                             {config.targetLists === 'specific' && (
                                                 <div className="mt-4 space-y-4">
-                                                    <div className="p-3 bg-amber-50 rounded-[var(--radius-md)] flex items-start gap-2.5 border border-amber-200/50">
+                                                    <div className="p-3 bg-amber-50 rounded-[var(--radius-md)] flex items-start gap-2.5 border border-amber-200/70">
                                                         <Info className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                                                         <p className="text-[10px] text-amber-700 font-bold leading-relaxed">
                                                             Chỉ kích hoạt đối với những người có trong danh sách/phân khúc được chọn dưới đây.
-                                                            <span className="block font-medium text-slate-500 mt-0.5 italic">Nếu họ không thuộc danh sách này, flow sẽ không tự động bắt đầu.</span>
+                                                            <span className="block font-medium text-slate-600 mt-0.5">Nếu họ không thuộc danh sách này, flow sẽ không tự động bắt đầu.</span>
                                                         </p>
                                                     </div>
                                                     <div className="flex bg-slate-100/50 p-0.5 rounded-[var(--radius-md)] w-full mb-2">
                                                         <button
                                                             onClick={() => setBirthdayTab('list')}
-                                                            className={`flex-1 py-1 rounded-[var(--radius-md)] text-[9px] font-bold uppercase transition-all ${birthdayTab === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                                            className={`flex-1 py-1 rounded-[var(--radius-md)] text-[9px] font-bold uppercase transition-colors ${birthdayTab === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                                                         >
                                                             Danh sách
                                                         </button>
                                                         <button
                                                             onClick={() => setBirthdayTab('sync')}
-                                                            className={`flex-1 py-1 rounded-[var(--radius-md)] text-[9px] font-bold uppercase transition-all ${birthdayTab === 'sync' ? 'bg-white shadow-sm text-green-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                                            className={`flex-1 py-1 rounded-[var(--radius-md)] text-[9px] font-bold uppercase transition-colors ${birthdayTab === 'sync' ? 'bg-white shadow-sm text-green-600' : 'text-slate-400 hover:text-slate-600'}`}
                                                         >
                                                             Nguồn Sync
                                                         </button>
                                                         <button
                                                             onClick={() => setBirthdayTab('segment')}
-                                                            className={`flex-1 py-1 rounded-[var(--radius-md)] text-[9px] font-bold uppercase transition-all ${birthdayTab === 'segment' ? 'bg-white shadow-sm text-[var(--color-primary)]' : 'text-slate-400 hover:text-slate-600'}`}
+                                                            className={`flex-1 py-1 rounded-[var(--radius-md)] text-[9px] font-bold uppercase transition-colors ${birthdayTab === 'segment' ? 'bg-white shadow-sm text-[var(--color-primary)]' : 'text-slate-400 hover:text-slate-600'}`}
                                                         >
                                                             Phân khúc
                                                         </button>
@@ -1543,11 +1539,11 @@ const TriggerConfig: React.FC<TriggerConfigProps> = ({ config, onChange, disable
                                                             value={searchTerm}
                                                             onChange={e => setSearchTerm(e.target.value)}
                                                             placeholder="Tìm danh sách..."
-                                                            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-[var(--radius-md)] text-[11px] font-semibold outline-none focus:border-slate-400 transition-all"
+                                                            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-[var(--radius-md)] text-[11px] font-semibold outline-none focus:border-slate-400 transition-colors"
                                                         />
                                                     </div>
 
-                                                    <div className="space-y-1 custom-scrollbar border border-slate-100 rounded-[14px] p-1 bg-slate-50/50 max-h-48 overflow-y-auto">
+                                                    <div className="space-y-1 custom-scrollbar border border-slate-200 rounded-xl p-1 bg-slate-50/50 max-h-48 overflow-y-auto">
                                                         {(birthdayTab === 'list' ? lists.filter(l => isManualList(l) && String(l?.name || '').toLowerCase().includes(searchTerm.toLowerCase())) :
                                                             birthdayTab === 'sync' ? lists.filter(l => isSyncList(l) && String(l?.name || '').toLowerCase().includes(searchTerm.toLowerCase())) :
                                                                 segments.filter(s => String(s?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))).map(item => {

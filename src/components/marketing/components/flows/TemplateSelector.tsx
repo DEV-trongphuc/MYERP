@@ -93,29 +93,29 @@ const TemplateSelector: React.FC<TemplateSelectorProps> = ({ templates, selected
                 key={template.id}
                 onClick={() => onSelect(template)}
                 className={`
-                  relative group cursor-pointer rounded-2xl border-2 transition-all overflow-hidden
-                  ${isSelected ? 'border-[var(--color-primary)] ring-4 ring-[var(--color-primary-light)] shadow-lg' : 'border-slate-100 hover:border-slate-300 hover:shadow-md bg-white'}
+                  relative group cursor-pointer rounded-2xl border transition-[border-color,box-shadow] overflow-hidden
+                  ${isSelected ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary-light)] shadow-sm' : 'border-slate-200 hover:border-slate-300 hover:shadow-sm bg-white'}
                 `}
               >
                 <div className="aspect-[4/3] bg-slate-100 relative overflow-hidden">
                   {template.thumbnail && !template.thumbnail.includes('placehold.co') ? (
-                    <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-700" />
+                    <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover" />
                   ) : (
                     <VisualTemplate template={template} />
                   )}
                   {isSelected && (
                     <div className="absolute inset-0 bg-[var(--color-primary)]/20 backdrop-blur-[1px] flex items-center justify-center">
-                      <div className="bg-white p-2.5 rounded-full shadow-xl text-[var(--color-primary)] animate-in zoom-in duration-300">
+                      <div className="bg-white p-2.5 rounded-full shadow-md text-[var(--color-primary)] animate-in zoom-in duration-200">
                         <Check className="w-5 h-5" />
                       </div>
                     </div>
                   )}
-                  <div className="absolute top-2 right-2 bg-white/95 backdrop-blur px-2.5 py-1 rounded-lg text-[8px] font-black uppercase text-slate-500 border border-slate-100 shadow-sm flex items-center gap-1">
+                  <div className="absolute top-2 right-2 bg-white/95 backdrop-blur px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase text-slate-500 border border-slate-200 shadow-sm flex items-center gap-1 tabular-nums">
                     <span className="text-[var(--color-primary)]">Update:</span> {template.lastModified ? new Date(template.lastModified).toLocaleDateString('vi-VN') : 'Unknown'}
                   </div>
                 </div>
-                <div className="p-3 bg-white border-t border-slate-50">
-                  <p className="text-xs font-black text-slate-800 truncate">{template.name}</p>
+                <div className="p-3 bg-white border-t border-slate-100">
+                  <p className="text-xs font-bold text-slate-800 truncate">{template.name}</p>
                 </div>
               </div>
             );
@@ -132,8 +132,8 @@ const TemplateSelector: React.FC<TemplateSelectorProps> = ({ templates, selected
       {/* Pagination Controls */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-auto">
-          <p className="text-xs font-bold text-slate-400">
-            Trang <span className="text-slate-700">{currentPage}</span> / {totalPages}
+          <p className="text-xs font-bold text-slate-500 tabular-nums">
+            Trang <span className="text-slate-800">{currentPage}</span> / {totalPages}
           </p>
           <div className="flex gap-2">
             <button

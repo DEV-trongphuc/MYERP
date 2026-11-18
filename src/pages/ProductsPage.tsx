@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Pagination } from '../components/ui/Pagination';
 import { Plus, Package, Pencil, Trash2, X, Loader2, Search, Layers, Download } from 'lucide-react';
@@ -153,7 +153,7 @@ export const ProductsPage: React.FC = () => {
         },
         defaultFilename: `export_products_${Date.now()}.csv`,
         onSuccess: () => {
-          addToast('Tải xuống danh sách sản phẩm thành công!', 'success');
+          addToast('Tải xuống danh sách sản phẩm thành công', 'success');
         },
       });
     } catch (err: any) {
@@ -169,7 +169,7 @@ export const ProductsPage: React.FC = () => {
       <div className="page-header">
         <div>
           <h1 className="page-title">Sản phẩm & Dịch vụ</h1>
-          <p className="page-subtitle">{total} sản phẩm</p>
+          <p className="page-subtitle" style={{ fontVariantNumeric: 'tabular-nums' }}>{total} sản phẩm</p>
         </div>
         <div className="flex gap-2">
           <button className="btn secondary" onClick={() => setShowCatModal(true)} title="Quản lý danh mục">
@@ -282,14 +282,14 @@ export const ProductsPage: React.FC = () => {
                     </div>
                   </td>
                   <td>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <span className="font-semi" style={{ color:'var(--color-primary)', fontWeight: 700, fontSize: '0.875rem' }}>{FMT(p.price)}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span className="font-semi" style={{ color:'var(--color-primary)', fontWeight: 700, fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{FMT(p.price)}</span>
                       <span className="text-xs text-light" style={{ color: 'var(--color-text-muted)' }}>/ {p.unit}</span>
                     </div>
                   </td>
                   <td>
                     {p.track_inventory ? (
-                      <span className={`badge ${(p.stock_quantity || 0) <= 5 ? 'danger' : 'info'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}>
+                      <span className={`badge ${(p.stock_quantity || 0) <= 5 ? 'danger' : 'info'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', width: 'fit-content', fontVariantNumeric: 'tabular-nums' }}>
                         {p.stock_quantity || 0}
                       </span>
                     ) : (
@@ -350,22 +350,22 @@ export const ProductsPage: React.FC = () => {
               onClick={e => e.stopPropagation()}
             >
               
-              <div className="modal-header" style={{ padding: '1.25rem 1.75rem' }}>
+              <div className="modal-header" style={{ padding: '20px 24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: 40, height: 40, borderRadius: '12px', background: 'rgba(163, 20, 34,0.1)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: '10px', background: 'rgba(163, 20, 34,0.1)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Package size={20} />
                   </div>
                   <div>
-                    <h3 style={{ fontWeight:800, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>{editItem ? 'Cập nhật sản phẩm' : 'Thêm sản phẩm mới'}</h3>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', marginTop: '2px' }}>
+                    <h3 style={{ fontWeight: 700, fontSize: '1.1rem' }}>{editItem ? 'Cập nhật sản phẩm' : 'Thêm sản phẩm mới'}</h3>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', marginTop: '4px' }}>
                       Điền thông tin chi tiết cho sản phẩm/dịch vụ
                     </p>
                   </div>
                 </div>
-                <button className="btn-icon" onClick={() => !saving && setShowModal(false)} style={{ borderRadius: '10px' }}><X size={18} /></button>
+                <button className="btn-icon" onClick={() => !saving && setShowModal(false)} style={{ borderRadius: '8px' }}><X size={18} /></button>
               </div>
 
-              <div className="modal-body" style={{ padding: '1.5rem 1.75rem', gap: '1.25rem' }}>
+              <div className="modal-body" style={{ padding: '24px', gap: '20px' }}>
 
                 {/* ── Basic Info ── */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -394,11 +394,11 @@ export const ProductsPage: React.FC = () => {
                 </div>
 
                 {/* ── Pricing ── */}
-                <div style={{ background: 'var(--color-bg)', borderRadius: '12px', padding: '1rem', border: '1px solid var(--color-border-light)' }}>
-                  <p style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
+                <div style={{ background: 'var(--color-bg)', borderRadius: '12px', padding: '16px', border: '1px solid var(--color-border-light)' }}>
+                  <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: '12px' }}>
                     Giá cả
                   </p>
-                  <div style={{ display: 'grid', gridTemplateColumns: form.track_cost ? '1fr 1fr' : '1fr', gap: '1rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: form.track_cost ? '1fr 1fr' : '1fr', gap: '16px' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label className="form-label" style={{ fontWeight: 700 }}>Giá bán (đ)</label>
                       <div style={{ position: 'relative' }}>
@@ -410,11 +410,11 @@ export const ProductsPage: React.FC = () => {
                             const rawDigits = e.target.value.replace(/\D/g, '');
                             setForm({...form, price: rawDigits});
                           }} 
-                          style={{ paddingRight: '2.5rem' }} 
+                          style={{ paddingRight: '2.5rem', fontVariantNumeric: 'tabular-nums' }} 
                         />
                         <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>đ</span>
                         {form.price && Number(form.price) > 0 && (
-                          <div style={{ marginTop: '4px', fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 600, fontStyle: 'italic' }}>
+                          <div style={{ marginTop: '4px', fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 500 }}>
                             {numberToText(Number(form.price))}
                           </div>
                         )}
@@ -432,11 +432,11 @@ export const ProductsPage: React.FC = () => {
                               const rawDigits = e.target.value.replace(/\D/g, '');
                               setForm({...form, cost: rawDigits});
                             }} 
-                            style={{ paddingRight: '2.5rem' }} 
+                            style={{ paddingRight: '2.5rem', fontVariantNumeric: 'tabular-nums' }} 
                           />
                           <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>đ</span>
                           {form.cost && Number(form.cost) > 0 && (
-                            <div style={{ marginTop: '4px', fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 600, fontStyle: 'italic' }}>
+                            <div style={{ marginTop: '4px', fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 500 }}>
                               {numberToText(Number(form.cost))}
                             </div>
                           )}
@@ -449,15 +449,15 @@ export const ProductsPage: React.FC = () => {
                 {/* ── Inventory (physical products only) ── */}
                 {/* ── Inventory ── */}
                 {form.track_inventory && (
-                  <div style={{ background: 'var(--color-bg)', borderRadius: '12px', padding: '1rem', border: '1px solid var(--color-border-light)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                      <p style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)' }}>
+                  <div style={{ background: 'var(--color-bg)', borderRadius: '12px', padding: '16px', border: '1px solid var(--color-border-light)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                      <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)' }}>
                         Tồn kho
                       </p>
                     </div>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label className="form-label" style={{ fontWeight: 700 }}>Số lượng tồn kho hiện có</label>
-                      <input className="form-input" type="number" value={form.stock_quantity} onChange={e => setForm({...form, stock_quantity: Number(e.target.value)})} />
+                      <input className="form-input" type="number" style={{ fontVariantNumeric: 'tabular-nums' }} value={form.stock_quantity} onChange={e => setForm({...form, stock_quantity: Number(e.target.value)})} />
                     </div>
                   </div>
                 )}
@@ -513,19 +513,19 @@ export const ProductsPage: React.FC = () => {
               onClick={e => e.stopPropagation()}
             >
               
-              <div className="modal-header" style={{ padding: '1.25rem 1.75rem', borderBottom: '1px solid var(--color-border)' }}>
+              <div className="modal-header" style={{ padding: '20px 24px', borderBottom: '1px solid var(--color-border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: 40, height: 40, borderRadius: '12px', background: 'rgba(16,185,129,0.1)', color: 'var(--color-success)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: '10px', background: 'rgba(16,185,129,0.1)', color: 'var(--color-success)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Layers size={20} />
                   </div>
                   <div>
-                    <h3 style={{ fontWeight:800, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>Thiết lập Danh mục</h3>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', marginTop: '2px' }}>
+                    <h3 style={{ fontWeight: 700, fontSize: '1.1rem' }}>Thiết lập Danh mục</h3>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', marginTop: '4px' }}>
                       Cấu hình tính năng tồn kho, giá vốn theo từng danh mục
                     </p>
                   </div>
                 </div>
-                <button className="btn-icon" onClick={() => setShowCatModal(false)} style={{ borderRadius: '10px' }}><X size={18} /></button>
+                <button className="btn-icon" onClick={() => setShowCatModal(false)} style={{ borderRadius: '8px' }}><X size={18} /></button>
               </div>
 
               <div className="modal-body" style={{ padding: '1.5rem 1.75rem' }}>

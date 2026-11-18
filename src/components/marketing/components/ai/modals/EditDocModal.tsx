@@ -25,7 +25,7 @@ const EditDocModal: React.FC<EditDocModalProps> = ({ isOpen, onClose, onUpdate, 
                 <div className="flex justify-between w-full">
                     <Button variant="ghost" onClick={onClose}>Hủy</Button>
                     <Button
-                        className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold border-none shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 transition-all"
+                        className="bg-[#BD1D2D] hover:bg-[#9A1523] text-white font-semibold border-none transition-colors"
                         icon={Save}
                         onClick={onUpdate}
                         isLoading={loading}
@@ -49,19 +49,19 @@ const EditDocModal: React.FC<EditDocModalProps> = ({ isOpen, onClose, onUpdate, 
                 </div>
 
                 <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-800 uppercase tracking-widest ml-1">Nội dung chi tiết</label>
+                    <label className="text-[10px] font-bold text-slate-800 uppercase tracking-widest ml-1">Nội dung chi tiết</label>
                     <textarea
                         value={editingDoc.content}
                         onChange={e => setEditingDoc({ ...editingDoc, content: e.target.value })}
                         rows={20}
-                        className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-[14px] text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-emerald-500 transition-all resize-none shadow-inner"
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 outline-none focus:bg-white focus:border-[#BD1D2D] transition-colors resize-none"
                     />
-                    <div className="text-right text-[10px] text-slate-400 font-bold mt-1">{(editingDoc.content || '').length.toLocaleString()}/15,000 ký tự</div>
+                    <div className="text-right text-[10px] text-slate-400 font-semibold tabular-nums mt-1">{(editingDoc.content || '').length.toLocaleString()}/15,000 ký tự</div>
                 </div>
 
-                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-[14px] border border-slate-100">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Loại dữ liệu: <span className="text-slate-700">{editingDoc.source_type}</span></div>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Cập nhật: <span className="text-slate-700">{new Date(editingDoc.updated_at || editingDoc.created_at).toLocaleString()}</span></div>
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Loại dữ liệu: <span className="text-slate-700">{editingDoc.source_type}</span></div>
+                    <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest text-right tabular-nums">Cập nhật: <span className="text-slate-700">{new Date(editingDoc.updated_at || editingDoc.created_at).toLocaleString()}</span></div>
                 </div>
             </div>
         </Modal>

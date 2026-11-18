@@ -234,34 +234,34 @@ const ClickHeatmap: React.FC<ClickHeatmapProps> = ({ html, clickData, deviceFilt
     return (
         <div className="relative border rounded-xl bg-slate-50 overflow-hidden select-none">
             {/* Toolbar */}
-            <div className="flex items-center justify-between px-4 py-2 bg-white border-b sticky top-0 z-30">
-                <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-indigo-50 rounded-lg">
-                        <MousePointer2 className="w-4 h-4 text-indigo-600" />
+            <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-slate-200 sticky top-0 z-30">
+                <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 bg-rose-50 rounded-lg border border-rose-100">
+                        <MousePointer2 className="w-4 h-4 text-[#BD1D2D]" />
                     </div>
                     <div>
-                        <h3 className="text-xs font-black uppercase tracking-tight text-slate-700">Link Click Heatmap</h3>
-                        <p className="text-[10px] text-slate-400 font-bold">Visual distribution of engagement</p>
+                        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-800">Link Click Heatmap</h3>
+                        <p className="text-[11px] text-slate-500 font-medium">Visual distribution of engagement</p>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                    <div className="flex bg-slate-100 p-0.5 rounded-lg mr-2">
+                <div className="flex items-center gap-2">
+                    <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/80 mr-1">
                         <button
                             onClick={() => onDeviceFilterChange?.('all')}
-                            className={`px-3 py-1.5 rounded-md text-[10px] font-bold transition-all ${deviceFilter === 'all' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                            className={`px-3 py-1.5 rounded-md text-[11px] font-semibold transition-colors duration-150 ${deviceFilter === 'all' ? 'bg-white shadow-sm text-[#BD1D2D]' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             ALL
                         </button>
                         <button
                             onClick={() => onDeviceFilterChange?.('desktop')}
-                            className={`p-1.5 rounded-md transition-all ${deviceFilter === 'desktop' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                            className={`p-1.5 rounded-md transition-colors duration-150 ${deviceFilter === 'desktop' ? 'bg-white shadow-sm text-[#BD1D2D]' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             <Monitor className="w-3.5 h-3.5" />
                         </button>
                         <button
                             onClick={() => onDeviceFilterChange?.('mobile')}
-                            className={`p-1.5 rounded-md transition-all ${deviceFilter === 'mobile' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                            className={`p-1.5 rounded-md transition-colors duration-150 ${deviceFilter === 'mobile' ? 'bg-white shadow-sm text-[#BD1D2D]' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             <Smartphone className="w-3.5 h-3.5" />
                         </button>
@@ -270,7 +270,7 @@ const ClickHeatmap: React.FC<ClickHeatmapProps> = ({ html, clickData, deviceFilt
                     {onDownload && (
                         <button
                             onClick={onDownload}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 hover:bg-slate-50 transition-colors duration-150"
                         >
                             <Download className="w-3 h-3" />
                             Export
@@ -282,7 +282,7 @@ const ClickHeatmap: React.FC<ClickHeatmapProps> = ({ html, clickData, deviceFilt
             {/* Canvas Area */}
             <div className="flex justify-center p-8 min-h-[400px]">
                 <div
-                    className="relative bg-white shadow-2xl transition-all duration-500 overflow-hidden"
+                    className="relative bg-white shadow-lg border border-slate-200 transition-[width,max-width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] overflow-hidden"
                     style={{
                         width: viewMode === 'mobile' ? '375px' : '100%',
                         maxWidth: viewMode === 'mobile' ? '375px' : '800px',
@@ -304,7 +304,7 @@ const ClickHeatmap: React.FC<ClickHeatmapProps> = ({ html, clickData, deviceFilt
                         {bubbles.map((b) => (
                             <div
                                 key={b.id}
-                                className="absolute rounded-full border-2 border-white shadow-lg pointer-events-auto cursor-help group flex items-center justify-center transition-all hover:scale-125"
+                                className="absolute rounded-full border-2 border-white shadow-md pointer-events-auto cursor-help group flex items-center justify-center transition-[box-shadow,border-color] duration-150 hover:ring-2 hover:ring-slate-900/30"
                                 style={{
                                     left: b.x,
                                     top: b.y,
@@ -314,22 +314,22 @@ const ClickHeatmap: React.FC<ClickHeatmapProps> = ({ html, clickData, deviceFilt
                                     transform: 'translate(-50%, -50%)',
                                 }}
                             >
-                                <span className="text-[10px] font-bold text-white drop-shadow-md">
+                                <span className="text-[10px] font-bold text-white tabular-nums">
                                     {b.total}
                                 </span>
 
                                 {/* Tooltip */}
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-900 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl border border-slate-700">
-                                    <div className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest mb-1 border-b border-white/10 pb-1">Link Stats</div>
-                                    <div className="text-[10px] font-medium break-all mb-2 leading-tight opacity-80">{b.url}</div>
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-900 text-white p-2.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50 shadow-xl border border-slate-700">
+                                    <div className="text-[10px] font-semibold text-rose-300 uppercase tracking-wider mb-1 border-b border-white/10 pb-1">Link Stats</div>
+                                    <div className="text-[10px] font-medium break-all mb-2 leading-tight text-slate-200">{b.url}</div>
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
-                                            <div className="text-[8px] text-slate-400 uppercase font-black tracking-tighter">Total Clicks</div>
-                                            <div className="text-xs font-black">{b.total}</div>
+                                            <div className="text-[9px] text-slate-400 uppercase font-semibold">Total Clicks</div>
+                                            <div className="text-xs font-bold tabular-nums">{b.total}</div>
                                         </div>
                                         <div>
-                                            <div className="text-[8px] text-slate-400 uppercase font-black tracking-tighter">Unique</div>
-                                            <div className="text-xs font-black">{b.unique}</div>
+                                            <div className="text-[9px] text-slate-400 uppercase font-semibold">Unique</div>
+                                            <div className="text-xs font-bold tabular-nums">{b.unique}</div>
                                         </div>
                                     </div>
                                     <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900"></div>
@@ -341,25 +341,25 @@ const ClickHeatmap: React.FC<ClickHeatmapProps> = ({ html, clickData, deviceFilt
             </div>
 
             {/* Legend */}
-            <div className="px-6 py-4 bg-slate-50 border-t flex items-center justify-between">
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
                 <div className="flex items-center gap-6">
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Low Impact</span>
+                        <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider">Low Impact</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-amber-600"></div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Medium</span>
+                        <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider">Medium</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-rose-500"></div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">High Intensity</span>
+                        <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider">High Intensity</span>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-2 px-3 py-1 bg-white border border-slate-200 rounded-full">
-                    <Info className="w-3 h-3 text-indigo-400" />
-                    <span className="text-[9px] font-bold text-slate-400 italic">Click coordinate estimated by link target matching</span>
+                    <Info className="w-3 h-3 text-slate-500" />
+                    <span className="text-[10px] font-medium text-slate-500">Click coordinate estimated by link target matching</span>
                 </div>
             </div>
         </div>

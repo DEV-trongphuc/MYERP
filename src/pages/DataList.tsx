@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, Fragment, useMemo, lazy, Suspense } from 'react';
 import api from '../api/axios';
 import { createPortal } from 'react-dom';
-import { Database, Search, Filter, ChevronLeft, ChevronRight, Download, RefreshCw, User, Users, Phone, Mail, Clock, Tag, ExternalLink, AlertTriangle, CheckCircle2, XCircle, ShieldAlert, Calendar, LayoutList, Sparkles, Check, X, Edit, Bell, Copy, CheckCircle, BarChart2, Scale, Info, Ban, UserPlus, Send, Plus, Eye } from 'lucide-react';
+import { Database, Search, Filter, ChevronLeft, ChevronRight, Download, RefreshCw, User, Users, Phone, Mail, Clock, Tag, ExternalLink, AlertTriangle, CheckCircle2, XCircle, ShieldAlert, Calendar, LayoutList, Sparkles, Check, X, Edit, Bell, Copy, BarChart2, Scale, Info, Ban, UserPlus, Send, Plus, Eye } from 'lucide-react';
 import {
   Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
@@ -22,6 +22,7 @@ import { getModulePermissionScope, hasPermission } from '../store/authStore';
 import { withRouterFreezer } from '../components/RouterFreezer';
 import { CalendarSkeleton, TableSkeleton, KpiCardSkeleton, CardSkeleton, ChartSkeleton } from '../components/ui/Skeleton';
 import { detectCountryFromPhone } from '../utils/phoneHelper';
+import { ensureArray, extractArray } from '../utils/safeArray';
 import { NotificationPreviewModal } from '../components/ui/NotificationPreviewModal';
 import { RuleSettings } from './RuleSettings';
 import { TableContextMenu } from '../components/ui/TableContextMenu';
@@ -246,13 +247,13 @@ const getAICardConfig = (selectedLead: Lead | null, theme: 'light' | 'dark', t: 
       avatar: "/LOGO.jpg",
       title: "IDEAS AI",
       badgeText: t("Đạt chuẩn"),
-      badgeBg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+      badgeBg: '#059669',
       badgeColor: '#ffffff',
       content: selectedLead.ai_evaluation,
       accentColor: '#BD1D2D',
-      textAccentColor: theme === 'dark' ? '#a78bfa' : '#8a0f1b',
-      topAccentGradient: 'linear-gradient(90deg, #BD1D2D 0%, #BD1D2D 100%)',
-      bgGradient: theme === 'dark' ? 'linear-gradient(135deg, rgba(189, 29, 45, 0.08) 0%, rgba(189, 29, 45, 0.08) 100%)' : 'linear-gradient(135deg, #fff8f9 0%, #fff0f3 100%)',
+      textAccentColor: theme === 'dark' ? '#fb7185' : '#8a0f1b',
+      topAccentGradient: '#BD1D2D',
+      bgGradient: theme === 'dark' ? 'rgba(189, 29, 45, 0.08)' : '#fff8f9',
       borderColor: theme === 'dark' ? '1px solid rgba(189, 29, 45, 0.25)' : '1px solid rgba(189, 29, 45, 0.15)',
     };
   } else if (selectedLead.status === 'pending_approval') {
@@ -266,42 +267,42 @@ const getAICardConfig = (selectedLead: Lead | null, theme: 'light' | 'dark', t: 
       avatar: "/imgs/warn_icon.png",
       title: "IDEAS AI",
       badgeText: t("Chờ duyệt"),
-      badgeBg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+      badgeBg: '#d97706',
       badgeColor: '#ffffff',
       content: selectedLead.ai_evaluation || (isPendingEvaluation ? t('Đang chờ AI đánh giá...') : t('Tạm giữ')),
       accentColor: '#f59e0b',
       textAccentColor: theme === 'dark' ? '#fbbf24' : '#b45309',
-      topAccentGradient: 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)',
-      bgGradient: theme === 'dark' ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(217, 119, 6, 0.08) 100%)' : 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
-      borderColor: theme === 'dark' ? '1px solid rgba(245, 158, 11, 0.25)' : '1px solid rgba(245, 158, 11, 0.15)',
+      topAccentGradient: '#f59e0b',
+      bgGradient: theme === 'dark' ? 'rgba(245, 158, 11, 0.08)' : '#fffbeb',
+      borderColor: theme === 'dark' ? '1px solid rgba(245, 158, 11, 0.25)' : '1px solid rgba(245, 158, 11, 0.2)',
     };
   } else if (selectedLead.status === 'rejected') {
     return {
       avatar: "/LOGO.jpg",
       title: "IDEAS AI",
       badgeText: t("Từ chối"),
-      badgeBg: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+      badgeBg: '#dc2626',
       badgeColor: '#ffffff',
       content: selectedLead.ai_evaluation || t('Không đủ điều kiện'),
       accentColor: '#ef4444',
       textAccentColor: theme === 'dark' ? '#f87171' : '#be123c',
-      topAccentGradient: 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)',
-      bgGradient: theme === 'dark' ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(220, 38, 38, 0.08) 100%)' : 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
-      borderColor: theme === 'dark' ? '1px solid rgba(239, 68, 68, 0.25)' : '1px solid rgba(239, 68, 68, 0.15)',
+      topAccentGradient: '#ef4444',
+      bgGradient: theme === 'dark' ? 'rgba(239, 68, 68, 0.08)' : '#fef2f2',
+      borderColor: theme === 'dark' ? '1px solid rgba(239, 68, 68, 0.25)' : '1px solid rgba(239, 68, 68, 0.2)',
     };
   } else if (selectedLead.status === 'blacklisted') {
     return {
       avatar: "/imgs/angry_icon.jpg",
       title: "IDEAS AI",
       badgeText: t("Bị chặn"),
-      badgeBg: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
+      badgeBg: '#b91c1c',
       badgeColor: '#ffffff',
       content: selectedLead.ai_evaluation || t('Chặn tự động'),
       accentColor: '#ef4444',
       textAccentColor: theme === 'dark' ? '#f87171' : '#dc2626',
-      topAccentGradient: 'linear-gradient(90deg, #ef4444 0%, #b91c1c 100%)',
-      bgGradient: theme === 'dark' ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(185, 28, 28, 0.08) 100%)' : 'linear-gradient(135deg, #fff5f5 0%, #ffe3e3 100%)',
-      borderColor: theme === 'dark' ? '1px solid rgba(239, 68, 68, 0.25)' : '1px solid rgba(239, 68, 68, 0.15)',
+      topAccentGradient: '#ef4444',
+      bgGradient: theme === 'dark' ? 'rgba(239, 68, 68, 0.08)' : '#fff5f5',
+      borderColor: theme === 'dark' ? '1px solid rgba(239, 68, 68, 0.25)' : '1px solid rgba(239, 68, 68, 0.2)',
     };
   }
   return null;
@@ -327,7 +328,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
       }).catch(() => {});
 
       api.get('/teams').then(r => {
-        setTeamsList(r.data.data || r.data || []);
+        setTeamsList(extractArray(r?.data));
       }).catch(() => {});
     }
   }, [userRole]);
@@ -569,7 +570,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
       const json = await fetchAPI(`get_logs&page=${currentPage}&pageSize=${ITEMS_PER_PAGE}&date=${encodeURIComponent(dateFilter)}&status=${encodeURIComponent(statusFilter)}&consultant=${encodeURIComponent(consultantFilter)}&round=${encodeURIComponent(roundFilter)}&search=${encodeURIComponent(searchTerm)}`, { signal });
       if (json.success) {
         // Map the backend structure to the frontend structure
-        const mappedLeads = json.data.map((item: any) => ({
+        const mappedLeads = extractArray(json).map((item: any) => ({
           id: item.id,
           lead_id: item.lead_id,
           name: item.lead_name || t('Khách hàng ẩn danh'),
@@ -714,7 +715,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
       `${t('Loại')}: ${lead.type || ''}`,
       `${t('Ghi chú')}: ${lead.note || ''}`
     ].join('\n');
-    handleCopyText(text, t('Đã sao chép toàn bộ thông tin khách hàng!'), 'full');
+    handleCopyText(text, t('Đã sao chép toàn bộ thông tin khách hàng'), 'full');
   };
 
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -772,7 +773,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
               method: 'POST'
             });
             if (res && !res.hasOwnProperty('success')) {
-              res = { success: true, message: res.message || t('Đã nhả về Kho chung thành công!') };
+              res = { success: true, message: res.message || t('Đã nhả về Kho chung thành công') };
             }
           } else {
             res = await fetchAPI('release_to_databank', {
@@ -781,7 +782,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
             });
           }
           if (res.success || res.action) {
-            toast.success(res.message || t('Đã nhả về Kho chung thành công!'));
+            toast.success(res.message || t('Đã nhả về Kho chung thành công'));
             setSelectedLead(null);
             fetchLeads();
             if (viewMode === 'databank') {
@@ -816,7 +817,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
             body: JSON.stringify({ person_id: personId, sale_id: saleId })
           });
           if (res.success) {
-            toast.success(res.message || t('Đã xóa lượt nhận thành công!'));
+            toast.success(res.message || t('Đã xóa lượt nhận thành công'));
             
             // Update local modal details
             const updatedTakers = selectedLead.takers ? selectedLead.takers.filter((t: any) => t.id !== saleId) : [];
@@ -896,7 +897,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
         })
       });
       if (res.success) {
-        toast.success(res.message || t('Đã gửi nhắc nhở thành công!'));
+        toast.success(res.message || t('Đã gửi nhắc nhở thành công'));
         setIsReminderModalOpen(false);
         fetchNotificationStatus(selectedLead.lead_id || selectedLead.id);
       } else {
@@ -929,7 +930,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
         })
       });
       if (res.success) {
-        toast.success(t('Cập nhật thông tin khách hàng thành công!'));
+        toast.success(t('Cập nhật thông tin khách hàng thành công'));
         setSelectedLead({
           ...selectedLead,
           name: editForm.name.trim(),
@@ -1277,8 +1278,9 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
     try {
       const json = await fetchAPI(`get_public_leads&page=${publicPage}&pageSize=${ITEMS_PER_PAGE}&search=${encodeURIComponent(searchTerm)}`);
       if (json.success) {
-        setPublicLeads(json.data || []);
-        setPublicTotalCount(json.total_count || (json.data ? json.data.length : 0));
+        const pubList = extractArray(json);
+        setPublicLeads(pubList);
+        setPublicTotalCount(json.total_count ?? pubList.length);
       } else {
         toast.error(json.message || t('Lỗi tải dữ liệu kho data chung'));
       }
@@ -1303,7 +1305,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
             body: JSON.stringify({ person_id: personId })
           });
           if (json.success) {
-            toast.success(json.message || t('Nhận data thành công!'));
+            toast.success(json.message || t('Nhận data thành công'));
             fetchPublicLeads();
             window.dispatchEvent(new CustomEvent('lead-claimed'));
             if (onSuccess) onSuccess();
@@ -1433,8 +1435,8 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
       });
       if (res.success) {
         toast.success(compensate
-          ? t('Giao lại Tư vấn viên & Đền bù thành công!')
-          : t('Giao lại Tư vấn viên thành công!')
+          ? t('Giao lại Tư vấn viên & Đền bù thành công')
+          : t('Giao lại Tư vấn viên thành công')
         );
         setSelectedLead(null);
         setReassignConsId('');
@@ -1467,7 +1469,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
         })
       });
       if (res.success) {
-        toast.success(t('Chặn khách hàng và đưa vào Blacklist thành công!'));
+        toast.success(t('Chặn khách hàng và đưa vào Blacklist thành công'));
         setSelectedLead(null);
         setConfirmBlockOpen(false);
         setBlockReason('');
@@ -1492,7 +1494,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
       toast.loading(t('Đang chuẩn bị dữ liệu xuất CSV (Demo)...'), { id: 'export' });
       try {
         if (leads.length === 0) {
-          toast.error(t('Không có dữ liệu để xuất!'), { id: 'export' });
+          toast.error(t('Không có dữ liệu để xuất'), { id: 'export' });
           setIsExportingCSV(false);
           return;
         }
@@ -1545,7 +1547,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
 
-        toast.success(t('Đã tải xuống file CSV an toàn!'), { id: 'export' });
+        toast.success(t('Đã tải xuống file CSV an toàn'), { id: 'export' });
       } catch (err) {
         toast.error(t('Có lỗi xảy ra khi xuất dữ liệu'), { id: 'export' });
       } finally {
@@ -1637,7 +1639,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
     // Heuristic override from distribution log message
     if (status === 'compensation' || msg.includes('đền bù') || msg.includes('bù lượt') || msg.includes('bù chủ động') || msg.includes('bù data')) {
       return (
-        <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', border: '1px solid rgba(139, 92, 246, 0.25)', fontWeight: 600 }}>
+        <span className="badge" style={{ background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', border: '1px solid rgba(189, 29, 45, 0.2)', fontWeight: 600 }}>
           {t('Đã bù')}
         </span>
       );
@@ -1653,7 +1655,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
 
     if (status === 'reminder' || msg.includes('khách cũ đăng ký lại') || msg.includes('nhắc trùng') || msg.includes('nhắc lại')) {
       return (
-        <span className="badge" style={{ background: 'rgba(236, 72, 153, 0.12)', color: '#ec4899', border: '1px solid rgba(236, 72, 153, 0.25)', fontWeight: 600 }}>
+        <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#b45309', border: '1px solid rgba(245, 158, 11, 0.25)', fontWeight: 600 }}>
           {t('Nhắc lại')}
         </span>
       );
@@ -1675,12 +1677,12 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
     }
     switch (status) {
       case 'assigned': return <span className="badge success">{t('Đã chia')}</span>;
-      case 'compensation': return <span className="badge purple">{t('Đã bù')}</span>;
+      case 'compensation': return <span className="badge" style={{ background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', border: '1px solid rgba(189, 29, 45, 0.2)', fontWeight: 600 }}>{t('Đã bù')}</span>;
       case 'reallocated': return <span className="badge warning" style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', border: '1px solid rgba(245, 158, 11, 0.25)', fontWeight: 600 }}>{t('Phân bổ lại')}</span>;
       case 'pending_work_hours': return <span className="badge warm">{t('Chờ giờ làm')}</span>;
       case 'error': return <span className="badge danger">{t('Ticket')}</span>;
       case 'pending': return <span className="badge warning">{t('Chờ chia')}</span>;
-      case 'reminder': return <span className="badge" style={{ background: 'rgba(236, 72, 153, 0.12)', color: '#ec4899', border: '1px solid rgba(236, 72, 153, 0.25)' }}>{t('Nhắc lại')}</span>;
+      case 'reminder': return <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#b45309', border: '1px solid rgba(245, 158, 11, 0.25)', fontWeight: 600 }}>{t('Nhắc lại')}</span>;
       case 'duplicate': return <span className="badge danger">{t('Trùng lặp')}</span>;
       case 'rule_6_month': return <span className="badge cold">{t('Quy định 6 tháng')}</span>;
       case 'silent': return <span className="badge cold">{t('Chỉ đồng bộ')}</span>;
@@ -1816,7 +1818,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
               color: theme === 'dark' ? 'var(--color-primary)' : '#a31422',
               fontSize: '0.6875rem',
               fontWeight: 600,
-              border: theme === 'dark' ? '1px solid var(--color-border)' : '1px solid #ddd6fe'
+              border: theme === 'dark' ? '1px solid var(--color-border)' : '1px solid #fecdd3'
             }} title={t("Ticket lỗi")}>
               <span>{t('Ticket')}:</span>
               <strong>{dayData.ticket_total}</strong>
@@ -1829,11 +1831,11 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
               alignItems: 'center',
               padding: '2px 4px',
               borderRadius: '4px',
-              background: theme === 'dark' ? 'rgba(236, 72, 153, 0.15)' : '#fce7f3',
-              color: theme === 'dark' ? '#f472b6' : '#db2777',
+              background: theme === 'dark' ? 'rgba(245, 158, 11, 0.12)' : '#fffbeb',
+              color: theme === 'dark' ? '#fbbf24' : '#b45309',
               fontSize: '0.6875rem',
               fontWeight: 600,
-              border: theme === 'dark' ? '1px solid rgba(236, 72, 153, 0.25)' : 'none'
+              border: theme === 'dark' ? '1px solid rgba(245, 158, 11, 0.25)' : '1px solid #fde68a'
             }} title={t("Nhắc lại")}>
               <span>{t('Nhắc')}:</span>
               <strong>{dayData.reminder}</strong>
@@ -2073,11 +2075,11 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   fontSize: '0.78rem',
                   fontWeight: 700,
                   cursor: isExportingCSV ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s',
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease',
                   height: '28px',
                   opacity: isExportingCSV ? 0.6 : 1
                 }}
-                className="btn-export-csv-compact hover-lift"
+                className="btn-export-csv-compact"
               >
                 {isExportingCSV ? <RefreshCw size={13} className="spin" /> : <Download size={13} />}
                 <span>{isExportingCSV ? t('Đang xuất...') : t('Xuất')}<span className="hide-on-mobile"> CSV</span></span>
@@ -2411,20 +2413,21 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: '1rem',
-              marginBottom: '1rem',
-              marginTop: '0.25rem'
+              gap: '16px',
+              marginBottom: '16px',
+              marginTop: '4px',
+              fontVariantNumeric: 'tabular-nums'
             }}>
               {/* Card 1: Doanh thu SO */}
-              <div className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+              <div className="card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>TỔNG DOANH THU (SO)</span>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3b82f6' }}></div>
+                  <span style={{ fontSize: '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>TỔNG DOANH THU (SO)</span>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#BD1D2D' }}></div>
                 </div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-primary)' }}>
+                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)' }}>
                   {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round((financeSummary.so_paid || 0) + (financeSummary.so_pending || 0)))}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border-light)', paddingTop: '6px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border-light)', paddingTop: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Đã thu:</span>
                     <strong style={{ color: 'var(--color-success)' }}>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round(financeSummary.so_paid || 0))}</strong>
@@ -2437,15 +2440,15 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
               </div>
 
               {/* Card 2: Chi phí PO */}
-              <div className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+              <div className="card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>TỔNG CHI PHÍ (PO)</span>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b' }}></div>
+                  <span style={{ fontSize: '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>TỔNG CHI PHÍ (PO)</span>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#334155' }}></div>
                 </div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#BD1D2D' }}>
                   {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round((financeSummary.po_approved || 0) + (financeSummary.po_pending || 0)))}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border-light)', paddingTop: '6px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border-light)', paddingTop: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Đã duyệt:</span>
                     <strong style={{ color: 'var(--color-success)' }}>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round(financeSummary.po_approved || 0))}</strong>
@@ -2458,15 +2461,15 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
               </div>
 
               {/* Card 3: Dòng tiền thực tế */}
-              <div className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+              <div className="card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>DÒNG TIỀN THỰC TẾ</span>
-                  <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--color-success)', borderRadius: '4px', fontWeight: 700 }}>Thực tế</span>
+                  <span style={{ fontSize: '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>DÒNG TIỀN THỰC TẾ</span>
+                  <span style={{ fontSize: '0.68rem', padding: '2px 8px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--color-success)', borderRadius: '6px', fontWeight: 600 }}>Thực tế</span>
                 </div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: ((financeSummary.so_paid || 0) - (financeSummary.po_approved || 0)) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: ((financeSummary.so_paid || 0) - (financeSummary.po_approved || 0)) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
                   {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round((financeSummary.so_paid || 0) - (financeSummary.po_approved || 0)))}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border-light)', paddingTop: '6px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border-light)', paddingTop: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Thực thu:</span>
                     <span>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round(financeSummary.so_paid || 0))}</span>
@@ -2479,15 +2482,15 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
               </div>
 
               {/* Card 4: Dự báo dòng tiền */}
-              <div className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+              <div className="card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>DỰ BÁO DÒNG TIỀN</span>
-                  <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'rgba(245, 158, 11, 0.1)', color: 'var(--color-warning)', borderRadius: '4px', fontWeight: 700 }}>Dự báo</span>
+                  <span style={{ fontSize: '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>DỰ BÁO DÒNG TIỀN</span>
+                  <span style={{ fontSize: '0.68rem', padding: '2px 8px', background: 'rgba(51, 65, 85, 0.08)', color: '#334155', borderRadius: '6px', fontWeight: 600 }}>Dự báo</span>
                 </div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: ((financeSummary.so_pending || 0) - (financeSummary.po_pending || 0)) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: ((financeSummary.so_pending || 0) - (financeSummary.po_pending || 0)) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
                   {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round((financeSummary.so_pending || 0) - (financeSummary.po_pending || 0)))}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border-light)', paddingTop: '6px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border-light)', paddingTop: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Sắp thu:</span>
                     <span>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Math.round(financeSummary.so_pending || 0))}</span>
@@ -2810,25 +2813,16 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
 
                                 disabled={isClaimingLeadId !== null || hasClaimed || isFull}
                                 style={{
-                                  background: hasClaimed ? 'rgba(16,185,129,0.12)' : (isFull ? 'transparent' : 'linear-gradient(135deg, #bd1d2d 0%, #e63946 100%)'),
+                                  background: hasClaimed ? 'rgba(16,185,129,0.12)' : (isFull ? 'transparent' : '#BD1D2D'),
                                   border: hasClaimed ? '1px solid rgba(16,185,129,0.2)' : (isFull ? '1px solid var(--color-border)' : 'none'),
                                   color: hasClaimed ? '#10b981' : (isFull ? 'var(--color-text-muted)' : '#ffffff'),
                                   padding: '6px 16px',
-                                  borderRadius: '6px',
+                                  borderRadius: '8px',
                                   fontSize: '0.8125rem',
-                                  fontWeight: 700,
+                                  fontWeight: 600,
                                   cursor: (hasClaimed || isFull) ? 'default' : 'pointer',
-                                  boxShadow: (hasClaimed || isFull) ? 'none' : '0 2px 6px rgba(189, 29, 45, 0.2)',
-                                  transition: 'all 0.2s'
+                                  transition: 'background-color 0.18s ease, opacity 0.18s ease'
                                 }}
-                                onMouseEnter={(!hasClaimed && !isFull) ? e => {
-                                  e.currentTarget.style.transform = 'translateY(-1px)';
-                                  e.currentTarget.style.boxShadow = '0 4px 10px rgba(189, 29, 45, 0.35)';
-                                } : undefined}
-                                onMouseLeave={(!hasClaimed && !isFull) ? e => {
-                                  e.currentTarget.style.transform = 'translateY(0)';
-                                  e.currentTarget.style.boxShadow = '0 2px 6px rgba(189, 29, 45, 0.2)';
-                                } : undefined}
                               >
                                 {isClaimingLeadId === lead.id ? (
                                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -4064,10 +4058,10 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                             let iconColor = 'var(--color-danger)';
                             let titleColor = 'var(--color-danger)';
                             let titleText = t("Từ chối bởi AI");
-                            let IconComponent = Sparkles;
+                            let IconComponent = XCircle;
 
                             if (isApprove) {
-                              cardBg = theme === 'dark' ? 'rgba(16, 185, 129, 0.08)' : 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)';
+                              cardBg = theme === 'dark' ? 'rgba(16, 185, 129, 0.08)' : '#f0fdf4';
                               cardBorder = theme === 'dark' ? '1px solid rgba(16, 185, 129, 0.15)' : '1px solid #a7f3d0';
                               iconBg = theme === 'dark' ? 'rgba(16, 185, 129, 0.15)' : '#d1fae5';
                               iconColor = 'var(--color-success)';
@@ -4079,8 +4073,8 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                               IconComponent = ShieldAlert;
                             } else if (isFallback) {
                               cardBg = theme === 'dark' ? 'rgba(245, 158, 11, 0.08)' : '#fffbeb';
-                              cardBorder = theme === 'dark' ? '1px solid rgba(245, 158, 11, 0.15)' : '1px solid #fca5a5';
-                              iconBg = theme === 'dark' ? 'rgba(245, 158, 11, 0.15)' : '#ffe4e6';
+                              cardBorder = theme === 'dark' ? '1px solid rgba(245, 158, 11, 0.15)' : '1px solid #fde68a';
+                              iconBg = theme === 'dark' ? 'rgba(245, 158, 11, 0.15)' : '#fef3c7';
                               iconColor = 'var(--color-warning)';
                               titleColor = 'var(--color-warning)';
                               titleText = t("Xác nhận dưới chuẩn (Fallback)");
@@ -4091,12 +4085,11 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                               <div key={index} style={{
                                 background: cardBg,
                                 border: cardBorder,
-                                padding: '0.875rem 1rem',
-                                borderRadius: '14px',
+                                padding: '12px 16px',
+                                borderRadius: '12px',
                                 display: 'flex',
                                 flexDirection: 'column',
-                                gap: '0.5rem',
-                                boxShadow: theme === 'dark' ? 'none' : '0 2px 8px rgba(0,0,0,0.02)'
+                                gap: '8px'
                               }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', width: '100%' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -5556,7 +5549,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                                   totalCount: number;
                                 }> = {};
 
-                                dayDetails.sales.forEach((item: any) => {
+                                ensureArray(dayDetails?.sales).forEach((item: any) => {
                                   const name = item.sale_name || t('Chưa phân bổ');
                                   if (!groupedSales[name]) {
                                     groupedSales[name] = {
@@ -5654,10 +5647,10 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                                               </div>
                                             </td>
                                             <td>
-                                              <span style={{
-                                                background: isReminder ? 'rgba(236, 72, 153, 0.12)' : 'var(--color-primary-light)',
-                                                color: isReminder ? '#ec4899' : 'var(--color-primary)',
-                                                padding: '3px 8px',
+                                                <span style={{
+                                                background: isReminder ? 'rgba(245, 158, 11, 0.12)' : 'var(--color-primary-light)',
+                                                color: isReminder ? '#b45309' : 'var(--color-primary)',
+                                                padding: '4px 8px',
                                                 borderRadius: '6px',
                                                 fontSize: '0.75rem',
                                                 fontWeight: 600
@@ -5692,7 +5685,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
 
                   {activeModalTab === 'tickets' && (
                     <div>
-                      {dayDetails.tickets && dayDetails.tickets.length > 0 ? (
+                      {ensureArray(dayDetails?.tickets).length > 0 ? (
                         <div className="premium-table-container">
                           <table className="premium-table">
                             <thead>
@@ -5705,7 +5698,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                               </tr>
                             </thead>
                             <tbody>
-                              {dayDetails.tickets.map((item: any, idx: number) => {
+                              {ensureArray(dayDetails?.tickets).map((item: any, idx: number) => {
                                 const showPhone = (user?.role === 'admin' || user?.role === 'superadmin') ? item.phone : maskPhone(item.phone);
                                 return (
                                   <tr key={idx}>
@@ -5767,7 +5760,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
 
                   {activeModalTab === 'blacklist' && (
                     <div>
-                      {dayDetails.blacklist_logs && dayDetails.blacklist_logs.length > 0 ? (
+                      {ensureArray(dayDetails?.blacklist_logs).length > 0 ? (
                         <div className="premium-table-container">
                           <table className="premium-table">
                             <thead>
@@ -5779,7 +5772,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                               </tr>
                             </thead>
                             <tbody>
-                              {dayDetails.blacklist_logs.map((item: any, idx: number) => {
+                              {ensureArray(dayDetails?.blacklist_logs).map((item: any, idx: number) => {
                                 const showPhone = (user?.role === 'admin' || user?.role === 'superadmin') ? item.phone : maskPhone(item.phone);
                                 const showEmail = (user?.role === 'admin' || user?.role === 'superadmin') ? item.email : maskEmail(item.email);
                                 return (
@@ -5855,7 +5848,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                           {t('Tạo SO mới')}
                         </button>
                       </div>
-                      {dayDetails.invoices && dayDetails.invoices.length > 0 ? (
+                      {ensureArray(dayDetails?.invoices).length > 0 ? (
                         <div className="premium-table-container">
                           <table className="premium-table">
                             <thead>
@@ -5868,7 +5861,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                               </tr>
                             </thead>
                             <tbody>
-                               {dayDetails.invoices.map((item: any, idx: number) => (
+                               {ensureArray(dayDetails?.invoices).map((item: any, idx: number) => (
                                 <tr key={item.id || idx} onClick={() => handleOpenSO(item)} style={{ cursor: 'pointer' }}>
                                   <td>
                                     <strong style={{ color: 'var(--color-primary)', textDecoration: 'underline' }}>{item.invoice_number || `#${item.id}`}</strong>
@@ -6473,12 +6466,12 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   alignItems: 'center',
                   gap: '6px',
                   background: theme === 'dark' ? 'rgba(189, 29, 45, 0.15)' : '#fff0f3',
-                  color: theme === 'dark' ? '#a78bfa' : '#700913',
-                  border: theme === 'dark' ? '1px solid rgba(189, 29, 45, 0.25)' : '1px solid #ffccd5',
-                  padding: '3px 8px',
-                  borderRadius: '12px',
+                  color: theme === 'dark' ? '#fb7185' : '#8a0f1b',
+                  border: theme === 'dark' ? '1px solid rgba(189, 29, 45, 0.25)' : '1px solid #fecdd3',
+                  padding: '4px 8px',
+                  borderRadius: '8px',
                   fontSize: '0.72rem',
-                  fontWeight: 700
+                  fontWeight: 600
                 }}>
                   <Scale size={12} />
                   {t("Data Bù (compensation)")}
@@ -6503,13 +6496,13 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  background: theme === 'dark' ? 'rgba(236, 72, 153, 0.15)' : '#fce7f3',
-                  color: theme === 'dark' ? '#f472b6' : '#9d174d',
-                  border: theme === 'dark' ? '1px solid rgba(236, 72, 153, 0.25)' : '1px solid #fbcfe8',
-                  padding: '3px 8px',
-                  borderRadius: '12px',
+                  background: theme === 'dark' ? 'rgba(245, 158, 11, 0.15)' : '#fffbeb',
+                  color: theme === 'dark' ? '#fbbf24' : '#b45309',
+                  border: theme === 'dark' ? '1px solid rgba(245, 158, 11, 0.25)' : '1px solid #fde68a',
+                  padding: '4px 8px',
+                  borderRadius: '8px',
                   fontSize: '0.72rem',
-                  fontWeight: 700
+                  fontWeight: 600
                 }}>
                   <Bell size={12} />
                   {t("Nhắc lại (reminder)")}
@@ -6537,12 +6530,12 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   background: theme === 'dark' ? 'rgba(249, 115, 22, 0.15)' : '#fff7ed',
                   color: theme === 'dark' ? '#fb923c' : '#c2410c',
                   border: theme === 'dark' ? '1px solid rgba(249, 115, 22, 0.25)' : '1px solid #ffedd5',
-                  padding: '3px 8px',
-                  borderRadius: '12px',
+                  padding: '4px 8px',
+                  borderRadius: '8px',
                   fontSize: '0.72rem',
-                  fontWeight: 700
+                  fontWeight: 600
                 }}>
-                  <Sparkles size={12} />
+                  <AlertTriangle size={12} />
                   {t("Dự phòng (fallback)")}
                 </span>
                 <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
@@ -7086,12 +7079,12 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                     </div>
 
                     {/* Stacked Percentage Bar */}
-                    <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', background: 'var(--color-border-light)', position: 'relative' }}>
+                    <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: 'var(--color-border-light)', position: 'relative' }}>
                       {((statsData.summary.distributed_count || 0) + (statsData.summary.coop_count || 0)) > 0 && (
                         <div
                           style={{
                             width: `${(((statsData.summary.distributed_count || 0) + (statsData.summary.coop_count || 0)) / Math.max(1, statsData.summary.total_received)) * 100}%`,
-                            background: 'linear-gradient(90deg, #3b82f6, #007af5)',
+                            background: '#C6333D',
                             transition: 'width 0.3s ease'
                           }}
                           title={`${t('Được chia')}: ${(statsData.summary.distributed_count || 0) + (statsData.summary.coop_count || 0)}`}
@@ -7101,7 +7094,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                         <div
                           style={{
                             width: `${((statsData.summary.databank_count || 0) / Math.max(1, statsData.summary.total_received)) * 100}%`,
-                            background: 'linear-gradient(90deg, #34c759, #10b981)',
+                            background: '#334155',
                             transition: 'width 0.3s ease'
                           }}
                           title={`${t('Từ Databank')}: ${statsData.summary.databank_count}`}
@@ -7111,7 +7104,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                         <div
                           style={{
                             width: `${((statsData.summary.self_count || 0) / Math.max(1, statsData.summary.total_received)) * 100}%`,
-                            background: 'linear-gradient(90deg, #fcd34d, #f59e0b)',
+                            background: '#94A3B8',
                             transition: 'width 0.3s ease'
                           }}
                           title={`${t('Tự nhập')}: ${statsData.summary.self_count}`}
@@ -7120,26 +7113,26 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                     </div>
 
                     {/* Legend explaining the numbers */}
-                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.75rem', marginTop: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                        <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#007af5' }} />
+                    <div style={{ display: 'flex', gap: '16px', fontSize: '0.75rem', marginTop: 4, flexWrap: 'wrap', alignItems: 'center', fontVariantNumeric: 'tabular-nums' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#C6333D' }} />
                         <span style={{ color: 'var(--color-text-muted)' }}>
-                          {t('Được chia')}: <strong style={{ color: '#007af5' }}>{(statsData.summary.distributed_count || 0) + (statsData.summary.coop_count || 0)}</strong> ({statsData.summary.total_received > 0 ? Math.round((((statsData.summary.distributed_count || 0) + (statsData.summary.coop_count || 0)) / statsData.summary.total_received) * 100) : 0}%)
+                          {t('Được chia')}: <strong style={{ color: '#BD1D2D' }}>{(statsData.summary.distributed_count || 0) + (statsData.summary.coop_count || 0)}</strong> ({statsData.summary.total_received > 0 ? Math.round((((statsData.summary.distributed_count || 0) + (statsData.summary.coop_count || 0)) / statsData.summary.total_received) * 100) : 0}%)
                         </span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                        <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#34c759' }} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#334155' }} />
                         <span style={{ color: 'var(--color-text-muted)' }}>
-                          {t('Từ Databank')}: <strong style={{ color: '#34c759' }}>{statsData.summary.databank_count || 0}</strong> ({statsData.summary.total_received > 0 ? Math.round(((statsData.summary.databank_count || 0) / statsData.summary.total_received) * 100) : 0}%)
+                          {t('Từ Databank')}: <strong style={{ color: 'var(--color-text)' }}>{statsData.summary.databank_count || 0}</strong> ({statsData.summary.total_received > 0 ? Math.round(((statsData.summary.databank_count || 0) / statsData.summary.total_received) * 100) : 0}%)
                         </span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                        <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#94A3B8' }} />
                         <span style={{ color: 'var(--color-text-muted)' }}>
-                          {t('Tự nhập')}: <strong style={{ color: '#f59e0b' }}>{statsData.summary.self_count || 0}</strong> ({statsData.summary.total_received > 0 ? Math.round(((statsData.summary.self_count || 0) / statsData.summary.total_received) * 100) : 0}%)
+                          {t('Tự nhập')}: <strong style={{ color: '#64748B' }}>{statsData.summary.self_count || 0}</strong> ({statsData.summary.total_received > 0 ? Math.round(((statsData.summary.self_count || 0) / statsData.summary.total_received) * 100) : 0}%)
                         </span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginLeft: 'auto', paddingLeft: '1rem', borderLeft: '1px solid var(--color-border)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto', paddingLeft: '16px', borderLeft: '1px solid var(--color-border)' }}>
                         <span style={{ color: 'var(--color-text-muted)' }}>
                           {t('Nhắc lại')}: <strong style={{ color: 'var(--color-warning)' }}>{statsData.summary.reminder || 0}</strong> | {t('Lỗi/Trùng')}: <strong style={{ color: 'var(--color-danger)' }}>{statsData.summary.error || 0}</strong>
                         </span>
@@ -7148,85 +7141,63 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   </div>
 
                   {/* KPI Cards Row (3 Columns) */}
-                  <div className="responsive-grid-3" style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: '0.75rem' }}>
+                  <div className="responsive-grid-3" style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: '16px' }}>
                     {/* Card 1: Tổng khách hàng */}
-                    <div className="stat-card hover-lift total-card" style={{ display: 'flex', flexDirection: 'column', padding: '1rem', minHeight: '120px', borderRadius: '12px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
-                      <div className="decor-svg" style={{ color: '#a31422' }}>
-                        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                          <circle cx="30" cy="50" r="10" stroke="currentColor" strokeWidth="2" />
-                          <circle cx="70" cy="30" r="10" stroke="currentColor" strokeWidth="2" />
-                          <circle cx="70" cy="70" r="10" stroke="currentColor" strokeWidth="2" />
-                          <path d="M40 50 H 55 V 30 H 60 M 55 50 V 70 H 60" stroke="currentColor" strokeWidth="2" />
-                        </svg>
-                      </div>
+                    <div className="stat-card total-card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '120px', borderRadius: '16px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                        <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 800, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Tổng khách hàng')}</span>
-                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(163, 20, 34, 0.08)', color: '#a31422', flexShrink: 0 }}><Users size={16} /></div>
+                        <span className="stat-label" style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('Tổng khách hàng')}</span>
+                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', flexShrink: 0 }}><Users size={16} strokeWidth={1.75} /></div>
                       </div>
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
-                        <div className="stat-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                        <div className="stat-value" style={{ fontSize: '1.65rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
                           {statsData.summary.total_received || 0}
                         </div>
-                        <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500 }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a31422', display: 'inline-block' }} />
-                            {t('Tổng data đang chăm sóc')}: {statsData.summary.total_received || 0}
+                        <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ color: '#94a3b8' }}>•</span>
+                            {t('Tổng data đang chăm sóc')}: <strong style={{ color: 'var(--color-text)' }}>{statsData.summary.total_received || 0}</strong>
                           </span>
                         </div>
                       </div>
                     </div>
 
                     {/* Card 2: Được chia */}
-                    <div className="stat-card hover-lift distributed-card" style={{ display: 'flex', flexDirection: 'column', padding: '1rem', minHeight: '120px', borderRadius: '12px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
-                      <div className="decor-svg" style={{ color: '#007af5' }}>
-                        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                          <circle cx="45" cy="35" r="15" stroke="currentColor" strokeWidth="2" />
-                          <path d="M20 75 C 20 60, 31 50, 45 50 C 59 50, 70 60, 70 75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          <path d="M75 35 H 89 M 82 28 V 42" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        </svg>
-                      </div>
+                    <div className="stat-card distributed-card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '120px', borderRadius: '16px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                        <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 800, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Được chia')}</span>
-                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(0, 122, 245, 0.08)', color: '#007af5', flexShrink: 0 }}><Send size={16} /></div>
+                        <span className="stat-label" style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('Được chia')}</span>
+                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', flexShrink: 0 }}><Send size={16} strokeWidth={1.75} /></div>
                       </div>
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
-                        <div className="stat-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                        <div className="stat-value" style={{ fontSize: '1.65rem', fontWeight: 700, color: '#BD1D2D', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
                           {(statsData.summary.distributed_count || 0) + (statsData.summary.coop_count || 0)}
                         </div>
-                        <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#007af5', display: 'inline-block' }} />
-                            {t('Chia tự động')}: {statsData.summary.distributed_count || 0}
+                        <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500, display: 'flex', flexDirection: 'column', gap: '2px', fontVariantNumeric: 'tabular-nums' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ color: '#94a3b8' }}>•</span>
+                            {t('Chia tự động')}: <strong style={{ color: 'var(--color-text)' }}>{statsData.summary.distributed_count || 0}</strong>
                           </span>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fbbf24', display: 'inline-block' }} />
-                            {t('Hợp tác (co.op)')}: {statsData.summary.coop_count || 0}
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ color: '#94a3b8' }}>•</span>
+                            {t('Hợp tác (co.op)')}: <strong style={{ color: 'var(--color-text)' }}>{statsData.summary.coop_count || 0}</strong>
                           </span>
                         </div>
                       </div>
                     </div>
 
                     {/* Card 4: Tự nhập */}
-                    <div className="stat-card hover-lift out_of_hours-card" style={{ display: 'flex', flexDirection: 'column', padding: '1rem', minHeight: '120px', borderRadius: '12px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
-                      <div className="decor-svg" style={{ color: '#f59e0b' }}>
-                        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                          <circle cx="50" cy="35" r="15" stroke="currentColor" strokeWidth="2" />
-                          <path d="M25 75 C 25 60, 36 50, 50 50 C 64 50, 75 60, 75 75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          <path d="M75 35 H 90 M 82.5 27.5 V 42.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        </svg>
-                      </div>
+                    <div className="stat-card out_of_hours-card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '120px', borderRadius: '16px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                        <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 800, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Tự nhập')}</span>
-                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.08)', color: '#f59e0b', flexShrink: 0 }}><UserPlus size={16} /></div>
+                        <span className="stat-label" style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('Tự nhập')}</span>
+                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', flexShrink: 0 }}><UserPlus size={16} strokeWidth={1.75} /></div>
                       </div>
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
-                        <div className="stat-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                        <div className="stat-value" style={{ fontSize: '1.65rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
                           {statsData.summary.self_count || 0}
                         </div>
-                        <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500 }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
-                            {t('Tự tạo hoặc giới thiệu')}: {statsData.summary.self_count || 0}
+                        <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ color: '#94a3b8' }}>•</span>
+                            {t('Tự tạo hoặc giới thiệu')}: <strong style={{ color: 'var(--color-text)' }}>{statsData.summary.self_count || 0}</strong>
                           </span>
                         </div>
                       </div>
@@ -7234,24 +7205,18 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   </div>
 
                   {/* Row 1: Daily trend bar chart (Full Width) */}
-                  <div className="card" style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', width: '100%' }}>
-                    <h4 style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--color-text)' }}>{t('Lưu lượng nhận Data theo Ngày')}</h4>
+                  <div className="card" style={{ padding: '20px', borderRadius: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', width: '100%' }}>
+                    <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '12px', color: 'var(--color-text)' }}>{t('Lưu lượng nhận Data theo ngày')}</h4>
                     {statsData.by_date && statsData.by_date.length > 0 ? (
                       <div style={{ height: 180, width: '100%' }}>
                         <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={statsData.by_date} margin={{ left: -10, right: 5, top: 20, bottom: 0 }}>
-                            <defs>
-                              <linearGradient id="statsDateGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#e63946" stopOpacity={1} />
-                                <stop offset="100%" stopColor="#a31422" stopOpacity={0.8} />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
-                            <XAxis dataKey="date" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                            <YAxis domain={[0, (max: number) => (max < 5 ? 5 : Math.ceil(max * 1.15))]} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
-                            <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8 }} />
-                            <Bar dataKey="count" fill="url(#statsDateGradient)" radius={[4, 4, 0, 0]} maxBarSize={30} name={t("Data thành công")}>
-                              <LabelList dataKey="count" position="top" style={{ fill: 'var(--color-text)', fontSize: 10, fontWeight: 700 }} offset={6} />
+                          <BarChart data={statsData.by_date} margin={{ left: -8, right: 8, top: 20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" strokeOpacity={0.7} vertical={false} />
+                            <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
+                            <YAxis domain={[0, (max: number) => (max < 5 ? 5 : Math.ceil(max * 1.15))]} tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} width={36} />
+                            <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 10, boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)', fontVariantNumeric: 'tabular-nums' }} />
+                            <Bar dataKey="count" fill="#C6333D" radius={[4, 4, 0, 0]} maxBarSize={28} name={t("Data thành công")}>
+                              <LabelList dataKey="count" position="top" style={{ fill: 'var(--color-text)', fontSize: 11, fontWeight: 600 }} offset={6} />
                             </Bar>
                           </BarChart>
                         </ResponsiveContainer>
@@ -7264,19 +7229,19 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   </div>
 
                   {/* Row 2: Status Ratio (Donut) & Rounds Breakdown */}
-                  <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                  <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                     {/* Donut chart for status ratio */}
-                    <div className="card" style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)' }}>
-                      <h4 style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--color-text)' }}>{t('Tỷ lệ Trạng thái Data')}</h4>
+                    <div className="card" style={{ padding: '20px', borderRadius: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)' }}>
+                      <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '12px', color: 'var(--color-text)' }}>{t('Tỷ lệ trạng thái Data')}</h4>
                       {(() => {
                         const statusChartData = [
-                          { name: t('Thành công'), value: statsData.summary.successful, color: '#a31422' },
-                          { name: t('Nhắc lại'), value: statsData.summary.reminder, color: '#f59e0b' },
-                          { name: t('Lỗi'), value: statsData.summary.error, color: '#ef4444' }
+                          { name: t('Thành công'), value: statsData.summary.successful, color: '#C6333D' },
+                          { name: t('Nhắc lại'), value: statsData.summary.reminder, color: '#64748B' },
+                          { name: t('Lỗi'), value: statsData.summary.error, color: '#CBD5E1' }
                         ].filter(item => item.value > 0);
 
                         return statsData.summary.total > 0 && statusChartData.length > 0 ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', justifyContent: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '24px', justifyContent: 'center' }}>
                             <div style={{ width: 140, height: 140, flexShrink: 0 }}>
                               <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
@@ -7284,22 +7249,22 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                                     data={statusChartData}
                                     cx="50%"
                                     cy="50%"
-                                    innerRadius={35}
-                                    outerRadius={55}
-                                    paddingAngle={4}
+                                    innerRadius={38}
+                                    outerRadius={58}
+                                    paddingAngle={3}
                                     dataKey="value"
                                   >
                                     {statusChartData.map((entry, index) => (
-                                      <Cell key={`cell-${index}`} fill={entry.color} />
+                                      <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
                                     ))}
                                   </Pie>
-                                  <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8 }} />
+                                  <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 10, boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)', fontVariantNumeric: 'tabular-nums' }} />
                                 </PieChart>
                               </ResponsiveContainer>
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.75rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
                               {statusChartData.map((item, idx) => (
-                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: item.color }} />
                                   <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
                                     {item.name}: <strong style={{ fontSize: '0.8125rem' }}>{item.value}</strong> ({Math.round(item.value / statsData.summary.total * 100)}%)
@@ -7309,7 +7274,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                             </div>
                           </div>
                         ) : (
-                          <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.75rem', padding: '2rem 0' }}>
+                          <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.75rem', padding: '32px 0' }}>
                             {t('Không có dữ liệu lưu lượng')}
                           </div>
                         );
@@ -7317,24 +7282,24 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                     </div>
 
                     {/* Rounds breakdown chart */}
-                    <div className="card" style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)' }}>
-                      <h4 style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--color-text)' }}>{t('Phân bổ theo Vòng (Round)')}</h4>
+                    <div className="card" style={{ padding: '20px', borderRadius: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)' }}>
+                      <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '12px', color: 'var(--color-text)' }}>{t('Phân bổ theo Vòng (Round)')}</h4>
                       {statsData.rounds.length > 0 ? (
                         <div style={{ height: 160, width: '100%' }}>
                           <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={statsData.rounds} layout="vertical" margin={{ left: -10, right: 10, top: 0, bottom: 0 }}>
-                              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border-light)" />
-                              <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                              <YAxis dataKey="round_name" type="category" width={90} tick={{ fontSize: 9, fontWeight: 600 }} axisLine={false} tickLine={false} />
-                              <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8 }} />
-                              <Bar dataKey="successful_count" stackId="a" fill="#a31422" radius={[0, 0, 0, 0]} barSize={12} name={t("Thành công")} />
-                              <Bar dataKey="reminder_count" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} barSize={12} name={t("Nhắc lại")} />
-                              <Bar dataKey="error_count" stackId="a" fill="#ef4444" radius={[0, 4, 4, 0]} barSize={12} name={t("Lỗi")} />
+                            <BarChart data={statsData.rounds} layout="vertical" margin={{ left: -8, right: 12, top: 0, bottom: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border-light)" strokeOpacity={0.7} />
+                              <XAxis type="number" tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
+                              <YAxis dataKey="round_name" type="category" width={92} tick={{ fontSize: 11, fill: '#64748B', fontWeight: 500 }} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 10, boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)', fontVariantNumeric: 'tabular-nums' }} />
+                              <Bar dataKey="successful_count" stackId="a" fill="#C6333D" radius={[0, 0, 0, 0]} barSize={12} name={t("Thành công")} />
+                              <Bar dataKey="reminder_count" stackId="a" fill="#64748B" radius={[0, 0, 0, 0]} barSize={12} name={t("Nhắc lại")} />
+                              <Bar dataKey="error_count" stackId="a" fill="#CBD5E1" radius={[0, 4, 4, 0]} barSize={12} name={t("Lỗi")} />
                             </BarChart>
                           </ResponsiveContainer>
                         </div>
                       ) : (
-                        <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.75rem', padding: '2rem 0' }}>
+                        <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.75rem', padding: '32px 0' }}>
                           {t('Không có dữ liệu chia số theo vòng')}
                         </div>
                       )}
@@ -7342,13 +7307,13 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                   </div>
 
                   {/* Row 3: Marketing Sources & Tickets Reports */}
-                  <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                  <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                     {/* Source breakdown list */}
-                    <div className="card" style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)' }}>
-                      <h4 style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--color-text)' }}>{t('Tỷ lệ Nguồn Data (Chi tiết)')}</h4>
-                      {statsData.by_source && statsData.by_source.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 110, overflowY: 'auto', paddingRight: 4 }}>
-                          {statsData.by_source.map((src: any, idx: number) => {
+                    <div className="card" style={{ padding: '20px', borderRadius: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)' }}>
+                      <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '12px', color: 'var(--color-text)' }}>{t('Tỷ lệ nguồn Data (Chi tiết)')}</h4>
+                      {ensureArray(statsData?.by_source).length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 120, overflowY: 'auto', paddingRight: 4, fontVariantNumeric: 'tabular-nums' }}>
+                          {ensureArray(statsData?.by_source).map((src: any, idx: number) => {
                             const sourcePercent = statsData.summary.successful > 0
                               ? Math.round((src.count / statsData.summary.successful) * 100)
                               : 0;
@@ -7366,33 +7331,33 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                           })}
                         </div>
                       ) : (
-                        <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.75rem', padding: '1.5rem 0' }}>
+                        <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.75rem', padding: '24px 0' }}>
                           {t('Không có dữ liệu nguồn data')}
                         </div>
                       )}
                     </div>
 
                     {/* Tickets Reports statistics */}
-                    <div className="card" style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)' }}>
-                      <h4 style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--color-text)' }}>{t('Thống kê Ticket báo lỗi Data')}</h4>
+                    <div className="card" style={{ padding: '20px', borderRadius: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', fontVariantNumeric: 'tabular-nums' }}>
+                      <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '12px', color: 'var(--color-text)' }}>{t('Thống kê Ticket báo lỗi Data')}</h4>
                       {statsData.tickets ? (
                         <>
-                          <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', textAlign: 'center' }}>
-                            <div style={{ background: 'var(--color-bg)', padding: '6px', borderRadius: 8, border: '1px solid var(--color-border-light)' }}>
-                              <div style={{ fontSize: '0.6rem', color: 'var(--color-text-muted)', fontWeight: 700 }}>{t('GỬI ĐI')}</div>
-                              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)', marginTop: 2 }}>{statsData.tickets.total}</div>
+                          <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', textAlign: 'center' }}>
+                            <div style={{ background: 'var(--color-bg)', padding: '8px', borderRadius: 8, border: '1px solid var(--color-border-light)' }}>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('GỬI ĐI')}</div>
+                              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', marginTop: 4 }}>{statsData.tickets.total}</div>
                             </div>
-                            <div style={{ background: 'var(--color-success-light)', padding: '6px', borderRadius: 8, border: '1px solid rgba(16, 185, 129, 0.1)' }}>
-                              <div style={{ fontSize: '0.6rem', color: 'var(--color-success)', fontWeight: 700 }}>{t('ĐÃ BÙ')}</div>
-                              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-success)', marginTop: 2 }}>{statsData.tickets.approved}</div>
+                            <div style={{ background: 'var(--color-success-light)', padding: '8px', borderRadius: 8, border: '1px solid rgba(16, 185, 129, 0.1)' }}>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--color-success)', fontWeight: 600 }}>{t('ĐÃ BÙ')}</div>
+                              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-success)', marginTop: 4 }}>{statsData.tickets.approved}</div>
                             </div>
-                            <div style={{ background: 'var(--color-warning-light)', padding: '6px', borderRadius: 8, border: '1px solid rgba(245, 158, 11, 0.1)' }}>
-                              <div style={{ fontSize: '0.6rem', color: 'var(--color-warning)', fontWeight: 700 }}>{t('ĐANG CHỜ')}</div>
-                              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-warning)', marginTop: 2 }}>{statsData.tickets.pending}</div>
+                            <div style={{ background: 'var(--color-warning-light)', padding: '8px', borderRadius: 8, border: '1px solid rgba(245, 158, 11, 0.1)' }}>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--color-warning)', fontWeight: 600 }}>{t('ĐANG CHỜ')}</div>
+                              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-warning)', marginTop: 4 }}>{statsData.tickets.pending}</div>
                             </div>
-                            <div style={{ background: 'var(--color-danger-light)', padding: '6px', borderRadius: 8, border: '1px solid rgba(239, 68, 68, 0.1)' }}>
-                              <div style={{ fontSize: '0.6rem', color: 'var(--color-danger)', fontWeight: 700 }}>{t('TỪ CHỐI')}</div>
-                              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-danger)', marginTop: 2 }}>{statsData.tickets.rejected}</div>
+                            <div style={{ background: 'var(--color-danger-light)', padding: '8px', borderRadius: 8, border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--color-danger)', fontWeight: 600 }}>{t('TỪ CHỐI')}</div>
+                              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-danger)', marginTop: 4 }}>{statsData.tickets.rejected}</div>
                             </div>
                           </div>
                           <div style={{ marginTop: '10px', fontSize: '0.75rem', color: 'var(--color-text-muted)', textAlign: 'center', fontWeight: 500 }}>

@@ -1,4 +1,4 @@
-# sync-staging-db.ps1
+﻿# sync-staging-db.ps1
 # Dedicated 1-Way Database Schema & Migration Sync from Production -> Staging
 # Production: vhvxoigh_myerp (STRICTLY READ-ONLY)
 # Staging:    vhvxoigh_erpstagging (TARGET)
@@ -15,10 +15,10 @@ Write-Host "   Ngắt toàn bộ đồng bộ giữa Production và Staging." -F
 Write-Host "=========================================================" -ForegroundColor Red
 exit 0
 
-$sshKey = "C:\Users\LENOVO\.ssh\id_ed25519"
-$sshUser = "vhvxoigh"
-$sshHost = "103.110.87.26"
-$sshPort = "2210"
+$sshKey = if ($env:SSH_KEY) { $env:SSH_KEY } else { Join-Path $HOME ".ssh\id_ed25519" }
+$sshUser = if ($env:SSH_USER) { $env:SSH_USER } else { "vhvxoigh" }
+$sshHost = if ($env:STAGING_SSH_HOST) { $env:STAGING_SSH_HOST } else { "103.110.87.26" }
+$sshPort = if ($env:SSH_PORT) { $env:SSH_PORT } else { "2210" }
 $remoteDir = "myerp-stagging.ideas.edu.vn"
 
 Write-Host "=========================================================" -ForegroundColor Cyan
@@ -55,7 +55,13 @@ Write-Host "`n[2/3] Executing 1-Way Schema Auditor & Synchronizer..." -Foregroun
 $flag = if ($DryRun) { "" } else { "--apply" }
 if ($ForceClone) {
     Write-Host "   WARNING: Force-Clone requested! Snapshotting full database..." -ForegroundColor Red
-    $cmd = "mysqldump -u vhvxoigh_mail_auto -p'Ideas@812' --single-transaction --quick vhvxoigh_myerp | mysql -u vhvxoigh_mail_auto -p'Ideas@812' vhvxoigh_erpstagging && /usr/local/bin/ea-php81 ${remoteDir}/audit_and_sync_schema.php --apply"
+    $dbUser = if ($env:DB_USER) { $env:DB_USER } else { "vhvxoigh_mail_auto" }
+    $dbPass = $env:DB_PASS
+    if ([string]::IsNullOrWhiteSpace($dbPass)) {
+        Write-Host "ERROR: Set DB_PASS environment variable before ForceClone." -ForegroundColor Red
+        exit 1
+    }
+    $cmd = "mysqldump -u ${dbUser} -p'${dbPass}' --single-transaction --quick vhvxoigh_myerp | mysql -u ${dbUser} -p'${dbPass}' vhvxoigh_erpstagging && /usr/local/bin/ea-php81 ${remoteDir}/audit_and_sync_schema.php --apply"
 } else {
     $cmd = "/usr/local/bin/ea-php81 ${remoteDir}/audit_and_sync_schema.php $flag && /usr/local/bin/ea-php81 ${remoteDir}/backend/run_migrations.php --apply"
 }

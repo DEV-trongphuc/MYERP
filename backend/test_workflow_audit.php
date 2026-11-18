@@ -1,10 +1,11 @@
 <?php
 // backend/test_workflow_audit.php
 // IDEAS DATA CRM - Workflow & Database Schema Audit Test Suite
-// Chạy từ dòng lệnh hoặc HTTP với Secure Token: ?token=Ideas_Diag_Secure_Token_2026_9e88d6c701fbc6b7
+// Chạy từ dòng lệnh (CLI) hoặc qua HTTP với ?token=<MYERP_DIAG_TOKEN> (cấu hình trong backend/.env)
 
-define('DIAG_TOKEN', true);
-$_GET['token'] = 'Ideas_Diag_Secure_Token_2026_9e88d6c701fbc6b7'; // Force verification authorization
+if (php_sapi_name() === 'cli' && !defined('DIAG_TOKEN')) {
+    define('DIAG_TOKEN', true);
+}
 require_once __DIR__ . '/test_bootstrap.php';
 
 // Thiết lập định dạng trả về nếu truy cập qua web

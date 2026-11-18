@@ -99,7 +99,7 @@ const EVENT_CATEGORIES = [
         key: 'HOLIDAY_REGISTRATION_OPENED',
         name: 'Admin Mở Đăng ký Trực lễ',
         desc: 'Thông báo khi Ban quản trị mở đăng ký trực ca các ngày Lễ, Tết',
-        icon: '🎉'
+        icon: '📅'
       },
       {
         key: 'HOLIDAY_UPDATE',
@@ -1154,7 +1154,7 @@ const getDefaultConfig = (key: string): EventConfig => {
                 Hủy bỏ
               </button>
               <div style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap' }}>
-                💡 <strong>Mẹo:</strong> Chuông In-App luôn duy trì tự động.
+                <strong>Lưu ý:</strong> Chuông In-App luôn duy trì tự động.
               </div>
             </div>
 
@@ -1308,7 +1308,7 @@ const getDefaultConfig = (key: string): EventConfig => {
                       const code = `CONNECT ${userInfo.user_id || currentUser?.id || ''}`;
                       navigator.clipboard.writeText(code);
                       setCopiedCode(true);
-                      toast.success('Đã sao chép mã kết nối Zalo Bot!');
+                      toast.success('Đã sao chép mã kết nối Zalo Bot');
                       setTimeout(() => setCopiedCode(false), 2000);
                     }}
                     style={{
@@ -1380,8 +1380,8 @@ const getDefaultConfig = (key: string): EventConfig => {
 
           </div>
 
-          <div style={{ fontSize: '0.75rem', color: '#64748b', fontStyle: 'italic', textAlign: 'center', marginTop: 2 }}>
-            ✨ Ngay khi nhắn mã thành công, Zalo Bot sẽ tự động phản hồi xác nhận liên kết tài khoản của bạn!
+          <div style={{ fontSize: '0.75rem', color: '#64748b', textAlign: 'center', marginTop: 4 }}>
+            Ngay khi nhắn mã thành công, Zalo Bot sẽ tự động phản hồi xác nhận liên kết tài khoản của bạn.
           </div>
         </div>
       </CustomModal>

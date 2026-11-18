@@ -20,47 +20,47 @@ export const ProactiveInsightCard: React.FC<ProactiveInsightCardProps> = ({ insi
 
   const typeConfig = {
     warning: {
-      borderColor: 'rgba(245, 158, 11, 0.4)',
-      bgGradient: 'linear-gradient(135deg, rgba(254, 243, 199, 0.6) 0%, rgba(255, 251, 235, 0.9) 100%)',
-      badgeBg: '#fef3c7',
-      badgeText: '#b45309',
-      iconColor: '#d97706',
+      borderColor: '#FDE68A',
+      bgGradient: '#FFFBEB',
+      badgeBg: '#FEF3C7',
+      badgeText: '#92400E',
+      iconColor: '#D97706',
       badgeLabel: 'CẢNH BÁO VẬN HÀNH',
       Icon: AlertTriangle,
     },
     urgent: {
-      borderColor: 'rgba(239, 68, 68, 0.45)',
-      bgGradient: 'linear-gradient(135deg, rgba(254, 226, 226, 0.6) 0%, rgba(255, 241, 242, 0.9) 100%)',
-      badgeBg: '#fee2e2',
-      badgeText: '#b91c1c',
-      iconColor: '#ef4444',
+      borderColor: '#FECACA',
+      bgGradient: '#FEF2F2',
+      badgeBg: '#FEE2E2',
+      badgeText: '#BD1D2D',
+      iconColor: '#BD1D2D',
       badgeLabel: 'KHẨN CẤP / QUÁ HẠN',
       Icon: ShieldAlert,
     },
     opportunity: {
-      borderColor: 'rgba(16, 185, 129, 0.4)',
-      bgGradient: 'linear-gradient(135deg, rgba(209, 250, 229, 0.6) 0%, rgba(240, 253, 244, 0.9) 100%)',
-      badgeBg: '#d1fae5',
+      borderColor: '#A7F3D0',
+      bgGradient: '#ECFDF5',
+      badgeBg: '#D1FAE5',
       badgeText: '#047857',
-      iconColor: '#10b981',
+      iconColor: '#10B981',
       badgeLabel: 'CƠ HỘI CHĂM SÓC',
       Icon: TrendingUp,
     },
     info: {
-      borderColor: 'rgba(99, 102, 241, 0.4)',
-      bgGradient: 'linear-gradient(135deg, rgba(224, 231, 255, 0.6) 0%, rgba(245, 247, 255, 0.9) 100%)',
-      badgeBg: '#e0e7ff',
-      badgeText: '#4338ca',
-      iconColor: '#6366f1',
+      borderColor: '#CBD5E1',
+      bgGradient: '#F8FAFC',
+      badgeBg: '#E2E8F0',
+      badgeText: '#334155',
+      iconColor: '#475569',
       badgeLabel: 'THÔNG TIN CHỦ ĐỘNG',
       Icon: Info,
     },
   }[type] || {
-    borderColor: 'rgba(245, 158, 11, 0.4)',
-    bgGradient: 'linear-gradient(135deg, rgba(254, 243, 199, 0.6) 0%, rgba(255, 251, 235, 0.9) 100%)',
-    badgeBg: '#fef3c7',
-    badgeText: '#b45309',
-    iconColor: '#d97706',
+    borderColor: '#FDE68A',
+    bgGradient: '#FFFBEB',
+    badgeBg: '#FEF3C7',
+    badgeText: '#92400E',
+    iconColor: '#D97706',
     badgeLabel: 'CẢNH BÁO VẬN HÀNH',
     Icon: AlertTriangle,
   };
@@ -73,14 +73,14 @@ export const ProactiveInsightCard: React.FC<ProactiveInsightCardProps> = ({ insi
         marginTop: '8px',
         marginBottom: '8px',
         borderRadius: '12px',
-        border: 'none',
+        border: `1px solid ${typeConfig.borderColor}`,
         background: typeConfig.bgGradient,
-        padding: '11px 13px',
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
+        padding: '12px',
+        boxShadow: '0 1px 2px rgba(15, 23, 42, 0.03)',
         position: 'relative',
-        transition: 'all 0.2s ease',
+        transition: 'border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
       }}
-      className="dark:!bg-slate-900/90"
+      className="dark:!bg-slate-900/90 dark:!border-slate-700"
     >
       {/* Dismiss Button */}
       <button
@@ -93,9 +93,9 @@ export const ProactiveInsightCard: React.FC<ProactiveInsightCardProps> = ({ insi
           right: '8px',
           background: 'transparent',
           border: 'none',
-          color: '#94a3b8',
+          color: '#94A3B8',
           cursor: 'pointer',
-          padding: '3px',
+          padding: '4px',
           borderRadius: '4px',
           display: 'flex',
           alignItems: 'center',
@@ -103,10 +103,10 @@ export const ProactiveInsightCard: React.FC<ProactiveInsightCardProps> = ({ insi
         }}
         className="hover:!text-slate-700 dark:hover:!text-slate-200"
       >
-        <X size={14} />
+        <X size={14} strokeWidth={1.75} />
       </button>
 
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', paddingRight: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', paddingRight: '16px' }}>
         <div
           style={{
             marginTop: '2px',
@@ -114,15 +114,15 @@ export const ProactiveInsightCard: React.FC<ProactiveInsightCardProps> = ({ insi
             flexShrink: 0,
           }}
         >
-          <Icon size={18} />
+          <Icon size={18} strokeWidth={1.75} />
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
             <span
               style={{
                 fontSize: '10px',
-                fontWeight: 700,
+                fontWeight: 600,
                 letterSpacing: '0.04em',
                 padding: '2px 6px',
                 borderRadius: '4px',
@@ -138,7 +138,7 @@ export const ProactiveInsightCard: React.FC<ProactiveInsightCardProps> = ({ insi
               style={{
                 fontSize: '13px',
                 fontWeight: 600,
-                color: '#1e293b',
+                color: '#0F172A',
               }}
               className="dark:!text-slate-100"
             >
@@ -150,8 +150,8 @@ export const ProactiveInsightCard: React.FC<ProactiveInsightCardProps> = ({ insi
             style={{
               fontSize: '12px',
               color: '#475569',
-              margin: '3px 0 0 0',
-              lineHeight: '1.4',
+              margin: '4px 0 0 0',
+              lineHeight: '1.45',
             }}
             className="dark:!text-slate-300"
           >
@@ -166,17 +166,16 @@ export const ProactiveInsightCard: React.FC<ProactiveInsightCardProps> = ({ insi
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '5px',
-                  padding: '4px 10px',
-                  fontSize: '11px',
+                  gap: '4px',
+                  padding: '4px 12px',
+                  fontSize: '11.5px',
                   fontWeight: 600,
                   borderRadius: '6px',
-                  border: 'none',
-                  background: '#ffffff',
+                  border: '1px solid #E2E8F0',
+                  background: '#FFFFFF',
                   color: typeConfig.badgeText,
                   cursor: 'pointer',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                  transition: 'all 0.15s ease',
+                  transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
                 }}
                 className="hover:!shadow hover:!brightness-95 dark:!bg-slate-800 dark:!text-slate-200"
               >

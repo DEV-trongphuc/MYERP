@@ -53,6 +53,7 @@ import { AssignedAssetsSection, type AssignedAsset } from '../components/ui/Assi
 
 import { decodeHtmlEntities, stripHtml } from '../utils/textUtils';
 import { fetchAPI } from '../utils/api';
+import { ensureArray, extractArray } from '../utils/safeArray';
 import { compressToWebP } from '../utils/imageCompress';
 import { MentionInput } from '../components/ui/MentionInput';
 import { CustomModal } from '../components/ui/CustomModal';
@@ -3499,7 +3500,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
       const res = await fetchAPI(`get_reports&${queryParams.toString()}`);
       if (res.success) {
-        setTickets(res.data || []);
+        setTickets(extractArray(res));
         setTicketTotalCount(res.total_count ?? 0);
       } else {
         toast.error(res.message || t('Không thể tải danh sách ticket'));
@@ -3624,7 +3625,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     try {
       const res = await fetchAPI('cooperation-slips?pending_sign=1');
       if (res.success) {
-        const slips = res.data || [];
+        const slips = extractArray(res);
         setPendingCoopSlips(slips);
         setPendingCoopsCount(slips.length);
       }
@@ -4439,10 +4440,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         }));
         setUsers(team);
       }).catch(() => {});
-      api.get('/projects').then(r => setAllowedProjects(r.data.data || r.data || [])).catch(() => {});
-      api.get('/marketing-campaigns').then(r => setAllowedCampaigns(r.data.data?.items || r.data.data || [])).catch(() => {});
+      api.get('/projects').then(r => setAllowedProjects(extractArray(r?.data))).catch(() => {});
+      api.get('/marketing-campaigns').then(r => setAllowedCampaigns(extractArray(r?.data))).catch(() => {});
       api.get('/teams').then(r => {
-        const list = r.data.data || r.data || [];
+        const list = extractArray(r?.data);
         setAllowedTeams(list);
         setTeamsList(list);
       }).catch(() => {});
@@ -5035,7 +5036,22 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       }
       const json = await fetchAPI(query);
       if (json.success) {
-        setData(json);
+        setData({
+          ...json,
+          leads: ensureArray(json.leads),
+          rounds: ensureArray(json.rounds),
+          consultants: ensureArray(json.consultants),
+          by_round: ensureArray(json.by_round),
+          by_hour: Array.isArray(json.by_hour) ? json.by_hour : Array(24).fill(0),
+          stats: {
+            total_received: 0,
+            tickets_total: 0,
+            tickets_approved: 0,
+            tickets_rejected: 0,
+            tickets_pending: 0,
+            ...(json.stats && typeof json.stats === 'object' ? json.stats : {}),
+          },
+        });
         if (json.vacation_mode !== undefined) setPortalVacationMode(Boolean(Number(json.vacation_mode)));
       } else {
         if (!isSilent) toast.error(json.message || t('Không thể tải dữ liệu'));
@@ -5257,7 +5273,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       const endStr = toLocalDateString(sunday);
 
       const res = await fetchAPI(`check-ins&start_date=${startStr}&end_date=${endStr}&include_shifts=1`);
-      if (res.success && res.data && res.data.shifts) {
+      if (res.success && res.data && Array.isArray(res.data.shifts)) {
         const myShifts = res.data.shifts.filter((s: any) => String(s.user_id) === String(user?.id));
         setWeeklyRegistrations(myShifts);
         const registeredDates = myShifts.map((s: any) => s.shift_date);
@@ -5388,7 +5404,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     try {
       const res = await fetchAPI(`get_public_leads&show_deleted=${showDeletedFilter}`);
       if (res.success) {
-        setPublicLeads(res.data || []);
+        setPublicLeads(extractArray(res));
         if (res.quota) {
           setPublicQuota(res.quota);
         }
@@ -6146,7 +6162,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       const query = saleId ? `get_consultant_leaves&consultant_id=${saleId}` : 'get_consultant_leaves';
       const res = await fetchAPI(query);
       if (res.success) {
-        setLeaveHistory(res.data || []);
+        setLeaveHistory(extractArray(res));
       }
     } catch (err) {
       /* silent */
@@ -6680,7 +6696,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   };
 
   // Prepare chart data for Recharts (Hourly distribution)
-  const hourlyChartData = data.by_hour.map((count: number, hr: number) => ({
+  const safeByHour = Array.isArray(data?.by_hour) ? data.by_hour : Array(24).fill(0);
+  const hourlyChartData = safeByHour.map((count: number, hr: number) => ({
     time: `${String(hr).padStart(2, '0')}:00`,
     volume: count
   }));
@@ -6731,7 +6748,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   const getStatusBadge = (status: string, reportStatus?: string, aiScreenerStatus?: string, createdAt?: string, takers?: any[]) => {
     if (status === 'assigned' && reportStatus === 'pending') {
-      return <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#4338ca' }}>{t('Ticket Review')}</span>;
+      return <span className="badge" style={{ background: 'rgba(51, 65, 85, 0.1)', color: '#334155' }}>{t('Ticket Review')}</span>;
     }
     if (reportStatus === 'approved_no_comp') {
       return <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#1d4ed8' }}>{t('Lỗi không bù')}</span>;
@@ -6744,19 +6761,19 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       const created = createdAt ? parseServerDate(createdAt) : nowTime;
       const diffMins = (nowTime.getTime() - created.getTime()) / 60000;
       if (diffMins >= -2 && diffMins < 5) {
-        return <span className="badge" style={{ background: 'rgba(236, 72, 153, 0.1)', color: '#be185d' }}>{t('Chờ AI đánh giá')}</span>;
+        return <span className="badge" style={{ background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D' }}>{t('Chờ AI đánh giá')}</span>;
       }
     }
     switch (status) {
       case 'assigned': return <span className="badge" style={{ background: 'rgba(13, 148, 136, 0.1)', color: '#0f766e' }}>{t('Đã chia')}</span>;
-      case 'compensation': return <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#6d28d9' }}>{t('Data Bù')}</span>;
+      case 'compensation': return <span className="badge" style={{ background: 'rgba(2, 132, 199, 0.1)', color: '#0284c7' }}>{t('Data Bù')}</span>;
       case 'pending_work_hours': return <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#b45309' }}>{t('Chờ giờ làm')}</span>;
       case 'error': return <span className="badge" style={{ background: 'rgba(244, 63, 94, 0.1)', color: '#be123c' }}>{t('Ticket')}</span>;
       case 'pending': return <span className="badge" style={{ background: 'rgba(234, 179, 8, 0.1)', color: '#a16207' }}>{t('Chờ chia')}</span>;
-      case 'reminder': return <span className="badge" style={{ background: 'rgba(236, 72, 153, 0.1)', color: '#be185d' }}>{t('Nhắc lại')}</span>;
+      case 'reminder': return <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#b45309' }}>{t('Nhắc lại')}</span>;
       case 'duplicate': return <span className="badge" style={{ background: 'rgba(220, 38, 38, 0.1)', color: '#991b1b' }}>{t('Trùng lặp')}</span>;
       case 'rule_6_month': return <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#1d4ed8' }}>{t('Quy định 6 tháng')}</span>;
-      case 'silent': return <span className="badge" style={{ background: 'rgba(79, 70, 229, 0.1)', color: '#3730a3' }}>{t('Chỉ đồng bộ')}</span>;
+      case 'silent': return <span className="badge" style={{ background: 'rgba(71, 85, 105, 0.1)', color: '#475569' }}>{t('Chỉ đồng bộ')}</span>;
       case 'blacklisted': return <span className="badge" style={{ background: 'rgba(31, 41, 55, 0.1)', color: '#111827' }}>{t('Blacklist')}</span>;
       case 'pending_approval': return <span className="badge" style={{ background: 'rgba(234, 88, 12, 0.1)', color: '#c2410c' }}>{t('Tạm giữ')}</span>;
       case 'rejected': return <span className="badge" style={{ background: 'rgba(120, 53, 4, 0.1)', color: '#78350f' }}>{t('Dưới chuẩn')}</span>;
@@ -6777,7 +6794,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
   };
 
-  const filteredLeads = data.leads.filter((lead: any) => {
+  const filteredLeads = ensureArray(data?.leads).filter((lead: any) => {
     if (statusFilter !== 'all') {
       if (statusFilter === 'assigned') {
         if (!['assigned', 'rule_6_month', 'pending_work_hours', 'fallback', 'databank_claim'].includes(lead.status) || lead.report_status) return false;
@@ -6977,12 +6994,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     const isAdminOrManager = ['admin', 'superadmin', 'super_admin', 'manager', 'director'].includes(String(user?.role || displayUser?.role || '').toLowerCase());
     const teamOptions = [
       { value: '', label: t('Tất cả Nhóm') },
-      ...teamsList.map((t: any) => ({ value: String(t.id), label: t.name }))
+      ...ensureArray(teamsList).map((t: any) => ({ value: String(t.id), label: t.name }))
     ];
 
     const consultantOptions = [
       { value: '', label: t('Tất cả Nhân viên') },
-      ...users.map((u: any) => ({ value: String(u.id), label: u.full_name || u.username, avatar: u.avatar || u.avatar_url }))
+      ...ensureArray(users).map((u: any) => ({ value: String(u.id), label: u.full_name || u.username, avatar: u.avatar || u.avatar_url }))
     ];
 
     return (
@@ -7033,7 +7050,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     flexShrink: 0,
                     padding: '2px 4px',
                     color: wsBg ? '#ffffff' : 'var(--color-text)',
-                    textShadow: wsBg ? '0 1px 3px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.4)' : 'none'
+                    textShadow: wsBg ? '0 1px 2px rgba(15, 23, 42, 0.55)' : 'none'
                   }}>
                     {t("Bàn làm việc")}
                   </h1>
@@ -7047,21 +7064,22 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         display: 'flex',
                         alignItems: 'center',
                         gap: '4px',
-                        background: wsBg ? 'rgba(16, 185, 129, 0.25)' : 'rgba(16, 185, 129, 0.08)',
+                        background: wsBg ? 'rgba(6, 78, 59, 0.8)' : 'rgba(16, 185, 129, 0.08)',
                         border: wsBg ? '1px solid rgba(52, 211, 153, 0.5)' : '1px solid rgba(16, 185, 129, 0.15)',
-                        backdropFilter: wsBg ? 'blur(8px)' : 'none',
-                        WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
-                        padding: '2px 8px',
+                        backdropFilter: wsBg ? 'blur(12px)' : 'none',
+                        WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
+                        padding: '2px 9px',
                         borderRadius: '20px',
                         fontSize: '0.7rem',
                         fontWeight: 700,
-                        color: wsBg ? '#a7f3d0' : '#10b981',
+                        color: wsBg ? '#ecfdf5' : '#10b981',
                         cursor: 'pointer',
                         userSelect: 'none',
                         whiteSpace: 'nowrap',
                         height: '24px',
                         flexShrink: 0,
-                        textShadow: wsBg ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
+                        boxShadow: wsBg ? '0 2px 8px rgba(15, 23, 42, 0.2)' : 'none',
+                        textShadow: 'none'
                       }}
                     >
                       <Phone size={10} style={{ flexShrink: 0 }} />
@@ -7106,29 +7124,28 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         <button
                           onClick={() => setHideWorkspaceAlerts(false)}
                           style={{
-                            background: wsBg ? 'rgba(255, 255, 255, 0.2)' : 'rgba(189, 29, 45, 0.06)',
-                            border: wsBg ? '1px solid rgba(255, 255, 255, 0.35)' : '1px solid rgba(189, 29, 45, 0.2)',
-                            backdropFilter: wsBg ? 'blur(10px)' : 'none',
-                            WebkitBackdropFilter: wsBg ? 'blur(10px)' : 'none',
-                            padding: '2px 9px',
+                            background: wsBg ? 'rgba(15, 23, 42, 0.74)' : 'rgba(189, 29, 45, 0.06)',
+                            border: wsBg ? '1px solid rgba(255, 255, 255, 0.24)' : '1px solid rgba(189, 29, 45, 0.2)',
+                            backdropFilter: wsBg ? 'blur(12px)' : 'none',
+                            WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
+                            padding: '2px 10px',
                             borderRadius: '14px',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '4px',
+                            gap: '5px',
                             cursor: 'pointer',
                             color: wsBg ? '#ffffff' : 'var(--color-primary)',
                             fontSize: '0.7rem',
                             fontWeight: 700,
-                            height: '24px',
+                            height: '25px',
                             flexShrink: 0,
-                            transition: 'all 0.15s',
-                            boxShadow: wsBg ? '0 2px 8px rgba(0,0,0,0.25)' : 'none',
-                            textShadow: wsBg ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
+                            transition: 'background-color 0.15s ease, border-color 0.15s ease',
+                            boxShadow: wsBg ? '0 2px 8px rgba(15, 23, 42, 0.22)' : 'none',
+                            textShadow: 'none'
                           }}
-                          className="hover-lift"
                           title={t('Hiện lại gợi ý xử lý')}
                         >
-                          <Sparkles size={11} style={{ color: '#ef4444' }} />
+                          <Lightbulb size={11} strokeWidth={1.75} style={{ color: wsBg ? '#f87171' : '#BD1D2D' }} />
                           <span>{t('Gợi ý')}</span>
                         </button>
                       );
@@ -7169,15 +7186,15 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           boxSizing: 'border-box',
                           border: isWsSearchFocused 
                             ? '1.5px solid var(--color-primary, #BD1D2D)' 
-                            : (wsBg ? '1px solid rgba(255, 255, 255, 0.4)' : '1px solid var(--color-border)'),
+                            : (wsBg ? '1px solid rgba(255, 255, 255, 0.24)' : '1px solid var(--color-border)'),
                           background: wsBg 
-                            ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.1) 100%)' 
+                            ? 'rgba(15, 23, 42, 0.72)' 
                             : 'var(--color-surface)',
                           color: wsBg ? '#ffffff' : 'var(--color-text)',
-                          textShadow: wsBg ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
-                          backdropFilter: wsBg ? 'blur(12px)' : 'none',
-                          WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
-                          boxShadow: wsBg ? '0 4px 16px rgba(0, 0, 0, 0.3)' : 'none',
+                          textShadow: 'none',
+                          backdropFilter: wsBg ? 'blur(14px)' : 'none',
+                          WebkitBackdropFilter: wsBg ? 'blur(14px)' : 'none',
+                          boxShadow: wsBg ? '0 4px 14px rgba(15, 23, 42, 0.22)' : 'none',
                           transition: 'all 0.2s ease',
                           outline: 'none'
                         }}
@@ -7191,10 +7208,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           transform: isWsSearchFocused 
                             ? 'translateY(-50%) rotate(15deg) scale(1.15)' 
                             : 'translateY(-50%) rotate(0deg) scale(1)', 
-                          color: wsBg ? '#ffffff' : 'var(--color-text-muted)', 
+                          color: wsBg ? '#e2e8f0' : 'var(--color-text-muted)', 
                           pointerEvents: 'none',
                           transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-                          filter: wsBg ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none'
+                          filter: 'none'
                         }} 
                       />
                       {wsSearch && (
@@ -7243,13 +7260,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     title={t('Báo cáo & Thống kê công việc')}
                     style={{
                       background: wsBg 
-                        ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.1) 100%)' 
+                        ? 'rgba(15, 23, 42, 0.72)' 
                         : 'rgba(189, 29, 45, 0.06)',
-                      border: wsBg ? '1px solid rgba(255, 255, 255, 0.4)' : '1px solid rgba(189, 29, 45, 0.25)',
-                      backdropFilter: wsBg ? 'blur(12px)' : 'none',
-                      WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
+                      border: wsBg ? '1px solid rgba(255, 255, 255, 0.24)' : '1px solid rgba(189, 29, 45, 0.25)',
+                      backdropFilter: wsBg ? 'blur(14px)' : 'none',
+                      WebkitBackdropFilter: wsBg ? 'blur(14px)' : 'none',
                       color: wsBg ? '#ffffff' : 'var(--color-primary, #BD1D2D)',
-                      textShadow: wsBg ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
+                      textShadow: 'none',
                       fontWeight: 700,
                       fontSize: '0.82rem',
                       borderRadius: '10px',
@@ -7261,12 +7278,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       justifyContent: 'center',
                       gap: '6px',
                       cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      boxShadow: wsBg ? '0 4px 16px rgba(0, 0, 0, 0.3)' : 'none',
+                      transition: 'background-color 0.2s ease, border-color 0.2s ease',
+                      boxShadow: wsBg ? '0 4px 14px rgba(15, 23, 42, 0.22)' : 'none',
                       whiteSpace: 'nowrap'
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = wsBg ? 'rgba(255, 255, 255, 0.32)' : 'rgba(189, 29, 45, 0.12)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = wsBg ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.1) 100%)' : 'rgba(189, 29, 45, 0.06)'; }}
+                    onMouseEnter={e => { e.currentTarget.style.background = wsBg ? 'rgba(15, 23, 42, 0.88)' : 'rgba(189, 29, 45, 0.12)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = wsBg ? 'rgba(15, 23, 42, 0.72)' : 'rgba(189, 29, 45, 0.06)'; }}
                   >
                     <BarChart3 size={15} style={{ color: wsBg ? '#ffffff' : 'var(--color-primary, #BD1D2D)' }} />
                     {!isMobile && <span>{t('Thống kê')}</span>}
@@ -7277,10 +7294,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       className="btn secondary"
                       onClick={handleStartFocusSession}
                       style={{
-                        background: wsBg ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.1) 100%)' : 'rgba(189, 29, 45, 0.06)',
-                        border: wsBg ? '1px solid rgba(255, 255, 255, 0.4)' : '1px solid rgba(189, 29, 45, 0.25)',
-                        backdropFilter: wsBg ? 'blur(12px)' : 'none',
-                        WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
+                        background: wsBg ? 'rgba(15, 23, 42, 0.72)' : 'rgba(189, 29, 45, 0.06)',
+                        border: wsBg ? '1px solid rgba(255, 255, 255, 0.24)' : '1px solid rgba(189, 29, 45, 0.25)',
+                        backdropFilter: wsBg ? 'blur(14px)' : 'none',
+                        WebkitBackdropFilter: wsBg ? 'blur(14px)' : 'none',
                         color: wsBg ? '#ffffff' : 'var(--color-primary, #BD1D2D)',
                         fontWeight: 700,
                         fontSize: '0.82rem',
@@ -7293,13 +7310,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         justifyContent: 'center',
                         gap: '6px',
                         cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        boxShadow: wsBg ? '0 4px 16px rgba(0, 0, 0, 0.3)' : 'none',
-                        textShadow: wsBg ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
+                        transition: 'background-color 0.2s ease, border-color 0.2s ease',
+                        boxShadow: wsBg ? '0 4px 14px rgba(15, 23, 42, 0.22)' : 'none',
+                        textShadow: 'none',
                         whiteSpace: 'nowrap'
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.background = wsBg ? 'rgba(255, 255, 255, 0.32)' : 'rgba(189, 29, 45, 0.12)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = wsBg ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.1) 100%)' : 'rgba(189, 29, 45, 0.06)'; }}
+                      onMouseEnter={e => { e.currentTarget.style.background = wsBg ? 'rgba(15, 23, 42, 0.88)' : 'rgba(189, 29, 45, 0.12)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = wsBg ? 'rgba(15, 23, 42, 0.72)' : 'rgba(189, 29, 45, 0.06)'; }}
                     >
                       <Play size={14} />
                       <span>{t('Chế độ tập trung')}</span>
@@ -7387,15 +7404,15 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       boxSizing: 'border-box',
                       border: isWsSearchFocused 
                         ? '1.5px solid var(--color-primary, #BD1D2D)' 
-                        : (wsBg ? '1px solid rgba(255, 255, 255, 0.4)' : '1px solid var(--color-border)'),
+                        : (wsBg ? '1px solid rgba(255, 255, 255, 0.24)' : '1px solid var(--color-border)'),
                       background: wsBg 
-                        ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.1) 100%)' 
+                        ? 'rgba(15, 23, 42, 0.72)' 
                         : 'var(--color-surface)',
                       color: wsBg ? '#ffffff' : 'var(--color-text)',
-                      textShadow: wsBg ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
-                      backdropFilter: wsBg ? 'blur(12px)' : 'none',
-                      WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
-                      boxShadow: wsBg ? '0 4px 16px rgba(0, 0, 0, 0.3)' : 'none',
+                      textShadow: 'none',
+                      backdropFilter: wsBg ? 'blur(14px)' : 'none',
+                      WebkitBackdropFilter: wsBg ? 'blur(14px)' : 'none',
+                      boxShadow: wsBg ? '0 4px 14px rgba(15, 23, 42, 0.22)' : 'none',
                       transition: 'all 0.2s ease',
                       outline: 'none'
                     }}
@@ -7407,7 +7424,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       right: wsSearch ? '28px' : '10px', 
                       top: '50%', 
                       transform: 'translateY(-50%)', 
-                      color: wsBg ? '#ffffff' : 'var(--color-text-muted)', 
+                      color: wsBg ? '#e2e8f0' : 'var(--color-text-muted)', 
                       pointerEvents: 'none'
                     }} 
                   />
@@ -7444,35 +7461,51 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '3px',
-                      border: wsBg ? '1px solid rgba(255, 255, 255, 0.3)' : '1px solid var(--color-border)',
-                      background: wsBg ? 'rgba(255, 255, 255, 0.18)' : 'var(--color-surface)',
-                      backdropFilter: wsBg ? 'blur(8px)' : 'none',
-                      WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
-                      color: wsBg ? '#ffffff' : 'var(--color-text-light)',
-                      padding: '2px 8px',
+                      gap: '4px',
+                      border: wsBg ? '1px solid rgba(255, 255, 255, 0.24)' : '1px solid var(--color-border)',
+                      background: wsBg ? 'rgba(15, 23, 42, 0.72)' : 'var(--color-surface)',
+                      backdropFilter: wsBg ? 'blur(12px)' : 'none',
+                      WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
+                      color: wsBg ? '#f8fafc' : 'var(--color-text-light)',
+                      padding: '3px 9px',
                       borderRadius: '6px',
                       cursor: 'pointer',
                       fontSize: '0.7rem',
                       fontWeight: 700,
-                      transition: 'all 0.15s',
+                      transition: 'background-color 0.15s ease, border-color 0.15s ease',
                       flexShrink: 0,
-                      textShadow: wsBg ? '0 1px 3px rgba(0,0,0,0.6)' : 'none'
+                      boxShadow: wsBg ? '0 2px 8px rgba(15, 23, 42, 0.2)' : 'none',
+                      textShadow: 'none'
                     }}
                     className="hover-lift"
                   >
                     <ArrowLeft size={11} /> {t('Quay lại')}
                   </button>
-                  <span style={{ fontSize: '0.725rem', color: wsBg ? '#e2e8f0' : 'var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: wsBg ? '0 1px 3px rgba(0,0,0,0.7)' : 'none' }}>
+                  <span style={{
+                    fontSize: '0.725rem',
+                    color: wsBg ? '#e2e8f0' : 'var(--color-text-muted)',
+                    background: wsBg ? 'rgba(15, 23, 42, 0.68)' : 'transparent',
+                    backdropFilter: wsBg ? 'blur(10px)' : 'none',
+                    WebkitBackdropFilter: wsBg ? 'blur(10px)' : 'none',
+                    border: wsBg ? '1px solid rgba(255, 255, 255, 0.16)' : 'none',
+                    padding: wsBg ? '3px 10px' : '0',
+                    borderRadius: wsBg ? '6px' : '0',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    textShadow: 'none'
+                  }}>
                     <span>{t('Đang xem nhóm:')}</span>
-                    <strong style={{ color: wsBg ? '#fbbf24' : 'var(--color-primary)', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: wsBg ? '0 1px 4px rgba(0,0,0,0.8), 0 0 10px rgba(251, 191, 36, 0.4)' : 'none' }}>
+                    <strong style={{ color: wsBg ? '#fde68a' : 'var(--color-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {wsTeamId === 'all_teams_bypass' ? t('Tất cả các Nhóm') : (teamsList.find(t => String(t.id) === wsTeamId)?.name || wsTeamId)}
                     </strong>
                   </span>
                 </div>
               ) : (
                 !isMobile && (
-                  <p className="page-subtitle" style={{ fontSize: '0.825rem', color: wsBg ? '#e2e8f0' : 'var(--color-text-muted)', margin: 0, textShadow: wsBg ? '0 1px 3px rgba(0,0,0,0.7)' : 'none' }}>
+                  <p className="page-subtitle" style={{ fontSize: '0.825rem', color: wsBg ? '#f1f5f9' : 'var(--color-text-muted)', margin: 0, textShadow: wsBg ? '0 1px 2px rgba(15, 23, 42, 0.6)' : 'none' }}>
                     {t("Quản lý toàn bộ công việc cần thực hiện, lọc chi tiết theo tiến độ và độ ưu tiên.")}
                   </p>
                 )
@@ -7590,10 +7623,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               overflow: 'hidden'
             }}>
               {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: wsBg ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid var(--color-border-light)', paddingBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: wsBg ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid var(--color-border-light)', paddingBottom: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Sparkles size={16} style={{ color: '#ef4444' }} />
-                  <span style={{ fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.03em', color: '#ef4444' }}>
+                  <AlertCircle size={16} strokeWidth={1.75} style={{ color: '#BD1D2D' }} />
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em', color: '#BD1D2D' }}>
                     {t('Cảnh báo & Gợi ý xử lý')}
                   </span>
                 </div>
@@ -7604,7 +7637,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     background: 'transparent',
                     color: wsBg ? '#cbd5e1' : 'var(--color-text-muted)',
                     cursor: 'pointer',
-                    padding: '2px',
+                    padding: '4px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -7621,14 +7654,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {/* 1. Uncontacted leads alert */}
                 {hasUncontacted && ['sale', 'sales'].includes(String(user?.role || displayUser?.role || '').toLowerCase()) && (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '4px 0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '4px 0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         <AlertCircle size={15} />
                       </div>
                       <span style={{ fontSize: isMobile ? '0.78rem' : '0.825rem', color: 'var(--color-text)', lineHeight: 1.35, wordBreak: 'break-word' }}>
                         {t('Yêu cầu liên hệ khách hàng mới: ')}
-                        <strong style={{ color: '#ef4444', fontWeight: 800 }}>{uncontactedCount}</strong>
+                        <strong style={{ color: '#BD1D2D', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{uncontactedCount}</strong>
                         {t(' data chưa liên hệ.')}
                       </span>
                     </div>
@@ -7636,10 +7669,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       onClick={() => navigate('/contacts?status=not_contacted')}
                       style={{
                         ...actionBtnStyle,
-                        background: 'rgba(239, 68, 68, 0.08)',
-                        color: '#ef4444'
+                        background: 'rgba(189, 29, 45, 0.08)',
+                        color: '#BD1D2D'
                       }}
-                      className="hover-lift"
                     >
                       {t('Xem ngay')} <ChevronRight size={12} />
                     </button>
@@ -7648,14 +7680,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
                 {/* 2. Cooperation slips alert */}
                 {hasCoops && (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '4px 0', borderTop: '1px dashed var(--color-border-light)', paddingTop: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '8px 0 4px', borderTop: '1px dashed var(--color-border-light)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
                       <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(16, 185, 129, 0.08)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         <Scale size={15} />
                       </div>
                       <span style={{ fontSize: isMobile ? '0.78rem' : '0.825rem', color: 'var(--color-text)', lineHeight: 1.35, wordBreak: 'break-word' }}>
                         {t('Yêu cầu ký phiếu hợp tác: ')}
-                        <strong style={{ color: '#10b981', fontWeight: 800 }}>{pendingCoopsCount}</strong>
+                        <strong style={{ color: '#10b981', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{pendingCoopsCount}</strong>
                         {t(' phiếu đang chờ bạn ký.')}
                       </span>
                     </div>
@@ -7669,7 +7701,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         background: 'rgba(16, 185, 129, 0.08)',
                         color: '#10b981'
                       }}
-                      className="hover-lift"
                     >
                       {t('Ký ngay')} <ChevronRight size={12} />
                     </button>
@@ -7678,10 +7709,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
                 {/* 3. AI suggestion alert */}
                 {aiCount > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '4px 0', borderTop: '1px dashed var(--color-border-light)', paddingTop: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Sparkles size={14} style={{ color: '#ef4444' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '8px 0 4px', borderTop: '1px dashed var(--color-border-light)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(189, 29, 45, 0.1)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Sparkles size={14} strokeWidth={1.75} style={{ color: '#BD1D2D' }} />
                       </div>
                       <span style={{ fontSize: isMobile ? '0.78rem' : '0.825rem', color: 'var(--color-text)', lineHeight: 1.35, wordBreak: 'break-word' }}>
                         {aiMessage}
@@ -8053,8 +8084,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     backdropFilter: wsBg ? 'blur(8px)' : 'none',
                     WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
                     color: isApproveActive 
-                      ? (theme === 'dark' ? '#d8b4fe' : '#6d28d9') 
-                      : (wsBg ? (theme === 'dark' ? '#cbd5e1' : '#334155') : '#8b5cf6'),
+                      ? (theme === 'dark' ? '#5eead4' : '#0f766e') 
+                      : (wsBg ? (theme === 'dark' ? '#cbd5e1' : '#334155') : '#0d9488'),
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -8074,18 +8105,18 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         position: 'absolute',
                         inset: 0,
                         borderRadius: '20px',
-                        background: 'rgba(168, 85, 247, 0.25)',
-                        border: '1.5px solid #a855f7',
-                        boxShadow: '0 2px 10px rgba(168, 85, 247, 0.25)',
+                        background: 'rgba(13, 148, 136, 0.18)',
+                        border: '1.5px solid #0d9488',
+                        boxShadow: '0 2px 8px rgba(13, 148, 136, 0.18)',
                         zIndex: 0
                       }}
                       transition={{ type: 'spring', stiffness: 450, damping: 32 }}
                     />
                   )}
                   <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                    <UserCheck size={isMobile ? 12 : 13} style={{ color: isApproveActive ? (theme === 'dark' ? '#d8b4fe' : '#6d28d9') : '#8b5cf6' }} />
+                    <UserCheck size={isMobile ? 12 : 13} style={{ color: isApproveActive ? (theme === 'dark' ? '#5eead4' : '#0f766e') : '#0d9488' }} />
                     <span>{t('Chờ tôi duyệt')}</span>
-                    <span style={{ background: '#8b5cf6', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
+                    <span style={{ background: '#0d9488', color: '#fff', borderRadius: '10px', padding: '1px 6px', fontSize: '0.675rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                       {workspaceStats.pendingApproval}
                     </span>
                   </span>
@@ -8838,7 +8869,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           </div>
                         )}
                         {teamMembers.length === 0 && (
-                          <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
                             {t('Không có thành viên')}
                           </span>
                         )}
@@ -9420,7 +9451,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     { value: 'assigned_to_me', label: t('Tôi thực hiện'), badge: { count: workspaceStats.assignedToMe || 0, color: '#2563eb' } },
                     { value: 'overdue', label: t('Công việc Quá hạn'), badge: { count: workspaceStats.overdue, color: 'var(--color-danger)' } },
                     { value: 'today', label: t('Công việc Đến hạn hôm nay'), badge: { count: workspaceStats.dueToday, color: 'var(--color-warning)' } },
-                    { value: 'approve_by_me', label: t('Chờ tôi duyệt'), badge: { count: workspaceStats.pendingApproval, color: '#8b5cf6' } },
+                    { value: 'approve_by_me', label: t('Chờ tôi duyệt'), badge: { count: workspaceStats.pendingApproval, color: '#0d9488' } },
                     { value: 'collaborator', label: t('Tôi liên quan'), badge: { count: workspaceStats.collaborator || 0, color: '#475569' } }
                   ]}
                   width="100%"
@@ -9546,7 +9577,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                                   <Avatar src={assignee.avatar_url || assignee.avatar} name={assignee.full_name} size={18} />
                                 </div>
                               ) : (
-                                <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{t('Chưa gán')}</span>
+                                <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>{t('Chưa gán')}</span>
                               )}
                               
                               {/* Collaborator Stack */}
@@ -9874,7 +9905,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       }
     ];
 
-    const recentLeads = data.leads.slice(0, 5);
+    const recentLeads = ensureArray(data?.leads).slice(0, 5);
 
     return (
       <>
@@ -10049,9 +10080,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 name={displayUser?.name || 'User'} 
                 src={displayUser?.avatar} 
                 size={isMobile ? 64 : 60} 
-                style={{ border: '2.5px solid rgba(189, 29, 45, 0.45)', boxShadow: '0 0 16px rgba(189, 29, 45, 0.3)' }}
+                style={{ border: '2px solid rgba(189, 29, 45, 0.5)' }}
               />
-              <span className="animate-pulse" style={{
+              <span style={{
                 position: 'absolute',
                 bottom: 2,
                 right: 2,
@@ -10059,8 +10090,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 height: 14,
                 borderRadius: '50%',
                 backgroundColor: '#10b981',
-                border: '2.5px solid #181515',
-                boxShadow: '0 0 10px #10b981'
+                border: '2.5px solid #181515'
               }} />
             </div>
             {isMobile ? (
@@ -10070,20 +10100,19 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   <Clock size={12} style={{ color: '#ff4d5a' }} />
                   {getCurrentDateVi()}
                 </span>
-                <h2 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.3px', textShadow: '0 2px 4px rgba(0,0,0,0.3)', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                <h2 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ffffff', margin: 0, whiteSpace: 'normal', wordBreak: 'break-word' }}>
                   {t('Xin chào')}, {displayUser?.name || 'Thành viên'}
                 </h2>
                 <div style={{ display: 'flex' }}>
                   <span style={{ 
                     fontSize: '0.625rem', 
-                    fontWeight: 900, 
+                    fontWeight: 700, 
                     color: '#ffffff', 
-                    background: 'linear-gradient(135deg, #BD1D2D 0%, #a31422 100%)', 
-                    padding: '3px 10px', 
-                    borderRadius: '20px', 
+                    background: '#BD1D2D', 
+                    padding: '4px 10px', 
+                    borderRadius: '6px', 
                     textTransform: 'uppercase',
-                    boxShadow: '0 2px 8px rgba(189, 29, 45, 0.5)',
-                    letterSpacing: '0.6px'
+                    letterSpacing: '0.04em'
                   }}>
                     {(() => {
                       const matched = data.consultants?.find((c: any) => 
@@ -10220,14 +10249,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 <div style={{ display: 'flex' }}>
                   <span style={{ 
                     fontSize: '0.68rem', 
-                    fontWeight: 900, 
+                    fontWeight: 700, 
                     color: '#ffffff', 
-                    background: 'linear-gradient(135deg, #BD1D2D 0%, #a31422 100%)', 
+                    background: '#BD1D2D', 
                     padding: '4px 12px', 
-                    borderRadius: '20px', 
+                    borderRadius: '6px', 
                     textTransform: 'uppercase',
-                    boxShadow: '0 2px 8px rgba(189, 29, 45, 0.5)',
-                    letterSpacing: '0.6px'
+                    letterSpacing: '0.04em'
                   }}>
                     {(() => {
                       const matched = data.consultants?.find((c: any) => 
@@ -10307,11 +10335,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   <CheckCircle2 size={20} />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
-                    {t("Tuyệt vời! Không có tồn đọng")}
+                  <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#ffffff', margin: 0 }}>
+                    {t("Không có công việc tồn đọng")}
                   </h3>
                   <p style={{ fontSize: '0.78rem', color: '#a1a1aa', margin: '4px 0 0', fontWeight: 500 }}>
-                    {t("Chúc bạn một ngày chốt thật nhiều deal! 🚀")}
+                    {t("Tất cả đầu việc và lịch hẹn đều đang đúng tiến độ")}
                   </p>
                 </div>
               </div>
@@ -10719,27 +10747,21 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 <div style={{ height: 260 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={activeChartData} margin={{ left: -20, right: 5, top: 10 }}>
-                      <defs>
-                        <linearGradient id="chartBarGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#e63946" stopOpacity={1} />
-                          <stop offset="100%" stopColor="#a31422" stopOpacity={1} />
-                        </linearGradient>
-                      </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
-                      <XAxis dataKey={flowViewMode === 'day' ? 'date' : 'time'} tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} width={35} />
+                      <XAxis dataKey={flowViewMode === 'day' ? 'date' : 'time'} tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} width={35} />
                       <Tooltip content={({ active, payload, label }) => {
                         if (active && payload && payload.length) {
                           return (
                             <div style={{ background: 'var(--color-surface)', padding: '8px 12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid var(--color-border)', fontSize: '0.8rem' }}>
                               <div style={{ fontWeight: 700, color: 'var(--color-text)' }}>{label}</div>
-                              <div style={{ color: 'var(--color-primary)', marginTop: 2 }}>{t('Số lượng data: ')}<span style={{ fontWeight: 800 }}>{payload[0].value}</span></div>
+                              <div style={{ color: 'var(--color-primary)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{t('Số lượng data: ')}<span style={{ fontWeight: 700 }}>{payload[0].value}</span></div>
                             </div>
                           );
                         }
                         return null;
                       }} />
-                      <Bar dataKey="volume" fill="url(#chartBarGrad)" radius={[4, 4, 0, 0]} maxBarSize={16} />
+                      <Bar dataKey="volume" fill="#C6333D" radius={[4, 4, 0, 0]} maxBarSize={16} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -10920,8 +10942,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             </div>
 
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem', justifyContent: 'center' }}>
-              {data.by_round && data.by_round.length > 0 ? (
-                data.by_round.map((r: any, idx: number) => {
+              {ensureArray(data?.by_round).length > 0 ? (
+                ensureArray(data?.by_round).map((r: any, idx: number) => {
                   const percentage = data.stats.total_received > 0
                     ? ((r.count / data.stats.total_received) * 100).toFixed(1)
                     : '0.0';
@@ -10934,10 +10956,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         <div style={{ width: 12, height: 12, borderRadius: '50%', background: themeColor }} />
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                           <span style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '0.9rem' }}>{r.round_name}</span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>{percentage}% tổng data</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{percentage}% tổng data</span>
                         </div>
                       </div>
-                      <span style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '1rem' }}>{r.count}</span>
+                      <span style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '1rem', fontVariantNumeric: 'tabular-nums' }}>{r.count}</span>
                     </div>
                   );
                 })
@@ -10955,20 +10977,20 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               <h3 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)', margin: 0 }}>
                 <GitBranch size={18} color="#BD1D2D" /> {t('Tỷ lệ Nguồn Data')}
               </h3>
-              <div style={{ display: 'flex', background: 'var(--color-bg)', padding: '3px', borderRadius: '8px', border: '1px solid var(--color-border-light)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', background: 'var(--color-bg)', padding: '3px', borderRadius: '10px', border: '1px solid var(--color-border-light)', flexShrink: 0 }}>
                 <button
                   onClick={() => setSourceViewMode('connection')}
                   style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
+                    padding: '4px 12px',
+                    borderRadius: '7px',
                     fontSize: '0.75rem',
-                    fontWeight: 600,
+                    fontWeight: sourceViewMode === 'connection' ? 700 : 600,
                     border: 'none',
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease',
+                    transition: 'background-color 0.2s ease, color 0.2s ease',
                     background: sourceViewMode === 'connection' ? 'var(--color-surface)' : 'transparent',
-                    color: sourceViewMode === 'connection' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                    boxShadow: sourceViewMode === 'connection' ? '0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)' : 'none'
+                    color: sourceViewMode === 'connection' ? '#BD1D2D' : 'var(--color-text-muted)',
+                    boxShadow: sourceViewMode === 'connection' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
                   }}
                 >
                   {t('Theo Kết nối')}
@@ -10976,16 +10998,16 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 <button
                   onClick={() => setSourceViewMode('lead')}
                   style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
+                    padding: '4px 12px',
+                    borderRadius: '7px',
                     fontSize: '0.75rem',
-                    fontWeight: 600,
+                    fontWeight: sourceViewMode === 'lead' ? 700 : 600,
                     border: 'none',
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease',
+                    transition: 'background-color 0.2s ease, color 0.2s ease',
                     background: sourceViewMode === 'lead' ? 'var(--color-surface)' : 'transparent',
-                    color: sourceViewMode === 'lead' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                    boxShadow: sourceViewMode === 'lead' ? '0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)' : 'none'
+                    color: sourceViewMode === 'lead' ? '#BD1D2D' : 'var(--color-text-muted)',
+                    boxShadow: sourceViewMode === 'lead' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
                   }}
                 >
                   {t('Theo Nguồn Lead')}
@@ -10997,7 +11019,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               {(() => {
                 const getSourceStats = () => {
                   const counts: Record<string, number> = {};
-                  data.leads.filter((l: any) => l.status !== 'reminder').forEach((lead: any) => {
+                  ensureArray(data?.leads).filter((l: any) => l.status !== 'reminder').forEach((lead: any) => {
                     const name = lead.connection_name || t('Nhập tay');
                     counts[name] = (counts[name] || 0) + 1;
                   });
@@ -11012,7 +11034,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
                 const getLeadSourceStats = () => {
                   const counts: Record<string, number> = {};
-                  data.leads.filter((l: any) => l.status !== 'reminder').forEach((lead: any) => {
+                  ensureArray(data?.leads).filter((l: any) => l.status !== 'reminder').forEach((lead: any) => {
                     const name = lead.source?.trim() || t('Không xác định');
                     counts[name] = (counts[name] || 0) + 1;
                   });
@@ -11045,7 +11067,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           ))}
                         </Pie>
                         <Tooltip
-                          contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                          contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontVariantNumeric: 'tabular-nums' }}
                           itemStyle={{ color: 'var(--color-text)', fontWeight: 600 }}
                         />
                       </PieChart>
@@ -11658,7 +11680,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         <td style={{ padding: '1rem', textAlign: 'right' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
                             {Number(lead.is_won) === 1 ? (
-                              <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontStyle: 'italic', paddingRight: '8px' }}>-</span>
+                              <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', paddingRight: '8px' }}>—</span>
                             ) : (
                               <>
                                 {isAdmin && (
@@ -12127,7 +12149,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
                         <td style={{ padding: '1rem 1.25rem' }}>
                           {ticket.status === 'pending' ? (
-                            <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: '0.8rem' }}>{t('Đang xử lý...')}</span>
+                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{t('Đang xử lý...')}</span>
                           ) : (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                               <Avatar src={ticket.resolved_by_avatar} name={ticket.resolved_by || t('Hệ thống')} size={32} />
@@ -12332,8 +12354,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   const bg = theme === 'dark' ? 'rgba(239, 68, 68, 0.15)' : '#fef2f2';
                   const border = theme === 'dark' ? 'rgba(239, 68, 68, 0.3)' : '#fecaca';
                   const color = theme === 'dark' ? '#f87171' : '#b91c1c';
-                  const icon = '🔥';
-                  
+
                   return (
                     <div
                       key={a.id}
@@ -12358,10 +12379,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         width: '100%',
                         overflow: 'hidden'
                       }}
-                      className="calendar-activity-item hover-lift"
+                      className="calendar-activity-item"
                       title={`[${t('Ưu tiên cao')}] ${a.subject || a.title || ''}: ${a.body || a.description || ''}`}
                     >
-                      <span style={{ fontSize: '0.7rem', flexShrink: 0 }}>{icon}</span>
+                      <Flame size={11} strokeWidth={2} style={{ flexShrink: 0 }} />
                       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {a.subject || a.title || t('Công việc quan trọng')}
                       </span>
@@ -12461,14 +12482,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   alignItems: 'center',
                   padding: '2px 4px',
                   borderRadius: '4px',
-                  background: theme === 'dark' ? 'rgba(236, 72, 153, 0.15)' : '#fce7f3',
-                  color: theme === 'dark' ? '#f472b6' : '#db2777',
+                  background: theme === 'dark' ? 'rgba(245, 158, 11, 0.16)' : '#fef3c7',
+                  color: theme === 'dark' ? '#fbbf24' : '#b45309',
                   fontSize: '0.6875rem',
                   fontWeight: 600,
-                  border: theme === 'dark' ? '1px solid rgba(236, 72, 153, 0.25)' : 'none',
-                  cursor: 'pointer'
+                  border: theme === 'dark' ? '1px solid rgba(245, 158, 11, 0.25)' : 'none',
+                  cursor: 'pointer',
+                  fontVariantNumeric: 'tabular-nums'
                 }}
-                className="hover-lift"
                 title={t("Nhắc lại - Nhấn để xem chi tiết")}
               >
                 <span>{t('Nhắc')}:</span>
@@ -12664,7 +12685,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               <span style={{ color: 'var(--color-text-muted)' }}>{t('Ticket lỗi')}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#db2777' }}></span>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#d97706' }}></span>
               <span style={{ color: 'var(--color-text-muted)' }}>{t('Nhắc lại')}</span>
             </div>
           </div>
@@ -12823,7 +12844,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
     const handleManagerOnlyFieldClick = () => {
       if (!canEditUserAssets) {
-        toast(t('Chỉ có Quản lý / Ban Giám đốc / HR mới có quyền cập nhật trường này.'), { icon: 'ℹ️' });
+        toast(t('Chỉ có Quản lý / Ban Giám đốc / HR mới có quyền cập nhật trường này.'), { icon: <Info size={16} color="#0284c7" /> });
       }
     };
 
@@ -13408,7 +13429,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       onClick={() => setProfileActiveTab('assets')}
                       style={{ width: '100%', border: 'none', textAlign: 'left', cursor: 'pointer' }}
                     >
-                      {renderColoredIcon(Package, '#8b5cf6')}
+                      {renderColoredIcon(Package, '#0284c7')}
                       <span style={{ whiteSpace: 'nowrap' }}>{t('Tài sản cấp phát')}</span>
                     </button>
                     <button
@@ -14155,7 +14176,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {isEditingCertificates && (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                         {t('(Bấm "Lưu thiết lập" ở góc trên bên phải để lưu thay đổi)')}
                       </span>
                     )}
@@ -14185,7 +14206,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   profileCertificates.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '3rem 2rem', background: 'var(--color-bg)', borderRadius: '16px', border: '1px dashed var(--color-border-light)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
                       <Award size={36} style={{ color: 'var(--color-text-muted)', opacity: 0.3 }} />
-                      <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                      <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)' }}>
                         {t('Chưa có chứng chỉ hoặc bằng cấp nào được thêm.')}
                       </span>
                       <button
@@ -14392,7 +14413,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   <>
                     {profileCertificates.length === 0 ? (
                       <div style={{ textAlign: 'center', padding: '2rem', background: 'var(--color-bg)', borderRadius: '12px', border: '1px dashed var(--color-border-light)', marginBottom: '1rem' }}>
-                        <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                        <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)' }}>
                           {t('Chưa có chứng chỉ hoặc bằng cấp nào được thêm.')}
                         </span>
                       </div>
@@ -14672,7 +14693,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   {['admin', 'superadmin', 'manager', 'assistant'].includes(String(user?.role).toLowerCase()) && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       {isEditingHRRecords && (
-                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                           {t('(Bấm "Lưu thiết lập" ở góc trên bên phải để lưu thay đổi)')}
                         </span>
                       )}
@@ -14815,7 +14836,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       <span style={{ color: 'var(--color-text-muted)', display: 'inline-flex' }}>
                         {activeHRSubTab === 'award' ? <Award size={28} /> : (activeHRSubTab === 'warning' ? <Bell size={28} /> : <Shield size={28} />)}
                       </span>
-                      <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                      <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)' }}>
                         {activeHRSubTab === 'award' ? t('Chưa có ghi nhận khen thưởng nào.') : (activeHRSubTab === 'warning' ? t('Không có ghi nhận cảnh cáo nào.') : t('Không có ghi nhận kỷ luật nào.'))}
                       </span>
                     </div>
@@ -15630,8 +15651,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                                     justifyContent: isMobile ? 'space-between' : 'center',
                                     padding: isMobile ? '6px 12px' : '6px 2px',
                                     borderRadius: '8px',
-                                    background: item.isRegistered ? 'rgba(139, 92, 246, 0.1)' : 'var(--color-surface)',
-                                    border: item.isRegistered ? '1px solid #8b5cf6' : '1px solid var(--color-border-light)',
+                                    background: item.isRegistered ? 'rgba(2, 132, 199, 0.1)' : 'var(--color-surface)',
+                                    border: item.isRegistered ? '1px solid #0284c7' : '1px solid var(--color-border-light)',
                                     textAlign: isMobile ? 'left' : 'center'
                                   }}
                                 >
@@ -15641,7 +15662,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                                   <span style={{
                                     fontSize: '0.75rem',
                                     fontWeight: 700,
-                                    color: item.isRegistered ? '#8b5cf6' : 'var(--color-text-muted)',
+                                    color: item.isRegistered ? '#0284c7' : 'var(--color-text-muted)',
                                     marginTop: isMobile ? '0' : '2px'
                                   }}>
                                     {item.isRegistered ? t('Đã trực') : t('Nghỉ')}
@@ -16229,11 +16250,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                               let statusBg = 'rgba(100, 116, 139, 0.08)';
 
                               if (isNightRegistered) {
-                                backgroundStyle = 'rgba(139, 92, 246, 0.06)';
-                                borderStyle = '2px solid #8b5cf6';
+                                backgroundStyle = 'rgba(14, 165, 233, 0.08)';
+                                borderStyle = '2px solid #0284c7';
                                 statusText = isPastDay ? t('Đã trực đêm') : t('Trực đêm');
-                                statusColor = '#8b5cf6';
-                                statusBg = 'rgba(139, 92, 246, 0.12)';
+                                statusColor = '#0284c7';
+                                statusBg = 'rgba(14, 165, 233, 0.14)';
                               } else if (isSelected || reg) {
                                 if (isApproved) {
                                   backgroundStyle = 'rgba(16, 185, 129, 0.06)';
@@ -16517,7 +16538,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                                 {t('Đang tải lịch sử...')}
                               </div>
                             ) : leaveHistory.length === 0 ? (
-                              <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                              <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
                                 {t('Chưa có đăng ký nghỉ phép nào.')}
                               </div>
                             ) : (
@@ -16759,7 +16780,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '0.5rem' }}>
                   {consultantDocs.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--color-text-muted)', fontSize: '0.8rem', fontStyle: 'italic', background: 'var(--color-bg)', borderRadius: '8px' }}>
+                    <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--color-text-muted)', fontSize: '0.8rem', background: 'var(--color-bg)', borderRadius: '8px' }}>
                       {t('Chưa có tài liệu nào được tải lên.')}
                     </div>
                   ) : (
@@ -16906,7 +16927,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               }}>
                 <img src="/LOGO.webp" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} alt="logo" />
               </div>
-              <span style={{ fontSize: '1.25rem', fontWeight: 900, color: 'white', letterSpacing: '-0.02em' }}>IDEAS</span>
+              <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em' }}>IDEAS</span>
             </div>
             <button 
               onClick={() => setIsMobileSidebarOpen(false)}
@@ -16999,7 +17020,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                             fontWeight: isActive ? 700 : 500,
                             cursor: 'pointer',
                             textAlign: 'left',
-                            transition: 'all 0.15s ease',
+                            transition: 'background-color 0.15s ease, border-color 0.15s ease',
                             position: 'relative'
                           }}
                         >
@@ -17012,7 +17033,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                               background: '#ef4444',
                               color: 'white',
                               fontSize: '0.6rem',
-                              fontWeight: 700
+                              fontWeight: 700,
+                              fontVariantNumeric: 'tabular-nums'
                             }}>{badgeCount}</span>
                           )}
                         </button>
@@ -17045,7 +17067,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           color: '#dadada',
           display: isMobile ? 'none' : 'flex',
           flexDirection: 'column',
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: 'width 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
           flexShrink: 0,
           position: 'relative',
           zIndex: 50,
@@ -17066,12 +17088,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         }}>
           <div style={{
             width: 42, height: 42, borderRadius: '50%',
-            background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
+            background: '#BD1D2D',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0,
-            boxShadow: '0 0 12px rgba(192, 132, 252, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3)',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
             overflow: 'hidden',
-            border: '2px solid rgba(192, 132, 252, 0.8)'
+            border: '2px solid rgba(189, 29, 45, 0.7)'
           }}>
             <img src="/LOGO.webp" style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -17080,7 +17102,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
           {!isCollapsed && (
             <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
-              <span style={{ fontSize: '1.45rem', fontWeight: 900, whiteSpace: 'nowrap', color: 'white', letterSpacing: '-0.03em', lineHeight: 1.05 }}>
+              <span style={{ fontSize: '1.45rem', fontWeight: 800, whiteSpace: 'nowrap', color: 'white', letterSpacing: '-0.02em', lineHeight: 1.05 }}>
                 IDEAS
               </span>
               <span style={{
@@ -17825,6 +17847,17 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 transition: 'background-color 0.3s ease, backdrop-filter 0.3s ease'
               }}
             />
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '220px',
+                background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.56) 0%, rgba(15, 23, 42, 0.24) 60%, rgba(15, 23, 42, 0) 100%)',
+                pointerEvents: 'none'
+              }}
+            />
           </div>
         )}
 
@@ -18477,7 +18510,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   })}
                 </div>
               ) : (
-                <div style={{ fontSize: '0.85rem', color: '#94a3b8', fontStyle: 'italic', padding: '8px' }}>
+                <div style={{ fontSize: '0.85rem', color: '#94a3b8', padding: '8px' }}>
                   {t('Không có lịch sử nhắc lại trước đó.')}
                 </div>
               )}
@@ -18755,8 +18788,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               <div style={{ flex: 1, overflowY: 'auto', padding: '0 1.5rem 1.5rem 1.5rem' }}>
                 {activeCalendarModalTab === 'sales' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {dayDetails.sales && dayDetails.sales.length > 0 ? (
-                      dayDetails.sales.map((item: any, idx: number) => (
+                    {ensureArray(dayDetails?.sales).length > 0 ? (
+                      ensureArray(dayDetails?.sales).map((item: any, idx: number) => (
                         <div
                           key={idx}
                           onClick={() => {
@@ -18818,8 +18851,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
                 {activeCalendarModalTab === 'tickets' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {dayDetails.tickets && dayDetails.tickets.length > 0 ? (
-                      dayDetails.tickets.map((item: any, idx: number) => (
+                    {ensureArray(dayDetails?.tickets).length > 0 ? (
+                      ensureArray(dayDetails?.tickets).map((item: any, idx: number) => (
                         <div
                           key={idx}
                           style={{
@@ -18852,7 +18885,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                               {item.status === 'approved' ? t('Đã bù') : item.status === 'approved_no_comp' ? t('Không bù') : item.status === 'pending' ? t('Chờ duyệt') : t('Từ chối')}
                             </span>
                           </div>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', borderLeft: '2px solid var(--color-border)', paddingLeft: 8, fontStyle: 'italic' }}>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', borderLeft: '2px solid var(--color-border)', paddingLeft: 8 }}>
                             <strong>{t('Lý do báo lỗi:')}</strong> {item.reason}
                           </div>
                           {item.resolved_by && (
@@ -19341,7 +19374,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 setData((prev: any) => {
                   if (!prev) return prev;
                   const next = { ...prev };
-                  if (next.contacts) {
+                  if (Array.isArray(next.contacts)) {
                     next.contacts = next.contacts.filter((c: any) => c.id !== profileContact?.id);
                   }
                   return next;
@@ -19518,9 +19551,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     <div style={{ padding: '1rem' }}>
                       <TableSkeleton rows={4} cols={3} />
                     </div>
-                  ) : dayDetails?.sales && dayDetails.sales.length > 0 ? (
+                  ) : ensureArray(dayDetails?.sales).length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                      {dayDetails.sales.map((item: any, idx: number) => (
+                      {ensureArray(dayDetails?.sales).map((item: any, idx: number) => (
                         <div
                           key={idx}
                           onClick={() => {
@@ -20071,7 +20104,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                              <div
                                key={a.id}
                                onClick={() => handleSelectTask(a)}
-                               className="hover-scale-subtle"
                                style={{
                                  padding: '12px 14px',
                                  background: isUrgent 
@@ -20191,9 +20223,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     <div style={{ padding: '1rem' }}>
                       <TableSkeleton rows={4} cols={3} />
                     </div>
-                  ) : dayDetails?.tickets && dayDetails.tickets.length > 0 ? (
+                  ) : ensureArray(dayDetails?.tickets).length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                      {dayDetails.tickets.map((item: any, idx: number) => (
+                      {ensureArray(dayDetails?.tickets).map((item: any, idx: number) => (
                         <div
                           key={idx}
                           style={{
@@ -21104,10 +21136,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 }}>
                   <span style={{
                     fontSize: '1.7rem',
-                    fontWeight: 900,
+                    fontWeight: 700,
                     fontFamily: 'monospace',
+                    fontVariantNumeric: 'tabular-nums',
                     color: '#BD1D2D',
-                    letterSpacing: '-0.5px',
                     lineHeight: 1
                   }}>
                     {(() => {
@@ -21413,12 +21445,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border-light)" />
                       <XAxis 
                         dataKey="name" 
-                        tick={{ fill: 'var(--color-text-muted)', fontSize: 10 }} 
+                        tick={{ fill: 'var(--color-text-muted)', fontSize: 11 }} 
                         axisLine={false} 
                         tickLine={false} 
                       />
                       <YAxis 
-                        tick={{ fill: 'var(--color-text-muted)', fontSize: 10 }} 
+                        tick={{ fill: 'var(--color-text-muted)', fontSize: 11 }} 
                         axisLine={false} 
                         tickLine={false} 
                         allowDecimals={false}
@@ -21430,8 +21462,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                             return (
                               <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '8px 12px', borderRadius: '8px', boxShadow: 'var(--shadow-md)' }}>
                                 <p style={{ margin: 0, fontWeight: 700, fontSize: '0.8125rem', color: 'var(--color-text)' }}>{data.name}</p>
-                                <p style={{ margin: '4px 0 0 0', fontSize: '0.8125rem', color: 'var(--color-primary)', fontWeight: 600 }}>
-                                  {t('Số cuộc gọi:')} <span style={{ fontWeight: 800 }}>{data.calls}</span>
+                                <p style={{ margin: '4px 0 0 0', fontSize: '0.8125rem', color: 'var(--color-primary)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                  {t('Số cuộc gọi:')} <span style={{ fontWeight: 700 }}>{data.calls}</span>
                                 </p>
                               </div>
                             );
@@ -21439,10 +21471,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           return null;
                         }}
                       />
-                      <Bar dataKey="calls" radius={[6, 6, 0, 0]} maxBarSize={40}>
-                        <LabelList dataKey="calls" position="top" style={{ fill: 'var(--color-text)', fontSize: 11, fontWeight: 700 }} />
+                      <Bar dataKey="calls" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                        <LabelList dataKey="calls" position="top" style={{ fill: 'var(--color-text)', fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }} />
                         {modalChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={index === 0 ? 'var(--color-primary)' : '#10b981'} />
+                          <Cell key={`cell-${index}`} fill={index === 0 ? '#C6333D' : '#334155'} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -21743,8 +21775,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
                 if (isNightRegistered) {
                   statusLabel = t('Trực đêm');
-                  statusBadgeColor = '#8b5cf6';
-                  statusBadgeBg = 'rgba(139, 92, 246, 0.12)';
+                  statusBadgeColor = '#0284c7';
+                  statusBadgeBg = 'rgba(14, 165, 233, 0.14)';
                 } else if (isSelected || reg) {
                   if (isWeekend) {
                     statusLabel = t('Đăng ký (Cuối tuần)');

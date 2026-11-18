@@ -21,7 +21,7 @@ const FEEDBACK_TYPES: { id: FeedbackType; label: string; icon: React.ReactNode; 
     { id: 'bug', label: 'Báo lỗi', icon: <Bug className="w-4 h-4" />, desc: 'Chức năng bị hỏng hoặc hoạt động sai', color: '#ef4444' },
     { id: 'suggestion', label: 'Góp ý', icon: <Lightbulb className="w-4 h-4" />, desc: 'Ý tưởng cải thiện sản phẩm', color: '#BD1D2D' },
     { id: 'praise', label: 'Khen ngợi', icon: <Heart className="w-4 h-4" />, desc: 'Điều bạn thích ở sản phẩm', color: '#10b981' },
-    { id: 'other', label: 'Khác', icon: <MessageSquare className="w-4 h-4" />, desc: 'Bất kỳ phản hồi nào khác', color: '#6366f1' },
+    { id: 'other', label: 'Khác', icon: <MessageSquare className="w-4 h-4" />, desc: 'Bất kỳ phản hồi nào khác', color: '#475569' },
 ];
 
 const FeedbackModal: React.FC<FeedbackModalProps> = ({
@@ -139,17 +139,16 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({
 
             {/* Modal */}
             <div
-                className={`relative w-full max-w-lg rounded-[18px] shadow-2xl overflow-hidden transition-all duration-300 ${dk ? 'bg-[#0D1117] border border-slate-800' : 'bg-white border border-slate-100'}`}
+                className={`relative w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden transition-colors duration-200 ${dk ? 'bg-[#0D1117] border border-slate-800' : 'bg-white border border-slate-200'}`}
                 onClick={e => e.stopPropagation()}
-                style={{ boxShadow: `0 25px 60px rgba(0,0,0,0.4), 0 0 0 1px ${selectedMeta.color}22` }}
             >
                 {/* Colored top stripe */}
-                <div className="h-1 w-full transition-colors duration-300" style={{ background: `linear-gradient(90deg, ${selectedMeta.color}, ${brandColor})` }} />
+                <div className="h-1 w-full transition-colors duration-200" style={{ backgroundColor: selectedMeta.color }} />
 
                 {/* Header */}
                 <div className={`flex items-center justify-between px-6 py-4 border-b ${dk ? 'border-slate-800' : 'border-slate-100'}`}>
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-[var(--radius-md)] flex items-center justify-center text-white transition-colors duration-300" style={{ backgroundColor: selectedMeta.color }}>
+                        <div className="w-9 h-9 rounded-[var(--radius-md)] flex items-center justify-center text-white transition-colors duration-200" style={{ backgroundColor: selectedMeta.color }}>
                             {selectedMeta.icon}
                         </div>
                         <div>
@@ -157,7 +156,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({
                             <p className={`text-[11px] ${dk ? 'text-slate-400' : 'text-slate-500'}`}>Giúp chúng tôi cải thiện sản phẩm</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className={`p-2 rounded-[var(--radius-md)] transition-all active:scale-90 ${dk ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-100 text-slate-400'}`}>
+                    <button onClick={onClose} className={`p-2 rounded-[var(--radius-md)] transition-colors ${dk ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-100 text-slate-400'}`}>
                         <X className="w-5 h-5" />
                     </button>
                 </div>
@@ -165,11 +164,11 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({
                 {submitted ? (
                     /* Success state */
                     <div className="flex flex-col items-center justify-center py-16 gap-4">
-                        <div className="w-16 h-16 rounded-[14px] flex items-center justify-center bg-emerald-500/10 text-emerald-500 animate-bounce">
-                            <CheckCircle className="w-8 h-8" />
+                        <div className="w-16 h-16 rounded-xl flex items-center justify-center bg-emerald-500/10 border border-emerald-500/20 text-emerald-500">
+                            <CheckCircle className="w-8 h-8" strokeWidth={1.75} />
                         </div>
                         <div className="text-center">
-                            <p className={`font-bold text-lg ${dk ? 'text-white' : 'text-slate-800'}`}>Cảm ơn bạn!</p>
+                            <p className={`font-bold text-lg ${dk ? 'text-white' : 'text-slate-800'}`}>Cảm ơn bạn</p>
                             <p className={`text-sm mt-1 ${dk ? 'text-slate-400' : 'text-slate-500'}`}>Feedback của bạn đã được ghi nhận.</p>
                         </div>
                     </div>
@@ -177,21 +176,21 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({
                     <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
                         {/* Type selector */}
                         <div>
-                            <label className={`text-[11px] font-black uppercase tracking-widest mb-2 block ${dk ? 'text-slate-400' : 'text-slate-500'}`}>Loại phản hồi</label>
+                            <label className={`text-[11px] font-semibold uppercase tracking-widest mb-2 block ${dk ? 'text-slate-400' : 'text-slate-500'}`}>Loại phản hồi</label>
                             <div className="grid grid-cols-4 gap-2">
                                 {FEEDBACK_TYPES.map(t => (
                                     <button
                                         key={t.id}
                                         onClick={() => setType(t.id)}
                                         title={t.desc}
-                                        className={`flex flex-col items-center gap-1.5 p-3 rounded-[var(--radius-md)] border-2 transition-all text-center ${type === t.id
-                                            ? 'shadow-lg scale-[1.03]'
-                                            : (dk ? 'border-slate-800 hover:border-slate-700' : 'border-slate-100 hover:border-slate-200')
+                                        className={`flex flex-col items-center gap-1.5 p-3 rounded-[var(--radius-md)] border transition-colors text-center ${type === t.id
+                                            ? 'shadow-xs'
+                                            : (dk ? 'border-slate-800 hover:border-slate-700' : 'border-slate-200 hover:border-slate-300')
                                             }`}
-                                        style={type === t.id ? { borderColor: t.color, backgroundColor: t.color + '18', color: t.color } : {}}
+                                        style={type === t.id ? { borderColor: t.color, backgroundColor: t.color + '14', color: t.color } : {}}
                                     >
                                         <span className={type === t.id ? '' : (dk ? 'text-slate-500' : 'text-slate-400')}>{t.icon}</span>
-                                        <span className={`text-[10px] font-bold ${type === t.id ? '' : (dk ? 'text-slate-400' : 'text-slate-500')}`}>{t.label}</span>
+                                        <span className={`text-[10px] font-semibold ${type === t.id ? '' : (dk ? 'text-slate-400' : 'text-slate-500')}`}>{t.label}</span>
                                     </button>
                                 ))}
                             </div>
@@ -199,13 +198,13 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({
 
                         {/* Title */}
                         <div>
-                            <label className={`text-[11px] font-black uppercase tracking-widest mb-2 block ${dk ? 'text-slate-400' : 'text-slate-500'}`}>Tiêu đề *</label>
+                            <label className={`text-[11px] font-semibold uppercase tracking-widest mb-2 block ${dk ? 'text-slate-400' : 'text-slate-500'}`}>Tiêu đề *</label>
                             <input
                                 value={title}
                                 onChange={e => setTitle(e.target.value)}
                                 placeholder={type === 'bug' ? 'VD: Nút gửi không hoạt động sau khi upload file' : 'Tóm tắt ngắn gọn...'}
                                 maxLength={120}
-                                className={`w-full px-4 py-2.5 rounded-[var(--radius-md)] border text-sm outline-none transition-all ${dk
+                                className={`w-full px-4 py-2.5 rounded-[var(--radius-md)] border text-sm outline-none transition-colors ${dk
                                     ? 'bg-slate-900 border-slate-700 text-slate-200 focus:border-[var(--color-primary)] placeholder:text-slate-600'
                                     : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-[var(--color-primary)] focus:bg-white placeholder:text-slate-400'
                                     }`}
@@ -214,7 +213,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({
 
                         {/* Description */}
                         <div>
-                            <label className={`text-[11px] font-black uppercase tracking-widest mb-2 block ${dk ? 'text-slate-400' : 'text-slate-500'}`}>Mô tả chi tiết *</label>
+                            <label className={`text-[11px] font-semibold uppercase tracking-widest mb-2 block ${dk ? 'text-slate-400' : 'text-slate-500'}`}>Mô tả chi tiết *</label>
                             <textarea
                                 value={description}
                                 onChange={e => setDescription(e.target.value)}
@@ -224,7 +223,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({
                                         ? 'Tính năng bạn muốn thấy, lý do tại sao hữu ích...'
                                         : 'Chia sẻ cảm nhận của bạn...'}
                                 rows={4}
-                                className={`w-full px-4 py-2.5 rounded-[var(--radius-md)] border text-sm outline-none transition-all resize-none ${dk
+                                className={`w-full px-4 py-2.5 rounded-[var(--radius-md)] border text-sm outline-none transition-colors resize-none ${dk
                                     ? 'bg-slate-900 border-slate-700 text-slate-200 focus:border-[var(--color-primary)] placeholder:text-slate-600'
                                     : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-[var(--color-primary)] focus:bg-white placeholder:text-slate-400'
                                     }`}
@@ -233,12 +232,12 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({
 
                         {/* Screenshot zone */}
                         <div>
-                            <label className={`text-[11px] font-black uppercase tracking-widest mb-2 block ${dk ? 'text-slate-400' : 'text-slate-500'}`}>
+                            <label className={`text-[11px] font-semibold uppercase tracking-widest mb-2 block ${dk ? 'text-slate-400' : 'text-slate-500'}`}>
                                 Screenshot <span className={`font-normal normal-case tracking-normal ml-1 ${dk ? 'text-slate-600' : 'text-slate-400'}`}>(tuỳ chọn)</span>
                             </label>
 
                             {screenshot ? (
-                                <div className="relative group rounded-[14px] overflow-hidden border border-slate-700">
+                                <div className="relative group rounded-xl overflow-hidden border border-slate-700">
                                     <img src={screenshot} alt="Screenshot preview" className="w-full max-h-48 object-cover" />
                                     <button
                                         onClick={() => setScreenshot(null)}
@@ -255,8 +254,8 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({
                                     onDragLeave={() => setDragging(false)}
                                     onDrop={handleFileDrop}
                                     onClick={() => fileInputRef.current?.click()}
-                                    className={`flex flex-col items-center justify-center gap-2 py-6 rounded-[14px] border-2 border-dashed cursor-pointer transition-all ${dragging
-                                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5 scale-[1.01]'
+                                    className={`flex flex-col items-center justify-center gap-2 py-6 rounded-xl border border-dashed cursor-pointer transition-colors ${dragging
+                                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
                                         : (dk ? 'border-slate-700 hover:border-slate-600 hover:bg-slate-900/50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50')
                                         }`}
                                 >
@@ -277,8 +276,8 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({
                         <button
                             onClick={handleSubmit}
                             disabled={submitting}
-                            className="w-full flex items-center justify-center gap-2 py-3 rounded-[var(--radius-md)] font-bold text-sm text-white transition-all active:scale-95 disabled:opacity-60"
-                            style={{ background: `linear-gradient(135deg, ${selectedMeta.color}, ${brandColor})` }}
+                            className="w-full flex items-center justify-center gap-2 py-3 rounded-[var(--radius-md)] font-semibold text-sm text-white transition-opacity hover:opacity-95 disabled:opacity-60"
+                            style={{ backgroundColor: brandColor || selectedMeta.color }}
                         >
                             {submitting ? (
                                 <>

@@ -155,7 +155,7 @@ const SLASH_COMMANDS = [
     command: '/clear',
     label: 'Làm sạch cửa sổ trò chuyện',
     description: 'Xóa lịch sử tin nhắn tạm thời để bắt đầu chủ đề mới',
-    icon: <Sparkles size={14} />,
+    icon: <Trash2 size={14} />,
     template: 'CLEAR_ACTION',
   },
 ];
@@ -175,13 +175,13 @@ const TEST_PROMPTS = [
   },
   {
     category: 'Tài chính & Kế toán',
-    title: 'Đối soát Thu Chi PO / SO & Đặt cọc',
+    title: 'Đối soát thu chi PO / SO & Đặt cọc',
     prompt: 'Phân tích tổng quan thu chi tài chính tháng này, liệt kê các khoản đặt cọc (SO) gần đây và các đề xuất chi (PO) đang chờ duyệt.',
     agentId: 'finance',
   },
   {
     category: 'Nhân sự & Chấm công',
-    title: 'Kiểm tra Chấm công & Lịch nghỉ phép',
+    title: 'Kiểm tra chấm công & Lịch nghỉ phép',
     prompt: 'Tra cứu tình hình nhân sự, tổng hợp chấm công tháng này và danh sách nhân viên nghỉ phép hôm nay.',
     agentId: 'hrm',
   },
@@ -193,7 +193,7 @@ const TEST_PROMPTS = [
   },
   {
     category: 'Marketing & Đa kênh',
-    title: 'Hiệu quả Chiến dịch Email & Automation Flow',
+    title: 'Hiệu quả chiến dịch Email & Automation Flow',
     prompt: 'Phân tích hiệu quả các chiến dịch Email Marketing, kịch bản Automation Flow và danh sách Lead nóng tương tác cao.',
     agentId: 'marketing_campaigns',
   },
@@ -232,8 +232,8 @@ export const QwenAgentLabPage: React.FC = () => {
         id: 'welcome_turnio',
         role: 'assistant',
         content:
-          'Xin chào! Tôi là **SI IDEAS × Gemini 3.5 Flash Lite**.\n\n' +
-          'Tôi được tích hợp đầy đủ cơ chế **Multi-Agent Swarm**, **70 Công cụ Nghiệp vụ (`AgentToolRegistry`)**, **Trí nhớ Làm việc 2 Tầng & Ngữ cảnh Thực thể 48h**, **Cảnh báo Rủi ro Chủ động (`Proactive Insight`)**, **Đề xuất Hành động 1-Click (`Action Proposal`)**, **Lệnh tắt `/` (Slash Commands)** và **Đính kèm Hồ sơ ERP (`#`)**. Bạn có thể chọn kịch bản bên trái hoặc nhập câu hỏi bất kỳ!',
+          'Xin chào. Tôi là **SI IDEAS × Gemini 3.5 Flash Lite**.\n\n' +
+          'Tôi được tích hợp đầy đủ cơ chế **Multi-Agent Swarm**, **70 Công cụ Nghiệp vụ (`AgentToolRegistry`)**, **Trí nhớ Làm việc 2 Tầng & Ngữ cảnh Thực thể 48h**, **Cảnh báo Rủi ro Chủ động (`Proactive Insight`)**, **Đề xuất Hành động 1-Click (`Action Proposal`)**, **Lệnh tắt `/` (Slash Commands)** và **Đính kèm Hồ sơ ERP (`#`)**. Bạn có thể chọn kịch bản bên trái hoặc nhập câu hỏi bất kỳ.',
         timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
         model: 'gemini-3.5-flash-lite',
         collaborating_agents: [
@@ -445,7 +445,7 @@ export const QwenAgentLabPage: React.FC = () => {
       }
       setNewApiKeyInput('');
       setShowKeyModal(false);
-      toast.success('Đã cập nhật cấu hình Turnio 3.8 27B bảo mật!');
+      toast.success('Đã cập nhật cấu hình Turnio 3.8 27B bảo mật');
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Không thể lưu cấu hình API');
     } finally {
@@ -461,7 +461,7 @@ export const QwenAgentLabPage: React.FC = () => {
         id: 'welcome_turnio_' + Date.now(),
         role: 'assistant',
         content:
-          'Đã làm mới phiên làm việc! Toàn bộ ngữ cảnh đã được dọn sạch. Hãy chọn kịch bản hoặc nhập câu hỏi mới để test **Turnio 3.8 27B**.',
+          'Đã làm mới phiên làm việc. Toàn bộ ngữ cảnh đã được dọn sạch. Hãy chọn kịch bản hoặc nhập câu hỏi mới để test **Turnio 3.8 27B**.',
         timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
         model: selectedModel,
       },
@@ -536,8 +536,8 @@ export const QwenAgentLabPage: React.FC = () => {
             style={{
               width: 40,
               height: 40,
-              borderRadius: 12,
-              background: 'linear-gradient(135deg, #BD1D2D 0%, #7f1d1d 100%)',
+              borderRadius: 10,
+              background: '#BD1D2D',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -549,13 +549,13 @@ export const QwenAgentLabPage: React.FC = () => {
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <h1 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)' }}>
+              <h1 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)' }}>
                 SI IDEAS × Turnio 3.8 27B Lab
               </h1>
               <span
                 style={{
                   fontSize: '0.7rem',
-                  fontWeight: 800,
+                  fontWeight: 700,
                   padding: '2px 8px',
                   borderRadius: 999,
                   background: 'rgba(16, 185, 129, 0.12)',
@@ -568,7 +568,8 @@ export const QwenAgentLabPage: React.FC = () => {
               <span
                 style={{
                   fontSize: '0.7rem',
-                  fontWeight: 700,
+                  fontWeight: 600,
+                  fontVariantNumeric: 'tabular-nums',
                   padding: '2px 8px',
                   borderRadius: 999,
                   background: 'rgba(189, 29, 45, 0.1)',
@@ -578,7 +579,7 @@ export const QwenAgentLabPage: React.FC = () => {
                 {statusInfo?.total_tools || 70} ERP Tools • Full Access
               </span>
             </div>
-            <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
+            <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', marginTop: 4 }}>
               Màn hình kiểm thử độc lập tích hợp toàn bộ cơ chế Multi-Agent Swarm, Bộ nhớ 48h, Action Proposal & SQL Tool Registry trên Turnio 3.8 27B
             </div>
           </div>
@@ -703,7 +704,7 @@ export const QwenAgentLabPage: React.FC = () => {
             display: 'flex',
             flexDirection: 'column',
             overflowY: 'auto',
-            padding: '14px',
+            padding: '16px',
             gap: '16px',
           }}
         >
@@ -712,7 +713,7 @@ export const QwenAgentLabPage: React.FC = () => {
             <div
               style={{
                 fontSize: '0.72rem',
-                fontWeight: 800,
+                fontWeight: 700,
                 textTransform: 'uppercase',
                 letterSpacing: '0.04em',
                 color: 'var(--color-text-muted)',
@@ -726,19 +727,19 @@ export const QwenAgentLabPage: React.FC = () => {
               <Layers size={13} />
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <button
                 type="button"
                 onClick={() => setPinnedAgentId('auto')}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '10px',
-                  padding: '8px 10px',
+                  gap: '8px',
+                  padding: '8px 12px',
                   borderRadius: 10,
                   border:
                     pinnedAgentId === 'auto'
-                      ? '1.5px solid var(--color-primary)'
+                      ? '1px solid var(--color-primary)'
                       : '1px solid var(--color-border)',
                   background:
                     pinnedAgentId === 'auto' ? 'rgba(189, 29, 45, 0.08)' : 'var(--color-bg)',
@@ -760,10 +761,10 @@ export const QwenAgentLabPage: React.FC = () => {
                     flexShrink: 0,
                   }}
                 >
-                  <Sparkles size={15} />
+                  <Sparkles size={15} strokeWidth={1.75} />
                 </div>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>Auto Swarm (Tự động)</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 700 }}>Auto Swarm (Tự động)</div>
                   <div
                     style={{
                       fontSize: '0.7rem',
@@ -789,10 +790,10 @@ export const QwenAgentLabPage: React.FC = () => {
                       gap: '4px',
                       borderRadius: 10,
                       border: isSelected
-                        ? `1.5px solid ${ag.badgeColor}`
+                        ? `1px solid ${ag.badgeColor}`
                         : '1px solid transparent',
                       background: isSelected ? ag.badgeBg : 'transparent',
-                      paddingRight: 6,
+                      paddingRight: 8,
                     }}
                   >
                     <button
@@ -801,8 +802,8 @@ export const QwenAgentLabPage: React.FC = () => {
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '9px',
-                        padding: '7px 8px',
+                        gap: '8px',
+                        padding: '8px',
                         background: 'transparent',
                         border: 'none',
                         color: 'var(--color-text)',
@@ -875,7 +876,7 @@ export const QwenAgentLabPage: React.FC = () => {
             <div
               style={{
                 fontSize: '0.72rem',
-                fontWeight: 800,
+                fontWeight: 700,
                 textTransform: 'uppercase',
                 letterSpacing: '0.04em',
                 color: 'var(--color-text-muted)',
@@ -885,7 +886,7 @@ export const QwenAgentLabPage: React.FC = () => {
                 justifyContent: 'space-between',
               }}
             >
-              <span>Kịch bản Test 1-Click</span>
+              <span>Kịch bản test 1-click</span>
               <Play size={12} />
             </div>
 
@@ -912,8 +913,8 @@ export const QwenAgentLabPage: React.FC = () => {
                 >
                   <span
                     style={{
-                      fontSize: '0.66rem',
-                      fontWeight: 800,
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
                       color: 'var(--color-primary)',
                       textTransform: 'uppercase',
                     }}
@@ -956,7 +957,7 @@ export const QwenAgentLabPage: React.FC = () => {
               padding: '20px 24px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '18px',
+              gap: '16px',
             }}
           >
             {messages.map((msg) => {
@@ -986,19 +987,19 @@ export const QwenAgentLabPage: React.FC = () => {
                       color: 'var(--color-text-muted)',
                     }}
                   >
-                    <span style={{ fontWeight: 800, color: isUser ? 'var(--color-primary)' : 'var(--color-text)' }}>
+                    <span style={{ fontWeight: 700, color: isUser ? 'var(--color-primary)' : 'var(--color-text)' }}>
                       {isUser ? 'Bạn' : 'SI IDEAS × Turnio 3.8 27B'}
                     </span>
-                    <span>• {msg.timestamp}</span>
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>• {msg.timestamp}</span>
                     {!isUser && msg.model && (
                       <span
                         style={{
-                          padding: '1px 7px',
+                          padding: '2px 8px',
                           borderRadius: 999,
                           background: 'var(--color-surface)',
                           border: '1px solid var(--color-border)',
                           fontSize: '0.68rem',
-                          fontWeight: 700,
+                          fontWeight: 600,
                         }}
                       >
                         {formatModelLabel(msg.model)}
@@ -1010,12 +1011,12 @@ export const QwenAgentLabPage: React.FC = () => {
                         <span
                           key={ag.id}
                           style={{
-                            padding: '1px 8px',
+                            padding: '2px 8px',
                             borderRadius: 999,
                             background: 'rgba(189, 29, 45, 0.1)',
                             color: 'var(--color-primary)',
                             fontSize: '0.68rem',
-                            fontWeight: 800,
+                            fontWeight: 600,
                           }}
                         >
                           {ag.badge}
@@ -1024,15 +1025,19 @@ export const QwenAgentLabPage: React.FC = () => {
                     {!isUser && msg.telemetry?.tokens_per_second ? (
                       <span
                         style={{
-                          padding: '1px 7px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '2px 8px',
                           borderRadius: 999,
                           background: 'rgba(16, 185, 129, 0.12)',
                           color: '#059669',
                           fontSize: '0.68rem',
-                          fontWeight: 800,
+                          fontWeight: 600,
+                          fontVariantNumeric: 'tabular-nums',
                         }}
                       >
-                        ⚡ {msg.telemetry.tokens_per_second} tok/s ({msg.telemetry.total_wall_ms}ms)
+                        <Zap size={11} /> {msg.telemetry.tokens_per_second} tok/s ({msg.telemetry.total_wall_ms}ms)
                       </span>
                     ) : null}
                   </div>
@@ -1052,6 +1057,7 @@ export const QwenAgentLabPage: React.FC = () => {
                             background: 'var(--color-surface)',
                             border: '1px solid var(--color-border)',
                             fontSize: '0.72rem',
+                            fontVariantNumeric: 'tabular-nums',
                           }}
                         >
                           <Database size={12} style={{ color: st.has_error ? '#ef4444' : '#059669' }} />
@@ -1117,7 +1123,7 @@ export const QwenAgentLabPage: React.FC = () => {
                   <div
                     style={{
                       maxWidth: isUser ? '78%' : '94%',
-                      padding: isUser ? '11px 16px' : '16px 20px',
+                      padding: isUser ? '12px 16px' : '16px 20px',
                       borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                       background: isUser ? 'var(--color-primary)' : 'var(--color-surface)',
                       color: isUser ? '#ffffff' : 'var(--color-text)',
@@ -1261,18 +1267,18 @@ export const QwenAgentLabPage: React.FC = () => {
                   maxWidth: 460,
                   background: 'var(--color-surface)',
                   border: '1px solid var(--color-border)',
-                  borderRadius: 14,
-                  padding: 6,
+                  borderRadius: 12,
+                  padding: 8,
                   zIndex: 50,
                 }}
               >
                 <div
                   style={{
                     fontSize: '0.68rem',
-                    fontWeight: 800,
+                    fontWeight: 700,
                     textTransform: 'uppercase',
                     color: 'var(--color-text-muted)',
-                    padding: '4px 10px',
+                    padding: '4px 12px',
                   }}
                 >
                   Lệnh tắt AI Copilot (Slash Commands)
@@ -1314,10 +1320,10 @@ export const QwenAgentLabPage: React.FC = () => {
                     </div>
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <code style={{ fontWeight: 800, fontSize: '0.78rem', color: 'var(--color-primary)' }}>
+                        <code style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--color-primary)' }}>
                           {cmd.command}
                         </code>
-                        <span style={{ fontWeight: 700, fontSize: '0.78rem' }}>{cmd.label}</span>
+                        <span style={{ fontWeight: 600, fontSize: '0.78rem' }}>{cmd.label}</span>
                       </div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
                         {cmd.description}
@@ -1346,7 +1352,7 @@ export const QwenAgentLabPage: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                   <Briefcase size={15} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                       Đính kèm: {attachedEntity.title} (#{attachedEntity.id})
                     </div>
                     {attachedEntity.subtitle && (
@@ -1376,10 +1382,10 @@ export const QwenAgentLabPage: React.FC = () => {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
+                gap: '12px',
                 background: 'var(--color-bg)',
-                border: '1.5px solid var(--color-border)',
-                borderRadius: 14,
+                border: '1px solid var(--color-border)',
+                borderRadius: 12,
                 padding: '8px 12px',
               }}
             >
@@ -1390,13 +1396,13 @@ export const QwenAgentLabPage: React.FC = () => {
                 onClick={() => setShowErpCardModal(true)}
                 style={{
                   height: 36,
-                  padding: '0 10px',
-                  borderRadius: 9,
+                  padding: '0 12px',
+                  borderRadius: 8,
                   border: '1px solid var(--color-border)',
                   background: 'var(--color-surface)',
                   color: 'var(--color-text)',
                   fontSize: '0.75rem',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 6,
@@ -1459,16 +1465,16 @@ export const QwenAgentLabPage: React.FC = () => {
                 disabled={isSending || (!inputText.trim() && !attachedEntity)}
                 onClick={() => handleSendMessage()}
                 style={{
-                  height: 38,
+                  height: 36,
                   padding: '0 16px',
-                  borderRadius: 10,
+                  borderRadius: 8,
                   border: 'none',
                   background:
                     isSending || (!inputText.trim() && !attachedEntity)
                       ? 'var(--color-border)'
                       : 'var(--color-primary)',
                   color: '#ffffff',
-                  fontWeight: 800,
+                  fontWeight: 600,
                   fontSize: '0.82rem',
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1492,15 +1498,15 @@ export const QwenAgentLabPage: React.FC = () => {
             display: 'flex',
             flexDirection: 'column',
             overflowY: 'auto',
-            padding: '14px',
+            padding: '16px',
             gap: '16px',
           }}
         >
           {/* Turnio LPU Speedometer Card */}
           <div
             style={{
-              padding: '14px',
-              borderRadius: 14,
+              padding: '16px',
+              borderRadius: 12,
               background: 'var(--color-bg)',
               border: '1px solid var(--color-border)',
             }}
@@ -1510,13 +1516,13 @@ export const QwenAgentLabPage: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                marginBottom: 10,
+                marginBottom: 12,
               }}
             >
               <span
                 style={{
                   fontSize: '0.72rem',
-                  fontWeight: 800,
+                  fontWeight: 700,
                   textTransform: 'uppercase',
                   color: 'var(--color-text-muted)',
                 }}
@@ -1535,14 +1541,14 @@ export const QwenAgentLabPage: React.FC = () => {
             >
               <div
                 style={{
-                  padding: '8px 10px',
+                  padding: '8px 12px',
                   borderRadius: 10,
                   background: 'var(--color-surface)',
                   border: '1px solid var(--color-border)',
                 }}
               >
-                <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>Tốc độ Sinh Token</div>
-                <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#059669' }}>
+                <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>Tốc độ sinh Token</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#059669', fontVariantNumeric: 'tabular-nums' }}>
                   {latestTelemetryMessage?.telemetry?.tokens_per_second
                     ? `${latestTelemetryMessage.telemetry.tokens_per_second} tok/s`
                     : '—'}
@@ -1551,14 +1557,14 @@ export const QwenAgentLabPage: React.FC = () => {
 
               <div
                 style={{
-                  padding: '8px 10px',
+                  padding: '8px 12px',
                   borderRadius: 10,
                   background: 'var(--color-surface)',
                   border: '1px solid var(--color-border)',
                 }}
               >
                 <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>Thời gian Turnio LPU</div>
-                <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                   {latestTelemetryMessage?.telemetry?.groq_time_ms !== undefined
                     ? `${latestTelemetryMessage.telemetry.groq_time_ms} ms`
                     : '—'}
@@ -1567,14 +1573,14 @@ export const QwenAgentLabPage: React.FC = () => {
 
               <div
                 style={{
-                  padding: '8px 10px',
+                  padding: '8px 12px',
                   borderRadius: 10,
                   background: 'var(--color-surface)',
                   border: '1px solid var(--color-border)',
                 }}
               >
                 <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>Tổng Tokens (In/Out)</div>
-                <div style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                <div style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                   {latestTelemetryMessage?.telemetry
                     ? `${latestTelemetryMessage.telemetry.prompt_tokens} / ${latestTelemetryMessage.telemetry.completion_tokens}`
                     : '—'}
@@ -1583,14 +1589,14 @@ export const QwenAgentLabPage: React.FC = () => {
 
               <div
                 style={{
-                  padding: '8px 10px',
+                  padding: '8px 12px',
                   borderRadius: 10,
                   background: 'var(--color-surface)',
                   border: '1px solid var(--color-border)',
                 }}
               >
                 <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>Số vòng Tool Loop</div>
-                <div style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--color-primary)' }}>
+                <div style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--color-primary)', fontVariantNumeric: 'tabular-nums' }}>
                   {latestTelemetryMessage?.telemetry?.turns_used
                     ? `${latestTelemetryMessage.telemetry.turns_used} vòng`
                     : '1 vòng'}
@@ -1604,13 +1610,13 @@ export const QwenAgentLabPage: React.FC = () => {
             <div
               style={{
                 fontSize: '0.72rem',
-                fontWeight: 800,
+                fontWeight: 700,
                 textTransform: 'uppercase',
                 color: 'var(--color-text-muted)',
                 marginBottom: 8,
               }}
             >
-              Swarm Đang Phối Hợp
+              Swarm đang phối hợp
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {(latestTelemetryMessage?.collaborating_agents || [
@@ -1629,10 +1635,10 @@ export const QwenAgentLabPage: React.FC = () => {
                     border: '1px solid var(--color-border)',
                   }}
                 >
-                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-primary)' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-primary)' }}>
                     {ag.badge}
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: 3 }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: 4 }}>
                     {ag.focus}
                   </div>
                 </div>
@@ -1645,7 +1651,7 @@ export const QwenAgentLabPage: React.FC = () => {
             <div
               style={{
                 fontSize: '0.72rem',
-                fontWeight: 800,
+                fontWeight: 700,
                 textTransform: 'uppercase',
                 color: 'var(--color-text-muted)',
                 marginBottom: 8,
@@ -1654,7 +1660,7 @@ export const QwenAgentLabPage: React.FC = () => {
                 justifyContent: 'space-between',
               }}
             >
-              <span>Nhật ký Gọi Tool (MySQL)</span>
+              <span>Nhật ký gọi Tool (MySQL)</span>
               <Terminal size={13} />
             </div>
 
@@ -1671,7 +1677,7 @@ export const QwenAgentLabPage: React.FC = () => {
                   textAlign: 'center',
                 }}
               >
-                Chưa có lệnh gọi công cụ nào trong lượt gần nhất. Hãy bấm vào một kịch bản test bên trái!
+                Chưa có lệnh gọi công cụ nào trong lượt gần nhất. Hãy bấm vào một kịch bản test bên trái.
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1694,12 +1700,13 @@ export const QwenAgentLabPage: React.FC = () => {
                         gap: 6,
                       }}
                     >
-                      <code style={{ fontWeight: 800, color: 'var(--color-text)' }}>{step.tool}</code>
+                      <code style={{ fontWeight: 700, color: 'var(--color-text)' }}>{step.tool}</code>
                       <span
                         style={{
                           fontSize: '0.68rem',
-                          fontWeight: 700,
+                          fontWeight: 600,
                           color: '#059669',
+                          fontVariantNumeric: 'tabular-nums',
                         }}
                       >
                         {step.latency_ms}ms
@@ -1776,16 +1783,16 @@ export const QwenAgentLabPage: React.FC = () => {
             style={{
               width: '100%',
               maxWidth: 460,
-              borderRadius: 18,
+              borderRadius: 16,
               background: 'var(--color-surface)',
               border: '1px solid var(--color-border)',
-              padding: 22,
+              padding: 20,
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <KeyRound size={20} style={{ color: 'var(--color-primary)' }} />
-              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>
                 Bảo mật Turnio 3.8 27B API Key
               </h3>
             </div>
@@ -1795,19 +1802,19 @@ export const QwenAgentLabPage: React.FC = () => {
             </p>
             <div
               style={{
-                padding: '10px 12px',
+                padding: '12px',
                 borderRadius: 10,
                 background: 'var(--color-bg)',
                 border: '1px solid var(--color-border)',
                 fontSize: '0.8rem',
-                marginBottom: 14,
+                marginBottom: 16,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
               }}
             >
               <span style={{ color: 'var(--color-text-muted)' }}>Key đang kích hoạt:</span>
-              <code style={{ fontWeight: 800, color: '#059669' }}>
+              <code style={{ fontWeight: 700, color: '#059669', fontVariantNumeric: 'tabular-nums' }}>
                 {statusInfo?.masked_key || 'Đã cấu hình'}
               </code>
             </div>
@@ -1817,11 +1824,11 @@ export const QwenAgentLabPage: React.FC = () => {
                 style={{
                   display: 'block',
                   fontSize: '0.76rem',
-                  fontWeight: 700,
-                  marginBottom: 6,
+                  fontWeight: 600,
+                  marginBottom: 8,
                 }}
               >
-                Đổi API Key mới (Tùy chọn - Để trống nếu giữ nguyên):
+                Đổi API Key mới (tùy chọn — để trống nếu giữ nguyên):
               </label>
               <input
                 type="password"
@@ -1830,9 +1837,9 @@ export const QwenAgentLabPage: React.FC = () => {
                 placeholder="Nhập API Key mới..."
                 style={{
                   width: '100%',
-                  height: 38,
+                  height: 36,
                   padding: '0 12px',
-                  borderRadius: 10,
+                  borderRadius: 8,
                   border: '1px solid var(--color-border)',
                   background: 'var(--color-bg)',
                   color: 'var(--color-text)',
@@ -1846,13 +1853,13 @@ export const QwenAgentLabPage: React.FC = () => {
                   onClick={() => setShowKeyModal(false)}
                   style={{
                     height: 36,
-                    padding: '0 14px',
-                    borderRadius: 10,
+                    padding: '0 16px',
+                    borderRadius: 8,
                     border: '1px solid var(--color-border)',
                     background: 'var(--color-bg)',
                     color: 'var(--color-text)',
                     fontSize: '0.8rem',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     cursor: 'pointer',
                   }}
                 >
@@ -1864,12 +1871,12 @@ export const QwenAgentLabPage: React.FC = () => {
                   style={{
                     height: 36,
                     padding: '0 16px',
-                    borderRadius: 10,
+                    borderRadius: 8,
                     border: 'none',
                     background: 'var(--color-primary)',
                     color: '#fff',
                     fontSize: '0.8rem',
-                    fontWeight: 800,
+                    fontWeight: 600,
                     cursor: 'pointer',
                   }}
                 >
@@ -1912,13 +1919,13 @@ const renderInlineMarkdown = (text: string, onExport: (href: string) => void): R
               alignItems: 'center',
               gap: '6px',
               margin: '4px 4px 4px 0',
-              padding: '6px 13px',
-              borderRadius: 9,
+              padding: '6px 12px',
+              borderRadius: 8,
               background: 'var(--color-primary)',
               color: '#fff',
               border: 'none',
               fontSize: '0.78rem',
-              fontWeight: 700,
+              fontWeight: 600,
               cursor: 'pointer',
             }}
           >
@@ -2032,7 +2039,7 @@ const QwenMarkdownRenderer: React.FC<{ content: string; onExport: (href: string)
                       background: 'var(--color-bg)',
                       borderBottom: '1px solid var(--color-border)',
                       textAlign: 'left',
-                      fontWeight: 800,
+                      fontWeight: 700,
                       fontSize: '0.74rem',
                       textTransform: 'uppercase',
                     }}
@@ -2051,6 +2058,7 @@ const QwenMarkdownRenderer: React.FC<{ content: string; onExport: (href: string)
                       style={{
                         padding: '8px 12px',
                         borderBottom: '1px solid var(--color-border)',
+                        fontVariantNumeric: 'tabular-nums',
                       }}
                     >
                       {renderInlineMarkdown(cell, onExport)}
@@ -2068,7 +2076,7 @@ const QwenMarkdownRenderer: React.FC<{ content: string; onExport: (href: string)
     // Headings
     if (trimmed.startsWith('### ')) {
       elements.push(
-        <h4 key={`h3-${i}`} style={{ margin: '12px 0 6px', fontSize: '0.94rem', fontWeight: 800 }}>
+        <h4 key={`h3-${i}`} style={{ margin: '12px 0 8px', fontSize: '0.94rem', fontWeight: 700 }}>
           {renderInlineMarkdown(trimmed.slice(4), onExport)}
         </h4>
       );
@@ -2077,7 +2085,7 @@ const QwenMarkdownRenderer: React.FC<{ content: string; onExport: (href: string)
     }
     if (trimmed.startsWith('## ')) {
       elements.push(
-        <h3 key={`h2-${i}`} style={{ margin: '14px 0 6px', fontSize: '1.02rem', fontWeight: 800 }}>
+        <h3 key={`h2-${i}`} style={{ margin: '16px 0 8px', fontSize: '1.02rem', fontWeight: 700 }}>
           {renderInlineMarkdown(trimmed.slice(3), onExport)}
         </h3>
       );
@@ -2086,7 +2094,7 @@ const QwenMarkdownRenderer: React.FC<{ content: string; onExport: (href: string)
     }
     if (trimmed.startsWith('# ')) {
       elements.push(
-        <h2 key={`h1-${i}`} style={{ margin: '14px 0 8px', fontSize: '1.1rem', fontWeight: 800 }}>
+        <h2 key={`h1-${i}`} style={{ margin: '16px 0 8px', fontSize: '1.1rem', fontWeight: 700 }}>
           {renderInlineMarkdown(trimmed.slice(2), onExport)}
         </h2>
       );

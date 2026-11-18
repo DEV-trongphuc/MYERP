@@ -54,7 +54,7 @@ export const LeadScoreRing: React.FC<LeadScoreRingProps> = ({ score, size = 52, 
           lineHeight: 1,
           zIndex: 2
         }}>
-          <span style={{ fontSize: size < 44 ? '0.65rem' : '0.875rem', fontWeight: 900, color }}>{score}</span>
+          <span style={{ fontSize: size < 44 ? '0.68rem' : '0.875rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color }}>{score}</span>
         </div>
       )}
     </div>

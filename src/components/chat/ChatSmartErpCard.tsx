@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   User, CheckSquare, Receipt, CreditCard, GitBranch, 
-  FileText, ArrowRight, ExternalLink, Sparkles, Copy, Check
+  FileText, ArrowRight, Copy, Check
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { ErpCardTagData } from './chatTagParsers';
@@ -25,14 +25,14 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
       case 'user':
       case 'hrm':
         return {
-          bg: '#f5f3ff',
-          hoverBg: '#ede9fe',
-          border: '#ddd6fe',
-          accent: '#7c3aed',
-          btnBg: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+          bg: '#F8FAFC',
+          hoverBg: '#F1F5F9',
+          border: '#CBD5E1',
+          accent: '#334155',
+          btnBg: '#0F172A',
           btnText: '#ffffff',
-          badgeBg: '#ede9fe',
-          badgeText: '#7c3aed',
+          badgeBg: '#F1F5F9',
+          badgeText: '#334155',
           label: 'Hồ sơ Nhân sự',
           icon: User,
         };
@@ -41,14 +41,14 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
       case 'student':
       case 'lead':
         return {
-          bg: '#f0f7ff',
-          hoverBg: '#e0effe',
-          border: '#bae6fd',
-          accent: '#0284c7',
-          btnBg: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+          bg: '#F8FAFC',
+          hoverBg: '#F1F5F9',
+          border: '#BAE6FD',
+          accent: '#0284C7',
+          btnBg: '#0284C7',
           btnText: '#ffffff',
-          badgeBg: '#e0f2fe',
-          badgeText: '#0369a1',
+          badgeBg: '#E0F2FE',
+          badgeText: '#0369A1',
           label: 'Hồ sơ Học viên / Lead',
           icon: User,
         };
@@ -56,14 +56,14 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
       case 'po':
       case 'payment_order':
         return {
-          bg: '#f0fdf4',
-          hoverBg: '#dcfce7',
-          border: '#bbf7d0',
-          accent: '#16a34a',
-          btnBg: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
+          bg: '#F0FDF4',
+          hoverBg: '#DCFCE7',
+          border: '#BBF7D0',
+          accent: '#16A34A',
+          btnBg: '#16A34A',
           btnText: '#ffffff',
-          badgeBg: '#dcfce7',
-          badgeText: '#15803d',
+          badgeBg: '#DCFCE7',
+          badgeText: '#15803D',
           label: 'Phiếu chi / PO',
           icon: CreditCard,
         };
@@ -71,28 +71,28 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
       case 'so':
       case 'sale_order':
         return {
-          bg: '#f0fdfa',
-          hoverBg: '#ccfbf1',
-          border: '#99f6e4',
-          accent: '#0d9488',
-          btnBg: 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)',
+          bg: '#F0FDFA',
+          hoverBg: '#CCFBF1',
+          border: '#99F6E4',
+          accent: '#0D9488',
+          btnBg: '#0D9488',
           btnText: '#ffffff',
-          badgeBg: '#ccfbf1',
-          badgeText: '#0f766e',
+          badgeBg: '#CCFBF1',
+          badgeText: '#0F766E',
           label: 'Phiếu đặt cọc (SO)',
           icon: Receipt,
         };
       case 'task':
       case 'activity':
         return {
-          bg: '#fffbeb',
-          hoverBg: '#fef3c7',
-          border: '#fde68a',
-          accent: '#d97706',
-          btnBg: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
+          bg: '#FFFBEB',
+          hoverBg: '#FEF3C7',
+          border: '#FDE68A',
+          accent: '#D97706',
+          btnBg: '#B45309',
           btnText: '#ffffff',
-          badgeBg: '#fef3c7',
-          badgeText: '#b45309',
+          badgeBg: '#FEF3C7',
+          badgeText: '#B45309',
           label: 'Công việc Workspace',
           icon: CheckSquare,
         };
@@ -100,29 +100,29 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
       case 'workflow':
       case 'leave':
         return {
-          bg: '#faf5ff',
-          hoverBg: '#f3e8ff',
-          border: '#e9d5ff',
-          accent: '#9333ea',
-          btnBg: 'linear-gradient(135deg, #9333ea 0%, #7e22ce 100%)',
+          bg: '#FEF2F2',
+          hoverBg: '#FEE2E2',
+          border: '#FECACA',
+          accent: '#BD1D2D',
+          btnBg: '#BD1D2D',
           btnText: '#ffffff',
-          badgeBg: '#f3e8ff',
-          badgeText: '#7e22ce',
+          badgeBg: 'rgba(189, 29, 45, 0.08)',
+          badgeText: '#BD1D2D',
           label: 'Quy trình & Phê duyệt',
           icon: GitBranch,
         };
       default:
         return {
-          bg: '#f8fafc',
-          hoverBg: '#f1f5f9',
-          border: '#cbd5e1',
-          accent: '#475569',
-          btnBg: 'linear-gradient(135deg, #475569 0%, #334155 100%)',
+          bg: '#F8FAFC',
+          hoverBg: '#F1F5F9',
+          border: '#CBD5E1',
+          accent: '#334155',
+          btnBg: '#334155',
           btnText: '#ffffff',
-          badgeBg: '#e2e8f0',
+          badgeBg: '#E2E8F0',
           badgeText: '#334155',
           label: 'Đối tượng ERP',
-          icon: Sparkles,
+          icon: FileText,
         };
     }
   })();
@@ -136,7 +136,7 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
     const ok = await copyTextSafely(url);
     if (ok) {
       setCopied(true);
-      toast.success('Đã sao chép liên kết trực tiếp!');
+      toast.success('Đã sao chép liên kết trực tiếp');
       setTimeout(() => setCopied(false), 2000);
     } else {
       toast.error('Không thể sao chép liên kết');
@@ -157,14 +157,14 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
       onClick={handleCardClick}
       style={{
         marginTop: '8px',
-        marginBottom: '6px',
+        marginBottom: '4px',
         background: '#ffffff',
         borderRadius: '12px',
-        border: '1px solid #e2e8f0',
-        boxShadow: '0 3px 12px rgba(0, 0, 0, 0.05)',
-        padding: '11px 13px',
+        border: '1px solid #E2E8F0',
+        boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+        padding: '12px',
         cursor: 'pointer',
-        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: 'border-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s cubic-bezier(0.22, 1, 0.36, 1)',
         display: 'flex',
         flexDirection: 'column',
         gap: '8px',
@@ -173,14 +173,12 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
         overflow: 'hidden'
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = '#cbd5e1';
-        e.currentTarget.style.boxShadow = '0 6px 18px rgba(0, 0, 0, 0.09)';
-        e.currentTarget.style.transform = 'translateY(-1px)';
+        e.currentTarget.style.borderColor = '#CBD5E1';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(15, 23, 42, 0.08)';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = '#e2e8f0';
-        e.currentTarget.style.boxShadow = '0 3px 12px rgba(0, 0, 0, 0.05)';
-        e.currentTarget.style.transform = 'none';
+        e.currentTarget.style.borderColor = '#E2E8F0';
+        e.currentTarget.style.boxShadow = '0 1px 3px rgba(15, 23, 42, 0.04)';
       }}
     >
       {/* Top Header Badge */}
@@ -188,28 +186,29 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
         <div style={{
           display: 'inline-flex',
           alignItems: 'center',
-          gap: '5px',
-          padding: '2px 7px',
-          borderRadius: '5px',
+          gap: '4px',
+          padding: '2px 8px',
+          borderRadius: '4px',
           background: themeConfig.badgeBg,
           color: themeConfig.badgeText,
           border: 'none',
           fontSize: '0.68rem',
-          fontWeight: 800,
-          letterSpacing: '0.3px',
+          fontWeight: 700,
+          letterSpacing: '0.03em',
           textTransform: 'uppercase'
         }}>
-          <IconComp size={12} strokeWidth={2.4} />
+          <IconComp size={12} strokeWidth={2} />
           <span>{themeConfig.label}</span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           {card.entity_id && (
             <span style={{
-              fontSize: '0.68rem',
-              color: '#94a3b8',
-              fontWeight: 700,
-              fontFamily: 'monospace'
+              fontSize: '0.7rem',
+              color: '#64748B',
+              fontWeight: 600,
+              fontFamily: 'monospace',
+              fontVariantNumeric: 'tabular-nums'
             }}>
               #{card.entity_id}
             </span>
@@ -221,16 +220,16 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
             style={{
               background: 'transparent',
               border: 'none',
-              padding: '2px 4px',
+              padding: '4px',
               borderRadius: '4px',
-              color: copied ? '#16a34a' : '#94a3b8',
+              color: copied ? '#16A34A' : '#94A3B8',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}
           >
-            {copied ? <Check size={12} strokeWidth={3} /> : <Copy size={12} />}
+            {copied ? <Check size={12} strokeWidth={2.5} /> : <Copy size={12} strokeWidth={1.75} />}
           </button>
         </div>
       </div>
@@ -238,18 +237,18 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
       {/* Main Entity Title */}
       <div>
         <div style={{
-          fontWeight: 750,
+          fontWeight: 600,
           fontSize: '0.88rem',
-          color: '#0f172a',
+          color: '#0F172A',
           lineHeight: 1.35,
-          marginBottom: card.subtitle ? '3px' : '0'
+          marginBottom: card.subtitle ? '4px' : '0'
         }}>
           {card.title}
         </div>
         {card.subtitle && (
           <div style={{
-            fontSize: '0.74rem',
-            color: '#64748b',
+            fontSize: '0.75rem',
+            color: '#64748B',
             lineHeight: 1.4,
             fontWeight: 500
           }}>
@@ -269,28 +268,27 @@ export const ChatSmartErpCard: React.FC<Props> = ({ card, onOpen }) => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: '6px',
+          gap: '8px',
           width: '100%',
-          padding: '6px 12px',
-          borderRadius: '7px',
+          padding: '8px 12px',
+          borderRadius: '8px',
           background: themeConfig.btnBg,
           color: themeConfig.btnText,
           border: 'none',
           fontSize: '0.76rem',
-          fontWeight: 700,
+          fontWeight: 600,
           cursor: 'pointer',
-          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.08)',
-          transition: 'all 0.15s ease'
+          transition: 'opacity 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.filter = 'brightness(1.08)';
+          e.currentTarget.style.opacity = '0.9';
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.filter = 'none';
+          e.currentTarget.style.opacity = '1';
         }}
       >
-        <span>{card.action_label || 'Bấm để mở hồ sơ'}</span>
-        <ArrowRight size={12} strokeWidth={2.4} />
+        <span>{card.action_label || 'Mở hồ sơ'}</span>
+        <ArrowRight size={12} strokeWidth={2} />
       </button>
     </div>
   );

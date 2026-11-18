@@ -52,7 +52,7 @@ const FlowHistoryModal: React.FC<FlowHistoryModalProps> = ({ isOpen, onClose, sn
                         <History size={18} />
                     </div>
                     <div>
-                        <h3 className="text-sm font-black text-slate-800 dark:text-slate-200">Lịch sử phiên bản</h3>
+                        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">Lịch sử phiên bản</h3>
                         <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">Lưu trên server · Tất cả thành viên có thể xem</p>
                     </div>
                 </div>
@@ -76,7 +76,7 @@ const FlowHistoryModal: React.FC<FlowHistoryModalProps> = ({ isOpen, onClose, sn
                     </div>
                 ) : (
                     safeSnapshots.map((snap, index) => (
-                        <div key={snap.id} className="group relative bg-white dark:bg-[#161b24] border border-slate-100 dark:border-slate-800/80 rounded-xl p-3.5 hover:border-blue-200 dark:hover:border-blue-500/30 hover:shadow-sm transition-all">
+                        <div key={snap.id} className="group relative bg-white dark:bg-[#161b24] border border-slate-100 dark:border-slate-800/80 rounded-xl p-3.5 hover:border-blue-200 dark:hover:border-blue-500/30 hover:shadow-sm transition-colors">
                             <div className="flex justify-between items-start gap-3">
                                 <div className="flex gap-3 flex-1 min-w-0">
                                     <div className="flex flex-col items-center flex-shrink-0 mt-1">
@@ -85,15 +85,15 @@ const FlowHistoryModal: React.FC<FlowHistoryModalProps> = ({ isOpen, onClose, sn
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <p className="text-xs font-black text-slate-700 dark:text-slate-200 truncate">{snap.label || 'Chỉnh sửa'}</p>
+                                            <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{snap.label || 'Chỉnh sửa'}</p>
                                             {index === 0 && (
-                                                <span className="text-[9px] font-black text-white bg-blue-600 px-1.5 py-0.5 rounded-md shrink-0">
+                                                <span className="text-[9px] font-bold text-white bg-blue-600 px-1.5 py-0.5 rounded-md shrink-0">
                                                     Mới nhất
                                                 </span>
                                             )}
                                         </div>
                                         <div className="flex items-center gap-3 mt-1 flex-wrap">
-                                            <span className="flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                                            <span className="flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500 font-medium tabular-nums">
                                                 <Clock size={9} /> {formatTime(snap.created_at)}
                                             </span>
                                             <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
@@ -110,7 +110,7 @@ const FlowHistoryModal: React.FC<FlowHistoryModalProps> = ({ isOpen, onClose, sn
 
                                 <button
                                     onClick={() => onRestore(snap)}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 hover:bg-blue-50 dark:hover:bg-blue-950/20 rounded-lg shrink-0"
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 hover:bg-blue-50 dark:hover:bg-blue-950/20 rounded-lg shrink-0"
                                 >
                                     <RotateCcw size={11} />
                                     Khôi phục

@@ -717,7 +717,7 @@ export const ZaloUserProfileModal: React.FC<ZaloUserProfileModalProps> = ({
                                                     <button
                                                         onClick={handleSave}
                                                         disabled={updating}
-                                                        className="px-6 py-2.5 bg-[var(--color-primary)] hover:bg-[#9A1523] text-white rounded-[14px] text-[11px] font-black uppercase tracking-widest shadow-lg shadow-red-600/20 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center gap-2"
+                                                        className="px-6 py-2.5 bg-[var(--color-primary)] hover:bg-[#9A1523] text-white rounded-xl text-xs font-semibold uppercase tracking-wider shadow-sm transition-colors flex items-center gap-2"
                                                     >
                                                         <Send className="w-3.5 h-3.5" />
                                                         Lưu ghi chú
@@ -808,10 +808,10 @@ const TimelineIcon = ({ type }: { type: string }) => {
         case 'follow': return <div className="w-full h-full flex items-center justify-center rounded-full text-[var(--color-primary)] bg-orange-50"><User className="w-4 h-4" /></div>;
         case 'unfollow': return <div className="w-full h-full flex items-center justify-center rounded-full text-rose-500 bg-rose-50"><User className="w-4 h-4" /></div>;
         case 'user_send_text': return <div className="w-full h-full flex items-center justify-center rounded-full text-blue-500 bg-blue-50"><MessageCircle className="w-4 h-4" /></div>;
-        case 'sent_message': return <div className="w-full h-full flex items-center justify-center rounded-full text-indigo-500 bg-indigo-50"><Send className="w-4 h-4" /></div>;
+        case 'sent_message': return <div className="w-full h-full flex items-center justify-center rounded-full text-slate-700 bg-slate-100"><Send className="w-4 h-4" /></div>;
         case 'seen_broadcast': return <div className="w-full h-full flex items-center justify-center rounded-full text-emerald-500 bg-emerald-50"><MailOpen className="w-4 h-4" /></div>;
         case 'reacted_broadcast': return <div className="w-full h-full flex items-center justify-center rounded-full text-blue-500 bg-blue-50"><Activity className="w-4 h-4" /></div>;
-        case 'user_submit_info': return <div className="w-full h-full flex items-center justify-center rounded-full text-purple-500 bg-purple-50"><FileText className="w-4 h-4" /></div>;
+        case 'user_submit_info': return <div className="w-full h-full flex items-center justify-center rounded-full text-[#BD1D2D] bg-rose-50"><FileText className="w-4 h-4" /></div>;
         case 'lead_score_reward': return <div className="w-full h-full flex items-center justify-center rounded-full text-[var(--color-primary)] bg-amber-50"><Star className="w-4 h-4 fill-current" /></div>;
         case 'lead_score_sync': return <div className="w-full h-full flex items-center justify-center rounded-full text-emerald-600 bg-emerald-50"><RefreshCw className="w-4 h-4" /></div>;
         default: return <div className="w-full h-full flex items-center justify-center rounded-full text-slate-400 bg-slate-50"><Clock className="w-4 h-4" /></div>;

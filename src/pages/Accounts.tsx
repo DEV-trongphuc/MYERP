@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Shield, Plus, Edit3, Trash2, KeyRound, UserCog, Send, X, Link2Off, Check, RefreshCw, History, ChevronLeft, ChevronRight, Camera, RotateCcw, Loader2, AlertTriangle } from 'lucide-react';
+import { Shield, Plus, Edit3, Trash2, KeyRound, UserCog, Send, X, Check, RefreshCw, History, ChevronLeft, ChevronRight, Camera, RotateCcw, Loader2, AlertTriangle } from 'lucide-react';
 import { CustomModal } from '../components/ui/CustomModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { CustomSelect } from '../components/ui/CustomSelect';
@@ -16,6 +16,7 @@ import { withRouterFreezer } from '../components/RouterFreezer';
 import { useAuth } from '../contexts/AuthContext';
 import { isInternalTenantEmail, getTenantRoleOptions, useTenantConfig } from '../contexts/TenantConfigContext';
 import { CopyButton } from '../components/ui/CopyButton';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 const AccountDetailDrawer = React.lazy(() => import('../components/AccountDetailDrawer').then(m => ({ default: m.AccountDetailDrawer })));
 
@@ -29,7 +30,7 @@ const AccountsInner = () => {
   const renderLastLogin = (lastLoginStr: string | null) => {
     if (!lastLoginStr) {
       return (
-        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem', fontStyle: 'italic' }}>
+        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem' }}>
           {t('Chưa đăng nhập')}
         </span>
       );
@@ -143,7 +144,7 @@ const AccountsInner = () => {
 
       if (res.success && res.url) {
         setFormData(prev => ({ ...prev, avatar: res.url }));
-        toast.success(t('Tải ảnh đại diện lên thành công!'));
+        toast.success(t('Tải ảnh đại diện lên thành công'));
       } else {
         toast.error(res.message || t('Lỗi khi tải ảnh lên'));
       }
@@ -177,7 +178,7 @@ const AccountsInner = () => {
         body: JSON.stringify({ account_id: editingAccount.id, message: quickMsgText })
       });
       if (res.success) {
-        toast.success(res.message || t('Đã gửi tin nhắn thành công!'));
+        toast.success(res.message || t('Đã gửi tin nhắn thành công'));
         setQuickMsgText('');
       } else {
         toast.error(res.message || t('Lỗi khi gửi tin'));
@@ -205,7 +206,7 @@ const AccountsInner = () => {
             body: JSON.stringify({ id: editingAccount.id, type: 'account' })
           });
           if (json.success) {
-            toast.success(t('Đã hủy liên kết Zalo thành công!'));
+            toast.success(t('Đã hủy liên kết Zalo thành công'));
             setFormData(prev => ({ ...prev, zalo_chat_id: '' }));
             setEditingAccount((prev: any) => ({ ...prev, zalo_chat_id: null }));
             fetchAccounts();
@@ -252,7 +253,7 @@ const AccountsInner = () => {
             body: JSON.stringify({ log_id: logId })
           });
           if (res.success) {
-            toast.success(res.message || t('Hoàn tác thành công!'));
+            toast.success(res.message || t('Hoàn tác thành công'));
             fetchLogs();
           } else {
             toast.error(res.message || t('Hoàn tác thất bại'));
@@ -270,7 +271,7 @@ const AccountsInner = () => {
     try {
       const details = typeof detailsRaw === 'string' ? JSON.parse(detailsRaw) : detailsRaw;
       if (!details || Object.keys(details).length === 0) {
-        return <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{t('Không có chi tiết')}</span>;
+        return <span style={{ color: 'var(--color-text-muted)' }}>{t('Không có chi tiết')}</span>;
       }
       if (details.message && Object.keys(details).length === 1) {
         return <span style={{ color: 'var(--color-text)', fontWeight: 500 }}>{details.message}</span>;
@@ -593,8 +594,8 @@ const AccountsInner = () => {
         const activeLabel = formData.is_active === '1' ? t('Đang hoạt động') : t('Đang tạm khóa');
         toast.success(
           editingAccount 
-            ? `${t('Cập nhật thành công!')} ${t('Vai trò')}: ${roleLabel} (${activeLabel})` 
-            : `${t('Thêm mới thành công!')} ${t('Vai trò')}: ${roleLabel} (${activeLabel})`
+            ? `${t('Cập nhật thành công.')} ${t('Vai trò')}: ${roleLabel} (${activeLabel})` 
+            : `${t('Thêm mới thành công.')} ${t('Vai trò')}: ${roleLabel} (${activeLabel})`
         );
         fetchAccounts();
         setModalOpen(false);
@@ -633,7 +634,7 @@ const AccountsInner = () => {
     try {
       const json = await fetchAPI(`delete_account&id=${deleteId}`);
       if (json.success) {
-        toast.success(t('Đã xóa thành công!'));
+        toast.success(t('Đã xóa thành công'));
         fetchAccounts();
       } else {
         toast.error(json.message || t('Lỗi khi xóa'));
@@ -651,7 +652,7 @@ const AccountsInner = () => {
     try {
       const json = await fetchAPI(`delete_account&id=${deleteId}&replacement_id=${replacementId}`);
       if (json.success) {
-        toast.success(t('Đã chuyển giao cấu hình và xóa tài khoản thành công!'));
+        toast.success(t('Đã chuyển giao cấu hình và xóa tài khoản thành công'));
         fetchAccounts();
         setShowReplacementModal(false);
       } else {
@@ -736,14 +737,14 @@ const AccountsInner = () => {
     const r = role ? role.toLowerCase() : '';
     if (r === 'superadmin' || r === 'super_admin') return <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--color-danger)', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>Super Admin</span>;
     if (r === 'admin') return <span style={{ background: 'rgba(163, 20, 34, 0.1)', color: 'var(--color-primary)', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>Admin</span>;
-    if (r === 'director') return <span style={{ background: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>Director</span>;
+    if (r === 'director') return <span style={{ background: 'rgba(15, 23, 42, 0.08)', color: '#0f172a', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>Director</span>;
     if (r === 'manager') return <span style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>Manager</span>;
     if (r === 'assistant') return <span style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>Assistant</span>;
-    if (r === 'sale_admin' || r === 'saleadmin') return <span style={{ background: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>Sale Admin</span>;
+    if (r === 'sale_admin' || r === 'saleadmin') return <span style={{ background: 'rgba(51, 65, 85, 0.08)', color: '#334155', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>Sale Admin</span>;
     if (r === 'sale' || r === 'sales') return <span style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>Sales</span>;
-    if (r === 'hr') return <span style={{ background: 'rgba(236, 72, 153, 0.1)', color: '#ec4899', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>HR</span>;
+    if (r === 'hr') return <span style={{ background: 'rgba(13, 148, 136, 0.1)', color: '#0d9488', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>HR</span>;
     if (r === 'accountant') return <span style={{ background: 'rgba(14, 165, 233, 0.1)', color: '#0ea5e9', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>Accountant</span>;
-    if (r === 'marketing') return <span style={{ background: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>Marketing</span>;
+    if (r === 'marketing') return <span style={{ background: 'rgba(217, 119, 6, 0.1)', color: '#b45309', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>Marketing</span>;
     return <span style={{ background: 'rgba(100, 116, 139, 0.1)', color: '#64748b', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>Viewer</span>;
   };
 
@@ -1041,12 +1042,12 @@ const AccountsInner = () => {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '10px', padding: '3px', alignSelf: 'flex-start', marginBottom: '1.5rem', width: 'fit-content', gap: '3px', border: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '10px', padding: '4px', alignSelf: 'flex-start', marginBottom: '24px', width: 'fit-content', gap: '4px', border: '1px solid #e2e8f0' }}>
         <button 
           onClick={() => setActiveTab('accounts')}
           style={{
-            padding: '7px 18px',
-            borderRadius: '7px',
+            padding: '8px 16px',
+            borderRadius: '6px',
             fontSize: '0.84rem',
             fontWeight: activeTab === 'accounts' ? 700 : 500,
             cursor: 'pointer',
@@ -1054,7 +1055,7 @@ const AccountsInner = () => {
             background: activeTab === 'accounts' ? '#ffffff' : 'transparent',
             color: activeTab === 'accounts' ? '#C6333D' : '#64748b',
             boxShadow: activeTab === 'accounts' ? '0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04)' : 'none',
-            transition: 'all 0.15s ease',
+            transition: 'background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease',
             display: 'flex',
             alignItems: 'center',
             gap: 8,
@@ -1066,8 +1067,8 @@ const AccountsInner = () => {
         <button 
           onClick={() => setActiveTab('logs')}
           style={{
-            padding: '7px 18px',
-            borderRadius: '7px',
+            padding: '8px 16px',
+            borderRadius: '6px',
             fontSize: '0.84rem',
             fontWeight: activeTab === 'logs' ? 700 : 500,
             cursor: 'pointer',
@@ -1075,7 +1076,7 @@ const AccountsInner = () => {
             background: activeTab === 'logs' ? '#ffffff' : 'transparent',
             color: activeTab === 'logs' ? '#C6333D' : '#64748b',
             boxShadow: activeTab === 'logs' ? '0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04)' : 'none',
-            transition: 'all 0.15s ease',
+            transition: 'background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease',
             display: 'flex',
             alignItems: 'center',
             gap: 8,
@@ -1223,7 +1224,7 @@ const AccountsInner = () => {
                             ) : (
                               <Shield size={12} />
                             )}
-                            <span style={{ fontSize: '0.875rem' }}>{acc.email || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{t('Chưa có email')}</span>}</span>
+                            <span style={{ fontSize: '0.875rem' }}>{acc.email || <span style={{ color: 'var(--color-text-muted)' }}>{t('Chưa có email')}</span>}</span>
                             {acc.email && <CopyButton text={acc.email} />}
                             {acc.email && (
                               (Number(acc.is_confirmed) === 1 || isInternalTenantEmail(acc.email)) ? (
@@ -1291,7 +1292,7 @@ const AccountsInner = () => {
                                   cursor: acc.email ? 'pointer' : 'default',
                                   opacity: 0.7,
                                   border: '1px solid var(--color-border-light)',
-                                  transition: 'all 0.2s'
+                                  transition: 'background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease, color 0.15s ease'
                                 }}
                                 onClick={() => {
                                   if (acc.email && zaloRemindedId !== acc.id && zaloRemindingId !== acc.id) {
@@ -1344,7 +1345,7 @@ const AccountsInner = () => {
                                   cursor: acc.email ? 'pointer' : 'default',
                                   opacity: 0.7,
                                   border: '1px solid var(--color-border-light)',
-                                  transition: 'all 0.2s'
+                                  transition: 'background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease, color 0.15s ease'
                                 }}
                                 onClick={() => {
                                   if (acc.email && tgRemindedId !== acc.id && tgRemindingId !== acc.id) {
@@ -1613,7 +1614,7 @@ const AccountsInner = () => {
                           try {
                             const details = typeof detailsRaw === 'string' ? JSON.parse(detailsRaw) : detailsRaw;
                             if (!details || Object.keys(details).length === 0) {
-                              return <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{t('Không có chi tiết')}</span>;
+                              return <span style={{ color: 'var(--color-text-muted)' }}>{t('Không có chi tiết')}</span>;
                             }
                             if (details.message && Object.keys(details).length === 1) {
                               return <span style={{ color: 'var(--color-text)', fontWeight: 500 }}>{details.message}</span>;
@@ -1875,7 +1876,7 @@ const AccountsInner = () => {
                                   <span>{t('Hoàn tác')}</span>
                                 </button>
                               ) : (
-                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', fontStyle: 'italic' }}>-</span>
+                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>-</span>
                               )}
                             </td>
                           </tr>
@@ -2013,7 +2014,7 @@ const AccountsInner = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem' }}>
                   <label className="form-label" style={{ fontWeight: 600 }}>{t('Chọn Admin thay thế để chuyển giao cấu hình:')}</label>
                   <CustomSelect
-                    options={usageInfo.other_admins.map((a: any) => ({
+                    options={ensureArray(usageInfo?.other_admins).map((a: any) => ({
                       value: a.id,
                       label: a.name,
                       sublabel: a.email || a.username

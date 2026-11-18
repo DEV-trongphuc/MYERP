@@ -71,10 +71,13 @@ $dbConnectTime = null;
 $usingMockSqlite = false;
 
 // 1.1 Read environment variables dynamically first to avoid crashing
-$host = getenv('DB_HOST') !== false ? getenv('DB_HOST') : 'localhost';
-$db   = getenv('DB_NAME') !== false ? getenv('DB_NAME') : 'vhvxoigh_mail_auto';
-$user = getenv('DB_USER') !== false ? getenv('DB_USER') : 'vhvxoigh_mail_auto';
-$pass = getenv('DB_PASSWORD') !== false ? getenv('DB_PASSWORD') : 'Ideas@812';
+if (file_exists(dirname(__DIR__) . '/env.php')) {
+    require_once dirname(__DIR__) . '/env.php';
+}
+$host = $_ENV['DB_HOST'] ?? (getenv('DB_HOST') !== false ? getenv('DB_HOST') : 'localhost');
+$db   = $_ENV['MAIL_DB_NAME'] ?? $_ENV['DB_NAME'] ?? (getenv('DB_NAME') !== false ? getenv('DB_NAME') : 'vhvxoigh_mail_auto');
+$user = $_ENV['DB_USER'] ?? (getenv('DB_USER') !== false ? getenv('DB_USER') : 'vhvxoigh_mail_auto');
+$pass = $_ENV['DB_PASS'] ?? (getenv('DB_PASSWORD') !== false ? getenv('DB_PASSWORD') : (getenv('DB_PASS') !== false ? getenv('DB_PASS') : ''));
 
 $dbStart = microtime(true);
 $canConnectMySQL = false;

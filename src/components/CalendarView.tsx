@@ -6,6 +6,7 @@ import {
 import api from '../api/axios';
 import { useUIStore } from '../store/uiStore';
 import { motion } from 'framer-motion';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 interface CalendarViewProps {
   onEventClick: (event: any) => void;
@@ -21,7 +22,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onEventClick, onDate
   const fetchActivities = async () => {
     try {
       const res = await api.get('/activities');
-      setActivities(res.data.data?.items || res.data.data || []);
+      setActivities(extractArray(res?.data));
     } catch (err) {
       addToast('Lỗi khi tải lịch làm việc', 'error');
     } finally {
@@ -135,7 +136,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onEventClick, onDate
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', borderTop: '1px solid var(--color-border)', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
         {weekDays.map(wd => (
-          <div key={wd} style={{ padding: '8px', textAlign: 'center', fontSize: '10px', fontWeight: 900, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <div key={wd} style={{ padding: '8px', textAlign: 'center', fontSize: '10.5px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             {wd}
           </div>
         ))}

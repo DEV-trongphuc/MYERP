@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useUIStore } from '../store/uiStore';
 import { CustomModal } from '../components/ui/CustomModal';
 import { CustomSelect } from '../components/ui/CustomSelect';
-import { CreditCard, Plus, Check, X, Upload, AlertCircle, Trash2, Calendar, FileText, Ban, ChevronLeft, ChevronRight, Info, Eye, Edit, Loader2, Search, MessageSquare, Clock, Send, Bell, DollarSign, TrendingUp, Award, CheckCircle2, User, Building2, MoreHorizontal, Filter } from 'lucide-react';
+import { CreditCard, Plus, Check, X, AlertCircle, Calendar, Ban, ChevronLeft, ChevronRight, Info, Edit, Loader2, Search, Clock, DollarSign, TrendingUp, Award, CheckCircle2, MoreHorizontal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
 import { EmptyCard } from '../components/ui/EmptyCard';
@@ -25,8 +25,9 @@ import { getTenantBrandPrefix } from '../contexts/TenantConfigContext';
 import {
   XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer, ComposedChart,
-  PieChart, Pie, Cell, BarChart, Bar, Line, Legend, Area
+  Bar, Line, Legend, Area
 } from 'recharts';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 const formatNumberWithCommas = (val: any) => {
   if (val === undefined || val === null || val === '') return '';
@@ -621,7 +622,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     try {
       const res = await fetchAPI(`deposits/${selectedDepForManage.id}/comments`);
       if (res.success) {
-        setComments(res.data || []);
+        setComments(extractArray(res));
         setTimeout(() => commentEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
       }
     } catch (err) {
@@ -637,7 +638,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     try {
       const res = await fetchAPI(`deposits/${selectedDepForManage.id}/history`);
       if (res.success) {
-        setHistoryLogs(res.data || []);
+        setHistoryLogs(extractArray(res));
       }
     } catch (err) {
       console.error("Error loading history:", err);
@@ -658,7 +659,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       });
       if (res.success) {
         setNewCommentText('');
-        addToast('Gửi bình luận thành công!', 'success');
+        addToast('Gửi bình luận thành công', 'success');
         await Promise.all([loadComments(), loadHistory()]);
       } else {
         addToast(res.message || 'Lỗi gửi bình luận', 'error');
@@ -871,7 +872,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
           }
         }
 
-        addToast('Tạo đơn đặt hàng và lịch thanh toán thành công!', 'success');
+        addToast('Tạo đơn đặt hàng và lịch thanh toán thành công', 'success');
         setIsCreateOpen(false);
         // Reset Form
         setSelectedContactId('');
@@ -968,7 +969,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     try {
       const res = await fetchAPI(`deposits/${depositId}/milestones/${milestoneId}/approve`, { method: 'POST' });
       if (res.success) {
-        addToast('Phê duyệt đợt tiền thành công!', 'success');
+        addToast('Phê duyệt đợt tiền thành công', 'success');
         loadData(true);
       } else {
         addToast(res.message || 'Lỗi phê duyệt', 'error');
@@ -1127,7 +1128,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
 
       const res = await response.json();
       if (res.success && res.data?.url) {
-        addToast('Tải ảnh UNC thành công! Hãy nhấn "Lưu lịch trình" để hoàn tất lưu.', 'success');
+        addToast('Tải ảnh UNC thành công. Hãy nhấn "Lưu lịch trình" để hoàn tất lưu.', 'success');
         const updated = [...tempMilestones];
         updated[index] = { ...updated[index], status: 'paid', unc_file_path: res.data.url };
         setTempMilestones(updated);
@@ -1152,7 +1153,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     try {
       const res = await fetchAPI(`deposits/${selectedDepForManage.id}/milestones/${m.id}/approve`, { method: 'POST' });
       if (res.success) {
-        addToast('Phê duyệt đợt tiền thành công!', 'success');
+        addToast('Phê duyệt đợt tiền thành công', 'success');
         loadData(true);
       } else {
         addToast(res.message || 'Lỗi phê duyệt', 'error');
@@ -1258,7 +1259,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
         body: JSON.stringify(payload)
       });
       if (res.success) {
-        addToast('Cập nhật lịch trình thanh toán thành công!', 'success');
+        addToast('Cập nhật lịch trình thanh toán thành công', 'success');
         setShowManageModal(false);
         loadData(true);
       } else {
@@ -1282,7 +1283,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
         method: 'POST'
       });
       if (res.success) {
-        addToast(res.message || 'Đã gửi email nhắc thanh toán thành công!', 'success');
+        addToast(res.message || 'Đã gửi email nhắc thanh toán thành công', 'success');
       } else {
         addToast(res.message || 'Lỗi gửi nhắc nhở thanh toán', 'error');
       }
@@ -1302,8 +1303,9 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     depList.forEach(d => {
       const isPendingStudent = d.pipeline_status === 'pending';
 
-      if (d.milestones && d.milestones.length > 0) {
-        d.milestones.forEach(m => {
+      const depMilestones = ensureArray(d?.milestones);
+      if (depMilestones.length > 0) {
+        depMilestones.forEach(m => {
           if (m.status !== 'approved' && m.expected_pay_date) {
             const rawDateStr = m.expected_pay_date.substring(0, 10);
             const dateStr = rawDateStr;
@@ -1499,7 +1501,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       target.setHours(0, 0, 0, 0);
       const diff = (target.getTime() - today.getTime()) / (1000 * 3600 * 24);
       if (diff >= 0 && diff <= 7) {
-        r.milestones.forEach((m: any) => {
+        ensureArray(r?.milestones).forEach((m: any) => {
           if (m.isPendingStudent) {
             sum += Math.round(Number(m.expected_amount) || 0);
           }
@@ -1518,7 +1520,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       target.setHours(0, 0, 0, 0);
       const diff = (target.getTime() - today.getTime()) / (1000 * 3600 * 24);
       if (diff >= 0 && diff <= 30) {
-        r.milestones.forEach((m: any) => {
+        ensureArray(r?.milestones).forEach((m: any) => {
           if (m.isPendingStudent) {
             sum += Math.round(Number(m.expected_amount) || 0);
           }
@@ -1637,7 +1639,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
         map[r.date] = { date: r.date, receiptTotal: 0, expenditureTotal: 0, items: [] };
       }
       map[r.date].receiptTotal += r.totalAmount;
-      r.milestones.forEach((m: any) => {
+      ensureArray(r?.milestones).forEach((m: any) => {
         map[r.date].items.push({
           type: 'receipt',
           title: m.isPendingStudent 
@@ -1658,7 +1660,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
         map[e.date] = { date: e.date, receiptTotal: 0, expenditureTotal: 0, items: [] };
       }
       map[e.date].expenditureTotal += e.totalAmount;
-      e.items.forEach((item: any) => {
+      ensureArray(e?.items).forEach((item: any) => {
         map[e.date].items.push({
           type: 'expenditure',
           title: item.title,
@@ -1680,7 +1682,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   const allTimelineItems = React.useMemo(() => {
     const list: any[] = [];
     unifiedTimeline.forEach(day => {
-      day.items.forEach((item: any) => {
+      ensureArray(day?.items).forEach((item: any) => {
         list.push({
           ...item,
           date: day.date,
@@ -1892,85 +1894,49 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       {activeViewTab === 'list' ? (
         <>
           {/* SO KPI Cards */}
-          <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+          <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' }}>
             {[
               {
                 label: 'Tổng doanh thu kỳ này',
                 value: Math.round(listStats.totalSOAmount).toLocaleString('vi-VN') + ' đ',
                 icon: DollarSign,
-                color: '#2563eb',
-                bg: 'rgba(37, 99, 235, 0.08)',
                 sub: hasDateFilter ? `${listStats.totalScopedMilestonesCount} đợt thanh toán (${listStats.activeOrderCount} đơn hàng)` : `${listStats.activeOrderCount} đơn hàng`,
-                decor: (
-                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                    <path d="M10 80 L30 50 L50 60 L90 20" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
-                    <path d="M70 20 L90 20 L90 40" stroke="currentColor" strokeWidth="2" />
-                    <circle cx="10" cy="80" r="4" fill="currentColor" />
-                    <circle cx="30" cy="50" r="4" fill="currentColor" />
-                    <circle cx="50" cy="60" r="4" fill="currentColor" />
-                    <circle cx="90" cy="20" r="6" fill="currentColor" />
-                  </svg>
-                )
               },
               {
                 label: 'Đã đối soát (Đã thu)',
                 value: Math.round(listStats.approvedMilestoneAmount).toLocaleString('vi-VN') + ' đ',
                 icon: CheckCircle2,
-                color: '#10b981',
-                bg: 'rgba(16, 185, 129, 0.08)',
                 sub: `${listStats.approvedCount} đợt đã thu`,
-                decor: (
-                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                    <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
-                    <path d="M35 50 L45 60 L65 40" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )
               },
               {
                 label: 'Chờ đối soát (Chờ thu)',
                 value: Math.round(listStats.pendingMilestoneAmount).toLocaleString('vi-VN') + ' đ',
                 icon: Clock,
-                color: '#f59e0b',
-                bg: 'rgba(245, 158, 11, 0.08)',
                 sub: `${listStats.pendingCount} đợt đang chờ`,
                 pendingSub: listStats.pendingStudentMilestoneAmount > 0 ? (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--color-warning)', fontWeight: 700, padding: '2px 6px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '6px', marginBottom: '4px' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--color-warning)', fontWeight: 600, padding: '2px 8px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '6px', marginBottom: '4px', fontVariantNumeric: 'tabular-nums' }}>
                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-warning)', display: 'inline-block' }}></span>
                     <span>+{Math.round(listStats.pendingStudentMilestoneAmount).toLocaleString('vi-VN')}đ pending</span>
                   </div>
                 ) : null,
-                decor: (
-                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                    <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
-                    <path d="M50 20 L50 50 L70 50" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )
               },
               {
                 label: 'Đơn hàng lớn nhất',
                 value: listStats.maxSOAmount > 0 ? Math.round(listStats.maxSOAmount).toLocaleString('vi-VN') + ' đ' : '—',
                 icon: Award,
-                color: '#a31422',
-                bg: 'rgba(163, 20, 34, 0.08)',
                 sub: listStats.maxSOTitle || 'Chưa có dữ liệu',
-                decor: (
-                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                    <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
-                    <text x="35" y="68" fill="currentColor" fontSize="50" fontWeight="bold">★</text>
-                  </svg>
-                )
               }
             ].map((k, i) => {
               const Icon = k.icon;
               return (
                 <div 
                   key={i} 
-                  className="stat-card hover-lift" 
+                  className="stat-card" 
                   style={{ 
                     display: 'flex', 
                     flexDirection: 'column', 
-                    minHeight: '135px',
-                    padding: '1.25rem',
+                    minHeight: '136px',
+                    padding: '20px',
                     position: 'relative',
                     overflow: 'hidden',
                     background: 'var(--color-surface)',
@@ -1978,7 +1944,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                     borderRadius: '16px'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', position: 'relative', zIndex: 2 }}>
                     <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.73rem', color: '#64748b' }}>{k.label}</span>
                     <div className="stat-icon" style={{
                       background: i < 2 ? 'rgba(189, 29, 45, 0.08)' : 'rgba(15, 23, 42, 0.06)',
@@ -1991,7 +1957,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                       color: i < 2 ? '#BD1D2D' : '#334155',
                       flexShrink: 0
                     }}>
-                      <Icon size={16} />
+                      <Icon size={16} strokeWidth={1.75} />
                     </div>
                   </div>
 
@@ -2001,9 +1967,9 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                     ) : (
                       <div className="stat-value" style={{
                         fontSize: '1.85rem',
-                        fontWeight: 800,
+                        fontWeight: 700,
                         fontVariantNumeric: 'tabular-nums',
-                        color: i === 1 ? '#BD1D2D' : '#0f172a',
+                        color: i === 1 ? '#BD1D2D' : 'var(--color-text)',
                         margin: '4px 0'
                       }}>
                         {k.value}
@@ -2012,7 +1978,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                     {!loading && k.pendingSub}
                   </div>
 
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 'auto', zIndex: 2, fontWeight: 600 }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 'auto', zIndex: 2, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
                     {k.sub}
                   </div>
                 </div>
@@ -2327,9 +2293,9 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
             />
           ) : (
             <>
-            <div className="card" style={{ padding: 0, borderRadius: '16px', border: '1px solid var(--color-border-light)', overflow: 'hidden', background: 'var(--color-surface)', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
+            <div className="card" style={{ padding: 0, borderRadius: '16px', border: '1px solid var(--color-border-light)', overflow: 'hidden', background: 'var(--color-surface)', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)' }}>
               <div className="table-wrap" style={{ maxHeight: '480px', overflowY: 'auto', overflowX: 'auto' }}>
-                <table className="w-full text-left" style={{ borderCollapse: 'collapse', minWidth: 900 }}>
+                <table className="w-full text-left" style={{ borderCollapse: 'collapse', minWidth: 900, fontVariantNumeric: 'tabular-nums' }}>
                   <thead>
                     <tr>
                       <th style={{ padding: '1rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.5px', width: '240px', position: 'sticky', top: 0, zIndex: 10, background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>Khách hàng / Chương trình</th>
@@ -2515,10 +2481,11 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                       {/* Milestones steps formatted as approved/total (mấy trên mấy) */}
                       <td style={{ padding: '1rem', verticalAlign: 'middle' }}>
                         {(() => {
-                          const approvedCount = dep.milestones.filter(m => m.status === 'approved').length;
-                          const totalCount = dep.milestones.length;
-                          const isFullyApproved = approvedCount === totalCount;
-                          const pillColor = isFullyApproved ? '#10b981' : '#2563eb';
+                          const depMilestones = ensureArray(dep?.milestones);
+                          const approvedCount = depMilestones.filter(m => m.status === 'approved').length;
+                          const totalCount = depMilestones.length;
+                          const isFullyApproved = totalCount > 0 && approvedCount === totalCount;
+                          const pillColor = isFullyApproved ? '#10b981' : '#334155';
                           return (
                             <span style={{
                               background: `${pillColor}08`,
@@ -2629,13 +2596,13 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                         onClick={() => setCurrentPage(pageNum)}
                         style={{
                           width: 32, height: 32, borderRadius: 8, fontSize: '0.8125rem', fontWeight: 700,
+                          fontVariantNumeric: 'tabular-nums',
                           border: currentPage === pageNum ? 'none' : '1px solid var(--color-border-light)',
                           background: currentPage === pageNum ? 'var(--color-primary)' : 'var(--color-surface)',
                           color: currentPage === pageNum ? 'white' : 'var(--color-text-muted)',
                           cursor: 'pointer',
-                          transition: 'all 0.15s'
+                          transition: 'background-color 0.15s ease, border-color 0.15s ease'
                         }}
-                        className={currentPage === pageNum ? '' : 'hover-lift'}
                       >
                         {pageNum}
                       </button>
@@ -2657,172 +2624,170 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
           )}
         </>
       ) : (
-        <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {/* Summary Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
             {/* Card 1: Dự thu 7 ngày tới */}
-            <div className="stat-card hover-lift" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Dự thu 7 ngày tới</span>
-                <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(37, 99, 235, 0.08)', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <TrendingUp size={16} />
+            <div className="stat-card" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '20px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.73rem', color: '#64748b' }}>Dự thu 7 ngày tới</span>
+                <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <TrendingUp size={16} strokeWidth={1.75} />
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
-                <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.2rem', fontWeight: 800 }}>
+                <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.65rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                   {Math.round(projectedRec7Days).toLocaleString('vi-VN')} đ
                 </div>
                 {pendingStudentRec7Days > 0 && (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--color-warning)', fontWeight: 700, padding: '2px 6px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '6px', marginBottom: '4px' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--color-warning)', fontWeight: 600, padding: '2px 8px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '6px', marginBottom: '4px', fontVariantNumeric: 'tabular-nums' }}>
                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-warning)', display: 'inline-block' }}></span>
                     <span>+{Math.round(pendingStudentRec7Days).toLocaleString('vi-VN')}đ pending</span>
                   </div>
                 )}
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '4px', fontWeight: 600 }}>
-                Có {rec7Count} đợt dự kiến thu
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '4px', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
+                Có <strong style={{ color: 'var(--color-text)' }}>{rec7Count}</strong> đợt dự kiến thu
               </div>
               {overdueRecTotal > 0 && (
-                <div style={{ fontSize: '0.7rem', color: 'var(--color-danger)', fontWeight: 600, marginTop: '2px', marginBottom: '6px' }}>
+                <div style={{ fontSize: '0.72rem', color: '#BD1D2D', fontWeight: 600, marginTop: '4px', marginBottom: '6px', fontVariantNumeric: 'tabular-nums' }}>
                   Tồn đọng quá hạn: {Math.round(overdueRecTotal).toLocaleString('vi-VN')} đ ({overdueRecCount} đợt)
                 </div>
               )}
-              <div className="stat-change up" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: 'var(--color-success)', fontWeight: 700 }}>
+              <div className="stat-change up" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>
                 <span>Dòng tiền dự kiến tăng</span>
               </div>
             </div>
 
             {/* Card 2: Dự thu 30 ngày tới */}
-            <div className="stat-card hover-lift" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Dự thu 30 ngày tới</span>
-                <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Calendar size={16} />
+            <div className="stat-card" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '20px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.73rem', color: '#64748b' }}>Dự thu 30 ngày tới</span>
+                <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Calendar size={16} strokeWidth={1.75} />
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
-                <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.2rem', fontWeight: 800 }}>
+                <div className="stat-value" style={{ color: '#BD1D2D', margin: '4px 0', fontSize: '1.65rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                   {Math.round(projectedRec30Days).toLocaleString('vi-VN')} đ
                 </div>
                 {pendingStudentRec30Days > 0 && (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--color-warning)', fontWeight: 700, padding: '2px 6px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '6px', marginBottom: '4px' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--color-warning)', fontWeight: 600, padding: '2px 8px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '6px', marginBottom: '4px', fontVariantNumeric: 'tabular-nums' }}>
                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-warning)', display: 'inline-block' }}></span>
                     <span>+{Math.round(pendingStudentRec30Days).toLocaleString('vi-VN')}đ pending</span>
                   </div>
                 )}
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600 }}>
-                Có {rec30Count} đợt dự kiến thu
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
+                Có <strong style={{ color: 'var(--color-text)' }}>{rec30Count}</strong> đợt dự kiến thu
               </div>
-              <div className="stat-change up" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: 'var(--color-success)', fontWeight: 700 }}>
+              <div className="stat-change up" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>
                 <span>Chu kỳ thanh toán 30 ngày</span>
               </div>
             </div>
 
             {/* Card 3: Dự chi 7 ngày tới */}
-            <div className="stat-card hover-lift" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Dự chi 7 ngày tới</span>
-                <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(245, 158, 11, 0.08)', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <CreditCard size={16} />
+            <div className="stat-card" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '20px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.73rem', color: '#64748b' }}>Dự chi 7 ngày tới</span>
+                <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <CreditCard size={16} strokeWidth={1.75} />
                 </div>
               </div>
-              <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.2rem', fontWeight: 800 }}>
+              <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.65rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                 {Math.round(projectedExp7Days).toLocaleString('vi-VN')} đ
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '4px', fontWeight: 600 }}>
-                Có {exp7Count} khoản PO/chi phí
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '4px', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
+                Có <strong style={{ color: 'var(--color-text)' }}>{exp7Count}</strong> khoản PO/chi phí
               </div>
               {overdueExpTotal > 0 && (
-                <div style={{ fontSize: '0.7rem', color: 'var(--color-danger)', fontWeight: 600, marginTop: '2px', marginBottom: '6px' }}>
+                <div style={{ fontSize: '0.72rem', color: '#BD1D2D', fontWeight: 600, marginTop: '4px', marginBottom: '6px', fontVariantNumeric: 'tabular-nums' }}>
                   Tồn đọng quá hạn: {Math.round(overdueExpTotal).toLocaleString('vi-VN')} đ ({overdueExpCount} khoản)
                 </div>
               )}
-              <div className="stat-change down" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: 'var(--color-warning)', fontWeight: 700 }}>
+              <div className="stat-change down" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
                 <span>Dòng tiền dự kiến chi</span>
               </div>
             </div>
 
             {/* Card 4: Dự chi 30 ngày tới */}
-            <div className="stat-card hover-lift" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Dự chi 30 ngày tới</span>
-                <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <AlertCircle size={16} />
+            <div className="stat-card" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', padding: '20px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.73rem', color: '#64748b' }}>Dự chi 30 ngày tới</span>
+                <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <AlertCircle size={16} strokeWidth={1.75} />
                 </div>
               </div>
-              <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.2rem', fontWeight: 800 }}>
+              <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.65rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                 {Math.round(projectedExp30Days).toLocaleString('vi-VN')} đ
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600 }}>
-                Có {exp30Count} khoản PO/chi phí
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
+                Có <strong style={{ color: 'var(--color-text)' }}>{exp30Count}</strong> khoản PO/chi phí
               </div>
-              <div className="stat-change down" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: 'var(--color-danger)', fontWeight: 700 }}>
+              <div className="stat-change down" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#BD1D2D', fontWeight: 600 }}>
                 <span>Cam kết chi tiêu 30 ngày</span>
               </div>
             </div>
           </div>
 
           {/* Charts Row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px' }}>
             {/* Chart 1: Xu hướng dự thu và dự chi */}
-            <div className="card" style={{ padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--color-border-light)', background: 'var(--color-surface)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="card" style={{ padding: '24px', borderRadius: '16px', border: '1px solid var(--color-border-light)', background: 'var(--color-surface)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ fontWeight: 800, fontSize: '1.05rem', margin: 0, color: 'var(--color-text)' }}>Xu hướng Dự thu & Dự chi (30 ngày tới)</h3>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-light)' }}>Đơn vị: VND</span>
+                <h3 style={{ fontWeight: 700, fontSize: '1.05rem', margin: 0, color: 'var(--color-text)' }}>Xu hướng dự thu & dự chi (30 ngày tới)</h3>
+                <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#64748B' }}>Đơn vị: VND</span>
               </div>
               <div style={{ width: '100%', height: 280 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={forecastChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border-light)" />
-                    <XAxis dataKey="label" fontSize={10} tickLine={false} axisLine={false} stroke="var(--color-text-muted)" />
+                  <ComposedChart data={forecastChartData} margin={{ top: 10, right: 12, left: 8, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border-light)" strokeOpacity={0.7} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748B' }} tickLine={false} axisLine={false} />
                     <YAxis 
-                      fontSize={10} 
+                      tick={{ fontSize: 11, fill: '#64748B' }} 
                       tickLine={false} 
                       axisLine={false} 
-                      stroke="var(--color-text-muted)" 
                       tickFormatter={(val) => Math.abs(val) >= 1000000 ? `${(val / 1000000).toFixed(0)}M` : Math.round(val).toLocaleString('vi-VN')} 
                     />
                     <RechartsTooltip 
                       formatter={(value: any) => [Math.round(Number(value) || 0).toLocaleString('vi-VN') + ' đ']} 
-                      contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '11px', color: 'var(--color-text)' }}
+                      contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '10px', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)', fontSize: '12px', color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}
                     />
-                    <Legend wrapperStyle={{ fontSize: '11px', fontWeight: 600 }} />
-                    <Bar dataKey="Dự thu" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={15} />
-                    <Bar dataKey="Dự chi" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={15} />
-                    <Line type="monotone" dataKey="Dòng tiền ròng" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                    <Legend wrapperStyle={{ fontSize: '11px', fontWeight: 500 }} />
+                    <Bar dataKey="Dự thu" fill="#C6333D" radius={[4, 4, 0, 0]} maxBarSize={16} />
+                    <Bar dataKey="Dự chi" fill="#334155" radius={[4, 4, 0, 0]} maxBarSize={16} />
+                    <Line type="monotone" dataKey="Dòng tiền ròng" stroke="#10b981" strokeWidth={2} dot={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
             {/* Chart 2: Dòng tiền ròng tích lũy */}
-            <div className="card" style={{ padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--color-border-light)', background: 'var(--color-surface)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="card" style={{ padding: '24px', borderRadius: '16px', border: '1px solid var(--color-border-light)', background: 'var(--color-surface)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ fontWeight: 800, fontSize: '1.05rem', margin: 0, color: 'var(--color-text)' }}>Dự báo Dòng tiền ròng Tích lũy</h3>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-light)' }}>Đơn vị: VND</span>
+                <h3 style={{ fontWeight: 700, fontSize: '1.05rem', margin: 0, color: 'var(--color-text)' }}>Dự báo dòng tiền ròng tích lũy</h3>
+                <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#64748B' }}>Đơn vị: VND</span>
               </div>
               <div style={{ width: '100%', height: 280 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart 
                     data={cumulativeChartData} 
-                    margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+                    margin={{ top: 10, right: 12, left: 8, bottom: 0 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border-light)" />
-                    <XAxis dataKey="label" fontSize={10} tickLine={false} axisLine={false} stroke="var(--color-text-muted)" />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border-light)" strokeOpacity={0.7} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748B' }} tickLine={false} axisLine={false} />
                     <YAxis 
-                      fontSize={10} 
+                      tick={{ fontSize: 11, fill: '#64748B' }} 
                       tickLine={false} 
                       axisLine={false} 
-                      stroke="var(--color-text-muted)" 
                       tickFormatter={(val) => Math.abs(val) >= 1000000 ? `${(val / 1000000).toFixed(0)}M` : Math.round(val).toLocaleString('vi-VN')} 
                     />
                     <RechartsTooltip 
                       formatter={(value: any) => [Math.round(Number(value) || 0).toLocaleString('vi-VN') + ' đ']} 
-                      contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '11px', color: 'var(--color-text)' }}
+                      contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '10px', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)', fontSize: '12px', color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}
                     />
-                    <Legend wrapperStyle={{ fontSize: '11px', fontWeight: 600 }} />
-                    <Area type="monotone" dataKey="Tích lũy" fill="rgba(59, 130, 246, 0.05)" stroke="#3b82f6" strokeWidth={2} />
+                    <Legend wrapperStyle={{ fontSize: '11px', fontWeight: 500 }} />
+                    <Area type="monotone" dataKey="Tích lũy" fill="rgba(198, 51, 61, 0.08)" stroke="#C6333D" strokeWidth={2} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
@@ -2830,31 +2795,31 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
           </div>
 
           {/* List by date */}
-          <div className="card" style={{ padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--color-border-light)', background: 'var(--color-surface)' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '1.25rem' }}>
+          <div className="card" style={{ padding: '24px', borderRadius: '16px', border: '1px solid var(--color-border-light)', background: 'var(--color-surface)' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
               <div>
-                <h3 style={{ fontWeight: 800, fontSize: '1.1rem', margin: 0, color: 'var(--color-text)' }}>Dự báo Dòng tiền chi tiết theo ngày</h3>
+                <h3 style={{ fontWeight: 700, fontSize: '1.05rem', margin: 0, color: 'var(--color-text)' }}>Dự báo dòng tiền chi tiết theo ngày</h3>
                 <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                   Hiển thị danh sách các khoản thu và chi theo từng ngày (tối đa 50 khoản mỗi trang)
                 </p>
               </div>
 
               {/* Filter Tabs */}
-              <div style={{ display: 'flex', gap: '3px', background: 'var(--color-border-light, #f1f5f9)', padding: '3px', borderRadius: '8px', border: '1px solid var(--color-border, #e2e8f0)' }}>
+              <div style={{ display: 'flex', gap: '4px', background: 'var(--color-border-light, #f1f5f9)', padding: '3px', borderRadius: '10px', border: '1px solid var(--color-border, #e2e8f0)' }}>
                 <button
                   type="button"
                   onClick={() => handleTimelineFilterChange('upcoming')}
                   style={{
                     padding: '6px 12px',
-                    borderRadius: '6px',
+                    borderRadius: '8px',
                     border: 'none',
                     fontSize: '0.75rem',
-                    fontWeight: 700,
+                    fontWeight: timelineFilter === 'upcoming' ? 700 : 600,
                     cursor: 'pointer',
                     background: timelineFilter === 'upcoming' ? 'var(--color-surface, #ffffff)' : 'transparent',
                     color: timelineFilter === 'upcoming' ? '#C6333D' : 'var(--color-text-muted, #64748b)',
                     boxShadow: timelineFilter === 'upcoming' ? '0 1px 3px rgba(15,23,42,0.08)' : 'none',
-                    transition: 'all 0.15s ease',
+                    transition: 'background-color 0.15s ease, color 0.15s ease',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px'
@@ -2863,8 +2828,9 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                   <span>Sắp tới</span>
                   <span style={{
                     padding: '1px 6px',
-                    borderRadius: '10px',
+                    borderRadius: '6px',
                     fontSize: '0.7rem',
+                    fontVariantNumeric: 'tabular-nums',
                     background: timelineFilter === 'upcoming' ? 'rgba(198, 51, 61, 0.1)' : 'var(--color-border, #e2e8f0)',
                     color: timelineFilter === 'upcoming' ? '#C6333D' : 'var(--color-text-muted, #64748b)'
                   }}>
@@ -2877,15 +2843,15 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                   onClick={() => handleTimelineFilterChange('overdue')}
                   style={{
                     padding: '6px 12px',
-                    borderRadius: '6px',
+                    borderRadius: '8px',
                     border: 'none',
                     fontSize: '0.75rem',
-                    fontWeight: 700,
+                    fontWeight: timelineFilter === 'overdue' ? 700 : 600,
                     cursor: 'pointer',
                     background: timelineFilter === 'overdue' ? 'var(--color-surface, #ffffff)' : 'transparent',
                     color: timelineFilter === 'overdue' ? '#C6333D' : 'var(--color-text-muted, #64748b)',
                     boxShadow: timelineFilter === 'overdue' ? '0 1px 3px rgba(15,23,42,0.08)' : 'none',
-                    transition: 'all 0.15s ease',
+                    transition: 'background-color 0.15s ease, color 0.15s ease',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px'
@@ -2894,8 +2860,9 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                   <span>Quá hạn / Tồn đọng</span>
                   <span style={{
                     padding: '1px 6px',
-                    borderRadius: '10px',
+                    borderRadius: '6px',
                     fontSize: '0.7rem',
+                    fontVariantNumeric: 'tabular-nums',
                     background: timelineFilter === 'overdue' ? 'rgba(198, 51, 61, 0.1)' : 'rgba(239,68,68,0.1)',
                     color: timelineFilter === 'overdue' ? '#C6333D' : 'var(--color-danger, #ef4444)'
                   }}>
@@ -2908,15 +2875,15 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                   onClick={() => handleTimelineFilterChange('all')}
                   style={{
                     padding: '6px 12px',
-                    borderRadius: '6px',
+                    borderRadius: '8px',
                     border: 'none',
                     fontSize: '0.75rem',
-                    fontWeight: 700,
+                    fontWeight: timelineFilter === 'all' ? 700 : 600,
                     cursor: 'pointer',
                     background: timelineFilter === 'all' ? 'var(--color-surface, #ffffff)' : 'transparent',
                     color: timelineFilter === 'all' ? '#C6333D' : 'var(--color-text-muted, #64748b)',
                     boxShadow: timelineFilter === 'all' ? '0 1px 3px rgba(15,23,42,0.08)' : 'none',
-                    transition: 'all 0.15s ease',
+                    transition: 'background-color 0.15s ease, color 0.15s ease',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px'
@@ -2925,8 +2892,9 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                   <span>Tất cả</span>
                   <span style={{
                     padding: '1px 6px',
-                    borderRadius: '10px',
+                    borderRadius: '6px',
                     fontSize: '0.7rem',
+                    fontVariantNumeric: 'tabular-nums',
                     background: timelineFilter === 'all' ? 'rgba(198, 51, 61, 0.1)' : 'var(--color-border, #e2e8f0)',
                     color: timelineFilter === 'all' ? '#C6333D' : 'var(--color-text-muted, #64748b)'
                   }}>
@@ -2939,7 +2907,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
             {loading ? (
               <TimelineSkeleton count={5} />
             ) : filteredTimelineItems.length === 0 ? (
-              <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+              <div style={{ padding: '48px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
                 {timelineFilter === 'upcoming' 
                   ? 'Không có khoản dự thu hay dự chi nào trong tương lai gần.' 
                   : (timelineFilter === 'overdue' ? 'Không có khoản nợ nào quá hạn.' : 'Không có dữ liệu dòng tiền.')}
@@ -2951,40 +2919,41 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                   style={{ 
                     maxHeight: '620px', 
                     overflowY: 'auto', 
-                    paddingRight: '6px',
+                    paddingRight: '8px',
                     display: 'flex', 
                     flexDirection: 'column', 
-                    gap: '1.5rem' 
+                    gap: '24px',
+                    fontVariantNumeric: 'tabular-nums'
                   }}
                 >
                   {paginatedTimelineGroups.map(r => {
                     const isToday = r.date === todayDateStr;
                     const isOverdue = r.date < todayDateStr;
                     return (
-                      <div key={r.date} style={{ borderBottom: '1px solid var(--color-border-light)', paddingBottom: '1.25rem' }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', gap: '8px' }}>
-                          <span style={{ fontWeight: 800, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>
+                      <div key={r.date} style={{ borderBottom: '1px solid var(--color-border-light)', paddingBottom: '20px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', gap: '8px' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>
                             <Calendar size={16} style={{ color: isOverdue ? 'var(--color-danger)' : (isToday ? 'var(--color-primary)' : 'var(--color-text-muted)') }} />
                             <span>{new Date(r.date).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
                             {isToday && (
-                              <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--color-primary)', textTransform: 'uppercase' }}>
+                              <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', textTransform: 'uppercase' }}>
                                 Hôm nay
                               </span>
                             )}
                             {isOverdue && (
-                              <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--color-danger)', textTransform: 'uppercase' }}>
+                              <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.08)', color: 'var(--color-danger)', textTransform: 'uppercase' }}>
                                 Quá hạn
                               </span>
                             )}
                           </span>
-                          <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', fontWeight: 700 }}>
+                          <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem', fontWeight: 600 }}>
                             {r.receiptTotal > 0 && <span style={{ color: 'var(--color-success)' }}>Thu: +{Math.round(r.receiptTotal).toLocaleString('vi-VN')} đ</span>}
                             {r.expenditureTotal > 0 && <span style={{ color: 'var(--color-warning)' }}>Chi: -{Math.round(r.expenditureTotal).toLocaleString('vi-VN')} đ</span>}
                             <span style={{ color: 'var(--color-primary)' }}>Ròng: {Math.round(r.receiptTotal - r.expenditureTotal).toLocaleString('vi-VN')} đ</span>
                           </div>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', paddingLeft: '1.5rem' }}>
-                          {r.items.map((item, idx) => (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '24px' }}>
+                          {ensureArray(r?.items).map((item, idx) => (
                             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-bg)', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--color-border-light)', gap: '12px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
                                 {item.type === 'receipt' && (
@@ -2996,12 +2965,12 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                                   />
                                 )}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-                                  <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</span>
+                                  <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</span>
                                   <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.desc}</span>
                                 </div>
                               </div>
                               <span style={{ 
-                                fontWeight: 800, 
+                                fontWeight: 700, 
                                 fontSize: '0.9rem',
                                 color: item.isPendingStudent 
                                   ? 'var(--color-warning)' 
@@ -3014,12 +2983,12 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
                               }}>
                                 <span>{item.type === 'receipt' ? '+' : '-'}{Math.round(item.amount).toLocaleString('vi-VN')} đ</span>
                                 {item.isPendingStudent && (
-                                  <span style={{ fontSize: '0.625rem', fontWeight: 700, color: 'var(--color-warning)', background: 'rgba(245, 158, 11, 0.1)', padding: '1px 5px', borderRadius: '4px' }}>
+                                  <span style={{ fontSize: '0.625rem', fontWeight: 600, color: 'var(--color-warning)', background: 'rgba(245, 158, 11, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>
                                     Pending
                                   </span>
                                 )}
                                 {item.isOverdue && (
-                                  <span style={{ fontSize: '0.625rem', fontWeight: 700, color: 'var(--color-danger)', background: 'rgba(239, 68, 68, 0.08)', padding: '1px 5px', borderRadius: '4px' }}>
+                                  <span style={{ fontSize: '0.625rem', fontWeight: 600, color: 'var(--color-danger)', background: 'rgba(239, 68, 68, 0.08)', padding: '2px 6px', borderRadius: '4px' }}>
                                     Quá hạn
                                   </span>
                                 )}
@@ -3034,7 +3003,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
 
                 {/* Pagination */}
                 {filteredTimelineItems.length > TIMELINE_PAGE_SIZE && (
-                  <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '0.75rem', marginTop: '0.5rem' }}>
+                  <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '12px', marginTop: '8px' }}>
                     <Pagination 
                       total={filteredTimelineItems.length} 
                       page={timelinePage} 
@@ -3057,7 +3026,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
         title="Yêu cầu hủy giao dịch"
         width="400px"
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
             <strong>Lưu ý:</strong> Nếu chưa được duyệt bất kỳ đợt thanh toán nào, hệ thống sẽ tự động hạ 1 mức nhiệt của KHTN (decay) và chuyển trạng thái về Booking.
           </p>
@@ -3089,12 +3058,12 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
         title={t("Quy trình Đặt cọc & Chính sách Bể cọc / Đổi căn")}
         width="760px"
       >
-        <div style={{ padding: '0.25rem 0', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <div style={{ padding: '4px 0', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ 
             display: 'flex', 
             alignItems: 'center', 
             gap: 12, 
-            padding: '0.875rem 1rem', 
+            padding: '12px 16px', 
             background: 'var(--color-primary-light)', 
             border: '1px solid rgba(163, 20, 34, 0.15)', 
             borderRadius: 12 
@@ -3105,19 +3074,19 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
             </p>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {/* Quy tắc 1 */}
             <div style={{ 
               display: 'flex', 
               gap: 12, 
-              padding: '1rem', 
-              background: '#ffffff', 
-              border: '1px solid #e2e8f0',
+              padding: '16px', 
+              background: 'var(--color-surface)', 
+              border: '1px solid var(--color-border)',
               borderRadius: '12px'
             }}>
               <CreditCard size={20} color="#334155" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
-                <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
+                <h5 style={{ fontSize: '0.875rem', fontWeight: 700, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                   {t("1. Đợt thanh toán & Phê duyệt UNC")}
                 </h5>
                 <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
@@ -3130,14 +3099,14 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
             <div style={{ 
               display: 'flex', 
               gap: 12, 
-              padding: '1rem', 
-              background: '#ffffff', 
-              border: '1px solid #e2e8f0',
+              padding: '16px', 
+              background: 'var(--color-surface)', 
+              border: '1px solid var(--color-border)',
               borderRadius: '12px'
             }}>
               <Ban size={20} color="#BD1D2D" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
-                <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
+                <h5 style={{ fontSize: '0.875rem', fontWeight: 700, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                   {t("2. Quy tắc Bể cọc (Deposit Cancellation)")}
                 </h5>
                 <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
@@ -3152,14 +3121,14 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
             <div style={{ 
               display: 'flex', 
               gap: 12, 
-              padding: '1rem', 
-              background: '#ffffff', 
-              border: '1px solid #e2e8f0',
+              padding: '16px', 
+              background: 'var(--color-surface)', 
+              border: '1px solid var(--color-border)',
               borderRadius: '12px'
             }}>
               <Calendar size={20} color="#334155" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
-                <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
+                <h5 style={{ fontSize: '0.875rem', fontWeight: 700, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                   {t("3. Cơ chế Đổi Sản phẩm / Chiến dịch (Product Switching)")}
                 </h5>
                 <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>

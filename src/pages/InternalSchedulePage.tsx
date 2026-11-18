@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 export const InternalSchedulePage: React.FC = () => {
   const [viewType, setViewType] = useState<'course' | 'lecturer'>('lecturer');
@@ -53,10 +54,10 @@ export const InternalSchedulePage: React.FC = () => {
           fetchAPI('companies?limit=2000')
         ]);
         if (cRes?.success) {
-          setCampaigns(cRes.data || []);
+          setCampaigns(extractArray(cRes));
         }
         if (compRes?.success) {
-          setCompanies(compRes.data?.items || compRes.data || []);
+          setCompanies(extractArray(compRes));
         }
       } catch (err) {
         console.error('Error loading options list', err);
@@ -736,23 +737,22 @@ export const InternalSchedulePage: React.FC = () => {
             }}>
               {nearestClassDays !== null && (
                 <div style={{ 
-                  background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', 
-                  border: '1px solid #bfdbfe', 
-                  borderRadius: '14px', 
+                  background: 'var(--color-surface, #ffffff)', 
+                  border: '1px solid var(--color-border-light, #e2e8f0)', 
+                  borderRadius: '12px', 
                   padding: '0.85rem 1.15rem', 
                   display: 'flex', 
                   alignItems: 'center', 
-                  gap: '10px',
-                  boxShadow: 'var(--shadow-xs)'
+                  gap: '12px'
                 }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#3b82f6', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Clock size={18} />
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#1e40af', textTransform: 'uppercase' }}>{lecturer ? 'Lịch giảng sắp tới' : 'Lịch học sắp tới'}</div>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e3a8a', marginTop: '1px' }}>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{lecturer ? 'Lịch giảng sắp tới' : 'Lịch học sắp tới'}</div>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text, #0f172a)', marginTop: '2px', fontVariantNumeric: 'tabular-nums' }}>
                       {lecturer ? 'Lịch giảng gần nhất vào ' : 'Lịch học gần nhất của khóa vào '}
-                      <span style={{ color: '#2563eb', fontWeight: 800 }}>{formatDaysPhrase(nearestClassDays)}</span> ({nearestClassDateStr.split('-').reverse().join('/')}).
+                      <span style={{ color: '#0284c7', fontWeight: 700 }}>{formatDaysPhrase(nearestClassDays)}</span> ({nearestClassDateStr.split('-').reverse().join('/')}).
                     </div>
                   </div>
                 </div>
@@ -760,23 +760,22 @@ export const InternalSchedulePage: React.FC = () => {
 
               {nearestAsmDays !== null && (
                 <div style={{ 
-                  background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', 
-                  border: '1px solid #fed7aa', 
-                  borderRadius: '14px', 
+                  background: 'var(--color-surface, #ffffff)', 
+                  border: '1px solid var(--color-border-light, #e2e8f0)', 
+                  borderRadius: '12px', 
                   padding: '0.85rem 1.15rem', 
                   display: 'flex', 
                   alignItems: 'center', 
-                  gap: '10px',
-                  boxShadow: 'var(--shadow-xs)'
+                  gap: '12px'
                 }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#ea580c', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <FileText size={18} />
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#c2410c', textTransform: 'uppercase' }}>{lecturer ? 'Bài tập & Cột mốc liên quan' : 'Bài tập & Hạn nộp'}</div>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#7c2d12', marginTop: '1px' }}>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{lecturer ? 'Bài tập & cột mốc liên quan' : 'Bài tập & hạn nộp'}</div>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text, #0f172a)', marginTop: '2px', fontVariantNumeric: 'tabular-nums' }}>
                       {lecturer ? 'Thời hạn bài tập/mốc liên quan ' : 'Hạn nộp bài tập/mốc gần nhất '}
-                      <span style={{ color: '#ea580c', fontWeight: 800 }}>{formatDaysPhrase(nearestAsmDays)}</span> ({nearestAsmDateStr.split('-').reverse().join('/')}): <span style={{ fontWeight: 800 }}>{nearestAsmName}</span>.
+                      <span style={{ color: '#BD1D2D', fontWeight: 700 }}>{formatDaysPhrase(nearestAsmDays)}</span> ({nearestAsmDateStr.split('-').reverse().join('/')}): <span style={{ fontWeight: 700 }}>{nearestAsmName}</span>.
                     </div>
                   </div>
                 </div>

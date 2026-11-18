@@ -26,16 +26,16 @@ interface TechStatsTabProps {
 }
 
 const PALETTE = [
-    '#3b82f6', // Blue
-    '#10b981', // Emerald
-    '#f59e0b', // Amber
-    '#06b6d4', // Cyan
-    '#6366f1', // Indigo
-    '#ec4899', // Pink
-    '#8b5cf6', // Violet
-    '#14b8a6', // Teal
-    '#f43f5e', // Rose
-    '#84cc16'  // Lime
+    '#C6333D',
+    '#334155',
+    '#E11D48',
+    '#64748B',
+    '#991B1B',
+    '#475569',
+    '#FB7185',
+    '#94A3B8',
+    '#1E293B',
+    '#CBD5E1'
 ];
 
 const TechStatsTab: React.FC<TechStatsTabProps> = ({ type = 'campaign', id, stepId, isZns = false }) => {
@@ -84,7 +84,7 @@ const TechStatsTab: React.FC<TechStatsTabProps> = ({ type = 'campaign', id, step
     if (!canView) {
         return (
             <div
-                className="flex flex-col items-center justify-center py-32 text-slate-400 bg-slate-50/50 italic"
+                className="flex flex-col items-center justify-center py-32 text-slate-400 bg-slate-50/50"
                 style={{ borderRadius: 16, border: '1px dashed #e2e8f0' }}
             >
                 <div
@@ -102,7 +102,7 @@ const TechStatsTab: React.FC<TechStatsTabProps> = ({ type = 'campaign', id, step
     if (!stats || (!stats.device?.length && !stats.location?.length)) {
         return (
             <div
-                className="flex flex-col items-center justify-center py-32 text-slate-400 bg-slate-50/50 italic"
+                className="flex flex-col items-center justify-center py-32 text-slate-400 bg-slate-50/50"
                 style={{ borderRadius: 16, border: '1px dashed #e2e8f0' }}
             >
                 <div

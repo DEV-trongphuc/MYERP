@@ -525,23 +525,22 @@ export const PublicSchedulePage: React.FC = () => {
         }}>
           {nearestClassDays !== null && (
             <div style={{ 
-              background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', 
-              border: '1px solid #bfdbfe', 
-              borderRadius: '16px', 
-              padding: '1rem 1.25rem', 
+              background: '#ffffff', 
+              border: '1px solid #e2e8f0', 
+              borderRadius: '12px', 
+              padding: '0.9rem 1.15rem', 
               display: 'flex', 
               alignItems: 'center', 
-              gap: '12px',
-              boxShadow: 'var(--shadow-sm)'
+              gap: '12px'
             }}>
-              <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#3b82f6', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Clock size={20} />
+              <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Clock size={18} />
               </div>
               <div>
-                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{lecturer ? 'Lịch giảng sắp tới' : 'Lịch học sắp tới'}</div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e3a8a', marginTop: '2px' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{lecturer ? 'Lịch giảng sắp tới' : 'Lịch học sắp tới'}</div>
+                <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#0f172a', marginTop: '2px', fontVariantNumeric: 'tabular-nums' }}>
                   {student ? 'Bạn có lịch học gần nhất vào ' : lecturer ? 'Lịch giảng gần nhất vào ' : 'Lịch học gần nhất của khóa vào '}
-                  <span style={{ color: '#2563eb', fontWeight: 800 }}>{formatDaysPhrase(nearestClassDays)}</span> ({nearestClassDateStr.split('-').reverse().join('/')}).
+                  <span style={{ color: '#0284c7', fontWeight: 700 }}>{formatDaysPhrase(nearestClassDays)}</span> ({nearestClassDateStr.split('-').reverse().join('/')}).
                 </div>
               </div>
             </div>
@@ -549,23 +548,22 @@ export const PublicSchedulePage: React.FC = () => {
 
           {nearestAsmDays !== null && (
             <div style={{ 
-              background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', 
-              border: '1px solid #fed7aa', 
-              borderRadius: '16px', 
-              padding: '1rem 1.25rem', 
+              background: '#ffffff', 
+              border: '1px solid #e2e8f0', 
+              borderRadius: '12px', 
+              padding: '0.9rem 1.15rem', 
               display: 'flex', 
               alignItems: 'center', 
-              gap: '12px',
-              boxShadow: 'var(--shadow-sm)'
+              gap: '12px'
             }}>
-              <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#ea580c', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <FileText size={20} />
+              <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <FileText size={18} />
               </div>
               <div>
-                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{lecturer ? 'Bài tập & Cột mốc liên quan' : 'Bài tập & Hạn nộp'}</div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#7c2d12', marginTop: '2px' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{lecturer ? 'Bài tập & cột mốc liên quan' : 'Bài tập & hạn nộp'}</div>
+                <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#0f172a', marginTop: '2px', fontVariantNumeric: 'tabular-nums' }}>
                   {student ? 'Bạn có bài tập/mốc cần hoàn thành ' : lecturer ? 'Thời hạn bài tập/mốc liên quan ' : 'Hạn nộp bài tập/mốc gần nhất '}
-                  <span style={{ color: '#ea580c', fontWeight: 800 }}>{formatDaysPhrase(nearestAsmDays)}</span> ({nearestAsmDateStr.split('-').reverse().join('/')}): <span style={{ fontWeight: 800 }}>{nearestAsmName}</span>.
+                  <span style={{ color: '#BD1D2D', fontWeight: 700 }}>{formatDaysPhrase(nearestAsmDays)}</span> ({nearestAsmDateStr.split('-').reverse().join('/')}): <span style={{ fontWeight: 700 }}>{nearestAsmName}</span>.
                 </div>
               </div>
             </div>

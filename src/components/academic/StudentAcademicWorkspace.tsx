@@ -857,7 +857,7 @@ export const StudentAcademicWorkspace: React.FC<StudentAcademicWorkspaceProps> =
           type: 'success',
           text:
             json.message ||
-            'AI OCR đã đọc Đơn bảo lưu, tự động điền thông tin và tính ngày Email Remind!',
+            'AI OCR đã đọc Đơn bảo lưu, tự động điền thông tin và tính ngày Email Remind.',
         });
       } else {
         setPostponeNotice({
@@ -907,7 +907,7 @@ export const StudentAcademicWorkspace: React.FC<StudentAcademicWorkspaceProps> =
           type: 'success',
           text:
             json.message ||
-            'Đã lưu hồ sơ Bảo lưu và lên lịch nhắc Email Remind cho Học vụ thành công!',
+            'Đã lưu hồ sơ Bảo lưu và lên lịch nhắc Email Remind cho Học vụ thành công.',
         });
         fetchPostponeInfo();
         if (onPostponeSaved) {
@@ -1020,7 +1020,7 @@ export const StudentAcademicWorkspace: React.FC<StudentAcademicWorkspaceProps> =
       if (json.success) {
         setGradeSaveNotice({
           type: 'success',
-          text: json.message || 'Đã lưu bảng điểm môn học thành công!',
+          text: json.message || 'Đã lưu bảng điểm môn học thành công.',
         });
         fetchStudentGrades();
         if (onGradesSaved) onGradesSaved();
@@ -1046,10 +1046,10 @@ export const StudentAcademicWorkspace: React.FC<StudentAcademicWorkspaceProps> =
       {/* Upload Form Bảo Lưu + AI OCR Banner */}
       <div
         style={{
-          padding: '14px',
+          padding: '16px',
           borderRadius: '12px',
-          border: '1.5px dashed #f59e0b',
-          background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+          border: '1px dashed #f59e0b',
+          background: '#fffbeb',
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
@@ -1057,12 +1057,12 @@ export const StudentAcademicWorkspace: React.FC<StudentAcademicWorkspaceProps> =
           gap: '12px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: '1 1 280px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: '1 1 280px' }}>
           <div
             style={{
               width: '36px',
               height: '36px',
-              borderRadius: '10px',
+              borderRadius: '8px',
               background: '#f59e0b',
               color: '#fff',
               display: 'flex',
@@ -1071,10 +1071,10 @@ export const StudentAcademicWorkspace: React.FC<StudentAcademicWorkspaceProps> =
               flexShrink: 0,
             }}
           >
-            <Sparkles size={18} />
+            <Sparkles size={18} strokeWidth={1.75} />
           </div>
           <div>
-            <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#92400e' }}>
+            <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#92400e' }}>
               Upload Form Bảo Lưu Học Viên Đã Điền (Tự Động Trích Xuất & Tính Ngày Email Remind)
             </div>
             <div style={{ fontSize: '0.75rem', color: '#78350f', marginTop: '2px' }}>
@@ -2299,7 +2299,7 @@ export const StudentAcademicWorkspace: React.FC<StudentAcademicWorkspaceProps> =
                           navigator.clipboard.writeText(booking1on1Url);
                           setGradeSaveNotice({
                             type: 'success',
-                            text: 'Đã sao chép link Form đăng ký Hướng dẫn 1:1 cho học viên!',
+                            text: 'Đã sao chép link Form đăng ký Hướng dẫn 1:1 cho học viên.',
                           });
                         }}
                         style={{

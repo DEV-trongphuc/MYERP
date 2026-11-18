@@ -2,8 +2,13 @@
 // backend/run_migrations.php
 
 // Safe check: Allow CLI, inclusion by diagnostic script, or token validation
+if (file_exists(__DIR__ . '/env.php')) {
+    require_once __DIR__ . '/env.php';
+}
 $isCli = (php_sapi_name() === 'cli');
-$hasValidToken = (($_GET['token'] ?? '') === 'Ideas_Diag_Secure_Token_2026_9e88d6c701fbc6b7') || defined('DIAG_TOKEN');
+$envDiagToken = trim((string)($_ENV['DIAG_TOKEN'] ?? (getenv('DIAG_TOKEN') ?: ($_ENV['MYERP_DIAG_TOKEN'] ?? (getenv('MYERP_DIAG_TOKEN') ?: '')))));
+$reqToken = (string)($_GET['token'] ?? '');
+$hasValidToken = ($envDiagToken !== '' && hash_equals($envDiagToken, $reqToken)) || defined('DIAG_TOKEN');
 if (!$isCli && !$hasValidToken) {
     http_response_code(403);
     header("Content-Type: application/json; charset=UTF-8");
@@ -18,7 +23,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 338;
+$targetVersion = 339;
 $currentVersion = 186;
 
 // Query current DB version
@@ -4837,6 +4842,27 @@ try {
         $logMsg("Nâng cấp lên phiên bản 338 hoàn tất.", "success");
     }
 
+    if ($currentVersion < 339 || $isForce) {
+        $logMsg("Bắt đầu nâng cấp lên phiên bản 339: Migrate cấu hình người nhận thông báo chuyển bước Pipeline, trạng thái học tập & duyệt đặt cọc...", "info");
+        try {
+            if (!isset($db) || !($db instanceof PDO)) {
+                $db = new PDO(
+                    "mysql:host={$servername};dbname={$dbname};charset=utf8mb4",
+                    $username,
+                    $password,
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+                );
+                $db->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci, time_zone = '+07:00'");
+            }
+            require_once __DIR__ . '/migrations/2026_11_18_migrate_legacy_stage_notification_settings.php';
+            run_migration_2026_11_18_legacy_stage_notify($db, (bool)$isForce);
+            $logMsg("Migration 339 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chạy migration 339: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 339 hoàn tất.", "success");
+    }
+
     // Reconnect $conn if it timed out during heavy PDO migration
     try {
         $alive = false;
@@ -4855,9 +4881,9 @@ try {
     } catch (Throwable $eReconn) {}
 
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '338') ON DUPLICATE KEY UPDATE setting_value = '338'");
+    $conn->query("INSERT INTO system_settings (tenant_id, setting_key, setting_value) VALUES (1, 'db_version', '339') ON DUPLICATE KEY UPDATE setting_value = '339'");
 
-    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 338", "success");
+    $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: 339", "success");
 
 } catch (Throwable $e) {
     $logMsg("Lỗi trong quá trình đồng bộ: " . $e->getMessage(), "error");

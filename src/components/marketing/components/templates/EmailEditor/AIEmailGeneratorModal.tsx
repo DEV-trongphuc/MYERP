@@ -40,42 +40,42 @@ interface ImageItem {
 const SMART_PRESETS = [
     {
         id: 'scholarship',
-        badge: '🎓 Tuyển sinh & Học bổng',
+        badge: 'Tuyển sinh & Học bổng',
         prompt: 'Thiết kế email thông báo Chương trình Tuyển sinh & Quỹ Học bổng Quản trị Kinh doanh Quốc tế (MBA / DBA). Nêu bật 3 lợi ích cốt lõi cho nhà quản lý, lộ trình xét duyệt 3 bước, khối cảm nhận cựu học viên và nút Đăng ký nhận tư vấn.',
         blocks: ['check_list', 'timeline', 'review'],
         tone: 'luxury',
     },
     {
         id: 'vip_event',
-        badge: '🎫 Thư mời Hội thảo VIP',
+        badge: 'Thư mời Hội thảo VIP',
         prompt: 'Thiết kế thư mời trang trọng tham dự Hội thảo Chuyên đề / Executive Workshop dành cho Lãnh đạo & Quản lý cấp cao. Có banner sự kiện nổi bật, lịch trình 3 phần (Timeline), giá trị nhận được và nút Xác nhận tham dự VIP.',
         blocks: ['timeline', 'check_list'],
         tone: 'luxury',
     },
     {
         id: 'flash_offer',
-        badge: '🔥 Ưu đãi Giới hạn',
+        badge: 'Ưu đãi Giới hạn',
         prompt: 'Thiết kế email chương trình Ưu đãi Đặc biệt giới hạn thời gian. Có đồng hồ đếm ngược (Countdown), danh sách đặc quyền ưu đãi (Check-list), cam kết chất lượng và nút Nhận ưu đãi ngay nổi bật.',
         blocks: ['countdown', 'check_list'],
         tone: 'persuasive',
     },
     {
         id: 'onboarding',
-        badge: '💌 Chào mừng Học viên mới',
+        badge: 'Chào mừng Học viên mới',
         prompt: 'Thiết kế email Chào mừng Học viên / Khách hàng mới gia nhập hệ thống. Lời chào ấm áp cá nhân hóa {{first_name}}, 3 bước bắt đầu nhanh chóng (Timeline), danh mục tài liệu hướng dẫn và nút Truy cập cổng thông tin.',
         blocks: ['timeline', 'check_list'],
         tone: 'friendly',
     },
     {
         id: 'survey_csat',
-        badge: '📊 Khảo sát Chất lượng',
+        badge: 'Khảo sát Chất lượng',
         prompt: 'Thiết kế email tri ân khách hàng kết hợp Khảo sát nhanh mức độ hài lòng (Survey Card). Nội dung ngắn gọn, tinh tế, nhấn mạnh giá trị ý kiến đóng góp của học viên và khối thẻ Khảo sát nhanh nổi bật ở trung tâm.',
         blocks: ['survey_card'],
         tone: 'friendly',
     },
     {
         id: 'newsletter',
-        badge: '📰 Bản tin Quản trị',
+        badge: 'Bản tin Quản trị',
         prompt: 'Thiết kế Bản tin Tri thức & Xu hướng Quản trị hàng tháng. Bố cục hiện đại gồm 1 tiêu điểm chính, danh sách các góc nhìn chiến lược, 1 câu trích dẫn truyền cảm hứng (Quote) và nút Đọc chi tiết.',
         blocks: ['quote', 'check_list'],
         tone: 'professional',
@@ -983,9 +983,10 @@ const AIEmailGeneratorModal: React.FC<AIEmailGeneratorModalProps> = ({
                                                 setPrompt(chip);
                                                 handleGenerate(true, chip);
                                             }}
-                                            className="px-2.5 py-1.5 rounded-[9px] border border-slate-200 bg-white hover:border-[#BD1D2D] hover:text-[#BD1D2D] text-left text-[11px] font-semibold text-slate-700 transition-colors cursor-pointer outline-none focus:outline-none"
+                                            className="px-2.5 py-1.5 rounded-[9px] border border-slate-200 bg-white hover:border-[#BD1D2D] hover:text-[#BD1D2D] text-left text-[11px] font-semibold text-slate-700 transition-colors cursor-pointer outline-none focus:outline-none flex items-center gap-1.5"
                                         >
-                                            ✨ {chip}
+                                            <Sparkles className="w-3 h-3 text-[#BD1D2D] shrink-0" strokeWidth={1.75} />
+                                            <span>{chip}</span>
                                         </button>
                                     ))}
                                 </div>

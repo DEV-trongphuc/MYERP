@@ -30,7 +30,7 @@ const MetaMessenger: React.FC = () => {
                 onClose={() => setShowPolicyModal(false)}
             />
 
-            <div className="bg-[var(--color-surface)] rounded-[18px] border border-[var(--color-border)] shadow-xs overflow-hidden min-h-[500px]">
+            <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] shadow-xs overflow-hidden min-h-[500px]">
                 <div className="px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] flex items-center justify-between">
                     <Tabs
                         variant="segmented"

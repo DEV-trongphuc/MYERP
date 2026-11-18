@@ -575,24 +575,24 @@ const PublicSurvey: React.FC = () => {
                     >
                         {ty?.emoji ?? '🎉'}
                     </motion.div>
-                    <h1 className="text-2xl font-black mb-3" style={{ color: theme.textColor }}>{ty?.title ?? 'Cảm ơn!'}</h1>
+                    <h1 className="text-2xl font-bold mb-3" style={{ color: theme.textColor }}>{ty?.title ?? 'Cảm ơn'}</h1>
                     <p className="text-base text-slate-600 leading-relaxed">{ty?.message ?? 'Phản hồi của bạn đã được ghi nhận.'}</p>
 
                     {quizResult && (
                         <motion.div 
                             initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }}
-                            className="mt-6 mb-2 bg-slate-50 border border-slate-200 rounded-[14px] p-6 relative overflow-hidden"
+                            className="mt-6 mb-2 bg-slate-50 border border-slate-200 rounded-xl p-6 relative overflow-hidden"
                         >
                             <h3 className="text-sm font-bold text-slate-600 uppercase tracking-widest mb-2">Điểm của bạn</h3>
                             <div className="flex items-end justify-center gap-1.5 text-slate-900 relative z-10">
                                 <motion.span 
-                                    initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.6, type: 'spring', bounce: 0.6 }}
-                                    className="text-6xl font-black leading-none" 
+                                    initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3, duration: 0.2 }}
+                                    className="text-6xl font-bold leading-none tabular-nums" 
                                     style={{ color: theme.primaryColor }}
                                 >
                                     {quizResult.score}
                                 </motion.span>
-                                <span className="text-2xl font-bold opacity-40 mb-2">/ {quizResult.maxScore}</span>
+                                <span className="text-2xl font-bold opacity-40 mb-2 tabular-nums">/ {quizResult.maxScore}</span>
                             </div>
                         </motion.div>
                     )}
@@ -600,30 +600,28 @@ const PublicSurvey: React.FC = () => {
                     {voucherCode && (
                         <motion.div 
                             initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}
-                            className="mt-6 mb-2 bg-gradient-to-tr from-rose-50 to-white border border-rose-200 rounded-[14px] p-6 relative overflow-hidden"
+                            className="mt-6 mb-2 bg-rose-50/50 border border-rose-200 rounded-xl p-6 relative overflow-hidden"
                         >
-                            <h3 className="text-[11px] font-black text-[var(--color-primary)] uppercase tracking-widest mb-3 flex items-center justify-center gap-1.5 relative z-10">
-                                <span className="w-2 h-2 rounded-full bg-[var(--color-primary)] animate-pulse" />
+                            <h3 className="text-[11px] font-bold text-[var(--color-primary)] uppercase tracking-widest mb-3 flex items-center justify-center gap-1.5 relative z-10">
+                                <span className="w-2 h-2 rounded-full bg-[var(--color-primary)]" />
                                 Phần quà của bạn
                             </h3>
                             <div 
-                                className="bg-white border-2 border-dashed border-rose-300 rounded-[var(--radius-md)] py-3 px-4 relative group cursor-pointer overflow-hidden transition-all" 
-                                onClick={() => { navigator.clipboard.writeText(voucherCode); toast.success('Đã sao chép mã!'); }}
+                                className="bg-white border-2 border-dashed border-rose-300 rounded-[var(--radius-md)] py-3 px-4 relative group cursor-pointer overflow-hidden transition-colors duration-150" 
+                                onClick={() => { navigator.clipboard.writeText(voucherCode); toast.success('Đã sao chép mã'); }}
                             >
-                                <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-rose-100/50 to-transparent group-hover:animate-shimmer" />
-                                <p className="text-2xl font-mono font-black text-[var(--color-primary)] tracking-wider break-all relative z-10">{voucherCode}</p>
-                                <div className="absolute inset-0 bg-[var(--color-primary)] text-white font-bold text-xs flex items-center justify-center rounded-[var(--radius-md)] opacity-0 group-hover:opacity-100 transition-all duration-300 z-20">Bấm để sao chép</div>
+                                <p className="text-2xl font-mono font-bold text-[var(--color-primary)] tracking-wider break-all relative z-10 tabular-nums">{voucherCode}</p>
+                                <div className="absolute inset-0 bg-[var(--color-primary)] text-white font-bold text-xs flex items-center justify-center rounded-[var(--radius-md)] opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20">Bấm để sao chép</div>
                             </div>
-                            <p className="text-[10px] text-rose-800/80 mt-2 font-medium relative z-10">Chụp màn hình hoặc lưu mã này lại để sử dụng nhé!</p>
+                            <p className="text-[11px] text-rose-800/80 mt-2 font-medium relative z-10">Chụp màn hình hoặc lưu mã này lại để sử dụng</p>
                         </motion.div>
                     )}
 
                     {(ty?.ctaText && ty?.ctaUrl) || nextUrl ? (
                         <motion.a 
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
+                            whileTap={{ scale: 0.98 }}
                             href={nextUrl || ty?.ctaUrl} target={nextUrl ? '_self' : '_blank'} rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 mt-6 px-6 py-3 rounded-[14px] font-bold text-white transition-all"
+                            className="inline-flex items-center gap-2 mt-6 px-6 py-3 rounded-xl font-bold text-white transition-opacity duration-150 hover:opacity-95"
                             style={{ background: (ty as any)?.ctaColor || (survey as any)?.thank_you?.ctaColor || (survey as any)?.thankYouPage?.ctaColor || theme.primaryColor }}
                         >
                             {nextUrl ? 'Bấm để Tiếp tục' : ty?.ctaText} <ExternalLink className="w-4 h-4" />
@@ -631,7 +629,7 @@ const PublicSurvey: React.FC = () => {
                     ) : null}
                     
                     <motion.div 
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
                         className="mt-8 flex items-center justify-center gap-3"
                     >
                         <div className="relative w-8 h-8 shrink-0">
@@ -640,8 +638,8 @@ const PublicSurvey: React.FC = () => {
                             </div>
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-[13px] font-black text-slate-800 tracking-tighter leading-none">DOMATION</span>
-                            <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em]">Digital AI Vision</span>
+                            <span className="text-[13px] font-bold text-slate-800 leading-none">DOMATION</span>
+                            <span className="text-[8px] font-semibold text-slate-500 uppercase tracking-[0.2em]">Digital AI Vision</span>
                         </div>
                     </motion.div>
                 </motion.div>
@@ -677,13 +675,13 @@ const PublicSurvey: React.FC = () => {
                 <div className="relative z-20 w-full max-w-2xl mx-auto mb-4 flex justify-end">
                     <div className="bg-white border border-slate-200 rounded-[var(--radius-md)] px-4 py-2 flex items-center gap-2 text-slate-900">
                         <div className={`w-2.5 h-2.5 rounded-full ${timeLeft < 60 ? 'bg-red-500 animate-pulse border border-red-300' : 'bg-green-500'}`}></div>
-                        <span className="text-sm font-black tracking-widest font-mono">{formatTime(timeLeft)}</span>
+                        <span className="text-sm font-bold tracking-widest font-mono tabular-nums">{formatTime(timeLeft)}</span>
                     </div>
                 </div>
             )}
 
             {/* White content card */}
-            <div className="relative z-10 w-full max-w-2xl mx-auto bg-white rounded-[18px] border border-slate-200 overflow-hidden mb-6">
+            <div className="relative z-10 w-full max-w-2xl mx-auto bg-white rounded-2xl border border-slate-200 overflow-hidden mb-6">
 
                 {/* Survey header */}
                 {currentPage === 0 && (
@@ -711,7 +709,7 @@ const PublicSurvey: React.FC = () => {
                     {currentPage < totalPages - 1 ? (
                         <button
                             onClick={handleNext}
-                            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[14px] font-bold text-white transition-all text-base hover:brightness-105 active:scale-[0.98]"
+                            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-white transition-opacity duration-150 text-base hover:brightness-105 active:scale-[0.98]"
                             style={{ background: theme.primaryColor }}
                         >
                             Tiếp theo <ChevronRight className="w-4 h-4" />
@@ -720,7 +718,7 @@ const PublicSurvey: React.FC = () => {
                         <button
                             onClick={() => handleSubmit(undefined)}
                             disabled={isSubmitting}
-                            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[14px] font-bold text-white transition-all text-base hover:brightness-105 active:scale-[0.98] disabled:opacity-70"
+                            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-white transition-opacity duration-150 text-base hover:brightness-105 active:scale-[0.98] disabled:opacity-70"
                             style={{ background: theme.primaryColor }}
                         >
                             <Send className="w-4 h-4" />
@@ -731,7 +729,7 @@ const PublicSurvey: React.FC = () => {
                     {pageHistory.length > 0 && (
                         <button
                             onClick={handleBack}
-                            className="w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-[14px] border-2 border-slate-200 text-slate-700 font-semibold hover:border-slate-300 hover:bg-slate-50 transition-all text-sm"
+                            className="w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border-2 border-slate-200 text-slate-700 font-semibold hover:border-slate-300 hover:bg-slate-50 transition-colors duration-150 text-sm"
                         >
                             <ChevronLeft className="w-4 h-4" /> Trang trước
                         </button>
@@ -746,8 +744,8 @@ const PublicSurvey: React.FC = () => {
                         </div>
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-[12px] font-black text-slate-800 tracking-tighter leading-none">DOMATION</span>
-                        <span className="text-[7px] font-black text-slate-500 uppercase tracking-[0.2em]">Digital AI Vision</span>
+                        <span className="text-[12px] font-bold text-slate-800 leading-none">DOMATION</span>
+                        <span className="text-[7px] font-semibold text-slate-500 uppercase tracking-[0.2em]">Digital AI Vision</span>
                     </div>
                 </div>
             </div>
@@ -814,7 +812,7 @@ const SurveyCoverPublic: React.FC<{ survey: Survey }> = ({ survey }) => {
 
     return (
         <div
-            className="w-full mb-0 overflow-hidden relative transition-all"
+            className="w-full mb-0 overflow-hidden relative transition-colors duration-200"
             style={{ ...getBg(), minHeight: heightMap[coverHeight] }}
         >
             {(coverStyle === 'image') && (
@@ -823,11 +821,11 @@ const SurveyCoverPublic: React.FC<{ survey: Survey }> = ({ survey }) => {
             <div className="relative px-8 py-8 flex flex-col justify-end h-full" style={{ minHeight: heightMap[coverHeight] }}>
                 {timeLeft && theme.coverCountdownPos === 'top_right' && (
                     <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md rounded-[var(--radius-md)] p-2 border border-white/20 flex items-center gap-2.5 z-20">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse ring-2 ring-rose-400/50" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
                         <div className="flex gap-1.5">
                             {[timeLeft.h, timeLeft.m, timeLeft.s].map((v, i) => (
                                 <div key={i} className="bg-white/10 border border-white/10 rounded flex items-center justify-center p-1 font-mono">
-                                    <span className="text-[11px] font-black text-white">{v}</span>
+                                    <span className="text-[11px] font-bold text-white tabular-nums">{v}</span>
                                     <span className="text-[7px] text-white/50 ml-0.5">{['h', 'm', 's'][i]}</span>
                                 </div>
                             ))}
@@ -837,7 +835,7 @@ const SurveyCoverPublic: React.FC<{ survey: Survey }> = ({ survey }) => {
 
                 <div className="w-full relative z-10">
                     {theme.coverBadge && (
-                        <span className="inline-block px-3 py-1 mb-4 rounded-full text-[10px] font-black tracking-widest text-white uppercase border border-white/20 relative" style={{ background: 'var(--color-primary)' }}>
+                        <span className="inline-block px-3 py-1 mb-4 rounded-full text-[10px] font-bold tracking-widest text-white uppercase border border-white/20 relative" style={{ background: 'var(--color-primary)' }}>
                             {theme.coverBadge}
                         </span>
                     )}
@@ -846,7 +844,7 @@ const SurveyCoverPublic: React.FC<{ survey: Survey }> = ({ survey }) => {
                         <img src={theme.logoUrl} alt="logo" className="h-10 mb-5 object-contain" />
                     )}
 
-                    <h1 className="text-2xl md:text-3xl font-black leading-tight" style={{ color: textColor, fontFamily: theme.fontFamily }}>
+                    <h1 className="text-2xl md:text-3xl font-bold leading-tight" style={{ color: textColor, fontFamily: theme.fontFamily }}>
                         {survey.name}
                     </h1>
 
@@ -877,16 +875,16 @@ const SurveyCoverPublic: React.FC<{ survey: Survey }> = ({ survey }) => {
                     )}
 
                     {timeLeft && theme.coverCountdownPos !== 'top_right' && (
-                        <div className="mt-8 bg-black/20 backdrop-blur-md rounded-[14px] p-4 w-fit border border-white/10">
+                        <div className="mt-8 bg-black/20 backdrop-blur-md rounded-xl p-4 w-fit border border-white/10">
                             <p className="text-[10px] uppercase tracking-widest text-rose-300 font-bold mb-3 flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse" />
+                                <span className="w-2 h-2 rounded-full bg-rose-400" />
                                 Ưu đãi kết thúc sau
                             </p>
                             <div className="flex gap-2">
                                 {[timeLeft.d, timeLeft.h, timeLeft.m, timeLeft.s].map((v, i) => (
                                     <div key={i} className="bg-white/10 border border-white/20 rounded-[var(--radius-md)] w-12 h-12 flex flex-col items-center justify-center relative overflow-hidden">
                                         <div className="absolute inset-x-0 top-1/2 h-px bg-black/10" />
-                                        <span className="text-lg font-black text-white z-10">{v}</span>
+                                        <span className="text-lg font-bold text-white z-10 tabular-nums">{v}</span>
                                         <span className="text-[7px] uppercase font-bold text-white/70 mt-0.5 z-10">{['Ng', 'Giờ', 'Ph', 'Gi'][i]}</span>
                                     </div>
                                 ))}
@@ -1247,7 +1245,7 @@ const BlockRenderer: React.FC<{
                                         background: isSelected ? accent + '15' : undefined,
                                     }}
                                 >
-                                    <span className="text-base font-black" style={{ color: isSelected ? accent : '#334155' }}>{pt.value}</span>
+                                    <span className="text-base font-bold tabular-nums" style={{ color: isSelected ? accent : '#334155' }}>{pt.value}</span>
                                     <span className="text-[9px] text-slate-600 font-medium text-center leading-tight">{pt.label}</span>
                                 </button>
                             );
@@ -1359,7 +1357,7 @@ const BlockRenderer: React.FC<{
                             const opt = rawOptions.find(o => o.value === val);
                             return (
                                 <div key={val} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-white">
-                                    <div className="w-7 h-7 rounded bg-slate-100 flex items-center justify-center font-black text-slate-700 text-xs shrink-0">
+                                    <div className="w-7 h-7 rounded bg-slate-100 flex items-center justify-center font-bold text-slate-700 text-xs shrink-0 tabular-nums">
                                         #{idx + 1}
                                     </div>
                                     <div className="flex-1 text-sm font-medium text-slate-800">{opt?.label ?? val}</div>

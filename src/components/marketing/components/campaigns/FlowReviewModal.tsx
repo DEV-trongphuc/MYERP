@@ -64,9 +64,9 @@ const FlowReviewModal: React.FC<FlowReviewModalProps> = ({
                     {/* Animation Connector */}
                     <div className="flex flex-col items-center justify-center text-slate-300">
                         <div className="flex -space-x-1">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                         </div>
                         <ArrowRight className="w-6 h-6 text-emerald-500 mt-1" />
                     </div>

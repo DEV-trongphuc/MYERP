@@ -328,7 +328,7 @@ const VoucherCodeManager: React.FC<VoucherCodeManagerProps> = ({ isOpen, onClose
                                     onClick={() => setShowGenModal(true)} 
                                     disabled={generating} 
                                     icon={generating ? RefreshCw : Plus}
-                                    className={generating ? 'animate-pulse bg-emerald-500' : 'bg-emerald-500 hover:bg-emerald-600 border-0'}
+                                    className={generating ? 'bg-emerald-600 opacity-80 border-0' : 'bg-emerald-600 hover:bg-emerald-700 border-0'}
                                 >
                                     {generating ? 'Đang tạo...' : 'Tạo thêm mã'}
                                 </Button>
@@ -338,9 +338,9 @@ const VoucherCodeManager: React.FC<VoucherCodeManagerProps> = ({ isOpen, onClose
                 </div>
 
                 {selectedCodes.length > 0 && (
-                    <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl flex items-center justify-between animate-in slide-in-from-top-2">
-                        <div className="text-sm font-semibold text-indigo-800">
-                            Đã chọn <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-md mx-1">{selectedCodes.length}</span> mã
+                    <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl flex items-center justify-between animate-in slide-in-from-top-2">
+                        <div className="text-sm font-semibold text-slate-800">
+                            Đã chọn <span className="bg-[#BD1D2D] text-white px-2 py-0.5 rounded-md mx-1 tabular-nums">{selectedCodes.length}</span> mã
                         </div>
                         <div className="flex gap-2">
                             <Button size="sm" variant="outline" onClick={() => setRedeemModalOpen(true)} className="bg-white hover:bg-emerald-50 text-emerald-700 border-emerald-200">
@@ -364,7 +364,7 @@ const VoucherCodeManager: React.FC<VoucherCodeManagerProps> = ({ isOpen, onClose
                     <Button 
                         type="submit" 
                         disabled={redeeming || !redeemCodeInput.trim()} 
-                        className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap"
+                        className="bg-[#BD1D2D] hover:bg-[#9A1523] whitespace-nowrap"
                     >
                         {redeeming ? 'Đang xử lý...' : 'Gạch Mã'}
                     </Button>
@@ -373,7 +373,7 @@ const VoucherCodeManager: React.FC<VoucherCodeManagerProps> = ({ isOpen, onClose
                 {loading ? (
                     <div className="py-20 text-center text-slate-400">Đang tải danh sách mã...</div>
                 ) : campaign.codeType === 'static' ? (
-                    <div className="bg-white border rounded-2xl p-8 text-center space-y-4">
+                    <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-4">
                         <div className="mx-auto w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center text-amber-600">
                             <Tag className="w-8 h-8" />
                         </div>
@@ -382,19 +382,19 @@ const VoucherCodeManager: React.FC<VoucherCodeManagerProps> = ({ isOpen, onClose
                             <p className="text-sm text-slate-500 mt-1">Mã dùng chung cho mọi khách hàng nhận email.</p>
                         </div>
                         <div className="inline-block px-6 py-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl">
-                            <span className="text-2xl font-black tracking-widest text-slate-800">{campaign.staticCode}</span>
+                            <span className="text-2xl font-bold tracking-widest text-slate-800 tabular-nums">{campaign.staticCode}</span>
                         </div>
                     </div>
                 ) : filteredCodes.length === 0 ? (
-                    <div className="bg-slate-50 border border-slate-100 border-dashed rounded-2xl p-12 text-center text-slate-500 space-y-3">
+                    <div className="bg-slate-50 border border-slate-200 border-dashed rounded-2xl p-12 text-center text-slate-500 space-y-3">
                         <Gift className="w-10 h-10 mx-auto text-slate-300" />
                         <p className="font-medium text-sm">Chưa có mã ngẫu nhiên nào.<br/>Nhấn nút Generate để bổ sung kho.</p>
                     </div>
                 ) : (
-                    <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
                         <div className="max-h-[350px] overflow-y-auto">
                             <table className="w-full text-left text-sm">
-                                <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-100">
+                                <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
                                     <tr>
                                         <th className="px-4 py-3 w-10 text-center">
                                             <input 
@@ -404,29 +404,29 @@ const VoucherCodeManager: React.FC<VoucherCodeManagerProps> = ({ isOpen, onClose
                                                     else setSelectedCodes([]);
                                                 }} 
                                                 checked={filteredCodes.length > 0 && selectedCodes.length === filteredCodes.length} 
-                                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" 
+                                                className="rounded border-slate-300 text-[#BD1D2D] focus:ring-[#BD1D2D]" 
                                             />
                                         </th>
-                                        <th className="px-4 py-3 font-black text-[10px] uppercase tracking-widest text-slate-500">Mã (Code)</th>
-                                        <th className="px-4 py-3 font-black text-[10px] uppercase tracking-widest text-slate-500">Phần Quà</th>
-                                        <th className="px-4 py-3 font-black text-[10px] uppercase tracking-widest text-slate-500">Trạng thái</th>
-                                        <th className="px-4 py-3 font-black text-[10px] uppercase tracking-widest text-slate-500">Nguồn nhận</th>
-                                        <th className="px-4 py-3 font-black text-[10px] uppercase tracking-widest text-slate-500">Người nhận</th>
-                                        <th className="px-4 py-3 font-black text-[10px] uppercase tracking-widest text-slate-500">Ngày gửi</th>
-                                        <th className="px-4 py-3 font-black text-[10px] uppercase tracking-widest text-slate-500">Hạn dùng</th>
-                                        <th className="px-4 py-3 font-black text-[10px] uppercase tracking-widest text-slate-500">Ngày dùng</th>
+                                        <th className="px-4 py-3 font-bold text-[10px] uppercase tracking-wider text-slate-500">Mã (Code)</th>
+                                        <th className="px-4 py-3 font-bold text-[10px] uppercase tracking-wider text-slate-500">Phần Quà</th>
+                                        <th className="px-4 py-3 font-bold text-[10px] uppercase tracking-wider text-slate-500">Trạng thái</th>
+                                        <th className="px-4 py-3 font-bold text-[10px] uppercase tracking-wider text-slate-500">Nguồn nhận</th>
+                                        <th className="px-4 py-3 font-bold text-[10px] uppercase tracking-wider text-slate-500">Người nhận</th>
+                                        <th className="px-4 py-3 font-bold text-[10px] uppercase tracking-wider text-slate-500">Ngày gửi</th>
+                                        <th className="px-4 py-3 font-bold text-[10px] uppercase tracking-wider text-slate-500">Hạn dùng</th>
+                                        <th className="px-4 py-3 font-bold text-[10px] uppercase tracking-wider text-slate-500">Ngày dùng</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-50 bg-white">
+                                <tbody className="divide-y divide-slate-100 bg-white">
                                     {filteredCodes.map((code) => {
                                         const statusColors = {
-                                            available: 'bg-blue-50 text-blue-600',
-                                            distributed: 'bg-amber-50 text-amber-600',
-                                            used: 'bg-emerald-50 text-emerald-600',
-                                            expired: 'bg-rose-50 text-rose-600'
+                                            available: 'bg-slate-100 text-slate-700',
+                                            distributed: 'bg-amber-50 text-amber-700',
+                                            used: 'bg-emerald-50 text-emerald-700',
+                                            expired: 'bg-rose-50 text-[#BD1D2D]'
                                         };
                                         return (
-                                            <tr key={code.id} className={`hover:bg-slate-50/50 transition-colors ${selectedCodes.includes(code.id) ? 'bg-indigo-50/30' : ''}`}>
+                                            <tr key={code.id} className={`hover:bg-slate-50/70 transition-colors ${selectedCodes.includes(code.id) ? 'bg-rose-50/40' : ''}`}>
                                                 <td className="px-4 py-3 w-10 text-center">
                                                     <input 
                                                         type="checkbox" 
@@ -435,13 +435,13 @@ const VoucherCodeManager: React.FC<VoucherCodeManagerProps> = ({ isOpen, onClose
                                                             if (e.target.checked) setSelectedCodes(prev => [...prev, code.id]);
                                                             else setSelectedCodes(prev => prev.filter(id => id !== code.id));
                                                         }} 
-                                                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" 
+                                                        className="rounded border-slate-300 text-[#BD1D2D] focus:ring-[#BD1D2D]" 
                                                     />
                                                 </td>
-                                                <td className="px-4 py-3 font-mono font-bold text-slate-700">{code.code}</td>
+                                                <td className="px-4 py-3 font-mono font-bold text-slate-800">{code.code}</td>
                                                 <td className="px-4 py-3">
                                                     {code.rewardItemId ? (
-                                                        <span className="text-xs font-bold text-amber-600">
+                                                        <span className="text-xs font-bold text-amber-700 tabular-nums">
                                                             {campaign.rewards?.find(r => r.id === code.rewardItemId)?.giftTitle || 
                                                              (campaign.rewards?.find(r => r.id === code.rewardItemId)?.discountType === 'percentage' 
                                                                  ? `${campaign.rewards?.find(r => r.id === code.rewardItemId)?.discountValue}%` 
@@ -450,13 +450,13 @@ const VoucherCodeManager: React.FC<VoucherCodeManagerProps> = ({ isOpen, onClose
                                                     ) : <span className="text-slate-300">-</span>}
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-widest ${statusColors[code.status as keyof typeof statusColors] || 'bg-slate-100 text-slate-600'}`}>
+                                                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${statusColors[code.status as keyof typeof statusColors] || 'bg-slate-100 text-slate-600'}`}>
                                                         {code.status}
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-3 text-xs">
                                                     {code.claimedSource === 'survey' ? (
-                                                        <span className="flex items-center gap-1 text-purple-600 font-semibold bg-purple-50 px-1.5 py-0.5 rounded w-fit" title={`Survey ID: ${code.claimedSourceId}`}>
+                                                        <span className="flex items-center gap-1 text-[#BD1D2D] font-semibold bg-rose-50 px-1.5 py-0.5 rounded w-fit" title={`Survey ID: ${code.claimedSourceId}`}>
                                                             Survey
                                                         </span>
                                                     ) : code.claimedSource ? (

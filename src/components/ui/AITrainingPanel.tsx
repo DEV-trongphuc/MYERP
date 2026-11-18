@@ -12,6 +12,7 @@ import { EmptyCard } from './EmptyCard';
 import { CustomSelect } from './CustomSelect';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
+import { ensureArray, extractArray } from '../../utils/safeArray';
 
 interface AIDoc {
   id: string;
@@ -291,7 +292,7 @@ export const AITrainingPanel: React.FC = () => {
         body: JSON.stringify({ action: 'list_docs', property_id: 'Ideas' })
       });
       if (res && res.success) {
-        setDocs(res.data || []);
+        setDocs(extractArray(res));
       } else {
         setDocs([]);
         if (res?.message) {
@@ -1425,9 +1426,9 @@ export const AITrainingPanel: React.FC = () => {
             
             {/* Card 1: Chỉ dẫn Hệ thống & Vai trò AI (Left - Wider) */}
             <div className="card" style={{ flex: '1.6 1 450px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', border: '1px solid var(--color-border-light)' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--color-border-light)', paddingBottom: '0.75rem' }}>
-                <div style={{ background: '#a855f7', color: '#ffffff', padding: 6, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Sparkles size={16} />
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--color-border-light)', paddingBottom: '12px' }}>
+                <div style={{ background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', padding: 8, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Sparkles size={16} strokeWidth={1.75} />
                 </div>
                 Chỉ dẫn Hệ thống & Vai trò AI
               </h3>

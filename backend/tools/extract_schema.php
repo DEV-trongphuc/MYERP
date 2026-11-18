@@ -1,11 +1,22 @@
 <?php
-$pdo = new PDO('mysql:host=localhost;dbname=vhvxoigh_myerp;charset=utf8mb4', 'vhvxoigh_mail_auto', 'Ideas@812', [
+require_once dirname(__DIR__) . '/env.php';
+
+$host = $_ENV['DB_HOST'] ?? getenv('DB_HOST') ?: '127.0.0.1';
+$dbName = $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'vhvxoigh_myerp';
+$user = $_ENV['DB_USER'] ?? getenv('DB_USER') ?: '';
+$pass = $_ENV['DB_PASS'] ?? getenv('DB_PASS') ?: '';
+if ($user === '' || $pass === '') {
+    fwrite(STDERR, "Missing DB_USER / DB_PASS in backend/.env or environment.\n");
+    exit(1);
+}
+
+$pdo = new PDO("mysql:host={$host};dbname={$dbName};charset=utf8mb4", $user, $pass, [
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
 ]);
 $schema = [
     'extracted_at' => date('Y-m-d H:i:s'),
-    'database' => 'vhvxoigh_myerp',
+    'database' => $dbName,
     'table_count' => 0,
     'tables' => [],
     'foreign_keys' => []

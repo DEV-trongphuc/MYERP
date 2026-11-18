@@ -2,7 +2,9 @@
 // backend/test_accountant_workflow.php
 // Script kiểm thử tự động quy trình vận hành và Business Rules của Kế toán
 
-define('DIAG_TOKEN', 'Ideas_Diag_Secure_Token_2026_9e88d6c701fbc6b7'); // Token hợp lệ cho test_bootstrap.php
+if (php_sapi_name() === 'cli' && !defined('DIAG_TOKEN')) {
+    define('DIAG_TOKEN', true);
+}
 require_once __DIR__ . '/test_bootstrap.php';
 
 echo "====================================================\n";

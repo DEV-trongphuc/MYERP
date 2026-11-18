@@ -15,6 +15,7 @@ import { StatRowSkeleton } from '../components/ui/Skeleton';
 import toast from 'react-hot-toast';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 const DEFAULT_SCHEDULE = {
   "1": { active: true, start: "08:00", end: "17:00" },
@@ -258,7 +259,7 @@ export const ProfilePage: React.FC = () => {
     try {
       const res = await fetchAPI('get_my_activity_logs');
       if (res.success) {
-        setActivityLogs(res.data || []);
+        setActivityLogs(extractArray(res));
       }
     } catch (err) {
       console.error('Error fetching logs:', err);

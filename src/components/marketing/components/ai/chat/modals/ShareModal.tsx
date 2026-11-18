@@ -24,25 +24,25 @@ const ShareModal: React.FC<ShareModalProps> = ({
             noPadding={true}
             size="md"
         >
-            <div className={`border rounded-[18px] overflow-hidden shadow-2xl relative transition-colors duration-500 ${isDarkTheme ? 'bg-[#0B0F17] border-slate-800' : 'bg-white border-slate-200'}`}>
+            <div className={`border rounded-2xl overflow-hidden shadow-2xl relative transition-colors duration-300 ${isDarkTheme ? 'bg-[#0B0F17] border-slate-800' : 'bg-white border-slate-200'}`}>
                 <div className="absolute top-0 right-0 p-4">
-                    <button onClick={onClose} className="p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+                    <button onClick={onClose} className={`p-2 rounded-full transition-colors ${isDarkTheme ? 'hover:bg-slate-800 text-slate-400 hover:text-slate-200' : 'hover:bg-slate-100 text-slate-400 hover:text-slate-600'}`}>
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 <div className="p-8 pb-0 flex flex-col items-center text-center">
-                    <div className="w-16 h-16 rounded-[14px] bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] flex items-center justify-center text-white shadow-lg shadow-[var(--color-primary)]/30 mb-6 animate-bounce-slow">
-                        <Share2 className="w-8 h-8" />
+                    <div className="w-16 h-16 rounded-xl bg-[#BD1D2D] flex items-center justify-center text-white mb-6">
+                        <Share2 className="w-7 h-7" strokeWidth={1.75} />
                     </div>
-                    <h3 className={`text-xl font-black mb-2 ${isDarkTheme ? 'text-slate-100' : 'text-slate-800'}`}>Chia sẻ cuộc trò chuyện</h3>
+                    <h3 className={`text-xl font-bold mb-2 ${isDarkTheme ? 'text-slate-100' : 'text-slate-800'}`}>Chia sẻ cuộc trò chuyện</h3>
                     <p className="text-sm text-slate-500 max-w-sm mb-8 leading-relaxed">
                         Bất kỳ ai có liên kết này đều có thể xem và nhân bản cuộc trò chuyện này để tiếp tục chat.
                     </p>
 
-                    <div className={`w-full border rounded-[14px] p-4 flex items-center gap-3 mb-8 ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                    <div className={`w-full border rounded-xl p-4 flex items-center gap-3 mb-8 ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                         <div className="flex-1 min-w-0 flex flex-col items-start gap-1">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Public Link</span>
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Public Link</span>
                             <code className={`w-full text-xs font-mono truncate bg-transparent outline-none text-left ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>
                                 {shareUrl}
                             </code>
@@ -50,13 +50,13 @@ const ShareModal: React.FC<ShareModalProps> = ({
                         <button
                             onClick={() => {
                                 navigator.clipboard.writeText(shareUrl);
-                                toast.success('Đã sao chép liên kết!');
+                                toast.success('Đã sao chép liên kết');
                                 onClose();
                             }}
-                            className={`shrink-0 p-2.5 border rounded-xl transition-all shadow-sm group ${isDarkTheme ? 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-400 hover:text-slate-200' : 'bg-white border-slate-200 hover:bg-amber-50 hover:border-amber-200 hover:text-[#9A1523]'}`}
+                            className={`shrink-0 p-2.5 border rounded-xl transition-colors shadow-xs group ${isDarkTheme ? 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-400 hover:text-slate-200' : 'bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300 hover:text-[#BD1D2D]'}`}
                             title="Copy Link"
                         >
-                            <Copy className="w-4 h-4 text-slate-500 group-hover:text-[var(--color-primary)]" />
+                            <Copy className="w-4 h-4 text-slate-500 group-hover:text-[#BD1D2D]" />
                         </button>
                     </div>
                 </div>
@@ -64,9 +64,9 @@ const ShareModal: React.FC<ShareModalProps> = ({
                 <div className={`px-8 py-5 border-t flex justify-between items-center ${isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
                     <div className="flex items-center gap-2">
                         <Globe className="w-4 h-4 text-emerald-500" />
-                        <span className={`text-xs font-bold ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>Public Access</span>
+                        <span className={`text-xs font-semibold ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>Public Access</span>
                     </div>
-                    <button onClick={onClose} className={`text-xs font-bold ${isDarkTheme ? 'text-slate-500 hover:text-slate-300' : 'text-slate-500 hover:text-slate-800'}`}>Đóng</button>
+                    <button onClick={onClose} className={`text-xs font-semibold transition-colors ${isDarkTheme ? 'text-slate-500 hover:text-slate-300' : 'text-slate-500 hover:text-slate-800'}`}>Đóng</button>
                 </div>
             </div>
         </Modal>

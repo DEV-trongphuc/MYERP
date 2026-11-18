@@ -1,6 +1,8 @@
 <?php
 // backend/test_partner_po_banking.php
-define('DIAG_TOKEN', 'Ideas_Diag_Secure_Token_2026_9e88d6c701fbc6b7');
+if (php_sapi_name() === 'cli' && !defined('DIAG_TOKEN')) {
+    define('DIAG_TOKEN', true);
+}
 require_once __DIR__ . '/test_bootstrap.php';
 
 echo "🚀 BẮT ĐẦU KIỂM THỬ KHÉP KÍN THÔNG TIN NGÂN HÀNG ĐỐI TÁC & LIÊN KẾT PO\n";

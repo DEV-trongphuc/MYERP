@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import LinksQRView, { type LinksQRHandle } from '../../components/marketing/views/LinksQR';
-import { QrCode, Plus, Gift, LayoutGrid, List, CalendarClock, Ticket, Settings2, Trash2, BookOpen, Code, CheckCircle2, Sparkles } from 'lucide-react';
+import { QrCode, Plus, Gift, LayoutGrid, List, CalendarClock, Ticket, Settings2, Trash2, BookOpen, Code, CheckCircle2 } from 'lucide-react';
 import Tabs from '../../components/marketing/components/common/Tabs';
 import PageHero from '../../components/marketing/components/common/PageHero';
 import StatCard from '../../components/marketing/components/common/StatCard';
@@ -256,7 +256,7 @@ const Vouchers: React.FC = () => {
                     loading={firstLoad}
                     title="Đang hoạt động"
                     value={kpiStats.activeCampaigns.toLocaleString('vi-VN')}
-                    icon={<Sparkles />}
+                    icon={<QrCode />}
                     color="#0f172a"
                     breakdown="Sẵn sàng cấp phát mã tự động"
                 />
@@ -376,8 +376,8 @@ const Vouchers: React.FC = () => {
                                                 key={campaign.id}
                                                 className={
                                                     viewMode === 'grid'
-                                                        ? 'group bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-5 flex flex-col hover:border-[var(--color-primary)] hover:shadow-[var(--shadow-md)] transition-all relative overflow-hidden'
-                                                        : 'group bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-[var(--color-primary)] hover:shadow-[var(--shadow-sm)] transition-all relative overflow-hidden'
+                                                        ? 'group bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-5 flex flex-col hover:border-[var(--color-primary)] hover:shadow-[var(--shadow-md)] transition-[border-color,box-shadow] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] relative overflow-hidden'
+                                                        : 'group bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] p-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-[var(--color-primary)] hover:shadow-[var(--shadow-sm)] transition-[border-color,box-shadow] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] relative overflow-hidden'
                                                 }
                                             >
                                                 {viewMode === 'grid' ? (
@@ -393,7 +393,7 @@ const Vouchers: React.FC = () => {
                                                             <div className="flex items-center gap-1.5">
                                                                 <label className="relative inline-flex items-center cursor-pointer mr-1" title={campaign.status === 'active' ? 'Tạm dừng chiến dịch' : 'Kích hoạt chiến dịch'}>
                                                                     <input type="checkbox" className="sr-only peer" checked={campaign.status === 'active'} onChange={() => handleToggleStatus(campaign)} />
-                                                                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500" />
+                                                                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-transform after:duration-150 peer-checked:bg-emerald-500" />
                                                                     <span className={`ml-2 text-[11px] font-semibold ${campaign.status === 'active' ? 'text-emerald-600' : 'text-[var(--color-text-muted)]'}`}>
                                                                         {campaign.status === 'active' ? 'Hoạt động' : 'Đang tắt'}
                                                                     </span>
@@ -504,7 +504,7 @@ const Vouchers: React.FC = () => {
                                                             <div className="flex gap-1 items-center">
                                                                 <label className="relative inline-flex items-center cursor-pointer mr-1" title={campaign.status === 'active' ? 'Tạm dừng' : 'Kích hoạt'}>
                                                                     <input type="checkbox" className="sr-only peer" checked={campaign.status === 'active'} onChange={() => handleToggleStatus(campaign)} />
-                                                                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500" />
+                                                                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-transform after:duration-150 peer-checked:bg-emerald-500" />
                                                                 </label>
                                                                 <button
                                                                     type="button"

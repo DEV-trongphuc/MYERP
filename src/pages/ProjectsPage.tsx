@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { fetchAPI } from '../utils/api';
+import { ensureArray, extractArray } from '../utils/safeArray';
 import api from '../api/axios';
 import { useAuth } from '../contexts/AuthContext';
 import { useUIStore } from '../store/uiStore';
@@ -279,7 +280,7 @@ export default function ProjectsPage() {
     try {
       const res = await fetchAPI(`cloud-files?project_id=${projectId}&limit=100`);
       if (res.success) {
-        const data = res.data?.items || res.data || [];
+        const data = extractArray(res);
         setFolderFiles(data);
       }
     } catch (e) {
@@ -533,7 +534,7 @@ export default function ProjectsPage() {
                           {camp.description}
                         </p>
                       ) : (
-                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', fontStyle: 'italic', marginBottom: '1rem' }}>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', marginBottom: '1rem' }}>
                           Không có mô tả chi tiết
                         </p>
                       )}
@@ -1372,7 +1373,7 @@ export default function ProjectsPage() {
               onClick={() => handlePostDetailComment(entityType, entityId)}
               disabled={isSubmittingComment || uploadingAttachment || (!newCommentText.trim() && commentAttachments.length === 0)}
               className="btn primary sm"
-              style={{ padding: '6px 18px', fontSize: '0.78rem', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '5px', background: '#db2777', borderColor: '#db2777', color: '#fff' }}
+              style={{ padding: '6px 18px', fontSize: '0.78rem', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '5px', background: '#BD1D2D', borderColor: '#BD1D2D', color: '#fff' }}
             >
               {isSubmittingComment ? <RefreshCw className="spin" size={13} /> : <Send size={13} />}
               <span>Gửi</span>
@@ -1386,7 +1387,7 @@ export default function ProjectsPage() {
               <RefreshCw className="spin" size={16} color="var(--color-text-muted)" />
             </div>
           ) : detailComments.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.78rem', fontStyle: 'italic' }}>
+            <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
               Chưa có thảo luận nào.
             </div>
           ) : (
@@ -2376,7 +2377,7 @@ export default function ProjectsPage() {
   };
 
   const renderFolderPathLink = (path: string | undefined, projectId?: number) => {
-    if (!path) return <span style={{ color: 'var(--color-text-light)', fontStyle: 'italic', fontSize: '0.85rem' }}>Không có folder liên kết</span>;
+    if (!path) return <span style={{ color: 'var(--color-text-light)', fontSize: '0.85rem' }}>Không có folder liên kết</span>;
     const isUrl = path.startsWith('http://') || path.startsWith('https://');
     if (isUrl) {
       const isDriveUrl = path.toLowerCase().includes('drive');
@@ -2520,7 +2521,7 @@ export default function ProjectsPage() {
         </div>
 
         {linkedCamps.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
             Chưa có khóa học nào liên kết với chương trình này.
           </div>
         ) : (
@@ -2543,7 +2544,7 @@ export default function ProjectsPage() {
                   
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text)' }}>Khóa học: {camp.name}</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>Khóa học: {camp.name}</span>
                       <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '4px', background: camp.status === 'active' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(100, 116, 139, 0.08)', color: camp.status === 'active' ? '#10b981' : '#64748b', fontWeight: 700 }}>
                         {camp.status === 'active' ? 'Hoạt động' : 'Tạm dừng'}
                       </span>
@@ -2559,7 +2560,7 @@ export default function ProjectsPage() {
                   </div>
 
                   {subs.length === 0 ? (
-                    <div style={{ fontSize: '0.78rem', color: 'var(--color-text-light)', paddingLeft: '12px', fontStyle: 'italic' }}>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--color-text-light)', paddingLeft: '12px' }}>
                       Chưa cấu hình môn học
                     </div>
                   ) : (
@@ -3089,7 +3090,7 @@ export default function ProjectsPage() {
                       </div>
                     ) : (
                       parseIds(editingProject?.document_ids).map(docId => {
-                        const fileObj = allFiles.find(f => String(f.id) === String(docId));
+                        const fileObj = ensureArray(allFiles).find(f => String(f.id) === String(docId));
                         if (!fileObj) return null;
                         return (
                           <a
@@ -3415,22 +3416,22 @@ export default function ProjectsPage() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ width: '3px', height: '14px', background: 'var(--color-primary)', borderRadius: '1.5px', flexShrink: 0 }} />
-              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lịch sử hoạt động của Chương trình</h4>
+              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lịch sử hoạt động của Chương trình</h4>
             </div>
 
             {statsLoading ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
                 <RefreshCw className="spin" size={24} color="var(--color-text-muted)" />
               </div>
-            ) : !projectStats?.logs || projectStats.logs.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-muted)', fontSize: '0.875rem', fontStyle: 'italic' }}>
+            ) : ensureArray(projectStats?.logs).length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
                 Chưa có nhật ký hoạt động nào cho chương trình này.
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingLeft: '8px' }}>
-                {projectStats.logs.map((log: any, idx: number) => (
+                {ensureArray(projectStats?.logs).map((log: any, idx: number, arr: any[]) => (
                   <div key={log.id} style={{ display: 'flex', gap: '12px', position: 'relative' }}>
-                    {idx !== projectStats.logs.length - 1 && (
+                    {idx !== arr.length - 1 && (
                       <div style={{ position: 'absolute', top: '16px', left: '7px', bottom: '-24px', width: '2px', background: 'var(--color-border-light)' }} />
                     )}
                     <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: 'var(--color-primary)', border: '4px solid #ffffff', boxShadow: '0 0 0 1px var(--color-border-light)', flexShrink: 0, marginTop: '2px' }} />
@@ -3632,7 +3633,7 @@ export default function ProjectsPage() {
                         <Edit size={12} /> Chỉnh sửa
                       </button>
                     ) : (
-                      <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>
                         Chỉ đọc
                       </span>
                     )}
@@ -4495,7 +4496,7 @@ export default function ProjectsPage() {
               <div style={{ flex: 1, minWidth: '240px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                   <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-text)' }}>Nhắc nhở giảng viên lớp chuyên đề</span>
-                  <span style={{ fontSize: '0.72rem', background: '#faf5ff', color: '#6b21a8', padding: '2px 8px', borderRadius: '100px', fontWeight: 600 }}>Giảng viên</span>
+                  <span style={{ fontSize: '0.72rem', background: '#f1f5f9', color: '#334155', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>Giảng viên</span>
                 </div>
                 <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Gửi thông báo nhắc nhở trước khi đến lịch giảng dạy lớp chuyên đề cho giảng viên.</span>
               </div>
@@ -4967,7 +4968,7 @@ export default function ProjectsPage() {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div style={{ width: '3px', height: '14px', background: 'var(--color-primary)', borderRadius: '1.5px', flexShrink: 0 }} />
-                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tiến độ & Cột mốc</h4>
+                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tiến độ &amp; Cột mốc</h4>
                   </div>
 
                   {/* Time Progress Bar */}
@@ -4977,7 +4978,7 @@ export default function ProjectsPage() {
                     const endStr = editingCampaign?.end_date;
                     if (!startStr && !endStr) {
                       return (
-                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', fontStyle: 'italic' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-light)' }}>
                           Chưa thiết lập thời gian bắt đầu & kết thúc.
                         </div>
                       );
@@ -5000,7 +5001,7 @@ export default function ProjectsPage() {
                     return (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text-muted)' }}>
+                          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
                             Tiến độ thời gian: <strong style={{ color: 'var(--color-primary)' }}>{percent}%</strong>
                           </span>
                           <span style={{ fontSize: '0.72rem', color: 'var(--color-text-light)', fontWeight: 600 }}>
@@ -5017,12 +5018,12 @@ export default function ProjectsPage() {
                           <div style={{
                             width: `${percent}%`,
                             height: '100%',
-                            background: percent === 100 ? 'var(--color-success)' : 'linear-gradient(90deg, var(--color-primary) 0%, var(--color-success) 100%)',
+                            background: percent === 100 ? 'var(--color-success)' : 'var(--color-primary)',
                             borderRadius: '3px',
-                            transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+                            transition: 'width 0.4s cubic-bezier(0.22, 1, 0.36, 1)'
                           }} />
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--color-text-light)', marginTop: '2px', fontWeight: 600 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--color-text-light)', marginTop: '2px', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                           <span>Bắt đầu: {start ? start.toLocaleDateString('vi-VN') : 'N/A'}</span>
                           <span>Kết thúc: {end ? end.toLocaleDateString('vi-VN') : 'N/A'}</span>
                         </div>
@@ -5032,7 +5033,7 @@ export default function ProjectsPage() {
 
                   {/* Thesis Milestones List */}
                   <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                       Các cột mốc học vụ
                     </span>
                     {(() => {
@@ -5044,7 +5045,7 @@ export default function ProjectsPage() {
                       
                       if (!Array.isArray(miles) || miles.length === 0) {
                         return (
-                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', fontStyle: 'italic', padding: '6px 8px' }}>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', padding: '6px 8px' }}>
                             Chưa có cột mốc học vụ/luận văn nào được thiết lập.
                           </div>
                         );
@@ -5159,7 +5160,7 @@ export default function ProjectsPage() {
                       <RefreshCw className="spin" size={16} color="var(--color-text-muted)" />
                     </div>
                   ) : linkedTasks.length === 0 ? (
-                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '10px 14px', background: 'var(--color-bg-light)', border: '1px dashed var(--color-border)', borderRadius: '10px' }}>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', padding: '10px 14px', background: 'var(--color-bg-light)', border: '1px dashed var(--color-border)', borderRadius: '10px' }}>
                       Chưa có công việc nào liên kết với chiến dịch này.
                     </div>
                   ) : (
@@ -5419,22 +5420,22 @@ export default function ProjectsPage() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ width: '3px', height: '14px', background: 'var(--color-primary)', borderRadius: '1.5px', flexShrink: 0 }} />
-              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lịch sử hoạt động của Chiến dịch</h4>
+              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lịch sử hoạt động của Chiến dịch</h4>
             </div>
 
             {statsLoading ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
                 <RefreshCw className="spin" size={24} color="var(--color-text-muted)" />
               </div>
-            ) : !campaignStats?.logs || campaignStats.logs.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-muted)', fontSize: '0.875rem', fontStyle: 'italic' }}>
+            ) : ensureArray(campaignStats?.logs).length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
                 Chưa có nhật ký hoạt động nào cho chiến dịch này.
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingLeft: '8px' }}>
-                {campaignStats.logs.map((log: any, idx: number) => (
+                {ensureArray(campaignStats?.logs).map((log: any, idx: number, arr: any[]) => (
                   <div key={log.id} style={{ display: 'flex', gap: '14px', position: 'relative', alignItems: 'flex-start' }}>
-                    {idx !== campaignStats.logs.length - 1 && (
+                    {idx !== arr.length - 1 && (
                       <div style={{ position: 'absolute', top: '28px', left: '14px', bottom: '-20px', width: '2px', background: 'var(--color-border-light)' }} />
                     )}
                     <div style={{ flexShrink: 0, position: 'relative', zIndex: 1 }}>
@@ -5520,7 +5521,7 @@ export default function ProjectsPage() {
     try {
       const res = await fetchAPI('suppliers?limit=100');
       if (res.success) {
-        const list = res.data?.items || res.data || [];
+        const list = extractArray(res);
         setDevelopers(list);
         projectsPageCache.developers = list;
       }
@@ -5537,7 +5538,7 @@ export default function ProjectsPage() {
     try {
       const res = await fetchAPI('cloud-files?limit=100');
       if (res.success) {
-        const list = res.data?.items || res.data || [];
+        const list = extractArray(res);
         setAllFiles(list);
         projectsPageCache.allFiles = list;
       }
@@ -5719,7 +5720,7 @@ export default function ProjectsPage() {
     try {
       const res = await fetchAPI('users?all=1');
       if (res.success) {
-        const list = res.data || [];
+        const list = extractArray(res);
         setUsers(list);
         projectsPageCache.users = list;
       }
@@ -5736,7 +5737,7 @@ export default function ProjectsPage() {
     try {
       const res = await fetchAPI('consultants?limit=1000');
       if (res && res.success) {
-        const list = res.data?.items || res.data || [];
+        const list = extractArray(res);
         setConsultants(list);
         projectsPageCache.consultants = list;
       }
@@ -5753,7 +5754,7 @@ export default function ProjectsPage() {
     try {
       const res = await fetchAPI('companies?limit=2000');
       if (res && res.success) {
-        const list = res.data?.items || res.data || [];
+        const list = extractArray(res);
         setCompaniesList(list);
         projectsPageCache.companiesList = list;
         projectsPageCache.auxTimestamp = Date.now();
@@ -6017,7 +6018,7 @@ export default function ProjectsPage() {
     try {
       const res = await fetchAPI(`projects/${projectId}/roster`);
       if (res.success) {
-        setRosterMembers(res.data || []);
+        setRosterMembers(extractArray(res));
       } else {
         addToast(res.message || 'Lỗi tải roster', 'error');
       }
@@ -6077,7 +6078,7 @@ export default function ProjectsPage() {
     try {
       const res = await fetchAPI(`projects/${projectId}/documents`);
       if (res.success) {
-        setProjectDocs(res.data || []);
+        setProjectDocs(extractArray(res));
       } else {
         addToast(res.message || 'Lỗi tải tài liệu', 'error');
       }
@@ -7198,7 +7199,7 @@ export default function ProjectsPage() {
                                         <div style={{ width: '100%', height: '4px', background: 'var(--color-bg-light)', borderRadius: '2px', overflow: 'hidden' }}>
                                           <div style={{ width: `${progressVal}%`, height: '100%', background: '#10b981', borderRadius: '2px' }} />
                                         </div>
-                                        <span style={{ fontSize: '0.62rem', color: 'var(--color-text-light)', fontStyle: 'italic', textAlign: 'right' }}>Tiến độ: {progressVal}% thời gian</span>
+                                        <span style={{ fontSize: '0.62rem', color: 'var(--color-text-light)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tiến độ: {progressVal}% thời gian</span>
                                       </div>
                                     );
                                   }
@@ -7428,13 +7429,13 @@ export default function ProjectsPage() {
                         gap: '1rem',
                         boxShadow: 'var(--shadow-sm)'
                       }}>
-                        <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Quản lý &amp; Tài liệu</h4>
+                        <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Quản lý &amp; Tài liệu</h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                           <div>
-                            <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', fontWeight: 750, display: 'block', marginBottom: '6px' }}>Manager phụ trách chính</span>
+                            <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', fontWeight: 700, display: 'block', marginBottom: '6px' }}>Manager phụ trách chính</span>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                               {parseIds(editingProject?.manager_ids).length === 0 ? (
-                                <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: '0.85rem' }}>Chưa phân công manager phụ trách</span>
+                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Chưa phân công manager phụ trách</span>
                               ) : (
                                 parseIds(editingProject?.manager_ids).map(id => {
                                   const u = users.find(usr => String(usr.id) === String(id));
@@ -7450,11 +7451,11 @@ export default function ProjectsPage() {
                             </div>
                           </div>
                           <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '0.75rem' }}>
-                            <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', fontWeight: 750, display: 'block', marginBottom: '6px' }}>Đội ngũ nhân sự phụ trách</span>
+                            <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', fontWeight: 700, display: 'block', marginBottom: '6px' }}>Đội ngũ nhân sự phụ trách</span>
                             {projectRosterLoading ? (
-                              <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Đang tải danh sách nhân sự...</span>
+                              <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>Đang tải danh sách nhân sự...</span>
                             ) : projectRoster.length === 0 ? (
-                              <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: '0.85rem' }}>Chưa phân công nhân sự</span>
+                              <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Chưa phân công nhân sự</span>
                             ) : (
                               <div style={{ display: 'flex', alignItems: 'center', padding: '2px 0' }}>
                                 <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -7484,7 +7485,8 @@ export default function ProjectsPage() {
                                         background: 'var(--color-border-light)',
                                         color: 'var(--color-text)',
                                         fontSize: '0.7rem',
-                                        fontWeight: 800,
+                                        fontWeight: 700,
+                                        fontVariantNumeric: 'tabular-nums',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
@@ -7497,20 +7499,20 @@ export default function ProjectsPage() {
                                     </div>
                                   )}
                                 </div>
-                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-primary)', marginLeft: '8px' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-primary)', marginLeft: '8px', fontVariantNumeric: 'tabular-nums' }}>
                                   ({projectRoster.length} nhân sự)
                                 </span>
                               </div>
                             )}
                           </div>
                           <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '0.75rem' }}>
-                            <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', fontWeight: 750, display: 'block', marginBottom: '6px' }}>Tài liệu liên kết</span>
+                            <span style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', fontWeight: 700, display: 'block', marginBottom: '6px' }}>Tài liệu liên kết</span>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               {parseIds(editingProject?.document_ids).length === 0 ? (
-                                <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: '0.85rem' }}>Chưa liên kết tài liệu</span>
+                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Chưa liên kết tài liệu</span>
                               ) : (
                                 parseIds(editingProject?.document_ids).map(docId => {
-                                  const fileObj = allFiles.find(f => String(f.id) === String(docId));
+                                  const fileObj = ensureArray(allFiles).find(f => String(f.id) === String(docId));
                                   if (!fileObj) return null;
                                   return (
                                     <a
@@ -7551,7 +7553,7 @@ export default function ProjectsPage() {
                             <RefreshCw className="spin" size={16} color="var(--color-text-muted)" />
                           </div>
                         ) : linkedTasks.length === 0 ? (
-                          <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '10px 14px', background: 'var(--color-bg-light)', border: '1px dashed var(--color-border)', borderRadius: '10px' }}>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', padding: '10px 14px', background: 'var(--color-bg-light)', border: '1px dashed var(--color-border)', borderRadius: '10px' }}>
                             Chưa có công việc nào liên kết với chương trình này.
                           </div>
                         ) : (
@@ -7879,7 +7881,7 @@ export default function ProjectsPage() {
                           const currentLinks = parseReferenceLinks(editingProject?.reference_url);
                           if (currentLinks.length === 0) {
                             return (
-                              <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '8px 12px', background: 'var(--color-bg-light)', border: '1px dashed var(--color-border)', borderRadius: '10px' }}>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', padding: '8px 12px', background: 'var(--color-bg-light)', border: '1px dashed var(--color-border)', borderRadius: '10px' }}>
                                 Chưa có đường dẫn tham khảo nào. Bấm "Thêm Link mới" để cấu hình.
                               </div>
                             );
@@ -8008,7 +8010,7 @@ export default function ProjectsPage() {
                           const currentFolders = parseFolderPaths(editingProject?.folder_path);
                           if (currentFolders.length === 0) {
                             return (
-                              <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '8px 12px', background: 'var(--color-bg-light)', border: '1px dashed var(--color-border)', borderRadius: '10px' }}>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', padding: '8px 12px', background: 'var(--color-bg-light)', border: '1px dashed var(--color-border)', borderRadius: '10px' }}>
                                 Chưa liên kết thư mục nào. Bấm "Thêm Thư mục" để cấu hình.
                               </div>
                             );
@@ -8141,7 +8143,7 @@ export default function ProjectsPage() {
                         <CustomSelect
                           multiple
                           searchable={true}
-                          options={allFiles.map(f => ({ value: String(f.id), label: f.name }))}
+                          options={ensureArray(allFiles).map(f => ({ value: String(f.id), label: f.name }))}
                           value={parseIds(editingProject?.document_ids)}
                           onChange={val => setEditingProject(prev => ({ ...prev, document_ids: Array.isArray(val) ? val.join(',') : String(val) }))}
                           placeholder="Chọn tài liệu..."
@@ -8153,15 +8155,15 @@ export default function ProjectsPage() {
                         <CustomSelect
                           multiple
                           searchable={true}
-                          options={campaigns.map(c => ({ value: String(c.id), label: c.name, faded: c.status !== 'active' }))}
+                          options={ensureArray(campaigns).map(c => ({ value: String(c.id), label: c.name, faded: c.status !== 'active' }))}
                           value={
                             editingProject?.campaign_ids_array !== undefined
-                              ? editingProject.campaign_ids_array.map(String)
-                              : campaigns.filter(c => c.project_id === editingProject?.id).map(c => String(c.id))
+                              ? ensureArray(editingProject.campaign_ids_array).map(String)
+                              : ensureArray(campaigns).filter(c => c.project_id === editingProject?.id).map(c => String(c.id))
                           }
                           onChange={val => {
                             const selectedIds = Array.isArray(val) ? val.map(Number) : [];
-                            const selectedNames = campaigns.filter(c => selectedIds.includes(c.id)).map(c => c.name);
+                            const selectedNames = ensureArray(campaigns).filter(c => selectedIds.includes(c.id)).map(c => c.name);
                             setEditingProject(prev => ({
                               ...prev,
                               campaign_ids: selectedNames.join(','),
@@ -8454,7 +8456,7 @@ export default function ProjectsPage() {
             const selectedProj = projects.find(p => p.id === selectedProjectId);
             const linkedDocIds = selectedProj?.document_ids ? parseIds(selectedProj.document_ids) : [];
 
-            const formattedLinkedDocs = allFiles
+            const formattedLinkedDocs = ensureArray(allFiles)
               .filter(f => linkedDocIds.includes(String(f.id)))
               .map(f => ({
                 id: f.id,
@@ -8467,7 +8469,7 @@ export default function ProjectsPage() {
                 isLinkedOnly: true
               }));
 
-            const combinedDocs = [...projectDocs, ...formattedLinkedDocs];
+            const combinedDocs = [...ensureArray(projectDocs), ...formattedLinkedDocs];
 
             return (
               <div className="project-docs-container" style={{ display: 'flex', flexDirection: 'column', height: '100%', borderRadius: '12px' }}>
@@ -8537,7 +8539,7 @@ export default function ProjectsPage() {
                   color: #137333;
                 }
                 .category-btn.active.image {
-                  color: #ec4899;
+                  color: #0891b2;
                 }
                 .category-badge {
                   font-size: 0.72rem;
@@ -8937,8 +8939,8 @@ export default function ProjectsPage() {
                                         iconBg = '#e8f0fe';
                                       } else if (['png', 'jpg', 'jpeg', 'svg', 'webp'].includes(ext || '')) {
                                         icon = <Paperclip size={16} />;
-                                        iconColor = '#ec4899';
-                                        iconBg = '#fde8f3';
+                                        iconColor = '#0891b2';
+                                        iconBg = '#ecfeff';
                                       }
 
                                       return (
@@ -9242,7 +9244,7 @@ export default function ProjectsPage() {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                               {associatedProjs.map(proj => {
                                 const docIds = proj.document_ids ? proj.document_ids.split(',').map((id: string) => id.trim()) : [];
-                                const projDocs = allFiles.filter(f => docIds.includes(String(f.id)));
+                                const projDocs = ensureArray(allFiles).filter(f => docIds.includes(String(f.id)));
 
                                 return (
                                   <div key={proj.id} style={{ border: '1px solid var(--color-border-light)', borderRadius: '12px', padding: '1rem', background: 'var(--color-bg-light)' }}>
@@ -9271,7 +9273,7 @@ export default function ProjectsPage() {
                                     <div style={{ marginBottom: '8px' }}>
                                       <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Tài liệu:</span>
                                       {projDocs.length === 0 ? (
-                                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', fontStyle: 'italic' }}>Không có tài liệu</span>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-light)' }}>Không có tài liệu</span>
                                       ) : (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                           {projDocs.map(doc => (
@@ -9316,7 +9318,7 @@ export default function ProjectsPage() {
                             <RefreshCw className="spin" size={16} color="var(--color-text-muted)" />
                           </div>
                         ) : linkedTasks.length === 0 ? (
-                          <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '10px 14px', background: 'var(--color-bg-light)', border: '1px dashed var(--color-border)', borderRadius: '10px' }}>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', padding: '10px 14px', background: 'var(--color-bg-light)', border: '1px dashed var(--color-border)', borderRadius: '10px' }}>
                             Chưa có công việc nào liên kết với chiến dịch này.
                           </div>
                         ) : (
@@ -9727,7 +9729,7 @@ export default function ProjectsPage() {
                         <CustomSelect
                           multiple
                           searchable={true}
-                          options={allFiles.map(f => ({ value: String(f.id), label: f.name }))}
+                          options={ensureArray(allFiles).map(f => ({ value: String(f.id), label: f.name }))}
                           value={parseIds(editingCampaign?.document_ids)}
                           onChange={val => setEditingCampaign({ ...editingCampaign, document_ids: Array.isArray(val) ? val.join(',') : String(val) })}
                           placeholder="Chọn tài liệu..."
@@ -10154,13 +10156,13 @@ export default function ProjectsPage() {
                       {/* RIGHT COLUMN: Sales in Round */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <label className="form-label" style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
                             Danh sách Sales trong Vòng ({consultantsList.length})
                           </label>
                         </div>
 
                         {consultantsList.length === 0 ? (
-                          <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: '0.85rem', background: 'var(--color-bg-light)', borderRadius: '12px', border: '1px dashed var(--color-border)' }}>
+                          <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.85rem', background: 'var(--color-bg-light)', borderRadius: '12px', border: '1px dashed var(--color-border)' }}>
                             Chưa có tư vấn viên nào được gán vào vòng phân bổ này.
                           </div>
                         ) : (
@@ -10536,13 +10538,13 @@ export default function ProjectsPage() {
                         )}
                       </div>
 
-                      {(!sub.host_sessions || sub.host_sessions.length === 0) ? (
+                      {ensureArray(sub?.host_sessions).length === 0 ? (
                         <div style={{ padding: '2.5rem', textAlign: 'center', background: 'var(--color-bg-light)', borderRadius: '12px', border: '1px dashed var(--color-border-light)' }}>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', fontStyle: 'italic' }}>Chưa thiết lập buổi học nào. Hãy bấm "+ Thêm buổi học" để cấu hình.</span>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-light)' }}>Chưa thiết lập buổi học nào. Bấm "+ Thêm buổi học" để cấu hình.</span>
                         </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          {sub.host_sessions.map((hs: any, hsIdx: number) => {
+                          {ensureArray(sub?.host_sessions).map((hs: any, hsIdx: number) => {
                             const hsTime = `${hs.time_start || '20:00'} - ${hs.time_end || '22:00'}`;
                             const conflict = checkLecturerConflict(hs.lecturer_name || sub.lecturer_id, hs.date, hsTime, sub.id, hs.id || `hs_${hsIdx}`);
                             return (
@@ -10680,13 +10682,13 @@ export default function ProjectsPage() {
                         </div>
                       </div>
 
-                      {(!sub.seminars || sub.seminars.length === 0) ? (
+                      {ensureArray(sub?.seminars).length === 0 ? (
                         <div style={{ padding: '2.5rem', textAlign: 'center', background: 'var(--color-bg-light)', borderRadius: '12px', border: '1px dashed var(--color-border-light)' }}>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', fontStyle: 'italic' }}>Chưa thiết lập lớp chuyên đề.</span>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-light)' }}>Chưa thiết lập lớp chuyên đề.</span>
                         </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          {sub.seminars.map((sem: any, sIdx: number) => (
+                          {ensureArray(sub?.seminars).map((sem: any, sIdx: number) => (
                             <div key={sem.id || sIdx} style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: '#ffffff', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border-light)', boxShadow: 'var(--shadow-sm)' }}>
                               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 <div style={{ flex: '2 1 200px' }}>
@@ -10998,7 +11000,7 @@ export default function ProjectsPage() {
 
                           {/* Seminar Zoom Account */}
                           <div style={{ background: '#ffffff', padding: '16px 20px', borderRadius: '12px', border: '1px solid var(--color-border-light)', boxShadow: 'var(--shadow-sm)' }}>
-                            <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#6b21a8', textTransform: 'uppercase', display: 'block', marginBottom: '12px' }}>2. Zoom Lớp chuyên đề (IDEAS)</span>
+                            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', display: 'block', marginBottom: '12px' }}>2. Zoom Lớp chuyên đề (IDEAS)</span>
                             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                               <div style={{ flex: '2 1 240px' }}>
                                 <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-light)', display: 'block', marginBottom: '4px' }}>Đường dẫn Zoom Link (Chuyên đề)</label>
@@ -11047,7 +11049,7 @@ export default function ProjectsPage() {
                       {/* Quiz & Assignment list */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Danh sách bài tập / Quiz / Bài thi</span>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Danh sách bài tập / Quiz / Bài thi</span>
                           {canEdit && (
                             <button type="button" className="btn secondary" style={{ height: '36px', padding: '0 16px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }} onClick={handleAddAssignment}>
                               <Plus size={14} /> Thêm bài tập
@@ -11055,13 +11057,13 @@ export default function ProjectsPage() {
                           )}
                         </div>
 
-                        {(!sub.assignments || sub.assignments.length === 0) ? (
+                        {ensureArray(sub?.assignments).length === 0 ? (
                           <div style={{ padding: '3rem 2rem', textAlign: 'center', background: 'var(--color-bg-light)', borderRadius: '12px', border: '1px dashed var(--color-border-light)' }}>
-                            <span style={{ fontSize: '0.82rem', color: 'var(--color-text-light)', fontStyle: 'italic' }}>Chưa thiết lập bài tập nào.</span>
+                            <span style={{ fontSize: '0.82rem', color: 'var(--color-text-light)' }}>Chưa thiết lập bài tập nào.</span>
                           </div>
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {sub.assignments.map((asm: any, aIdx: number) => (
+                            {ensureArray(sub?.assignments).map((asm: any, aIdx: number) => (
                               <div key={asm.id || aIdx} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#ffffff', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--color-border-light)', boxShadow: 'var(--shadow-sm)' }}>
                                 <input
                                   type="text"

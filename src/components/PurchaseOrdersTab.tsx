@@ -594,7 +594,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                     return (
                       <tr key={o.id} className="table-row-hover group">
                         <td>
-                          <span className="font-black text-primary text-xs font-mono bg-primary/5 px-2 py-1 rounded">{o.po_number}</span>
+                          <span className="font-bold text-primary text-xs font-mono bg-primary/5 px-2 py-1 rounded tabular-nums">{o.po_number}</span>
                         </td>
                         <td>
                           <div className="flex items-center gap-3">
@@ -613,7 +613,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                           </div>
                         </td>
                         <td style={{ textAlign: 'right' }}>
-                          <div className="font-black text-sm text-primary">
+                          <div className="font-bold text-sm text-primary tabular-nums">
                             {new Intl.NumberFormat('vi-VN').format(o.total)} đ
                           </div>
                         </td>
@@ -1241,8 +1241,8 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                           )}
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(255,255,255,0.15)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
                             <div>
-                              <p style={{ fontSize: '0.6rem', fontWeight: 800, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>Tổng thanh toán (Total)</p>
-                              <p style={{ fontSize: '1.25rem', fontWeight: 900, margin: '2px 0 0', color: '#38bdf8' }}>{new Intl.NumberFormat('vi-VN').format(total)} đ</p>
+                              <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Tổng thanh toán</p>
+                              <p style={{ fontSize: '1.25rem', fontWeight: 700, margin: '2px 0 0', color: '#ffffff', fontVariantNumeric: 'tabular-nums' }}>{new Intl.NumberFormat('vi-VN').format(total)} đ</p>
                             </div>
                             <div style={{ textAlign: 'right' }}>
                               <p style={{ fontSize: '0.6rem', fontWeight: 800, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>Hình thức</p>

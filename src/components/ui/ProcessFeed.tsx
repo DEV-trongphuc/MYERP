@@ -196,7 +196,7 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
       actionColor = '#10b981';
     } else if (item.action === 'UPDATE_ATTACHMENT') {
       actionLabel = t('Cập nhật tài liệu / chứng từ đính kèm');
-      actionColor = '#8b5cf6';
+      actionColor = '#334155';
     } else if (item.action === 'UPDATE') {
       try {
         const parsed = JSON.parse(item.new_data || '{}');
@@ -205,7 +205,7 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
           actionColor = '#10b981';
         } else if (parsed.image_url && Object.keys(parsed).length <= 2) {
           actionLabel = t('Cập nhật tài liệu / chứng từ đính kèm');
-          actionColor = '#8b5cf6';
+          actionColor = '#334155';
         } else {
           actionLabel = t('Cập nhật nội dung chi');
           actionColor = '#f59e0b';
@@ -636,7 +636,7 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
                   <span style={{ color: 'var(--color-text-muted)' }}>{t('Đang trả lời')} </span>
                   <strong style={{ color: '#2563eb' }}>@{replyTo.userName}</strong>
                   {replyTo.snippet && (
-                    <span style={{ color: 'var(--color-text-muted)', marginLeft: '6px', fontStyle: 'italic' }}>
+                    <span style={{ color: 'var(--color-text-muted)', marginLeft: '6px' }}>
                       "{replyTo.snippet}"
                     </span>
                   )}

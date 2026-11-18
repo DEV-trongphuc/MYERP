@@ -1,7 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Clock, MapPin, CheckCircle2, AlertTriangle, X, RefreshCw, Sparkles } from 'lucide-react';
+import { LogOut, Clock, MapPin, CheckCircle2, AlertTriangle, X, RefreshCw } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { triggerFullConfetti } from '../../utils/confettiHelper';
 
@@ -198,26 +198,23 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
                   overflow: 'hidden'
                 }}
               >
-                {/* Animated Glowing Ring Aura */}
-                <div style={{ position: 'relative', width: 92, height: 92, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0.25rem 0' }}>
-                  <div className="checkin-pulse-ring" style={{ borderColor: 'rgba(16, 185, 129, 0.55)' }} />
+                <div style={{ position: 'relative', width: 88, height: 88, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '4px 0' }}>
                   <div
                     className="checkin-success-badge"
                     style={{
-                      width: 84,
-                      height: 84,
+                      width: 80,
+                      height: 80,
                       borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      background: '#10B981',
                       color: '#ffffff',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      boxShadow: '0 12px 30px rgba(16, 185, 129, 0.45)',
-                      border: '3px solid #ffffff',
+                      border: '2px solid #ffffff',
                       zIndex: 2
                     }}
                   >
-                    <CheckCircle2 size={46} strokeWidth={2.6} />
+                    <CheckCircle2 size={44} strokeWidth={2.2} />
                   </div>
                 </div>
 
@@ -227,32 +224,31 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: 6,
-                      padding: '4px 14px',
-                      borderRadius: '20px',
+                      gap: 8,
+                      padding: '4px 12px',
+                      borderRadius: '6px',
                       background: 'rgba(16, 185, 129, 0.1)',
                       color: '#059669',
                       fontSize: '0.75rem',
-                      fontWeight: 800,
-                      letterSpacing: '0.05em',
+                      fontWeight: 700,
+                      letterSpacing: '0.04em',
                       textTransform: 'uppercase'
                     }}
                   >
-                    <Sparkles size={13} />
+                    <CheckCircle2 size={13} strokeWidth={1.75} />
                     <span>{t('HOÀN THÀNH CA LÀM VIỆC')}</span>
                   </div>
 
                   <h2
                     style={{
-                      fontSize: isMobile ? '1.35rem' : '1.5rem',
-                      fontWeight: 800,
+                      fontSize: isMobile ? '1.3rem' : '1.45rem',
+                      fontWeight: 700,
                       color: 'var(--color-text, #0f172a)',
                       margin: 0,
-                      letterSpacing: '-0.02em',
                       lineHeight: 1.3
                     }}
                   >
-                    {t('CHẤM CÔNG RA CA THÀNH CÔNG!')}
+                    {t('Chấm công ra ca thành công')}
                   </h2>
 
                   <p
@@ -264,7 +260,7 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
                       lineHeight: 1.55
                     }}
                   >
-                    {t('Hẹn gặp lại bạn vào ca làm việc tiếp theo. Chúc bạn một buổi tối thật vui vẻ và thư giãn!')}
+                    {t('Đã ghi nhận giờ ra ca. Hẹn gặp lại bạn vào ca làm việc tiếp theo.')}
                   </p>
                 </div>
 
@@ -275,23 +271,23 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
                     maxWidth: '380px',
                     background: 'var(--color-bg, #f8fafc)',
                     border: '1px solid var(--color-border-light, rgba(0,0,0,0.08))',
-                    borderRadius: '16px',
+                    borderRadius: '12px',
                     padding: '12px 16px',
                     display: 'flex',
                     justifyContent: 'space-around',
                     alignItems: 'center'
                   }}
                 >
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                     <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted, #64748b)', fontWeight: 600 }}>{t('Giờ ra ca')}</span>
-                    <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#059669', letterSpacing: '-0.02em' }}>{currentHM}</span>
+                    <span style={{ fontSize: '1.15rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#059669' }}>{currentHM}</span>
                   </div>
                   {durationStr && (
                     <>
                       <div style={{ width: 1, height: 26, background: 'var(--color-border-light, rgba(0,0,0,0.1))' }} />
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                         <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted, #64748b)', fontWeight: 600 }}>{t('Thời gian làm việc')}</span>
-                        <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0284c7', letterSpacing: '-0.02em' }}>{durationStr}</span>
+                        <span style={{ fontSize: '1.15rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#0284c7' }}>{durationStr}</span>
                       </div>
                     </>
                   )}
@@ -334,39 +330,18 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
                 >
                   <div
                     style={{
-                      width: 64,
-                      height: 64,
-                      borderRadius: '20px',
-                      background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(239, 68, 68, 0.18) 100%)',
-                      border: '1px solid rgba(239, 68, 68, 0.25)',
+                      width: 60,
+                      height: 60,
+                      borderRadius: '12px',
+                      background: 'rgba(189, 29, 45, 0.08)',
+                      border: '1px solid rgba(189, 29, 45, 0.2)',
                       color: '#BD1D2D',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 8px 20px -4px rgba(239, 68, 68, 0.2)'
+                      justifyContent: 'center'
                     }}
                   >
-                    <LogOut size={30} strokeWidth={2.2} />
-                  </div>
-
-                  {/* Little sparkles badge */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: -4,
-                      right: -4,
-                      width: 22,
-                      height: 22,
-                      borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #f59e0b, #ef4444)',
-                      color: '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 2px 6px rgba(245, 158, 11, 0.4)'
-                    }}
-                  >
-                    <Sparkles size={11} />
+                    <LogOut size={28} strokeWidth={1.75} />
                   </div>
                 </div>
 

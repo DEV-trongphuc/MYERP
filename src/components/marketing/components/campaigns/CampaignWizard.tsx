@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
     Settings2, Mail, Users, BellRing, CheckCircle2, Wand2, Check, X,
-    ShieldCheck, Code, FileCode, Eye, Save, ChevronRight, ChevronLeft, Calendar, Send, GitMerge, Layout, Braces, ChevronDown, Loader2, ArrowRight, Zap, Sparkles, Smartphone, FileText, Download, Upload, Target, Plus, AlertCircle, Edit3
+    ShieldCheck, Code, FileCode, Eye, Save, ChevronRight, ChevronLeft, Calendar, Send, GitMerge, Layout, Braces, ChevronDown, Loader2, ArrowRight, Zap, Smartphone, FileText, Download, Upload, Target, Plus, AlertCircle, Edit3
 } from 'lucide-react';
 import { Campaign, CampaignStatus, Template, Segment, Flow, Subscriber } from '../../types'; // Fix: Import Subscriber
 import { api } from '../../services/storageAdapter'; // Fix: Import api
@@ -1113,7 +1113,7 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
                                         <span className="w-1 h-1 bg-slate-300 rounded-full hidden sm:block"></span>
                                         <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5 text-[var(--color-primary)]" /> Tốc độ gửi tức thì</span>
                                         <span className="w-1 h-1 bg-slate-300 rounded-full hidden sm:block"></span>
-                                        <span className="flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5 text-[var(--color-primary)]" /> Cá nhân hóa biến Realtime</span>
+                                        <span className="flex items-center gap-1.5"><Braces className="w-3.5 h-3.5 text-[var(--color-primary)]" /> Cá nhân hóa biến Realtime</span>
                                     </div>
                                 </div>
 
@@ -1233,8 +1233,8 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
                                             maxLength={100}
                                         />
                                         <p className="text-[11px] text-slate-400 font-medium px-1 flex items-center gap-1.5">
-                                            <Sparkles className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" />
-                                            Gợi ý: Đặt tên theo cú pháp <span className="font-semibold text-slate-600">[Thời gian] - [Mục đích / Sự kiện]</span> để dễ dàng tìm kiếm và đối soát báo cáo.
+                                            <FileText className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" />
+                                            Gợi ý: Đặt tên theo cú pháp <span className="font-semibold text-slate-600">[Thời gian] - [Mục đích / Sự kiện]</span> để dễ dàng tìm kiếm và đối soát báo cáo
                                         </p>
                                     </div>
 
@@ -1440,19 +1440,18 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
                                             return (
                                                 <>
                                                     {/* REACH & COST ESTIMATION CARD - MOVED UP */}
-                                                    <div className="bg-slate-900 rounded-[18px] p-6 shadow-2xl space-y-4 text-white relative overflow-hidden animate-in slide-in-from-left-2 duration-300">
-                                                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500 opacity-10 rounded-full blur-3xl -mr-10 -mt-10"></div>
-                                                        <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2 relative z-10">
-                                                            <Sparkles className="w-3 h-3 text-[#2563eb]" /> Ước tính gửi ZNS
+                                                    <div className="bg-slate-900 rounded-2xl p-6 shadow-md border border-slate-800 space-y-4 text-white relative overflow-hidden animate-in slide-in-from-left-2 duration-300">
+                                                        <h5 className="text-[10px] font-bold uppercase text-slate-400 tracking-widest flex items-center gap-2 relative z-10">
+                                                            <Zap className="w-3.5 h-3.5 text-rose-400" /> Ước tính gửi ZNS
                                                         </h5>
                                                         <div className="grid grid-cols-2 gap-4 relative z-10">
                                                             <div>
-                                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Liên hệ dự kiến</p>
-                                                                <p className="text-xl font-black text-white">{((formData.target?.listIds?.length || 0) + (formData.target?.segmentIds?.length || 0) + (formData.target?.tagIds?.length || 0)) > 0 ? "Theo Audience" : "Sẽ tính ở B3"}</p>
+                                                                <p className="text-[10px] text-slate-400 font-semibold uppercase">Liên hệ dự kiến</p>
+                                                                <p className="text-xl font-bold text-white tabular-nums">{((formData.target?.listIds?.length || 0) + (formData.target?.segmentIds?.length || 0) + (formData.target?.tagIds?.length || 0)) > 0 ? "Theo Audience" : "Sẽ tính ở B3"}</p>
                                                             </div>
                                                             <div>
-                                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Tạm tính chi phí</p>
-                                                                <p className="text-xl font-black text-blue-400">~ {znsPrice}<span className="text-[10px] ml-0.5 text-blue-300 font-bold">đ/tin</span></p>
+                                                                <p className="text-[10px] text-slate-400 font-semibold uppercase">Tạm tính chi phí</p>
+                                                                <p className="text-xl font-bold text-rose-300 tabular-nums">~ {znsPrice}<span className="text-[10px] ml-0.5 text-slate-300 font-semibold">đ/tin</span></p>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1563,8 +1562,8 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
                                                             if (loadingDetail) {
                                                                 return (
                                                                     <div className="flex-1 flex flex-col items-center justify-center space-y-4">
-                                                                        <div className="w-10 h-10 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin"></div>
-                                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Rendering UI...</p>
+                                                                        <div className="w-10 h-10 border-4 border-slate-200 border-t-[#BD1D2D] rounded-full animate-spin"></div>
+                                                                        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Đang tải giao diện...</p>
                                                                     </div>
                                                                 )
                                                             }
@@ -1598,18 +1597,14 @@ const CampaignWizard: React.FC<CampaignWizardProps> = ({
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className="text-center space-y-6 animate-in fade-in zoom-in-95 duration-700">
-                                                <div className="w-28 h-28 bg-white rounded-[18px] shadow-2xl flex items-center justify-center mx-auto ring-1 ring-slate-100"><Zap className="w-14 h-14 text-blue-500 animate-pulse" /></div>
+                                            <div className="text-center space-y-5 animate-in fade-in duration-300">
+                                                <div className="w-24 h-24 bg-white rounded-2xl shadow-md flex items-center justify-center mx-auto border border-slate-200"><Zap className="w-11 h-11 text-[#BD1D2D]" /></div>
                                                 <div>
-                                                    <p className="text-slate-800 text-xl font-black">Chưa chọn mẫu tin</p>
-                                                    <p className="text-slate-400 text-sm font-medium mt-2">Chọn mẫu ZNS ở cột trái để xem trước trên thiết bị</p>
+                                                    <p className="text-slate-900 text-lg font-bold">Chưa chọn mẫu tin</p>
+                                                    <p className="text-slate-500 text-sm font-medium mt-1.5">Chọn mẫu ZNS ở cột trái để xem trước trên thiết bị</p>
                                                 </div>
                                             </div>
                                         )}
-
-                                        {/* Abstract Background Decor */}
-                                        <div className="absolute -top-24 -right-24 w-[400px] h-[400px] bg-blue-100/50 rounded-full blur-[120px] pointer-events-none group-hover:scale-110 transition-transform duration-1000"></div>
-                                        <div className="absolute -bottom-24 -left-24 w-[400px] h-[400px] bg-[#fbbf24]/20 rounded-full blur-[120px] pointer-events-none group-hover:scale-110 transition-transform duration-1000"></div>
                                     </div>
                                 </div>
                             </TabTransition>

@@ -2,8 +2,12 @@
 // backend/clone_db_to_myerp.php
 // Script to clone schema and initial state from vhvxoigh_ideas_erp to vhvxoigh_myerp
 
+require_once __DIR__ . '/env.php';
+
 $isCli = (php_sapi_name() === 'cli');
-$hasValidToken = (($_GET['token'] ?? '') === 'Ideas_Diag_Secure_Token_2026_9e88d6c701fbc6b7') || defined('DIAG_TOKEN');
+$expectedDiagToken = (string)($_ENV['DIAG_TOKEN'] ?? $_ENV['MYERP_DIAG_TOKEN'] ?? getenv('DIAG_TOKEN') ?: '');
+$token = (string)($_GET['token'] ?? '');
+$hasValidToken = defined('DIAG_TOKEN') || ($expectedDiagToken !== '' && hash_equals($expectedDiagToken, $token));
 if (!$isCli && !$hasValidToken) {
     http_response_code(403);
     header("Content-Type: application/json; charset=UTF-8");
@@ -11,13 +15,15 @@ if (!$isCli && !$hasValidToken) {
     exit;
 }
 
-require_once __DIR__ . '/env.php';
-
-$host = $_ENV['DB_HOST'] ?? 'localhost';
-$user = $_ENV['DB_USER'] ?? 'vhvxoigh_mail_auto';
-$pass = $_ENV['DB_PASS'] ?? 'Ideas@812';
-$sourceDb = 'vhvxoigh_ideas_erp';
-$targetDb = $_ENV['DB_NAME'] ?? 'vhvxoigh_myerp';
+$host = $_ENV['DB_HOST'] ?? getenv('DB_HOST') ?: 'localhost';
+$user = $_ENV['DB_USER'] ?? getenv('DB_USER') ?: '';
+$pass = $_ENV['DB_PASS'] ?? getenv('DB_PASS') ?: '';
+$sourceDb = $_ENV['SOURCE_DB_NAME'] ?? 'vhvxoigh_ideas_erp';
+$targetDb = $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'vhvxoigh_myerp';
+if ($user === '' || $pass === '') {
+    fwrite(STDERR, "Missing DB_USER / DB_PASS environment configuration.\n");
+    exit(1);
+}
 
 echo "=== CLONING DATABASE: $sourceDb -> $targetDb ===\n";
 

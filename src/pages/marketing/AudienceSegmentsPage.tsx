@@ -32,6 +32,7 @@ import FilterPills from '../../components/marketing/components/audience/FilterPi
 import { Panel, Toolbar, SearchBox } from '../../components/marketing/components/audience/AudienceUi';
 import { useIsAdmin } from '../../components/marketing/hooks/useAuthUser';
 import { usePermissionGuard } from '../../components/marketing/components/common/PermissionGuard';
+import { ensureArray, extractArray } from '../../utils/safeArray';
 
 const SegmentBuilderModal = React.lazy(() => import('../../components/marketing/components/audience/SegmentBuilderModal'));
 const ListFormModal = React.lazy(() => import('../../components/marketing/components/audience/ListFormModal'));
@@ -68,12 +69,12 @@ const UndoToastContent = ({ t, icon: Icon, iconColorClass, title, subtitle, dura
                 <p className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate">{title}</p>
                 <div className="flex items-center gap-1 mt-0.5">
                     <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400">{subtitle}</p>
-                    <span className="text-[10px] font-black text-rose-500 tabular-nums">({timeLeft}s)</span>
+                    <span className="text-[10px] font-bold text-rose-500 tabular-nums">({timeLeft}s)</span>
                 </div>
             </div>
             <button
                 onClick={onUndo}
-                className="px-3 py-1.5 bg-slate-900 text-white text-[10px] font-black rounded-lg hover:bg-slate-800 transition-all uppercase tracking-widest shrink-0 shadow-sm"
+                className="px-3 py-1.5 bg-slate-900 text-white text-[10px] font-semibold rounded-lg hover:bg-slate-800 transition-colors duration-150 uppercase tracking-wider shrink-0 shadow-sm"
             >
                 Hoàn tác
             </button>
@@ -1227,7 +1228,7 @@ const Audience: React.FC = () => {
                     <UndoToastContent
                         t={t}
                         icon={Trash2}
-                        iconColorClass="bg-rose-100 text-rose-600 animate-pulse-subtle"
+                        iconColorClass="bg-rose-100 text-rose-600"
                         title={`Đã xóa ${countLabel} liên hệ`}
                         subtitle="Hệ thống sẽ thực hiện thao tác xóa danh tính khách hàng... "
                         durationMs={5000}
@@ -1236,7 +1237,7 @@ const Audience: React.FC = () => {
                             delete pendingActionsRef.current[actionId];
                             setSelectedIds(new Set(currentSelectedIds)); // Restore
                             toast.dismiss(t.id);
-                            toast.success('Đã hoàn tác xóa liên hệ', { icon: '↩️' });
+                            toast.success('Đã hoàn tác xóa liên hệ');
                         }}
                     />
                 ), { duration: 6000, position: 'bottom-center' });
@@ -2248,12 +2249,12 @@ const Audience: React.FC = () => {
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tên nhãn muốn gắn</label>
+                            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Tên nhãn muốn gắn</label>
                             <input
                                 placeholder="VD: KHACH_QUEN, VIP_2024..."
                                 value={bulkTagName}
                                 onChange={(e) => setBulkTagName(e.target.value)}
-                                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700/60 rounded-xl text-sm font-black text-slate-800 dark:text-slate-200 uppercase placeholder:text-slate-300 outline-none focus:bg-white dark:bg-slate-900 focus:border-emerald-500 transition-all"
+                                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700/60 rounded-xl text-sm font-bold text-slate-800 dark:text-slate-200 uppercase placeholder:text-slate-300 outline-none focus:bg-white dark:bg-slate-900 focus:border-emerald-500 transition-colors duration-150"
                                 autoFocus
                             />
                         </div>
@@ -2330,7 +2331,7 @@ const Audience: React.FC = () => {
 
             {isDateRangeModalOpen && createPortal(
                 <div className="fixed inset-0 z-[2147483646] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-[var(--color-surface)] rounded-[18px] border border-[var(--color-border)] w-full max-w-sm shadow-xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
+                    <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] w-full max-w-sm shadow-xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
                         <div className="flex items-center justify-between">
                             <h3 className="text-base font-bold text-[var(--color-text)]">Chọn khoảng thời gian</h3>
                             <button onClick={() => setIsDateRangeModalOpen(false)} className="p-1 hover:bg-[var(--color-bg)] rounded-full text-[var(--color-text-light)] hover:text-[var(--color-text)] transition-colors">
@@ -2377,7 +2378,7 @@ const Audience: React.FC = () => {
 
             {isBulkListModalOpen && createPortal(
                 <div className="fixed inset-0 z-[2147483646] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-[var(--color-surface)] rounded-[18px] w-full max-w-lg shadow-2xl p-6 space-y-6 animate-in zoom-in-95 duration-200 relative border border-[var(--color-border)]">
+                    <div className="bg-[var(--color-surface)] rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-6 animate-in zoom-in-95 duration-200 relative border border-[var(--color-border)]">
                         <button onClick={() => setIsBulkListModalOpen(false)} className="absolute top-5 right-5 p-2 hover:bg-[var(--color-bg)] rounded-lg text-[var(--color-text-light)] hover:text-[var(--color-text)] transition-all">
                             <X className="w-5 h-5" />
                         </button>
@@ -2457,10 +2458,10 @@ const Audience: React.FC = () => {
             {formProtectionModal.isOpen && createPortal(
                 <div className="fixed inset-0 z-[2147483646] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setFormProtectionModal(prev => ({ ...prev, isOpen: false }))} />
-                    <div className="relative bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[18px] shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+                    <div className="relative bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
                         <div className="flex items-start gap-4 mb-5">
                             <div className="w-11 h-11 bg-[var(--color-primary-light)] rounded-[var(--radius-md)] flex items-center justify-center shrink-0">
-                                <span className="text-xl">🔗</span>
+                                <FileText className="w-5 h-5 text-[var(--color-primary)]" />
                             </div>
                             <div>
                                 <h3 className="text-base font-bold text-[var(--color-text)]">Không thể xóa danh sách</h3>
@@ -2473,7 +2474,7 @@ const Audience: React.FC = () => {
                         <div className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[14px] p-4 mb-4">
                             <p className="text-xs font-semibold text-[var(--color-text-light)] mb-2.5">Form đang sử dụng danh sách này</p>
                             <div className="space-y-2">
-                                {formProtectionModal.linkedForms.map(form => (
+                                {ensureArray(formProtectionModal?.linkedForms).map(form => (
                                     <div key={form.id} className="flex items-center justify-between bg-[var(--color-surface)] rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2">
                                         <div className="flex items-center gap-2.5">
                                             <div className="w-7 h-7 bg-[var(--color-primary-light)] rounded-md flex items-center justify-center">
@@ -2497,7 +2498,7 @@ const Audience: React.FC = () => {
                         </div>
 
                         <div className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[14px] px-4 py-3 text-xs text-[var(--color-text-light)] mb-5 leading-relaxed">
-                            💡 Vào Form → Chỉnh sửa → Đổi <strong>"Danh sách nhận liên hệ"</strong> sang danh sách khác hoặc để trống, sau đó quay lại xóa danh sách này.
+                            <div className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-xl px-4 py-3 text-xs text-[var(--color-text-light)] mb-5 leading-relaxed flex items-start gap-2"><Lightbulb className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" /><span>Vào Form → Chỉnh sửa → Đổi <strong>"Danh sách nhận liên hệ"</strong> sang danh sách khác hoặc để trống, sau đó quay lại xóa danh sách này.</span></div>
                         </div>
 
                         <div className="flex gap-2 justify-end">

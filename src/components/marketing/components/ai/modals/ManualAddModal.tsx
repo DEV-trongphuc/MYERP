@@ -2,7 +2,7 @@ import React from 'react';
 import Modal from '../../common/Modal';
 import Button from '../../common/Button';
 import Input from '../../common/Input';
-import { Sparkles, Info } from 'lucide-react';
+import { Cpu, Info } from 'lucide-react';
 
 interface ManualAddModalProps {
     isOpen: boolean;
@@ -25,8 +25,8 @@ const ManualAddModal: React.FC<ManualAddModalProps> = ({ isOpen, onClose, onAdd,
                 <div className="flex justify-between w-full">
                     <Button variant="ghost" onClick={onClose}>Hủy</Button>
                     <Button
-                        className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold border-none shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 transition-all"
-                        icon={Sparkles}
+                        className="bg-[#BD1D2D] hover:bg-[#9A1523] text-white font-semibold border-none transition-colors"
+                        icon={Cpu}
                         onClick={onAdd}
                         disabled={(newDoc.content || '').length > 15000}
                         isLoading={loading}
@@ -50,11 +50,11 @@ const ManualAddModal: React.FC<ManualAddModalProps> = ({ isOpen, onClose, onAdd,
                 </div>
 
                 <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-800 uppercase tracking-widest ml-1">Lưu vào thư mục (Tùy chọn)</label>
+                    <label className="text-[10px] font-bold text-slate-800 uppercase tracking-widest ml-1">Lưu vào thư mục (Tùy chọn)</label>
                     <select
                         value={newDoc.batchName}
                         onChange={e => setNewDoc({ ...newDoc, batchName: e.target.value })}
-                        className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-emerald-500 transition-colors appearance-none cursor-pointer"
+                        className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:bg-white focus:border-[#BD1D2D] transition-colors appearance-none cursor-pointer"
                     >
                         <option value="">-- Lưu riêng lẻ (Không vào thư mục) --</option>
                         {groupedDocs.filter((d: any) => d.isGroup).map((f: any) => (
@@ -65,8 +65,8 @@ const ManualAddModal: React.FC<ManualAddModalProps> = ({ isOpen, onClose, onAdd,
 
                 <div className="space-y-1.5">
                     <div className="flex justify-between items-center ml-1">
-                        <label className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Nội dung chi tiết</label>
-                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        <label className="text-[10px] font-bold text-slate-800 uppercase tracking-widest">Nội dung chi tiết</label>
+                        <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 tabular-nums">
                             {(newDoc.content || '').length.toLocaleString()} / 15,000
                         </div>
                     </div>
@@ -76,19 +76,19 @@ const ManualAddModal: React.FC<ManualAddModalProps> = ({ isOpen, onClose, onAdd,
                             onChange={e => setNewDoc({ ...newDoc, content: e.target.value })}
                             rows={20}
                             placeholder="Dán hoặc soạn nội dung để AI ghi nhớ..."
-                            className={`w-full p-4 bg-slate-50 border-2 rounded-[14px] text-xs font-bold text-slate-700 outline-none focus:bg-white transition-all resize-none shadow-sm ${(newDoc.content || '').length > 15000 ? 'border-rose-400 focus:border-rose-500' : 'border-slate-200 focus:border-emerald-500'}`}
+                            className={`w-full p-4 bg-slate-50 border rounded-xl text-xs font-medium text-slate-700 outline-none focus:bg-white transition-colors resize-none ${(newDoc.content || '').length > 15000 ? 'border-rose-400 focus:border-rose-500' : 'border-slate-200 focus:border-[#BD1D2D]'}`}
                         />
-                        <div className="text-right text-[10px] text-slate-400 font-bold mt-1">{(newDoc.content || '').length.toLocaleString()}/15,000 ký tự</div>
+                        <div className="text-right text-[10px] text-slate-400 font-semibold tabular-nums mt-1">{(newDoc.content || '').length.toLocaleString()}/15,000 ký tự</div>
                         {(newDoc.content || '').length > 15000 && (
-                            <div className="absolute -bottom-5 left-2 text-[9px] font-bold text-rose-500 uppercase animate-pulse">
-                                Nội dung quá dài! Vui lòng chia nhỏ để đảm bảo AI đọc tốt nhất.
+                            <div className="mt-1.5 text-[11px] font-semibold text-rose-600">
+                                Nội dung vượt quá 15,000 ký tự. Vui lòng chia nhỏ để đảm bảo chất lượng xử lý.
                             </div>
                         )}
                     </div>
                 </div>
-                <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-[14px] flex gap-3">
-                    <Sparkles className="w-5 h-5 text-emerald-500 shrink-0" />
-                    <p className="text-[10px] text-emerald-700 font-medium leading-relaxed">Hệ thống sẽ tự động tách đoạn và tạo Vector Embedding để AI có thể tìm thấy dữ liệu này khi khách hỏi.</p>
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex gap-3">
+                    <Cpu className="w-5 h-5 text-slate-600 shrink-0" strokeWidth={1.75} />
+                    <p className="text-[11px] text-slate-600 font-medium leading-relaxed">Hệ thống sẽ tự động tách đoạn và tạo Vector Embedding để AI có thể tìm thấy dữ liệu này khi khách hỏi.</p>
                 </div>
             </div>
         </Modal>

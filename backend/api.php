@@ -208,7 +208,15 @@ if (!empty($httpOrigin)) {
 }
 header("Access-Control-Allow-Origin: " . $originToSet);
 
-$JWT_SECRET = defined('JWT_SECRET') ? JWT_SECRET : ($_ENV['JWT_SECRET'] ?? "MYERP_SECRET_KEY_2026_IDEAS");
+if (!defined('JWT_SECRET') && file_exists(__DIR__ . '/env.php')) {
+    require_once __DIR__ . '/env.php';
+}
+$JWT_SECRET = defined('JWT_SECRET') ? JWT_SECRET : (string)($_ENV['JWT_SECRET'] ?? (getenv('JWT_SECRET') ?: ''));
+if ($JWT_SECRET === '' && (!defined('MYERP_SKIP_DB_CONNECT') || !MYERP_SKIP_DB_CONNECT)) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Server configuration error: JWT_SECRET missing']);
+    exit;
+}
 
 function getSafeErrorMsg($e)
 {

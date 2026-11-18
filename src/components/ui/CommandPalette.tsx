@@ -1068,8 +1068,8 @@ export const CommandPalette: React.FC = () => {
         subtitle: 'Đổi chế độ màu Dark Mode / Light Mode toàn hệ thống',
         keywords: 'doi giao dien sang toi toggle theme dark light mode',
         badge: 'Cài đặt',
-        badgeColor: '#8b5cf6',
-        badgeBg: 'rgba(139, 92, 246, 0.12)',
+        badgeColor: '#334155',
+        badgeBg: 'rgba(15, 23, 42, 0.08)',
         iconName: 'Cài đặt hệ thống',
         visible: true,
         action: () => {
@@ -1078,7 +1078,7 @@ export const CommandPalette: React.FC = () => {
           const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
           document.documentElement.setAttribute('data-theme', nextTheme);
           localStorage.setItem('Ideas_theme', nextTheme);
-          toast.success(nextTheme === 'dark' ? '🌙 Đã kích hoạt chế độ Tối (Dark mode)' : '☀️ Đã kích hoạt chế độ Sáng (Light mode)');
+          toast.success(nextTheme === 'dark' ? 'Đã kích hoạt chế độ Tối (Dark mode)' : 'Đã kích hoạt chế độ Sáng (Light mode)');
         }
       },
       {
@@ -1087,8 +1087,8 @@ export const CommandPalette: React.FC = () => {
         subtitle: 'Xem toàn bộ danh mục phím tắt tăng tốc làm việc (Ctrl+S, ESC, J/K)',
         keywords: 'phim tat keyboard shortcuts tro giup huong dan',
         badge: 'Trợ giúp',
-        badgeColor: '#6366f1',
-        badgeBg: 'rgba(99, 102, 241, 0.12)',
+        badgeColor: '#BD1D2D',
+        badgeBg: 'rgba(189, 29, 45, 0.08)',
         iconName: 'Helpdesk',
         visible: true,
         action: () => {
@@ -1102,8 +1102,8 @@ export const CommandPalette: React.FC = () => {
         subtitle: 'Xem hàng đợi tiếp nhận và duyệt phân bổ lead mới',
         keywords: 'gatekeeper ai pre-screener kiem duyet phan phoi so tu dong',
         badge: 'Tác vụ',
-        badgeColor: '#ec4899',
-        badgeBg: 'rgba(236, 72, 153, 0.12)',
+        badgeColor: '#BD1D2D',
+        badgeBg: 'rgba(189, 29, 45, 0.08)',
         iconName: 'AI Pre-screener',
         visible: isGlobalAdmin || isMarketing,
         action: () => {
@@ -1371,7 +1371,7 @@ export const CommandPalette: React.FC = () => {
 
       if (item.group === 'actions') {
         gKey = 'actions';
-        gLabel = '⚡ Hành động nhanh (Quick Actions)';
+        gLabel = 'Hành động nhanh (Quick Actions)';
       } else if (item.group === 'contacts') {
         gKey = 'contacts';
         gLabel = 'Khách hàng & Học viên';
@@ -1447,8 +1447,8 @@ export const CommandPalette: React.FC = () => {
               width: '100%',
               maxWidth: '780px',
               background: 'var(--color-surface, #ffffff)',
-              borderRadius: '22px',
-              boxShadow: '0 30px 70px -15px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.14)',
+              borderRadius: '16px',
+              boxShadow: '0 24px 56px -12px rgba(15, 23, 42, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.12)',
               overflow: 'hidden',
               border: '1px solid var(--color-border)',
               display: 'flex',
@@ -1461,7 +1461,7 @@ export const CommandPalette: React.FC = () => {
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              padding: '1.125rem 1.35rem',
+              padding: '16px 20px',
               borderBottom: '1px solid var(--color-border-light)',
               background: 'var(--color-surface)',
               gap: '12px'
@@ -1478,7 +1478,7 @@ export const CommandPalette: React.FC = () => {
                 ref={inputRef}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder={search.startsWith('>') ? "⚡ Nhập tên tác vụ (Tạo chi phí, Đặt cọc, Lead, WorkChat...)" : "Tìm tính năng, SĐT, Khách hàng, #Task, #Đơn duyệt, hoặc > Tác vụ..."}
+                placeholder={search.startsWith('>') ? "Nhập tên tác vụ (Tạo chi phí, Đặt cọc, Lead, WorkChat...)" : "Tìm tính năng, SĐT, Khách hàng, #Task, #Đơn duyệt, hoặc > Tác vụ"}
                 style={{
                   flex: 1,
                   background: 'transparent',

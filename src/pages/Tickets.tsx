@@ -1199,7 +1199,7 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
             gap: 4,
             marginLeft: 8
           }}>
-            <Sparkles size={12} /> {t('Hiển thị toàn bộ ticket chờ duyệt')}
+            <Filter size={12} /> {t('Hiển thị toàn bộ ticket chờ duyệt')}
           </div>
         )}
 
@@ -1368,7 +1368,7 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
               width: '100%',
               justifyContent: 'center'
             }}>
-              <Sparkles size={12} /> {t('Hiển thị toàn bộ ticket chờ duyệt')}
+              <Filter size={12} /> {t('Hiển thị toàn bộ ticket chờ duyệt')}
             </div>
           )}
 
@@ -2511,7 +2511,7 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
                       {selectedLead.status === 'pending_work_hours' && <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 600, background: 'var(--color-warning-light)', color: 'var(--color-warning)' }}>{t("Chờ giờ làm")}</span>}
                       {selectedLead.status === 'error' && <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 600, background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>{t("Ticket")}</span>}
                       {selectedLead.status === 'pending' && <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 600, background: 'var(--color-warning-light)', color: 'var(--color-warning)' }}>{t("Chờ chia")}</span>}
-                      {selectedLead.status === 'reminder' && <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 600, background: theme === 'dark' ? 'rgba(219, 39, 119, 0.15)' : '#fce7f3', color: theme === 'dark' ? '#f472b6' : '#db2777' }}>{t("Nhắc lại")}</span>}
+                      {selectedLead.status === 'reminder' && <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 600, background: theme === 'dark' ? 'rgba(245, 158, 11, 0.16)' : '#fef3c7', color: theme === 'dark' ? '#fbbf24' : '#b45309' }}>{t("Nhắc lại")}</span>}
                       {selectedLead.status === 'duplicate' && <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 600, background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>{t("Trùng lặp")}</span>}
                       {selectedLead.status === 'rule_6_month' && <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 600, background: 'var(--color-border)', color: 'var(--color-text-muted)' }}>{t("Quy định 6 tháng")}</span>}
                       {selectedLead.status === 'silent' && <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 600, background: 'var(--color-border)', color: 'var(--color-text-muted)' }}>{t("Chỉ đồng bộ")}</span>}
@@ -4630,18 +4630,12 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
                       <div style={{ height: 180, width: '100%' }}>
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={statsData.by_date} margin={{ left: -10, right: 5, top: 20, bottom: 0 }}>
-                            <defs>
-                              <linearGradient id="statsDateGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#e63946" stopOpacity={1} />
-                                <stop offset="100%" stopColor="#a31422" stopOpacity={0.8} />
-                              </linearGradient>
-                            </defs>
                             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
-                            <XAxis dataKey="date" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                            <YAxis domain={[0, (max: number) => (max < 5 ? 5 : Math.ceil(max * 1.15))]} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
-                            <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8 }} />
-                            <Bar dataKey="count" fill="url(#statsDateGradient)" radius={[4, 4, 0, 0]} maxBarSize={30} name={t("Data thành công")}>
-                              <LabelList dataKey="count" position="top" style={{ fill: 'var(--color-text)', fontSize: 10, fontWeight: 700 }} offset={6} />
+                            <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
+                            <YAxis domain={[0, (max: number) => (max < 5 ? 5 : Math.ceil(max * 1.15))]} tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} width={34} />
+                            <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8, fontVariantNumeric: 'tabular-nums' }} />
+                            <Bar dataKey="count" fill="#C6333D" radius={[4, 4, 0, 0]} maxBarSize={30} name={t("Data thành công")}>
+                              <LabelList dataKey="count" position="top" style={{ fill: 'var(--color-text)', fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }} offset={6} />
                             </Bar>
                           </BarChart>
                         </ResponsiveContainer>
@@ -4660,9 +4654,9 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
                       <h4 style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--color-text)' }}>{t('Tỷ lệ Trạng thái Data')}</h4>
                       {(() => {
                         const statusChartData = [
-                          { name: t('Thành công'), value: statsData.summary.successful, color: '#a31422' },
+                          { name: t('Thành công'), value: statsData.summary.successful, color: '#C6333D' },
                           { name: t('Nhắc lại'), value: statsData.summary.reminder, color: '#f59e0b' },
-                          { name: t('Lỗi'), value: statsData.summary.error, color: '#ef4444' }
+                          { name: t('Lỗi'), value: statsData.summary.error, color: '#334155' }
                         ].filter(item => item.value > 0);
 
                         return statsData.summary.total > 0 && statusChartData.length > 0 ? (
@@ -4683,7 +4677,7 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
                                       <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
                                   </Pie>
-                                  <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8 }} />
+                                  <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8, fontVariantNumeric: 'tabular-nums' }} />
                                 </PieChart>
                               </ResponsiveContainer>
                             </div>
@@ -4691,7 +4685,7 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
                               {statusChartData.map((item, idx) => (
                                 <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: item.color }} />
-                                  <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
+                                  <span style={{ fontWeight: 600, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                                     {item.name}: <strong style={{ fontSize: '0.8125rem' }}>{item.value}</strong> ({Math.round(item.value / statsData.summary.total * 100)}%)
                                   </span>
                                 </div>
@@ -4714,12 +4708,12 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={statsData.rounds} layout="vertical" margin={{ left: -10, right: 10, top: 0, bottom: 0 }}>
                               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border-light)" />
-                              <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                              <YAxis dataKey="round_name" type="category" width={90} tick={{ fontSize: 9, fontWeight: 600 }} axisLine={false} tickLine={false} />
-                              <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8 }} />
-                              <Bar dataKey="successful_count" stackId="a" fill="#a31422" radius={[0, 0, 0, 0]} barSize={12} name={t("Thành công")} />
+                              <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
+                              <YAxis dataKey="round_name" type="category" width={92} tick={{ fontSize: 11, fontWeight: 600, fill: 'var(--color-text)' }} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8, fontVariantNumeric: 'tabular-nums' }} />
+                              <Bar dataKey="successful_count" stackId="a" fill="#C6333D" radius={[0, 0, 0, 0]} barSize={12} name={t("Thành công")} />
                               <Bar dataKey="reminder_count" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} barSize={12} name={t("Nhắc lại")} />
-                              <Bar dataKey="error_count" stackId="a" fill="#ef4444" radius={[0, 4, 4, 0]} barSize={12} name={t("Lỗi")} />
+                              <Bar dataKey="error_count" stackId="a" fill="#334155" radius={[0, 4, 4, 0]} barSize={12} name={t("Lỗi")} />
                             </BarChart>
                           </ResponsiveContainer>
                         </div>
@@ -4825,8 +4819,8 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '0.25rem' }}>
           {/* Section 1: Process Workflow */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <h4 style={{ fontSize: '0.9375rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Sparkles size={18} color="var(--color-primary)" />
+            <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <TicketIcon size={18} color="var(--color-primary)" />
               {t("1. Quy trình báo cáo & duyệt đền bù")}
             </h4>
             <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0 }}>

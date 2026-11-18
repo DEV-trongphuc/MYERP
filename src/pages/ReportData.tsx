@@ -222,7 +222,7 @@ export const ReportData = () => {
               {t("BÁO CÁO DATA")}{params.isTest ? ` ${t("(Thử nghiệm)")}` : ''}
             </span>
           </div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: 'white', letterSpacing: '-0.02em', margin: 0, textShadow: '0 2px 12px rgba(0,0,0,0.3)' }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'white', letterSpacing: '-0.02em', margin: 0 }}>
             {t("Báo cáo data không đạt chuẩn")}
           </h1>
           <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem', marginTop: 4 }}>
@@ -256,7 +256,7 @@ export const ReportData = () => {
                 <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg,#6ee7b7,#10b981)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem' }}>
                   <CheckCircle size={36} color="white" />
                 </div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-text)', marginBottom: 8 }}>{t("Gửi Báo Cáo Thành Công!")}</h3>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: 8 }}>{t("Gửi báo cáo thành công")}</h3>
                 <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', lineHeight: 1.7 }}>{t("Báo cáo đã được gửi tới Admin. Nếu hợp lệ, bạn sẽ nhận Data bù ưu tiên trong lượt tiếp theo.")}</p>
               </div>
             </div>
@@ -271,25 +271,25 @@ export const ReportData = () => {
                 {context && (
                   <>
                     {/* Customer avatar block */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px', background: theme === 'dark' ? 'rgba(59, 130, 246, 0.1)' : 'linear-gradient(135deg, #f8faff, #f0f4ff)', borderRadius: 14, border: theme === 'dark' ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid #ffe3e8' }}>
-                      <div style={{ width: 48, height: 48, borderRadius: '50%', background: getColor(context.lead_name), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: '1rem', flexShrink: 0, boxShadow: '0 4px 8px rgba(0,0,0,0.15)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px', background: 'var(--color-surface)', borderRadius: 12, border: '1px solid var(--color-border)' }}>
+                      <div style={{ width: 44, height: 44, borderRadius: '50%', background: getColor(context.lead_name), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.95rem', flexShrink: 0 }}>
                         {initials(context.lead_name)}
                       </div>
                       <div>
-                        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>{t("Khách hàng")}</div>
-                        <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-text)' }}>{context.lead_name}</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 700, color: theme === 'dark' ? '#fbbf24' : '#d97706', marginTop: 1 }}>{context.lead_phone}</div>
+                        <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>{t("Khách hàng")}</div>
+                        <div style={{ fontSize: '0.98rem', fontWeight: 700, color: 'var(--color-text)' }}>{context.lead_name}</div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#BD1D2D', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{context.lead_phone}</div>
                       </div>
                     </div>
 
                     {/* Sale avatar block */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: theme === 'dark' ? 'rgba(16, 185, 129, 0.1)' : 'linear-gradient(135deg, #f0fdf4, #dcfce7)', borderRadius: 14, border: theme === 'dark' ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid #bbf7d0' }}>
-                      <div style={{ width: 38, height: 38, borderRadius: '50%', background: getColor(context.consultant_name), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: '0.8rem', flexShrink: 0, boxShadow: '0 3px 6px rgba(0,0,0,0.12)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--color-surface)', borderRadius: 12, border: '1px solid var(--color-border)' }}>
+                      <div style={{ width: 38, height: 38, borderRadius: '50%', background: getColor(context.consultant_name), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.8rem', flexShrink: 0 }}>
                         {initials(context.consultant_name)}
                       </div>
                       <div>
-                        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: theme === 'dark' ? '#34d399' : '#86efac', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>{t("Saleperson phụ trách")}</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 700, color: theme === 'dark' ? '#34d399' : '#15803d' }}>{context.consultant_name}</div>
+                        <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>{t("Chuyên viên phụ trách")}</div>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{context.consultant_name}</div>
                       </div>
                     </div>
 
@@ -367,8 +367,8 @@ export const ReportData = () => {
                 {/* Already reported */}
                 {context?.existing_report === 'pending' && (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 12 }}>
-                    <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'linear-gradient(135deg,#fde68a,#f59e0b)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(245,158,11,0.3)' }}>
-                      <Shield size={26} color="white" />
+                    <div style={{ width: 52, height: 52, borderRadius: 12, background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Shield size={24} color="#d97706" />
                     </div>
                     <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Đã gửi báo cáo trước đó")}</h3>
                     <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{t("Báo cáo đang chờ Admin xét duyệt.")}</p>
@@ -377,10 +377,10 @@ export const ReportData = () => {
 
                 {context?.existing_report === 'approved' && (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 12 }}>
-                    <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'linear-gradient(135deg,#6ee7b7,#10b981)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <CheckCircle size={26} color="white" />
+                    <div style={{ width: 52, height: 52, borderRadius: 12, background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <CheckCircle size={24} color="#059669" />
                     </div>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Báo cáo đã được duyệt ✅")}</h3>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Báo cáo đã được duyệt")}</h3>
                     <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{t("Bạn sẽ được ưu tiên nhận Data bù trong lượt tiếp theo.")}</p>
                   </div>
                 )}
@@ -404,18 +404,17 @@ export const ReportData = () => {
                           alignItems: 'stretch',
                           gap: reason === r.reason ? 8 : 0,
                           padding: '12px 14px',
-                          border: '1.5px solid', borderColor: reason === r.reason ? '#BD1D2D' : 'transparent',
-                          background: reason === r.reason ? (theme === 'dark' ? 'rgba(163, 20, 34, 0.15)' : 'linear-gradient(135deg, rgba(189, 29, 45,0.08), rgba(163, 20, 34,0.12))') : 'var(--color-bg)',
-                          borderRadius: 12, cursor: 'pointer',
-                          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                          boxShadow: reason === r.reason ? '0 4px 12px rgba(189, 29, 45,0.15)' : '0 2px 4px rgba(0,0,0,0.02)',
+                          border: '1px solid', borderColor: reason === r.reason ? '#BD1D2D' : 'var(--color-border)',
+                          background: reason === r.reason ? 'rgba(189, 29, 45, 0.06)' : 'var(--color-bg)',
+                          borderRadius: 10, cursor: 'pointer',
+                          transition: 'all 0.2s cubic-bezier(0.22, 1, 0.36, 1)',
                           flexShrink: 0
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <input type="radio" name="reason" value={r.reason} checked={reason === r.reason}
                               onChange={() => setReason(r.reason)}
                               style={{ width: 16, height: 16, accentColor: '#BD1D2D', flexShrink: 0 }} />
-                            <span style={{ fontSize: '0.85rem', color: reason === r.reason ? (theme === 'dark' ? '#a78bfa' : '#5b21b6') : 'var(--color-text-light)', fontWeight: reason === r.reason ? 700 : 500 }}>{t(r.reason)}</span>
+                            <span style={{ fontSize: '0.85rem', color: reason === r.reason ? '#BD1D2D' : 'var(--color-text-light)', fontWeight: reason === r.reason ? 700 : 500 }}>{t(r.reason)}</span>
                           </div>
 
                           {reason === r.reason && r.note && (
@@ -447,13 +446,12 @@ export const ReportData = () => {
                     <button type="submit" disabled={submitting}
                       style={{
                         width: '100%', flexShrink: 0, marginTop: 'auto',
-                        background: params.isTest ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #a31422, #8a0f1b)',
-                        color: 'white', padding: '14px', borderRadius: 12, border: 'none',
-                        fontSize: '0.95rem', fontWeight: 700,
+                        background: params.isTest ? '#d97706' : '#BD1D2D',
+                        color: 'white', padding: '12px 16px', borderRadius: 10, border: 'none',
+                        fontSize: '0.9rem', fontWeight: 700,
                         cursor: submitting || params.isTest ? 'not-allowed' : 'pointer',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                        boxShadow: params.isTest ? '0 4px 16px rgba(245,158,11,0.3)' : '0 4px 16px rgba(138, 15, 27,0.4)',
-                        opacity: submitting ? 0.7 : 1, transition: 'all 0.2s'
+                        opacity: submitting ? 0.7 : 1, transition: 'all 0.2s cubic-bezier(0.22, 1, 0.36, 1)'
                       }}>
                       {submitting ? <><Loader2 size={17} className="spin" /> {t("Đang gửi...")}</>
                         : params.isTest ? t('Gửi bị tắt (Trang thử nghiệm)')
@@ -491,7 +489,7 @@ const ResponsiveStyle = () => (
     .report-wrapper {
       width: 100%;
       height: 100vh;
-      background: linear-gradient(135deg, #1e1246 0%, #2d1b69 40%, #0f172a 100%);
+      background: #0B0D14;
       display: flex;
       flex-direction: column;
       position: relative;

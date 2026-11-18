@@ -186,7 +186,7 @@ const FlowMinimap: React.FC<FlowMinimapProps> = ({ wrapperRef, containerRef, onP
 
     return (
         <div 
-            className="absolute bottom-6 right-6 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-2xl overflow-hidden backdrop-blur-md bg-white/80 dark:bg-slate-900/80 transition-all flex items-center justify-center"
+            className="absolute bottom-6 right-6 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg rounded-2xl overflow-hidden backdrop-blur-md bg-white/90 dark:bg-slate-900/90 transition-colors flex items-center justify-center"
             style={{ width: MINIMAP_MAX_WIDTH, height: MINIMAP_MAX_HEIGHT }}
             onMouseDown={(e) => {
                 if ((e.target as HTMLElement).className.includes('viewport-box')) return;

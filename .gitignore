@@ -37,11 +37,22 @@ backend/uploads/*
 # Environment & Secret files
 .env
 .env.*
+backend/.env
+backend/.env.*
 !.env.example
+!backend/.env.example
 *.pem
 *.key
 
 # Database backups
 backups/
 *.sql
+
+# Python, Locks & Local Agent/Guide Caches
+__pycache__/
+*.pyc
+.agents/
+guide_assets/
+backend/automation/_locks/
+*.lock
 

@@ -80,13 +80,6 @@ const MetaGrowthReport: React.FC<MetaReportProps> = ({ dateRange }) => {
         }
     };
 
-    const stats = [
-        { label: 'TỔNG CHAT', value: summary.total_chat || 0, icon: MessageSquare, color: 'text-indigo-600', bg: 'bg-indigo-600/10', iconBg: 'bg-indigo-500' },
-        { label: 'CÓ THÔNG TIN LEAD', value: summary.has_lead || 0, icon: Users, color: 'text-emerald-600', bg: 'bg-emerald-600/10', iconBg: 'bg-emerald-500' },
-        { label: 'CHƯA CÓ THÔNG TIN', value: summary.no_lead || 0, icon: MessageSquareDashed, color: 'text-slate-600', bg: 'bg-slate-600/10', iconBg: 'bg-slate-500' },
-        { label: 'KÍCH HOẠT AUTOMATION', value: summary.automation || 0, icon: Zap, color: 'text-[var(--color-primary)]', bg: 'bg-[var(--color-primary)]/10', iconBg: 'bg-[var(--color-primary)]' },
-    ];
-
     return (
         <div className="space-y-6 animate-in fade-in duration-300">
             {/* Filters Row */}
@@ -111,7 +104,7 @@ const MetaGrowthReport: React.FC<MetaReportProps> = ({ dateRange }) => {
                     />
                 </div>
 
-                <button onClick={fetchReport} className="h-9 px-3 bg-[var(--color-surface)] hover:bg-[var(--color-bg-subtle)] rounded-[var(--radius-md)] border border-[var(--color-border)] shadow-xs transition-all group ml-auto flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-muted)]">
+                <button onClick={fetchReport} className="h-9 px-3 bg-[var(--color-surface)] hover:bg-[var(--color-bg-subtle)] rounded-[var(--radius-md)] border border-[var(--color-border)] shadow-xs transition-colors group ml-auto flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-muted)]">
                     <RefreshCw className={`w-3.5 h-3.5 text-slate-400 group-hover:text-[var(--color-primary)] ${loading ? 'animate-spin' : ''}`} />
                     <span>Làm mới</span>
                 </button>
@@ -155,7 +148,7 @@ const MetaGrowthReport: React.FC<MetaReportProps> = ({ dateRange }) => {
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                <div className="bg-[var(--color-surface)] p-5 rounded-[18px] border border-[var(--color-border)] shadow-xs">
+                <div className="bg-[var(--color-surface)] p-5 rounded-2xl border border-[var(--color-border)] shadow-xs">
                     <div className="flex items-center justify-between mb-5">
                         <div>
                             <h3 className="text-sm font-bold text-[var(--color-text)]">Tăng trưởng & Quan tâm</h3>
@@ -172,25 +165,28 @@ const MetaGrowthReport: React.FC<MetaReportProps> = ({ dateRange }) => {
                             </div>
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                <AreaChart data={data} margin={{ top: 10, right: 10, left: -16, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="colorNew" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#C6333D" stopOpacity={0.18} />
+                                            <stop offset="5%" stopColor="#C6333D" stopOpacity={0.16} />
                                             <stop offset="95%" stopColor="#C6333D" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} />
-                                    <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid var(--color-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }} />
-                                    <Area type="monotone" dataKey="new_followers" name="Mới" stroke="#C6333D" strokeWidth={2.5} fill="url(#colorNew)" />
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} dy={8} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} />
+                                    <Tooltip
+                                        contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.06)', fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}
+                                        formatter={(value: any) => typeof value === 'number' ? value.toLocaleString('vi-VN') : value}
+                                    />
+                                    <Area type="monotone" dataKey="new_followers" name="Mới" stroke="#C6333D" strokeWidth={2.25} fill="url(#colorNew)" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         )}
                     </div>
                 </div>
 
-                <div className="bg-[var(--color-surface)] p-5 rounded-[18px] border border-[var(--color-border)] shadow-xs">
+                <div className="bg-[var(--color-surface)] p-5 rounded-2xl border border-[var(--color-border)] shadow-xs">
                     <div className="flex items-center justify-between mb-5">
                         <div>
                             <h3 className="text-sm font-bold text-[var(--color-text)]">Tương tác khách lạ</h3>
@@ -207,19 +203,23 @@ const MetaGrowthReport: React.FC<MetaReportProps> = ({ dateRange }) => {
                             </div>
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} />
-                                    <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid var(--color-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }} cursor={{ fill: 'rgba(0,0,0,0.02)' }} />
-                                    <Bar dataKey="non_follower_interactions" name="Tương tác" fill="#0f172a" radius={[4, 4, 0, 0]} barSize={24} />
+                                <BarChart data={data} margin={{ top: 10, right: 10, left: -16, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} dy={8} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} />
+                                    <Tooltip
+                                        contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.06)', fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}
+                                        cursor={{ fill: 'rgba(15, 23, 42, 0.03)' }}
+                                        formatter={(value: any) => typeof value === 'number' ? value.toLocaleString('vi-VN') : value}
+                                    />
+                                    <Bar dataKey="non_follower_interactions" name="Tương tác" fill="#334155" radius={[4, 4, 0, 0]} barSize={24} />
                                 </BarChart>
                             </ResponsiveContainer>
                         )}
                     </div>
                 </div>
 
-                <div className="lg:col-span-2 bg-[var(--color-surface)] p-5 rounded-[18px] border border-[var(--color-border)] shadow-xs">
+                <div className="lg:col-span-2 bg-[var(--color-surface)] p-5 rounded-2xl border border-[var(--color-border)] shadow-xs">
                     <div className="flex items-center justify-between mb-5">
                         <div>
                             <h3 className="text-sm font-bold text-[var(--color-text)]">Vận hành Automation</h3>
@@ -236,12 +236,15 @@ const MetaGrowthReport: React.FC<MetaReportProps> = ({ dateRange }) => {
                             </div>
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} />
-                                    <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid var(--color-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }} />
-                                    <Area type="monotone" dataKey="automation" name="Kích hoạt" stroke="#C6333D" strokeWidth={2.5} fillOpacity={0.08} fill="#C6333D" />
+                                <AreaChart data={data} margin={{ top: 10, right: 10, left: -16, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} dy={8} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} />
+                                    <Tooltip
+                                        contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.06)', fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}
+                                        formatter={(value: any) => typeof value === 'number' ? value.toLocaleString('vi-VN') : value}
+                                    />
+                                    <Area type="monotone" dataKey="automation" name="Kích hoạt" stroke="#C6333D" strokeWidth={2.25} fillOpacity={0.08} fill="#C6333D" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         )}

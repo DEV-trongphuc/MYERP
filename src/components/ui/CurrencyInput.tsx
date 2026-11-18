@@ -122,7 +122,7 @@ export const CurrencyInput: React.FC<CurrencyInputProps> = ({
           className={className}
           disabled={disabled}
           required={required}
-          style={{ width: '100%', fontWeight: 600, ...style }}
+          style={{ width: '100%', fontWeight: 600, fontVariantNumeric: 'tabular-nums', ...style }}
         />
       </div>
       {showTextHelper && rawNumericValue > 0 && (
@@ -131,7 +131,6 @@ export const CurrencyInput: React.FC<CurrencyInputProps> = ({
             fontSize: '0.75rem',
             color: 'var(--color-primary, #a31422)',
             fontWeight: 500,
-            fontStyle: 'italic',
             animation: 'fadeIn 0.2s ease'
           }}
         >

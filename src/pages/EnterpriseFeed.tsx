@@ -21,6 +21,7 @@ import { MentionInput } from '../components/ui/MentionInput';
 import { StickerPickerModal } from '../components/ui/StickerPickerModal';
 import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/AttachmentLightboxModal';
 import { useUIStore } from '../store/uiStore';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 // High-performance DOMPurify HTML sanitizer cache (avoids repeated synchronous parsing)
 const sanitizeCache = new Map<string, string>();
@@ -52,8 +53,8 @@ const REACTION_TYPES = [
   { type: 'like', label: 'Thích', emoji: '👍', color: '#3b82f6' },
   { type: 'love', label: 'Yêu thích', emoji: '❤️', color: '#ef4444' },
   { type: 'haha', label: 'Vui vẻ', emoji: '😂', color: '#f59e0b' },
-  { type: 'rocket', label: 'Đẩy tiến độ', emoji: '🚀', color: '#8b5cf6' },
-  { type: 'clap', label: 'Tuyệt vời', emoji: '👏', color: '#ec4899' },
+  { type: 'rocket', label: 'Đẩy tiến độ', emoji: '🚀', color: '#0284c7' },
+  { type: 'clap', label: 'Tuyệt vời', emoji: '👏', color: '#BD1D2D' },
   { type: 'flex', label: 'Đồng lòng', emoji: '💪', color: '#10b981' }
 ];
 
@@ -483,7 +484,7 @@ export const EnterpriseFeed: React.FC = () => {
   const fetchTeams = async () => {
     try {
       const res = await api.get('/teams');
-      setTeams(res.data.data || res.data || []);
+      setTeams(extractArray(res?.data));
     } catch (e) {
       console.error('Error fetching teams', e);
     }
@@ -2248,16 +2249,16 @@ export const EnterpriseFeed: React.FC = () => {
                 height: '32px',
                 borderRadius: '50%',
                 background: (excludedUserIds.length > 0 || (visibility === 'specific' && targetUserIds.length > 0))
-                  ? (excludedUserIds.length > 0 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(139, 92, 246, 0.12)')
+                  ? (excludedUserIds.length > 0 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(2, 132, 199, 0.1)')
                   : 'var(--color-bg)',
                 border: '1px solid ' + (
                   excludedUserIds.length > 0 
                     ? '#ef4444' 
-                    : (visibility === 'specific' && targetUserIds.length > 0 ? '#8b5cf6' : 'var(--color-border-light)')
+                    : (visibility === 'specific' && targetUserIds.length > 0 ? '#0284c7' : 'var(--color-border-light)')
                 ),
                 color: excludedUserIds.length > 0 
                   ? '#dc2626' 
-                  : (visibility === 'specific' && targetUserIds.length > 0 ? '#7c3aed' : 'var(--color-text-muted)'),
+                  : (visibility === 'specific' && targetUserIds.length > 0 ? '#0284c7' : 'var(--color-text-muted)'),
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
                 flexShrink: 0
@@ -2291,7 +2292,7 @@ export const EnterpriseFeed: React.FC = () => {
                   position: 'absolute',
                   top: '-3px',
                   right: '-3px',
-                  background: '#8b5cf6',
+                  background: '#0284c7',
                   color: '#ffffff',
                   fontSize: '0.62rem',
                   fontWeight: 700,
@@ -2416,7 +2417,7 @@ export const EnterpriseFeed: React.FC = () => {
                         <span>•</span>
                         {post.visibility === 'specific' ? (
                           <span 
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#7c3aed', fontWeight: 600 }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#0284c7', fontWeight: 600 }}
                             title={post.target_users && post.target_users.length > 0 ? post.target_users.map(u => u.full_name).join(', ') : t('Chỉ định người xem')}
                           >
                             <UserCheck size={11} /> {t('Chỉ định')} ({post.target_user_ids?.length || 0})
@@ -3650,16 +3651,16 @@ export const EnterpriseFeed: React.FC = () => {
                   height: '32px',
                   borderRadius: '50%',
                   background: (editExcludedUserIds.length > 0 || (editVisibility === 'specific' && editTargetUserIds.length > 0))
-                    ? (editExcludedUserIds.length > 0 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(139, 92, 246, 0.12)')
+                    ? (editExcludedUserIds.length > 0 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(2, 132, 199, 0.1)')
                     : 'var(--color-bg)',
                   border: '1px solid ' + (
                     editExcludedUserIds.length > 0 
                       ? '#ef4444' 
-                      : (editVisibility === 'specific' && editTargetUserIds.length > 0 ? '#8b5cf6' : 'var(--color-border-light)')
+                      : (editVisibility === 'specific' && editTargetUserIds.length > 0 ? '#0284c7' : 'var(--color-border-light)')
                   ),
                   color: editExcludedUserIds.length > 0 
                     ? '#dc2626' 
-                    : (editVisibility === 'specific' && editTargetUserIds.length > 0 ? '#7c3aed' : 'var(--color-text-muted)'),
+                    : (editVisibility === 'specific' && editTargetUserIds.length > 0 ? '#0284c7' : 'var(--color-text-muted)'),
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
                   flexShrink: 0
@@ -3693,7 +3694,7 @@ export const EnterpriseFeed: React.FC = () => {
                     position: 'absolute',
                     top: '-3px',
                     right: '-3px',
-                    background: '#8b5cf6',
+                    background: '#0284c7',
                     color: '#ffffff',
                     fontSize: '0.62rem',
                     fontWeight: 700,
@@ -3871,7 +3872,7 @@ export const EnterpriseFeed: React.FC = () => {
                 borderRadius: '8px',
                 border: 'none',
                 background: audienceModalMode === 'target' ? 'var(--color-surface)' : 'transparent',
-                color: audienceModalMode === 'target' ? '#7c3aed' : 'var(--color-text-muted)',
+                color: audienceModalMode === 'target' ? '#0284c7' : 'var(--color-text-muted)',
                 fontWeight: audienceModalMode === 'target' ? 700 : 500,
                 fontSize: '0.82rem',
                 cursor: 'pointer',
@@ -3887,7 +3888,7 @@ export const EnterpriseFeed: React.FC = () => {
               <span>{t('Chỉ định người xem')}</span>
               {(audienceModalContext === 'create' ? targetUserIds.length : editTargetUserIds.length) > 0 && (
                 <span style={{
-                  background: '#7c3aed',
+                  background: '#0284c7',
                   color: '#fff',
                   fontSize: '0.7rem',
                   padding: '1px 6px',
@@ -3980,7 +3981,7 @@ export const EnterpriseFeed: React.FC = () => {
 
           {/* Selection counter & Quick Select/Clear buttons */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
-            <span style={{ fontWeight: 600, color: currentAudienceSelectedIds.length > 0 ? (audienceModalMode === 'target' ? '#7c3aed' : '#dc2626') : 'var(--color-text-muted)' }}>
+            <span style={{ fontWeight: 600, color: currentAudienceSelectedIds.length > 0 ? (audienceModalMode === 'target' ? '#0284c7' : '#dc2626') : 'var(--color-text-muted)' }}>
               {t('Đã chọn')}: {currentAudienceSelectedIds.length} {t('nhân sự')}
             </span>
             <div style={{ display: 'flex', gap: '8px' }}>
@@ -4041,9 +4042,9 @@ export const EnterpriseFeed: React.FC = () => {
                     borderRadius: '16px',
                     fontSize: '0.75rem',
                     fontWeight: 500,
-                    background: audienceModalMode === 'target' ? 'rgba(139, 92, 246, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                    color: audienceModalMode === 'target' ? '#7c3aed' : '#dc2626',
-                    border: '1px solid ' + (audienceModalMode === 'target' ? 'rgba(139, 92, 246, 0.3)' : 'rgba(239, 68, 68, 0.3)')
+                    background: audienceModalMode === 'target' ? 'rgba(2, 132, 199, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                    color: audienceModalMode === 'target' ? '#0284c7' : '#dc2626',
+                    border: '1px solid ' + (audienceModalMode === 'target' ? 'rgba(2, 132, 199, 0.3)' : 'rgba(239, 68, 68, 0.3)')
                   }}
                 >
                   <Avatar src={s.avatar_url} name={s.full_name} size={16} />
@@ -4097,7 +4098,7 @@ export const EnterpriseFeed: React.FC = () => {
                       cursor: 'pointer',
                       borderBottom: '1px solid var(--color-border-light)',
                       background: isSelected 
-                        ? (audienceModalMode === 'target' ? 'rgba(139, 92, 246, 0.05)' : 'rgba(239, 68, 68, 0.05)') 
+                        ? (audienceModalMode === 'target' ? 'rgba(2, 132, 199, 0.06)' : 'rgba(239, 68, 68, 0.05)') 
                         : 'transparent',
                       transition: 'background 0.15s ease'
                     }}
@@ -4108,8 +4109,8 @@ export const EnterpriseFeed: React.FC = () => {
                         width: '18px',
                         height: '18px',
                         borderRadius: '4px',
-                        border: '2px solid ' + (isSelected ? (audienceModalMode === 'target' ? '#7c3aed' : '#dc2626') : 'var(--color-border)'),
-                        background: isSelected ? (audienceModalMode === 'target' ? '#7c3aed' : '#dc2626') : 'transparent',
+                        border: '2px solid ' + (isSelected ? (audienceModalMode === 'target' ? '#0284c7' : '#dc2626') : 'var(--color-border)'),
+                        background: isSelected ? (audienceModalMode === 'target' ? '#0284c7' : '#dc2626') : 'transparent',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -4159,7 +4160,7 @@ export const EnterpriseFeed: React.FC = () => {
                 padding: '8px 20px',
                 borderRadius: '8px',
                 border: 'none',
-                background: audienceModalMode === 'target' ? '#7c3aed' : '#dc2626',
+                background: audienceModalMode === 'target' ? '#0284c7' : '#dc2626',
                 color: '#fff',
                 fontSize: '0.85rem',
                 fontWeight: 700,

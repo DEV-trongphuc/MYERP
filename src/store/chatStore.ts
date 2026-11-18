@@ -17,6 +17,7 @@ import type {
 } from '../types/chat';
 import { type SpecializedAgent, SPECIALIZED_AGENTS, detectActiveAgent } from '../constants/aiAgents';
 import { useUIStore } from './uiStore';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 export const getClientCurrentContext = () => {
   try {
@@ -527,7 +528,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ loadingConversations: true });
     try {
       const res = await api.get('/chat/conversations');
-      const list: ChatConversation[] = res.data?.data || res.data || [];
+      const list: ChatConversation[] = extractArray(res?.data);
       const totalUnread = list.reduce((acc, c) => acc + (c.unread_count || 0), 0);
       set((state) => {
         const currentActiveId = state.activeConversationId;
@@ -1793,7 +1794,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   fetchStaffDirectory: async () => {
     try {
       const res = await api.get('/chat/staff');
-      const list: StaffDirectoryUser[] = res.data?.data || res.data || [];
+      const list: StaffDirectoryUser[] = extractArray(res?.data);
       const activeList = list.filter((s: any) => {
         if (s.is_active === false || s.is_active === 0 || String(s.is_active) === '0') return false;
         return true;
@@ -1902,7 +1903,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const res = await api.get('/chat/vault', {
         params: { conversation_id: requestedConvId, category: category === 'all' ? undefined : category }
       });
-      const items: ChatVaultItem[] = res.data?.data || res.data || [];
+      const items: ChatVaultItem[] = extractArray(res?.data);
       if (get().activeConversationId === requestedConvId) {
         set({ vaultItems: items, loadingVault: false });
       }

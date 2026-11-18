@@ -17,6 +17,7 @@ import { useAuthStore } from '../store/authStore';
 import { DistributionNavTabs } from '../components/DistributionNavTabs';
 import { Pagination } from '../components/ui/Pagination';
 import { canManageSystemSettings } from '../utils/roleUtils';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 const AVATAR_COLORS = [
   '#ef4444', '#f97316', '#f59e0b', '#10b981', '#0ea5e9',
@@ -242,7 +243,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
   const fetchAccounts = async () => {
     try {
       const json = await fetchAPI('get_accounts');
-      if (json.success) setAccounts(json.data || []);
+      if (json.success) setAccounts(extractArray(json));
     } catch (e: any) {
       console.error(t('Không thể tải tài khoản:'), e.message);
     }
@@ -251,7 +252,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
   const fetchProjects = async () => {
     try {
       const json = await fetchAPI('projects');
-      if (json.success) setProjects(json.data || []);
+      if (json.success) setProjects(extractArray(json));
     } catch (e: any) {
       console.error(t('Không thể tải chương trình:'), e.message);
     }
@@ -260,7 +261,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
   const fetchCampaigns = async () => {
     try {
       const json = await fetchAPI('campaigns');
-      if (json.success) setCampaigns(json.data || []);
+      if (json.success) setCampaigns(extractArray(json));
     } catch (e: any) {
       console.error(t('Không thể tải chiến dịch:'), e.message);
     }
@@ -346,7 +347,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
         body: JSON.stringify(payload)
       });
       if (res.success) {
-        toast.success(t('Đã cập nhật Bù Data!'));
+        toast.success(t('Đã cập nhật Bù Data'));
         fetchRounds();
         setCompModalOpen(false);
       } else {
@@ -460,7 +461,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
           compensations: newComps
         }));
         const projName = projects.find(p => p.id === projId)?.name || 'Chương trình';
-        toast.success(t(`Đã tự động nạp ${assignedUserIds.length} nhân sự từ Roster của ${projName}!`));
+        toast.success(t(`Đã tự động nạp ${assignedUserIds.length} nhân sự từ Roster của ${projName}`));
       } else {
         toast(t('Chương trình này chưa có nhân sự tư vấn nào trong Roster'), { icon: 'ℹ️' });
       }
@@ -515,7 +516,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
           data_per_turns: newTurns,
           compensations: newComps
         }));
-        toast.success(t(`Đã tự động nạp ${userIds.length} nhân sự từ Roster của Chiến dịch ${camp?.name || ''}!`));
+        toast.success(t(`Đã tự động nạp ${userIds.length} nhân sự từ Roster của Chiến dịch ${camp?.name || ''}`));
       } else {
         toast(t('Chiến dịch này chưa có nhân sự tư vấn nào trong Roster'), { icon: 'ℹ️' });
       }
@@ -536,7 +537,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
     try {
       const res = await fetchAPI(`get_active_compensation_logs&round_id=${roundId}`, { signal });
       if (signal.aborted) return;
-      if (res.success) setActiveLogs(res.data || []);
+      if (res.success) setActiveLogs(extractArray(res));
     } catch (e: any) {
       if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       console.error(e);
@@ -581,7 +582,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
         body: JSON.stringify({ id: reportId })
       });
       if (res.success) {
-        toast.success(action === 'approve' ? t('Đã duyệt đền bù Data!') : t('Đã từ chối báo cáo!'));
+        toast.success(action === 'approve' ? t('Đã duyệt đền bù Data') : t('Đã từ chối báo cáo'));
         fetchReports(editingRound.id);
         fetchRounds(); // Refresh to get updated compensations count
       } else {
@@ -626,7 +627,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
       });
 
       if (json.success) {
-        toast.success(editingRound ? t('Cập nhật thành công!') : t('Thêm mới thành công!'));
+        toast.success(editingRound ? t('Cập nhật thành công') : t('Thêm mới thành công'));
         fetchRounds();
         setModalOpen(false);
       } else {
@@ -657,7 +658,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
     try {
       const json = await fetchAPI(`delete_round&id=${deleteId}`);
       if (json.success) {
-        toast.success(t('Đã xóa thành công!'));
+        toast.success(t('Đã xóa thành công'));
         fetchRounds();
       } else {
         toast.error(json.message || t('Lỗi khi xóa'));
@@ -1123,7 +1124,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
                             )}
                           </div>
                         ) : (
-                          <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic', margin: 0 }}>{t("Chưa có")}</p>
+                          <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', margin: 0 }}>{t("Chưa có")}</p>
                         )}
                       </div>
 
@@ -1141,7 +1142,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
                         border: '1px solid var(--color-border-light)'
                       }}>
                         <span style={{ color: 'var(--color-text-muted)', fontWeight: 500 }}>{t("Tổng data:")}</span>
-                        <span style={{ color: 'var(--color-primary)', fontWeight: 800 }}>{r.total_leads || 0}</span>
+                        <span style={{ color: 'var(--color-primary)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{r.total_leads || 0}</span>
                       </div>
                     </div>
 
@@ -1373,7 +1374,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
                       marginLeft: 'auto'
                     }}>
                       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500 }}>{t("Tổng data:")}</span>
-                      <span style={{ color: 'var(--color-primary)', fontWeight: 800 }}>{r.total_leads || 0}</span>
+                      <span style={{ color: 'var(--color-primary)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{r.total_leads || 0}</span>
                     </div>
                   </div>
 
@@ -1481,15 +1482,15 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
             </div>
 
             {editingRound && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', background: 'var(--color-border-light)', borderRadius: '12px', padding: '4px', alignSelf: 'flex-start', margin: '0.75rem 1.25rem', width: 'fit-content', gap: '4px', maxWidth: 'calc(100% - 2.5rem)' }}>
-                <button type="button" onClick={() => setActiveTab('config')} style={{ padding: '8px 20px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 700, border: 'none', background: activeTab === 'config' ? 'var(--color-surface)' : 'transparent', color: activeTab === 'config' ? 'var(--color-primary)' : 'var(--color-text-light)', boxShadow: activeTab === 'config' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none', cursor: 'pointer', transition: 'all 0.2s' }}>{t("Cấu hình chung")}</button>
-                <button type="button" onClick={() => setActiveTab('reports')} style={{ padding: '8px 20px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 700, border: 'none', background: activeTab === 'reports' ? 'var(--color-surface)' : 'transparent', color: activeTab === 'reports' ? 'var(--color-primary)' : 'var(--color-text-light)', boxShadow: activeTab === 'reports' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', background: 'var(--color-border-light)', borderRadius: '10px', padding: '4px', alignSelf: 'flex-start', margin: '12px 20px', width: 'fit-content', gap: '4px', maxWidth: 'calc(100% - 40px)' }}>
+                <button type="button" onClick={() => setActiveTab('config')} style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 700, border: 'none', background: activeTab === 'config' ? 'var(--color-surface)' : 'transparent', color: activeTab === 'config' ? 'var(--color-primary)' : 'var(--color-text-light)', boxShadow: activeTab === 'config' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', cursor: 'pointer', transition: 'background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease' }}>{t("Cấu hình chung")}</button>
+                <button type="button" onClick={() => setActiveTab('reports')} style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 700, border: 'none', background: activeTab === 'reports' ? 'var(--color-surface)' : 'transparent', color: activeTab === 'reports' ? 'var(--color-primary)' : 'var(--color-text-light)', boxShadow: activeTab === 'reports' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', cursor: 'pointer', transition: 'background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease', display: 'flex', alignItems: 'center', gap: 6 }}>
                   {t("Data Lỗi & Đền Bù")}
                   {reports.filter(r => r.status === 'pending').length > 0 && (
-                    <span style={{ background: 'var(--color-danger)', color: 'white', fontSize: '0.7rem', padding: '2px 6px', borderRadius: 10 }}>{reports.filter(r => r.status === 'pending').length}</span>
+                    <span style={{ background: 'var(--color-danger)', color: 'white', fontSize: '0.7rem', padding: '2px 6px', borderRadius: 10, fontVariantNumeric: 'tabular-nums' }}>{reports.filter(r => r.status === 'pending').length}</span>
                   )}
                 </button>
-                <button type="button" onClick={() => setActiveTab('active_logs')} style={{ padding: '8px 20px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 700, border: 'none', background: activeTab === 'active_logs' ? 'var(--color-surface)' : 'transparent', color: activeTab === 'active_logs' ? 'var(--color-primary)' : 'var(--color-text-light)', boxShadow: activeTab === 'active_logs' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none', cursor: 'pointer', transition: 'all 0.2s' }}>
+                <button type="button" onClick={() => setActiveTab('active_logs')} style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 700, border: 'none', background: activeTab === 'active_logs' ? 'var(--color-surface)' : 'transparent', color: activeTab === 'active_logs' ? 'var(--color-primary)' : 'var(--color-text-light)', boxShadow: activeTab === 'active_logs' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', cursor: 'pointer', transition: 'background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease' }}>
                   {t("Log bù chủ động")}
                 </button>
               </div>
@@ -2099,17 +2100,16 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
                                 <button
                                   onClick={() => handleReportAction(r.id, 'approve')}
                                   disabled={isActioning === r.id}
-                                  className="btn primary sm hover-lift active-press"
+                                  className="btn primary sm active-press"
                                   style={{
-                                    background: 'linear-gradient(135deg, var(--color-success) 0%, oklch(75% 0.17 166) 100%)',
+                                    background: 'var(--color-success)',
                                     borderColor: 'transparent',
                                     padding: '8px 16px',
                                     fontSize: '0.8125rem',
-                                    fontWeight: 700,
+                                    fontWeight: 600,
                                     height: '36px',
                                     borderRadius: '8px',
                                     color: 'white',
-                                    boxShadow: '0 4px 10px rgba(16, 185, 129, 0.15)',
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: '4px'
@@ -2120,7 +2120,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
                                 <button
                                   onClick={() => handleReportAction(r.id, 'reject')}
                                   disabled={isActioning === r.id}
-                                  className="btn secondary sm hover-lift active-press"
+                                  className="btn secondary sm active-press"
                                   style={{
                                     color: 'var(--color-danger)',
                                     borderColor: 'var(--color-danger)',
@@ -2270,7 +2270,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
                                 gap: 4
                               }}>
                                 <span style={{ fontWeight: 600, color: 'var(--color-text-light)' }}>{t('Lý do:')}</span> 
-                                <span style={{ fontStyle: 'italic' }}>{translateReason(log.reason)}</span>
+                                <span>{translateReason(log.reason)}</span>
                               </div>
                             )}
                           </div>
@@ -2284,7 +2284,8 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
                             background: theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)',
                             padding: '4px 8px',
                             borderRadius: '8px',
-                            border: '1px solid var(--color-border-light)'
+                            border: '1px solid var(--color-border-light)',
+                            fontVariantNumeric: 'tabular-nums'
                           }}>
                             <Clock size={11} style={{ opacity: 0.7 }} />
                              <span>{new Date(log.created_at.replace(/-/g, '/')).toLocaleString('vi-VN')}</span>
@@ -2321,12 +2322,12 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
             {/* Modal Header */}
             <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-bg)' }}>
               <div>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Zap size={20} color="var(--color-primary)" /> {t("Quản lý Bù Data")}
                 </h2>
                 <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginTop: 4 }}>{t("Vòng:")} <strong>{compRound.round_name}</strong></div>
               </div>
-              <button onClick={() => setCompModalOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', padding: 8, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <button onClick={() => setCompModalOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', padding: 8, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background-color 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                 <X size={20} />
               </button>
             </div>
@@ -2342,7 +2343,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
                   const currentComp = compData[id] || 0;
                   
                   return (
-                    <div key={id} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '1rem', background: currentComp > 0 ? 'var(--color-warning-light)' : 'var(--color-bg)', border: `1px solid ${currentComp > 0 ? 'var(--color-warning)' : 'var(--color-border)'}`, borderRadius: 12, transition: 'all 0.2s' }}>
+                    <div key={id} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '1rem', background: currentComp > 0 ? 'var(--color-warning-light)' : 'var(--color-bg)', border: `1px solid ${currentComp > 0 ? 'var(--color-warning)' : 'var(--color-border)'}`, borderRadius: 12, transition: 'background-color 0.15s ease, border-color 0.15s ease' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                           <Avatar src={user.avatar} name={user.name} size={36} style={{ boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} />
@@ -2360,7 +2361,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
                           >
                             -
                           </button>
-                          <div style={{ width: 40, textAlign: 'center', fontSize: '1rem', fontWeight: 800, color: currentComp > 0 ? 'var(--color-danger)' : 'var(--color-text)' }}>
+                          <div style={{ width: 40, textAlign: 'center', fontSize: '1rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: currentComp > 0 ? 'var(--color-danger)' : 'var(--color-text)' }}>
                             {currentComp}
                           </div>
                           <button 
@@ -2546,14 +2547,14 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
                 alignItems: 'center', 
                 gap: 12, 
                 padding: '0.875rem', 
-                background: theme === 'dark' ? 'rgba(236, 72, 153, 0.04)' : 'rgba(236, 72, 153, 0.02)', 
-                borderLeft: '4px solid #ec4899', 
+                background: theme === 'dark' ? 'rgba(51, 65, 85, 0.08)' : 'rgba(15, 23, 42, 0.03)', 
+                borderLeft: '4px solid #334155', 
                 borderTop: '1px solid var(--color-border-light)',
                 borderRight: '1px solid var(--color-border-light)',
                 borderBottom: '1px solid var(--color-border-light)',
                 borderRadius: '0 8px 8px 0' 
               }}>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(236, 72, 153, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#ec4899' }}>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(15, 23, 42, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#334155' }}>
                   <Clock size={16} />
                 </div>
                 <div style={{ flex: 1 }}>
@@ -2724,7 +2725,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
 
           {/* Section 3: Double assignment */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <h4 style={{ fontSize: '0.9375rem', fontWeight: 800, margin: '0 0 0.25rem 0', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, margin: '0 0 0.25rem 0', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Scale size={18} color="#10b981" />
               {t("3. Vì sao Sale nhận được 2 lead liên tiếp?")}
             </h4>
@@ -2753,7 +2754,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
                   alignItems: 'center', 
                   justifyContent: 'center', 
                   fontSize: '0.7rem', 
-                  fontWeight: 800,
+                  fontWeight: 700,
                   flexShrink: 0,
                   marginTop: 2
                 }}>1</div>
@@ -2778,7 +2779,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
                   alignItems: 'center', 
                   justifyContent: 'center', 
                   fontSize: '0.7rem', 
-                  fontWeight: 800,
+                  fontWeight: 700,
                   flexShrink: 0,
                   marginTop: 2
                 }}>2</div>
@@ -2791,7 +2792,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
               </div>
             </div>
             
-            <p style={{ fontSize: '0.725rem', fontStyle: 'italic', color: 'var(--color-text-muted)', margin: '4px 0 0 0', display: 'flex', gap: 4, alignItems: 'center' }}>
+            <p style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', margin: '4px 0 0 0', display: 'flex', gap: 4, alignItems: 'center' }}>
               <AlertCircle size={12} style={{ flexShrink: 0 }} />
               {t("Lưu ý: Cơ chế bù xen kẽ chỉ chặn \"bù liên tiếp\", không chặn lượt xoay vòng tự nhiên khi vòng xoay đến hàng của Sale.")}
             </p>

@@ -55,35 +55,37 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     return (
         <div
             className={cn(
-                'w-full flex flex-col items-center justify-center text-center py-14 px-6',
+                'w-full flex flex-col items-center justify-center text-center py-12 px-6 rounded-[16px] border border-[var(--color-border)] bg-[var(--color-surface)]',
                 stripLegacyClasses(className),
             )}
         >
             {Icon && (
-                <Icon
-                    className="w-10 h-10 mb-3 text-[var(--color-text-muted)] opacity-60 shrink-0"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                />
+                <div className="w-12 h-12 mb-4 rounded-[10px] border border-[var(--color-border)] bg-[var(--color-bg)] flex items-center justify-center">
+                    <Icon
+                        className="w-5 h-5 text-[var(--color-text-muted)] shrink-0"
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                    />
+                </div>
             )}
 
-            <h3 className="text-sm font-semibold text-[var(--color-text)] text-center">
+            <h3 className="text-[15px] font-semibold text-[var(--color-text)] text-center">
                 {title}
             </h3>
 
             {description && (
-                <p className="text-xs text-[var(--color-text-muted)] max-w-md text-center mx-auto mt-1 leading-relaxed break-words">
+                <p className="text-[13px] text-[var(--color-text-muted)] max-w-md text-center mx-auto mt-1.5 leading-relaxed break-words">
                     {description}
                 </p>
             )}
 
             {( (resolvedLabel && resolvedOnClick) || secondaryAction || (action && !isActionObject) ) && (
-                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
                     {resolvedLabel && resolvedOnClick && (
                         <button
                             type="button"
                             onClick={resolvedOnClick}
-                            className="bg-[var(--color-primary)] text-white hover:brightness-95 h-9 px-4 rounded-[var(--radius-md)] inline-flex items-center justify-center gap-2 text-sm font-semibold shadow-[var(--shadow-xs)] transition-all cursor-pointer"
+                            className="bg-[var(--color-primary)] text-white hover:brightness-95 h-9 px-4 rounded-[8px] inline-flex items-center justify-center gap-2 text-[13px] font-semibold transition-[filter,transform] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.98] cursor-pointer"
                         >
                             {ResolvedBtnIcon && <ResolvedBtnIcon className="w-4 h-4 shrink-0" />}
                             <span>{resolvedLabel}</span>
@@ -94,7 +96,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
                         <button
                             type="button"
                             onClick={secondaryAction.onClick}
-                            className="bg-[var(--color-surface)] text-[var(--color-text)] border border-[var(--color-border)] hover:bg-[var(--color-bg)] h-9 px-4 rounded-[var(--radius-md)] inline-flex items-center justify-center gap-2 text-sm font-semibold transition-all cursor-pointer"
+                            className="bg-[var(--color-surface)] text-[var(--color-text)] border border-[var(--color-border)] hover:bg-[var(--color-bg)] h-9 px-4 rounded-[8px] inline-flex items-center justify-center gap-2 text-[13px] font-medium transition-colors duration-150 cursor-pointer"
                         >
                             <span>{secondaryAction.label}</span>
                         </button>

@@ -41,7 +41,7 @@ const FlowSummaryModal: React.FC<FlowSummaryModalProps> = ({ isOpen, onClose, fl
         const iconBorder = isHighlight || isError ? '#fecdd3' : '#e2e8f0';
 
         return (
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-[16px] border border-slate-200 shadow-[0_1px_3px_rgba(15,23,42,0.04)] flex flex-col justify-between group hover:shadow-md transition-all duration-200 relative overflow-hidden min-h-[140px] cursor-pointer">
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 shadow-[0_1px_3px_rgba(15,23,42,0.04)] flex flex-col justify-between group hover:shadow-md transition-shadow duration-200 relative overflow-hidden min-h-[140px] cursor-pointer">
                 <div className="relative z-10 flex flex-col justify-between h-full w-full">
                     <div>
                         <div className="flex justify-between items-center mb-3">
@@ -55,12 +55,12 @@ const FlowSummaryModal: React.FC<FlowSummaryModalProps> = ({ isOpen, onClose, fl
                                 <Icon className="w-4 h-4" />
                             </div>
                         </div>
-                        <h4 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight leading-none mb-2 tabular-nums">
+                        <h4 className="text-2xl font-bold text-slate-900 dark:text-slate-100 leading-none mb-2 tabular-nums">
                             {value.toLocaleString()}
                         </h4>
                     </div>
                     {subValue && (
-                        <div className="mt-1 text-xs font-semibold text-slate-500">
+                        <div className="mt-1 text-xs font-semibold text-slate-500 tabular-nums">
                             {subValue}
                         </div>
                     )}
@@ -76,11 +76,11 @@ const FlowSummaryModal: React.FC<FlowSummaryModalProps> = ({ isOpen, onClose, fl
             size="2xl"
             title={
                 <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-slate-900 rounded-[14px] flex items-center justify-center text-white shadow-xl">
+                    <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-md">
                         <BarChart3 className="w-6 h-6" />
                     </div>
                     <div>
-                        <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">
+                        <h2 className="text-xl font-bold text-slate-900 uppercase">
                             Tổng quan hiệu suất
                         </h2>
                         <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">{flow.name}</p>
@@ -89,12 +89,12 @@ const FlowSummaryModal: React.FC<FlowSummaryModalProps> = ({ isOpen, onClose, fl
             }
             footer={
                 <div className="flex justify-between items-center w-full">
-                    <p className="text-[11px] font-bold text-slate-400 italic">
+                    <p className="text-[11px] font-medium text-slate-500">
                         Dữ liệu được cập nhật theo Thời gian thực từ hệ thống Tracking.
                     </p>
                     <button
                         onClick={onClose}
-                        className="px-6 py-2.5 bg-slate-900 text-white rounded-[var(--radius-md)] text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg"
+                        className="px-6 py-2.5 bg-slate-900 text-white rounded-[var(--radius-md)] text-xs font-bold uppercase tracking-widest hover:bg-slate-800 transition-colors shadow-sm"
                     >
                         Đóng Báo cáo
                     </button>
@@ -103,30 +103,28 @@ const FlowSummaryModal: React.FC<FlowSummaryModalProps> = ({ isOpen, onClose, fl
         >
             <div className="space-y-8">
                 {/* Main Performance Section */}
-                <div className="bg-[#0f172a] rounded-xl p-8 text-white relative overflow-hidden ring-1 ring-white/10 shadow-2xl">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
-
+                <div className="bg-[#0f172a] rounded-xl p-8 text-white relative overflow-hidden ring-1 ring-white/10 shadow-xl">
                     <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-10">
                         <div className="w-full md:w-1/2 space-y-6">
                             <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-[14px] flex items-center justify-center shadow-lg text-white" style={{ backgroundColor: completionColor, boxShadow: `0 10px 15px -3px ${completionColor}33` }}>
+                                <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-sm text-white" style={{ backgroundColor: completionColor }}>
                                     <Activity className="w-6 h-6" />
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                                         Tỷ lệ hoàn tất
                                     </p>
-                                    <h3 className="text-3xl font-black tracking-tight">{completionRate}%</h3>
+                                    <h3 className="text-3xl font-bold tabular-nums">{completionRate}%</h3>
                                 </div>
                             </div>
                             <div className="space-y-2">
                                 <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
                                     <div
-                                        className="h-full transition-all duration-1000 rounded-full"
+                                        className="h-full transition-[width] duration-700 rounded-full"
                                         style={{ width: `${Math.min(100, Math.max(0, completionPct))}%`, backgroundColor: completionColor }}
                                     ></div>
                                 </div>
-                                <p className="text-[10px] text-slate-500 font-bold">
+                                <p className="text-[10px] text-slate-400 font-bold tabular-nums">
                                     {completed.toLocaleString()} / {enrolled.toLocaleString()} Khách hàng Hoàn thành
                                 </p>
                             </div>
@@ -134,22 +132,22 @@ const FlowSummaryModal: React.FC<FlowSummaryModalProps> = ({ isOpen, onClose, fl
 
                         <div className="w-px h-24 bg-white/10 hidden md:block"></div>
 
-                        <div className="w-full md:w-1/2 flex justify-around">
+                        <div className="w-full md:w-1/2 flex justify-around tabular-nums">
                             <div className="text-center">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                                     Unique Open
                                 </p>
-                                <p className="text-3xl font-black text-emerald-400">{openRate}%</p>
-                                <p className="text-[10px] text-slate-500 font-bold mt-1">Trung bình</p>
+                                <p className="text-3xl font-bold text-emerald-400">{openRate}%</p>
+                                <p className="text-[10px] text-slate-400 font-bold mt-1">Trung bình</p>
                             </div>
                             <div className="text-center">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                                     CTR
                                 </p>
-                                <p className="text-3xl font-black text-orange-400">
+                                <p className="text-3xl font-bold text-orange-400">
                                     {totalSent > 0 ? Math.round((combinedClicked / totalSent) * 100) : 0}%
                                 </p>
-                                <p className="text-[10px] text-slate-500 font-bold mt-1">Average</p>
+                                <p className="text-[10px] text-slate-400 font-bold mt-1">Average</p>
                             </div>
                         </div>
                     </div>
@@ -161,68 +159,68 @@ const FlowSummaryModal: React.FC<FlowSummaryModalProps> = ({ isOpen, onClose, fl
                         label="Khách tham gia"
                         value={enrolled}
                         icon={Users}
-                        color="from-blue-500 to-indigo-600 shadow-blue-500/20"
+                        color="bg-blue-600"
                         subValue="Enrolled"
                     />
                     <StatCard
                         label="Hoàn tất"
                         value={completed}
                         icon={CheckCircle2}
-                        color="from-emerald-500 to-teal-600 shadow-emerald-500/20"
+                        color="bg-emerald-600"
                         subValue={`${completionRate}%`}
                     />
                     <StatCard
                         label="Lượt gửi"
                         value={totalSent}
                         icon={Mail}
-                        color="from-indigo-500 to-blue-600 shadow-indigo-500/20"
+                        color="bg-[#0F172A]"
                         subValue="Total Sent"
                     />
                     <StatCard
                         label="Lượt mở"
                         value={totalOpened}
                         icon={MailOpen}
-                        color="from-cyan-500 to-blue-600 shadow-cyan-500/20"
+                        color="bg-cyan-600"
                         subValue={`${openRate}% Open`}
                     />
                     <StatCard
                         label="Lượt Click"
                         value={combinedClicked}
                         icon={MousePointerClick}
-                        color="from-orange-500 to-red-600 shadow-orange-500/20"
+                        color="bg-[#BD1D2D]"
                     />
                     <StatCard
                         label="Unique Clicks"
                         value={combinedUniqueClicked}
                         icon={TrendingUp}
-                        color="from-amber-400 to-orange-500 shadow-amber-600/20"
+                        color="bg-amber-600"
                     />
                     <StatCard
                         label="Gửi lỗi"
                         value={stats.totalFailed || 0}
                         icon={AlertOctagon}
-                        color="from-rose-500 to-red-600 shadow-rose-500/20"
+                        color="bg-rose-600"
                     />
                     <StatCard
                         label="Hủy đăng ký"
                         value={stats.totalUnsubscribed || 0}
                         icon={UserMinus}
-                        color="from-slate-600 to-slate-800 shadow-slate-600/20"
+                        color="bg-slate-700"
                     />
                 </div>
 
                 {/* Per-Channel Breakdown */}
                 {stats.zaloSent || stats.znsSent || stats.metaSent ? (
-                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">
                             Phân tích theo kênh
                         </p>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="text-center p-4 rounded-[14px] bg-indigo-50 border border-indigo-100">
-                                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 tabular-nums">
+                            <div className="text-center p-4 rounded-xl bg-slate-50 border border-slate-200">
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                                     Email
                                 </p>
-                                <p className="text-2xl font-black text-indigo-700">
+                                <p className="text-2xl font-bold text-slate-800">
                                     {Math.max(
                                         0,
                                         totalSent -
@@ -233,43 +231,43 @@ const FlowSummaryModal: React.FC<FlowSummaryModalProps> = ({ isOpen, onClose, fl
                                 </p>
                             </div>
                             {stats.zaloSent ? (
-                                <div className="text-center p-4 rounded-[14px] bg-teal-50 border border-teal-100">
-                                    <p className="text-[10px] font-bold text-teal-400 uppercase tracking-wider mb-1">
+                                <div className="text-center p-4 rounded-xl bg-teal-50 border border-teal-200">
+                                    <p className="text-[10px] font-bold text-teal-600 uppercase tracking-wider mb-1">
                                         Zalo CS
                                     </p>
-                                    <p className="text-2xl font-black text-teal-700">
+                                    <p className="text-2xl font-bold text-teal-700">
                                         {stats.zaloSent.toLocaleString()}
                                     </p>
                                 </div>
                             ) : null}
                             {stats.znsSent ? (
-                                <div className="text-center p-4 rounded-[14px] bg-blue-50 border border-blue-100">
-                                    <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">
+                                <div className="text-center p-4 rounded-xl bg-blue-50 border border-blue-200">
+                                    <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1">
                                         Zalo ZNS
                                     </p>
-                                    <p className="text-2xl font-black text-blue-700">
+                                    <p className="text-2xl font-bold text-blue-700">
                                         {stats.znsSent.toLocaleString()}
                                     </p>
-                                    <p className="text-[10px] text-blue-400 font-bold mt-1">Lượt gửi</p>
+                                    <p className="text-[10px] text-blue-500 font-bold mt-1">Lượt gửi</p>
                                 </div>
                             ) : null}
                             {(stats.totalZaloClicked || 0) > 0 ? (
-                                <div className="text-center p-4 rounded-[14px] bg-cyan-50 border border-cyan-100">
-                                    <p className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider mb-1">
+                                <div className="text-center p-4 rounded-xl bg-cyan-50 border border-cyan-200">
+                                    <p className="text-[10px] font-bold text-cyan-600 uppercase tracking-wider mb-1">
                                         ZNS Clicks
                                     </p>
-                                    <p className="text-2xl font-black text-cyan-700">
+                                    <p className="text-2xl font-bold text-cyan-700">
                                         {(stats.totalZaloClicked || 0).toLocaleString()}
                                     </p>
-                                    <p className="text-[10px] text-cyan-400 font-bold mt-1">Lượt Click Link</p>
+                                    <p className="text-[10px] text-cyan-500 font-bold mt-1">Lượt Click Link</p>
                                 </div>
                             ) : null}
                             {stats.metaSent ? (
-                                <div className="text-center p-4 rounded-[14px] bg-sky-50 border border-sky-100">
-                                    <p className="text-[10px] font-bold text-sky-400 uppercase tracking-wider mb-1">
+                                <div className="text-center p-4 rounded-xl bg-sky-50 border border-sky-200">
+                                    <p className="text-[10px] font-bold text-sky-600 uppercase tracking-wider mb-1">
                                         Meta
                                     </p>
-                                    <p className="text-2xl font-black text-sky-700">
+                                    <p className="text-2xl font-bold text-sky-700">
                                         {stats.metaSent.toLocaleString()}
                                     </p>
                                 </div>

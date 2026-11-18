@@ -87,12 +87,12 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
             overflow: 'hidden'
           }}
         >
-          {/* Header Banner: Clean Monochromatic IDEAS Red Theme */}
+          {/* Header Banner: Clean MYERP Red & Slate Theme */}
           <div style={{
             position: 'relative',
             padding: '20px 24px',
-            background: `linear-gradient(135deg, ${THEME_BG_LIGHT} 0%, #ffffff 100%)`,
-            borderBottom: '1px solid #f1f5f9',
+            background: '#FFFFFF',
+            borderBottom: '1px solid #E2E8F0',
             display: 'flex',
             alignItems: 'flex-start',
             gap: '16px'
@@ -102,14 +102,13 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
               position: 'relative',
               width: 68,
               height: 68,
-              borderRadius: '18px',
-              background: '#ffffff',
-              border: `2px solid ${THEME_ACCENT}`,
-              boxShadow: `0 8px 18px -4px rgba(189, 29, 45, 0.25)`,
+              borderRadius: '14px',
+              background: THEME_BG_LIGHT,
+              border: `1.5px solid ${THEME_ACCENT}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '6px',
+              padding: '8px',
               flexShrink: 0
             }}>
               <img
@@ -134,44 +133,44 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
                 <span style={{
                   fontSize: '0.7rem',
-                  fontWeight: 800,
+                  fontWeight: 700,
                   textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
+                  letterSpacing: '0.04em',
                   padding: '2px 8px',
                   borderRadius: '6px',
                   background: THEME_BG_LIGHT,
                   color: THEME_ACCENT,
-                  border: 'none'
+                  border: `1px solid ${THEME_BORDER_LIGHT}`
                 }}>
                   {currentAgent.badge}
                 </span>
                 <span style={{
-                  fontSize: '0.68rem',
-                  color: '#64748b',
-                  fontWeight: 650,
+                  fontSize: '0.7rem',
+                  color: '#64748B',
+                  fontWeight: 600,
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '4px'
                 }}>
-                  <Cpu size={12} color={THEME_ACCENT} />
+                  <Cpu size={12} color={THEME_ACCENT} strokeWidth={1.75} />
                   SI Swarm Agent
                 </span>
               </div>
 
               <h2 style={{
                 fontSize: '1.24rem',
-                fontWeight: 800,
-                color: '#0f172a',
+                fontWeight: 700,
+                color: '#0F172A',
                 margin: 0,
-                lineHeight: 1.2
+                lineHeight: 1.25
               }}>
                 {currentAgent.name}
               </h2>
               <p style={{
                 fontSize: '0.82rem',
-                fontWeight: 650,
+                fontWeight: 600,
                 color: THEME_ACCENT,
-                margin: '3px 0 0 0'
+                margin: '4px 0 0 0'
               }}>
                 {currentAgent.roleTitle}
               </p>
@@ -181,28 +180,28 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
             <button
               onClick={onClose}
               style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                color: '#64748b',
-                borderRadius: '10px',
-                padding: '7px',
+                background: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                color: '#64748B',
+                borderRadius: '8px',
+                padding: '8px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                transition: 'all 0.15s ease'
+                transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = THEME_BG_LIGHT;
                 e.currentTarget.style.color = THEME_ACCENT;
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#f8fafc';
-                e.currentTarget.style.color = '#64748b';
+                e.currentTarget.style.backgroundColor = '#F8FAFC';
+                e.currentTarget.style.color = '#64748B';
               }}
               title="Đóng modal"
             >
-              <X size={18} />
+              <X size={18} strokeWidth={1.75} />
             </button>
           </div>
 
@@ -219,20 +218,20 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {/* Nhiệm vụ chuyên trách */}
               <div style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
+                background: '#F8FAFC',
+                border: '1px solid #E2E8F0',
                 borderRadius: '12px',
-                padding: '14px 16px',
+                padding: '16px',
                 fontSize: '0.86rem',
                 color: '#334155',
                 lineHeight: 1.55,
                 display: 'flex',
                 alignItems: 'flex-start',
-                gap: '10px'
+                gap: '12px'
               }}>
-                <Info size={18} color={THEME_ACCENT} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <Info size={18} color={THEME_ACCENT} strokeWidth={1.75} style={{ flexShrink: 0, marginTop: '2px' }} />
                 <div>
-                  <strong style={{ color: '#0f172a' }}>Nhiệm vụ chuyên trách: </strong>
+                  <strong style={{ color: '#0F172A' }}>Nhiệm vụ chuyên trách: </strong>
                   {currentAgent.description}
                 </div>
               </div>
@@ -244,11 +243,11 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                   alignItems: 'center',
                   gap: '8px',
                   fontSize: '0.86rem',
-                  fontWeight: 800,
-                  color: '#0f172a',
-                  marginBottom: '10px'
+                  fontWeight: 700,
+                  color: '#0F172A',
+                  marginBottom: '12px'
                 }}>
-                  <ShieldCheck size={18} color={THEME_ACCENT} />
+                  <ShieldCheck size={18} color={THEME_ACCENT} strokeWidth={1.75} />
                   <span>Quyền Hạn & Thẩm Quyền Can Thiệp (Phân quyền bảo mật)</span>
                 </div>
                 
@@ -256,21 +255,21 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '8px',
-                  background: '#fafbfc',
-                  border: '1px solid #f1f5f9',
+                  background: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
                   borderRadius: '12px',
-                  padding: '14px 16px'
+                  padding: '16px'
                 }}>
                   {currentAgent.permissions.map((perm, idx) => (
                     <div key={idx} style={{
                       display: 'flex',
                       alignItems: 'flex-start',
-                      gap: '9px',
+                      gap: '8px',
                       fontSize: '0.82rem',
                       color: '#334155',
                       lineHeight: 1.45
                     }}>
-                      <CheckCircle2 size={15} color={THEME_ACCENT} style={{ flexShrink: 0, marginTop: '2px' }} />
+                      <CheckCircle2 size={15} color={THEME_ACCENT} strokeWidth={1.75} style={{ flexShrink: 0, marginTop: '2px' }} />
                       <span>{perm}</span>
                     </div>
                   ))}
@@ -283,31 +282,30 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
               {/* 1. Câu lệnh mẫu gợi ý: Nằm bên phải TRÊN ranh giới */}
               {currentAgent.suggestedPrompt && (
                 <div style={{
-                  background: '#fafbfc',
+                  background: '#F8FAFC',
                   border: `1px dashed ${THEME_BORDER_LIGHT}`,
                   borderRadius: '12px',
-                  padding: '12px 14px'
+                  padding: '12px 16px'
                 }}>
                   <div style={{
                     fontSize: '0.74rem',
-                    fontWeight: 800,
+                    fontWeight: 700,
                     textTransform: 'uppercase',
                     color: THEME_ACCENT,
-                    letterSpacing: '0.5px',
-                    marginBottom: '6px',
+                    letterSpacing: '0.04em',
+                    marginBottom: '8px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '5px'
+                    gap: '4px'
                   }}>
-                    <Sparkles size={13} color={THEME_ACCENT} />
-                    <span>Câu lệnh mẫu gợi ý:</span>
+                    <Sparkles size={13} color={THEME_ACCENT} strokeWidth={1.75} />
+                    <span>Câu lệnh mẫu gợi ý</span>
                   </div>
                   <div style={{
                     fontSize: '0.84rem',
-                    fontWeight: 650,
-                    color: '#1e293b',
-                    lineHeight: 1.45,
-                    fontStyle: 'italic'
+                    fontWeight: 600,
+                    color: '#1E293B',
+                    lineHeight: 1.45
                   }}>
                     "{currentAgent.suggestedPrompt}"
                   </div>
@@ -316,26 +314,26 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
 
               {/* 2. Ranh Giới An Toàn & Quyền Hạn Cuối Cùng */}
               <div style={{
-                background: '#fafbfc',
-                border: '1px solid #e2e8f0',
+                background: '#F8FAFC',
+                border: '1px solid #E2E8F0',
                 borderRadius: '12px',
-                padding: '14px 16px'
+                padding: '16px'
               }}>
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '7px',
+                  gap: '8px',
                   fontSize: '0.84rem',
-                  fontWeight: 800,
-                  color: '#0f172a',
+                  fontWeight: 700,
+                  color: '#0F172A',
                   marginBottom: '8px'
                 }}>
-                  <Lock size={15} color={THEME_ACCENT} />
+                  <Lock size={15} color={THEME_ACCENT} strokeWidth={1.75} />
                   <span>Ranh Giới An Toàn & Quyền Hạn Cuối Cùng</span>
                 </div>
                 <ul style={{
                   margin: 0,
-                  paddingLeft: '18px',
+                  paddingLeft: '20px',
                   fontSize: '0.8rem',
                   color: '#475569',
                   lineHeight: 1.55
@@ -343,8 +341,8 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                   {currentAgent.securityGuardrails.map((guard, idx) => (
                     <li key={idx} style={{ marginBottom: '4px' }}>{guard}</li>
                   ))}
-                  <li style={{ marginTop: '6px' }}>
-                    <strong style={{ color: '#0f172a' }}>Quyền hạn chốt: </strong>Agent chỉ hỗ trợ điền sẵn Thẻ Hành Động. Người dùng bắt buộc phải bấm nút <em>"Xác nhận / Lưu"</em> để dữ liệu chính thức được ghi vào hệ thống CSDL.
+                  <li style={{ marginTop: '8px' }}>
+                    <strong style={{ color: '#0F172A' }}>Quyền hạn chốt: </strong>Agent chỉ hỗ trợ điền sẵn Thẻ Hành Động. Người dùng bắt buộc phải bấm nút <strong>"Xác nhận / Lưu"</strong> để dữ liệu chính thức được ghi vào hệ thống CSDL.
                   </li>
                 </ul>
               </div>
@@ -355,13 +353,13 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                   <div style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
+                    gap: '8px',
                     fontSize: '0.84rem',
-                    fontWeight: 800,
-                    color: '#0f172a',
-                    marginBottom: '10px'
+                    fontWeight: 700,
+                    color: '#0F172A',
+                    marginBottom: '12px'
                   }}>
-                    <Users size={16} color={THEME_ACCENT} />
+                    <Users size={16} color={THEME_ACCENT} strokeWidth={1.75} />
                     <span>Liên Minh Phối Hợp Tự Động (Swarm Synergy)</span>
                   </div>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -373,23 +371,20 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                           display: 'flex',
                           alignItems: 'center',
                           gap: '8px',
-                          padding: '7px 11px',
+                          padding: '8px 12px',
                           borderRadius: '10px',
-                          background: '#ffffff',
-                          border: '1px solid #e2e8f0',
+                          background: '#FFFFFF',
+                          border: '1px solid #E2E8F0',
                           cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                          transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.borderColor = THEME_ACCENT;
                           e.currentTarget.style.backgroundColor = THEME_BG_LIGHT;
-                          e.currentTarget.style.transform = 'translateY(-1px)';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.borderColor = '#e2e8f0';
-                          e.currentTarget.style.backgroundColor = '#ffffff';
-                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.borderColor = '#E2E8F0';
+                          e.currentTarget.style.backgroundColor = '#FFFFFF';
                         }}
                         title={`Xem chi tiết ${ag.name}`}
                       >
@@ -399,14 +394,14 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                           style={{ width: 24, height: 24, objectFit: 'contain' }}
                         />
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a' }}>
+                          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0F172A' }}>
                             {ag.name}
                           </span>
-                          <span style={{ fontSize: '0.66rem', color: THEME_ACCENT, fontWeight: 650 }}>
+                          <span style={{ fontSize: '0.68rem', color: THEME_ACCENT, fontWeight: 600 }}>
                             {ag.badge}
                           </span>
                         </div>
-                        <ChevronRight size={13} color="#94a3b8" />
+                        <ChevronRight size={13} color="#94A3B8" strokeWidth={1.75} />
                       </div>
                     ))}
                   </div>
@@ -418,30 +413,30 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
           {/* Footer Bar */}
           <div style={{
             padding: '12px 24px',
-            borderTop: '1px solid #f1f5f9',
-            background: '#ffffff',
+            borderTop: '1px solid #E2E8F0',
+            background: '#FFFFFF',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between'
           }}>
-            <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>
+            <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
               Phân quyền an toàn theo tài khoản đăng nhập
             </span>
             <button
               onClick={onClose}
               style={{
-                padding: '8px 18px',
-                borderRadius: '10px',
-                background: '#0f172a',
-                color: '#ffffff',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                background: '#0F172A',
+                color: '#FFFFFF',
                 border: 'none',
                 fontSize: '0.82rem',
-                fontWeight: 700,
+                fontWeight: 600,
                 cursor: 'pointer',
-                transition: 'background-color 0.15s'
+                transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
               }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1e293b'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0f172a'}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1E293B'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0F172A'}
             >
               Đã hiểu & Đóng
             </button>

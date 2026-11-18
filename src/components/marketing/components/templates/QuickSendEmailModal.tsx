@@ -767,8 +767,8 @@ lethic@gmail.com, Lê Thị C`}
                                     className="w-full px-3 py-2 bg-white rounded-[var(--radius-md)] border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500/15 focus:border-[var(--color-primary)]"
                                 />
                             </div>
-                            <p className="text-[10px] text-slate-400 italic">
-                                💡 Lưu ý: CC và BCC nhận bản sao sạch (không tính lượt mở/click vào chỉ số của khách hàng).
+                            <p className="text-[11px] text-slate-500">
+                                Lưu ý: CC và BCC nhận bản sao sạch (không tính lượt mở/click vào chỉ số của khách hàng).
                             </p>
                         </div>
                     )}

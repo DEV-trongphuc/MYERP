@@ -117,13 +117,13 @@ const LiveTrafficModal: React.FC<LiveTrafficModalProps> = ({ isOpen, onClose: _o
                 <div className="flex-1 overflow-y-auto bg-slate-50/50 px-8 py-6">
                     {loading && visitors.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-48 space-y-3">
-                            <Activity className="w-8 h-8 text-blue-500 animate-bounce" />
-                            <p className="text-slate-400 text-sm font-medium">Scanning for live activity...</p>
+                            <Activity className="w-8 h-8 text-[#BD1D2D]" />
+                            <p className="text-slate-500 text-sm font-medium">Đang tải hoạt động trực tiếp...</p>
                         </div>
                     ) : visitors.length > 0 ? (
                         <div className="grid gap-4">
                             {visitors.map((v) => (
-                                <div key={v.id} className="bg-white p-4 rounded-[14px] border border-slate-100 shadow-sm hover:border-blue-200 hover:shadow-md transition-all group">
+                                <div key={v.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition-colors group">
                                     <div className="flex items-start justify-between gap-4">
                                         {/* Visitor Info */}
                                         <div className="flex items-center gap-4 min-w-[200px]">

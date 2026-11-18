@@ -313,26 +313,20 @@ const ZaloOAManager: React.FC<ZaloOAManagerProps> = ({ onSelect }) => {
                     <Loader2 className="w-8 h-8 animate-spin text-[var(--color-primary)]" />
                 </div>
             ) : oas.length === 0 ? (
-                <div className="relative overflow-hidden bg-white border border-slate-100 rounded-[18px] p-16 text-center shadow-sm">
-                    {/* Background decoration */}
-                    <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-red-50/50 to-transparent pointer-events-none" />
-                    <div className="absolute -top-24 -left-24 w-64 h-64 bg-[var(--color-primary)]/5 blur-[80px] rounded-full" />
-                    <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-[var(--color-primary)]/5 blur-[80px] rounded-full" />
-
+                <div className="relative overflow-hidden bg-white border border-slate-200 rounded-2xl p-14 text-center shadow-xs">
                     <div className="relative z-10 max-w-sm mx-auto">
-                        <div className="w-24 h-24 bg-gradient-to-br from-white to-slate-50 rounded-[18px] flex items-center justify-center mx-auto mb-8 shadow-xl shadow-[var(--color-primary)]/5 border border-white relative group">
-                            <div className="absolute inset-0 bg-[var(--color-primary)]/10 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                            <ExternalLink className="w-10 h-10 text-[var(--color-primary)] relative z-10 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-6" />
+                        <div className="w-20 h-20 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-rose-200">
+                            <ExternalLink className="w-9 h-9 text-[#BD1D2D]" />
                         </div>
-                        <h4 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Sẵn sàng kết nối?</h4>
-                        <p className="text-sm text-slate-500 mb-10 leading-relaxed font-medium">Kết nối Zalo Official Account của bạn ngay hôm nay để bắt đầu khai thác sức mạnh của thông báo ZNS tự động.</p>
+                        <h4 className="text-xl font-bold text-slate-900 mb-3">Sẵn sàng kết nối?</h4>
+                        <p className="text-sm text-slate-500 mb-8 leading-relaxed font-medium">Kết nối Zalo Official Account của bạn ngay hôm nay để bắt đầu triển khai thông báo ZNS tự động.</p>
                         <Button
                             icon={Plus}
                             onClick={handleConnect}
                             isLoading={isConnecting}
                             size="lg"
                             variant="secondary"
-                            className="bg-slate-900 hover:bg-black !text-white rounded-[14px] shadow-xl shadow-slate-900/10 px-10 py-4 transition-all hover:-translate-y-1 active:scale-95 border-0"
+                            className="bg-slate-900 hover:bg-slate-800 !text-white rounded-xl shadow-sm px-8 py-3.5 transition-colors border-0"
                         >
                             Kết nối ngay 1 chạm
                         </Button>
@@ -343,12 +337,8 @@ const ZaloOAManager: React.FC<ZaloOAManagerProps> = ({ onSelect }) => {
                     {oas.map((oa) => (
                         <div
                             key={oa.id}
-                            className={`relative group bg-white rounded-[16px] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.08)] transition-all duration-300 overflow-hidden ${isTokenExpired(oa.token_expires_at) ? 'border border-[#fecdd3]' : 'border border-[#e2e8f0]'}`}
+                            className={`relative group bg-white rounded-2xl p-6 shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.08)] transition-shadow duration-200 overflow-hidden ${isTokenExpired(oa.token_expires_at) ? 'border border-[#fecdd3]' : 'border border-[#e2e8f0]'}`}
                         >
-                            {/* Decorative Background Elements */}
-                            <div className="absolute -top-12 -right-12 w-40 h-40 bg-[var(--color-primary)]/5 blur-[60px] rounded-full group-hover:bg-[var(--color-primary)]/10 transition-all duration-700" />
-                            <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-[var(--color-primary)]/5 blur-[50px] rounded-full group-hover:bg-[var(--color-primary)]/8 transition-all duration-700" />
-
                             <div className="relative z-10">
                                 <div className="flex justify-between items-start mb-8">
                                     <div className="flex items-center gap-5">
@@ -358,9 +348,8 @@ const ZaloOAManager: React.FC<ZaloOAManagerProps> = ({ onSelect }) => {
                                                     <img
                                                         src={oa.avatar}
                                                         alt={oa.name}
-                                                        className="w-16 h-16 rounded-[14px] bg-slate-50 object-cover shadow-sm ring-4 ring-slate-50 transition-transform duration-500 group-hover:rotate-3"
+                                                        className="w-16 h-16 rounded-xl bg-slate-50 object-cover border border-slate-200"
                                                     />
-                                                    <div className="absolute inset-0 rounded-[14px] shadow-inner" />
                                                 </div>
                                             ) : (
                                                 <div className="w-16 h-16 rounded-[14px] bg-[#fef2f2] border border-[#fecdd3] flex items-center justify-center text-[#C6333D]">

@@ -50,16 +50,21 @@ class TestDatabase {
                 self::$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
                 self::$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
             } catch (\Throwable $e) {
-                // Direct fallback to 127.0.0.1:3306 if Database singleton timed out
+                // Direct fallback to configured env credentials on 127.0.0.1 if Database singleton timed out
                 try {
-                    $dsn = 'mysql:host=127.0.0.1;port=3306;dbname=vhvxoigh_myerp;charset=utf8mb4';
-                    self::$pdo = new PDO($dsn, 'vhvxoigh_mail_auto', 'Ideas@812', [
+                    $dbHost = $_ENV['DB_HOST'] ?? getenv('DB_HOST') ?: '127.0.0.1';
+                    $dbPort = $_ENV['DB_PORT'] ?? getenv('DB_PORT') ?: '3306';
+                    $dbName = $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'vhvxoigh_myerp';
+                    $dbUser = $_ENV['DB_USER'] ?? getenv('DB_USER') ?: '';
+                    $dbPass = $_ENV['DB_PASS'] ?? getenv('DB_PASS') ?: '';
+                    $dsn = "mysql:host={$dbHost};port={$dbPort};dbname={$dbName};charset=utf8mb4";
+                    self::$pdo = new PDO($dsn, $dbUser, $dbPass, [
                         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
                     ]);
                 } catch (\Throwable $e2) {
                     throw new RuntimeException("Failed to connect to MySQL database via PDO on 127.0.0.1:3306: " . $e2->getMessage() . 
-                        "\nEnsure active SSH tunnel: ssh -N -L 3306:127.0.0.1:3306 -i C:\\Users\\LENOVO\\.ssh\\id_ed25519 -4 -p 2210 vhvxoigh@chiefaiofficer.vn", 0, $e2);
+                        "\nEnsure active SSH tunnel or local MySQL and valid credentials in backend/.env", 0, $e2);
                 }
             }
         }
@@ -142,7 +147,8 @@ class TestDatabase {
         }
 
         if (!defined('JWT_SECRET')) {
-            define('JWT_SECRET', 'MYERP_SECRET_KEY_2026_IDEAS');
+            $envSecret = $_ENV['JWT_SECRET'] ?? getenv('JWT_SECRET') ?: '';
+            define('JWT_SECRET', $envSecret !== '' ? $envSecret : ('e2e_test_ephemeral_secret_' . hash('sha256', __FILE__)));
         }
         if (!defined('JWT_EXPIRE_ACCESS')) {
             define('JWT_EXPIRE_ACCESS', 86400 * 7);

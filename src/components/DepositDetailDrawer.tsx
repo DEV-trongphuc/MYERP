@@ -21,6 +21,7 @@ import { VietnameseDateInput } from './ui/VietnameseDateInput';
 import { formatCommentBody } from '../utils/commentFormatter';
 import { pushOverlay } from '../utils/overlayStack';
 import { getTenantBrandPrefix } from '../contexts/TenantConfigContext';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 interface Deposit {
   id: number;
@@ -264,7 +265,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
         body: JSON.stringify(payload)
       });
       if (res.success) {
-        addToast('Cập nhật thông tin đơn hàng thành công!', 'success');
+        addToast('Cập nhật thông tin đơn hàng thành công.', 'success');
         const projName = availableProjects.find(p => String(p.id) === String(editProjectId))?.name || selectedDepForManage.project_name;
         const selectedCreator = availableUsers.find(u => String(u.id) === String(editCreatedBy));
         const creatorName = selectedCreator?.full_name || selectedCreator?.name || selectedDepForManage.creator_name;
@@ -437,7 +438,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     try {
       const res = await fetchAPI(`deposits/comments/${commentId}`, { method: 'DELETE' });
       if (res.success) {
-        addToast(t('Đã xóa bình luận!'), 'success');
+        addToast(t('Đã xóa bình luận'), 'success');
         loadComments();
       } else {
         addToast(res.message || t('Không thể xóa bình luận'), 'error');
@@ -461,7 +462,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       const res = await fetchAPI(`deposits/${selectedDepForManage.id}/history`, { signal });
       if (signal.aborted) return;
       if (res.success) {
-        setHistoryLogs(res.data || []);
+        setHistoryLogs(extractArray(res));
       }
     } catch (err: any) {
       if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return;
@@ -496,7 +497,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       });
       if (res.success) {
         setNewCommentText('');
-        addToast('Gửi bình luận thành công!', 'success');
+        addToast('Gửi bình luận thành công.', 'success');
         setActiveDrawerTab('comments');
         await Promise.all([loadComments(), loadHistory()]);
       } else {
@@ -580,7 +581,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       });
 
       if (res.success && res.data?.unc_file_path) {
-        addToast('Tải chứng từ UNC thành công!', 'success');
+        addToast('Tải chứng từ UNC thành công.', 'success');
         const updated = [...tempMilestones];
         updated[index] = { ...updated[index], status: 'paid', unc_file_path: res.data.unc_file_path };
         setTempMilestones(updated);
@@ -612,7 +613,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
           body: JSON.stringify(body)
         });
         if (res.success) {
-          addToast('Ghi nhận đợt tiền thành công!', 'success');
+          addToast('Ghi nhận đợt tiền thành công.', 'success');
           const updated = [...tempMilestones];
           updated[index] = { ...updated[index], status: 'approved', actual_amount: actualAmt || m.expected_amount };
           setTempMilestones(updated);
@@ -765,7 +766,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
         body: JSON.stringify(payload)
       });
       if (res.success) {
-        addToast('Cập nhật lịch trình thanh toán thành công!', 'success');
+        addToast('Cập nhật lịch trình thanh toán thành công.', 'success');
         onClose();
         onSaveSuccess();
       } else {
@@ -790,7 +791,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
         body: JSON.stringify({ remind_target: targetChoice })
       });
       if (res.success) {
-        addToast('Đã gửi thông báo nhắc lịch thanh toán thành công!', 'success');
+        addToast('Đã gửi thông báo nhắc lịch thanh toán thành công.', 'success');
       } else {
         addToast(res.message || 'Lỗi khi gửi nhắc nhở', 'error');
       }
@@ -823,7 +824,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
         body: JSON.stringify({ reason: cancelReason })
       });
       if (res.success) {
-        addToast('Đã báo bể cọc và hủy giao dịch thành công!', 'success');
+        addToast('Đã báo bể cọc và hủy giao dịch thành công.', 'success');
         setIsCancelOpen(false);
         onClose();
         onSaveSuccess();
@@ -1313,31 +1314,31 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                       {/* Financial Stat Cards */}
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', width: '100%' }}>
                         {/* Card 1: Tổng giá trị & Thực thu */}
-                        <div className="stat-card hover-lift total-card" style={{
+                        <div className="stat-card total-card" style={{
                           display: 'flex',
                           flexDirection: 'column',
-                          padding: '1rem',
+                          padding: '16px',
                           minHeight: '120px',
-                          borderRadius: '12px',
+                          borderRadius: '16px',
                           border: '1px solid var(--color-border-light)',
                           position: 'relative',
                           overflow: 'hidden',
                           justifyContent: 'space-between'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                            <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 800, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                               Tổng giá trị
                             </span>
-                            <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(163, 20, 34, 0.08)', color: '#a31422', flexShrink: 0 }}>
+                            <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', flexShrink: 0 }}>
                               <CreditCard size={16} />
                             </div>
                           </div>
                           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
-                            <div className="stat-value" style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                            <div className="stat-value" style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
                               {selectedDepForManage.currency !== 'VND' ? (
                                 <div>
                                   <div>{formatMoney(selectedDepForManage.price / (parseFloat(selectedDepForManage.exchange_rate) || 1), selectedDepForManage.currency)}</div>
-                                  <div style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '4px', fontWeight: 500 }}>
+                                  <div style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '4px', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
                                     ≈ {formatMoney(selectedDepForManage.price, 'VND')}
                                   </div>
                                 </div>
@@ -1345,10 +1346,10 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                                 formatMoney(selectedDepForManage.price, 'VND')
                               )}
                             </div>
-                            <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500 }}>
+                            <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb', display: 'inline-block' }} />
-                                Thực thu: <strong style={{ color: '#2563eb' }}>
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#BD1D2D', display: 'inline-block' }} />
+                                Thực thu: <strong style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
                                   {formatMoney(
                                     selectedDepForManage.currency !== 'VND' ? totalApprovedMilestonesOriginal : totalApprovedMilestones,
                                     selectedDepForManage.currency
@@ -1366,19 +1367,19 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                         </div>
 
                         {/* Card 2: Hoa hồng dự kiến & Thực tế */}
-                        <div className="stat-card hover-lift distributed-card" style={{
+                        <div className="stat-card distributed-card" style={{
                           display: 'flex',
                           flexDirection: 'column',
-                          padding: '1rem',
+                          padding: '16px',
                           minHeight: '120px',
-                          borderRadius: '12px',
+                          borderRadius: '16px',
                           border: '1px solid var(--color-border-light)',
                           position: 'relative',
                           overflow: 'hidden',
                           justifyContent: 'space-between'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                            <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 800, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                               Hoa hồng dự kiến
                             </span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1484,14 +1485,14 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                                 </div>
                               </div>
                             ) : (
-                              <div className="stat-value" style={{ fontSize: '1.15rem', fontWeight: 800, color: '#059669', lineHeight: 1.1 }}>
+                              <div className="stat-value" style={{ fontSize: '1.15rem', fontWeight: 700, color: '#059669', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
                                 {formatMoney(tempExpectedCommission !== undefined ? tempExpectedCommission : selectedDepForManage.expected_commission, 'VND')}
                               </div>
                             )}
-                            <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500 }}>
+                            <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
-                                Thực tế: <strong style={{ color: 'var(--color-text)' }}>{formatMoney(actualCommission, 'VND')}</strong>
+                                Thực tế: <strong style={{ color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>{formatMoney(actualCommission, 'VND')}</strong>
                               </span>
                             </div>
                           </div>
@@ -1695,7 +1696,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                                   disabled={!canEditMilestones}
                                   onChange={e => handleUpdateMilestoneField(idx, 'milestone_name', e.target.value)}
                                   className="form-input"
-                                  style={{ width: '100%', height: '34px', fontSize: '0.775rem', padding: '0 10px', borderRadius: '6px' }}
+                                  style={{ width: '100%', height: '34px', fontSize: '0.775rem', padding: '0 8px', borderRadius: '6px', fontVariantNumeric: 'tabular-nums' }}
                                 />
                               </div>
 
@@ -1739,7 +1740,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                                     }
                                   }}
                                   className="form-input"
-                                  style={{ width: '100%', height: '34px', fontSize: '0.775rem', padding: '0 10px', borderRadius: '6px' }}
+                                  style={{ width: '100%', height: '34px', fontSize: '0.775rem', padding: '0 8px', borderRadius: '6px', fontVariantNumeric: 'tabular-nums' }}
                                 />
 
                                 {selectedDepForManage.currency !== 'VND' && (
@@ -2104,7 +2105,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                             </div>
                           ))}
                           {relUsers.length === 0 && (
-                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
                               {t('Chưa có người theo dõi. Tag @tên trong bình luận hoặc bấm "+ Thêm".')}
                             </span>
                           )}
@@ -2807,8 +2808,8 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                   overflowY: 'auto'
                 }}>
                   {/* Email Header */}
-                  <div style={{ background: 'linear-gradient(135deg, #BD1D2D, #8C111E)', padding: '16px 20px', textAlign: 'center' }}>
-                    <h2 style={{ color: '#ffffff', fontSize: '20px', margin: 0, fontWeight: 900, letterSpacing: '2px', fontFamily: 'system-ui, sans-serif' }}>
+                  <div style={{ background: '#BD1D2D', padding: '16px 20px', textAlign: 'center' }}>
+                    <h2 style={{ color: '#ffffff', fontSize: '20px', margin: 0, fontWeight: 700, letterSpacing: '0.08em', fontFamily: 'system-ui, sans-serif' }}>
                       IDEAS
                     </h2>
                     <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: '10.5px', margin: '4px 0 0', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>

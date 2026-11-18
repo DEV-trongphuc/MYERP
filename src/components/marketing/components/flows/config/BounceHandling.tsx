@@ -20,7 +20,7 @@ const BounceHandling: React.FC<BounceHandlingProps> = ({ value, onChange, disabl
             desc: 'Hệ thống sẽ gắn nhãn lỗi (Hard Bounce) cho Khách hàng và dừng toàn bộ Automation. Bảo vệ điểm uy tín tên miền.',
             icon: Ban,
             color: 'text-rose-600 bg-rose-50 border-rose-200',
-            activeBorder: 'border-rose-500 ring-4 ring-rose-50',
+            activeBorder: 'border-rose-500 ring-2 ring-rose-500/15',
             subtext: 'Khuyến nghị cho hầu hết trường hợp'
         },
         {
@@ -29,7 +29,7 @@ const BounceHandling: React.FC<BounceHandlingProps> = ({ value, onChange, disabl
             desc: 'Ghi nhận lỗi nhưng vẫn cho phép Khách hàng chuyển sang bước tiếp theo (Lưu ý: Hệ thống sẽ tự động Bỏ qua các bước gửi Email).',
             icon: FastForward,
             color: 'text-amber-600 bg-amber-50 border-amber-200',
-            activeBorder: 'border-amber-600 ring-4 ring-amber-50',
+            activeBorder: 'border-amber-600 ring-2 ring-amber-500/15',
             subtext: 'Sử dụng nếu bạn có bước kiểm tra điều kiện sau đó'
         }
     ];
@@ -40,7 +40,7 @@ const BounceHandling: React.FC<BounceHandlingProps> = ({ value, onChange, disabl
                 <div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg border border-amber-100 shadow-sm">
                     <ShieldAlert className="w-3.5 h-3.5" />
                 </div>
-                <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest">Xử lý Email Lỗi (Hard Bounce)</h3>
+                <h3 className="text-sm font-bold text-slate-700 uppercase tracking-widest">Xử lý Email Lỗi (Hard Bounce)</h3>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -51,9 +51,9 @@ const BounceHandling: React.FC<BounceHandlingProps> = ({ value, onChange, disabl
                             key={opt.id}
                             onClick={() => !disabled && onChange(opt.id)}
                             className={`
-                                relative p-5 rounded-xl border-2 cursor-pointer transition-all duration-300
+                                relative p-5 rounded-xl border cursor-pointer transition-[border-color,background-color,box-shadow] duration-200
                                 flex flex-col justify-between h-full
-                                ${isActive ? `bg-white ${opt.activeBorder} shadow-lg` : 'bg-slate-50 border-transparent hover:bg-white hover:border-slate-200'}
+                                ${isActive ? `bg-white ${opt.activeBorder} shadow-sm` : 'bg-slate-50 border-slate-200/80 hover:bg-white hover:border-slate-300'}
                             `}
                         >
                             <div className="flex items-start gap-4 mb-3">
@@ -72,7 +72,7 @@ const BounceHandling: React.FC<BounceHandlingProps> = ({ value, onChange, disabl
 
                             {/* Radial Selection Indicator */}
                             <div className="absolute top-4 right-4">
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${isActive ? 'border-[#2563eb] bg-[#2563eb]' : 'border-slate-300'}`}>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isActive ? 'border-[#2563eb] bg-[#2563eb]' : 'border-slate-300'}`}>
                                     {isActive && <div className="w-2 h-2 rounded-full bg-white" />}
                                 </div>
                             </div>

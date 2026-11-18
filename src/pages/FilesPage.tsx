@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Folder, FileText, Download, Trash2, Upload, Search, X,
-  MoreVertical, File, Filter, LayoutGrid, List, Plus, Edit,
-  Shield, User, Users, Globe, Clock, ChevronRight, HardDrive,
-  Star, Clock3, FileJson, FileCode, FileImage, FileVideo,
-  MoreHorizontal, Share2, Info, Building2, Eye, Megaphone, Loader2
+  Folder, FileText, Download, Trash2, Search, X,
+  File, LayoutGrid, List, Plus, Edit,
+  Shield, User, Users, Globe, ChevronRight, HardDrive,
+  Clock3, FileImage, FileVideo,
+  MoreHorizontal, Share2, Building2, Eye, Megaphone, Loader2
 } from 'lucide-react';
 import api from '../api/axios';
 import { compressToWebP } from '../utils/imageCompress';
@@ -369,7 +369,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
   const getMimeIcon = (mime: string) => {
     if (!mime) return <File size={24} />;
     if (mime.includes('image')) return <FileImage size={24} className="text-rose-500" />;
-    if (mime.includes('video')) return <FileVideo size={24} className="text-indigo-500" />;
+    if (mime.includes('video')) return <FileVideo size={24} style={{ color: '#475569' }} />;
     return <File size={24} style={{ color: 'var(--color-text-muted)' }} />;
   };
 
@@ -397,8 +397,8 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
         <div className="page-header" style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              {activeTab === 'shared' ? <Globe style={{ color: 'var(--color-primary)' }} /> : <User style={{ color: 'var(--color-indigo)' }} />}
-              {activeTab === 'shared' ? 'Kho Tài liệu chung' : 'Tài liệu cá nhân'}
+              {activeTab === 'shared' ? <Globe style={{ color: 'var(--color-primary)' }} /> : <User style={{ color: '#334155' }} />}
+              {activeTab === 'shared' ? 'Kho tài liệu chung' : 'Tài liệu cá nhân'}
             </h1>
             <p className="page-subtitle" style={{ marginTop: '4px' }}>
               {activeTab === 'shared' ? 'Lưu trữ các biểu mẫu, quy trình và tài liệu dùng chung cho toàn đội ngũ' : 'Không gian lưu trữ riêng tư chỉ mình bạn có thể truy cập'}
@@ -519,49 +519,36 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
           {/* Personal Vault Theme banner */}
           {activeTab === 'personal' && (
             <div style={{
-              background: 'linear-gradient(135deg, #1e1b4b 0%, #311042 100%)',
-              border: '1px solid rgba(99, 102, 241, 0.45)',
-              borderRadius: '12px',
-              padding: '1.5rem',
+              background: '#0F172A',
+              border: '1px solid #1E293B',
+              borderRadius: '16px',
+              padding: '20px 24px',
               display: 'flex',
               alignItems: 'center',
-              gap: '20px',
-              position: 'relative',
-              boxShadow: '0 10px 25px -5px rgba(99, 102, 241, 0.25), 0 8px 10px -6px rgba(99, 102, 241, 0.2)',
-              overflow: 'hidden'
+              gap: '16px',
+              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.08)',
             }}>
               <div style={{
-                position: 'absolute',
-                top: 0,
-                right: 0,
-                width: '120px',
-                height: '100%',
-                opacity: 0.1,
-                background: 'radial-gradient(circle, #fff 10%, transparent 11%)',
-                backgroundSize: '12px 12px'
-              }} />
-              
-              <div style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '14px',
-                background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+                width: '44px',
+                height: '44px',
+                borderRadius: '10px',
+                background: 'rgba(189, 29, 45, 0.16)',
+                border: '1px solid rgba(189, 29, 45, 0.35)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#fff',
-                boxShadow: '0 0 20px rgba(99, 102, 241, 0.5)',
+                color: '#F87171',
                 flexShrink: 0
               }}>
-                <Shield size={22} className="animate-pulse" />
+                <Shield size={20} strokeWidth={1.75} />
               </div>
-              <div style={{ flex: 1, zIndex: 1 }}>
-                <h4 style={{ fontWeight: 900, fontSize: '0.9rem', color: '#ffffff', margin: 0, display: 'flex', alignItems: 'center', gap: '10px', letterSpacing: '0.02em' }}>
+              <div style={{ flex: 1 }}>
+                <h4 style={{ fontWeight: 700, fontSize: '0.9rem', color: '#F8FAFC', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   HỆ THỐNG LƯU TRỮ BẢO MẬT CÁ NHÂN (PERSONAL VAULT)
-                  <span style={{ fontSize: '9px', background: '#6366f1', color: '#fff', padding: '3px 8px', borderRadius: '4px', fontWeight: 900, letterSpacing: '0.05em' }}>SECURE</span>
+                  <span style={{ fontSize: '0.6875rem', background: 'rgba(248, 250, 252, 0.12)', border: '1px solid rgba(248, 250, 252, 0.18)', color: '#E2E8F0', padding: '2px 8px', borderRadius: '6px', fontWeight: 600, letterSpacing: '0.04em' }}>SECURE</span>
                 </h4>
-                <p style={{ fontSize: '0.75rem', color: 'rgba(224, 231, 255, 0.85)', margin: '4px 0 0 0', fontWeight: 700, lineHeight: '1.4' }}>
-                  Không gian mã hóa bảo mật. Chỉ tài khoản cá nhân của bạn mới có quyền truy cập, xem hoặc chỉnh sửa dữ liệu tại đây.
+                <p style={{ fontSize: '0.78rem', color: '#CBD5E1', margin: '4px 0 0 0', fontWeight: 500, lineHeight: 1.45 }}>
+                  Không gian lưu trữ riêng tư. Chỉ tài khoản cá nhân của bạn mới có quyền truy cập, xem hoặc chỉnh sửa dữ liệu tại đây.
                 </p>
               </div>
             </div>
@@ -570,26 +557,26 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
           {/* Unified Explorer Control Panel */}
           <div style={{
             background: 'var(--color-surface)',
-            border: '1px solid rgba(226, 232, 240, 0.8)',
-            borderRadius: '12px',
-            padding: '1.25rem',
+            border: '1px solid var(--color-border)',
+            borderRadius: '16px',
+            padding: '20px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '1.25rem',
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)'
+            gap: '20px',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
           }}>
             {/* Row 1: Sleek Explorer Header & Breadcrumbs Bar */}
             <div style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              gap: '1.5rem',
+              gap: '24px',
               flexWrap: 'wrap'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', flex: 1, paddingBottom: '2px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', flex: 1, paddingBottom: '4px' }}>
                 <button 
                   onClick={() => { setCurrentPath([]); setCategory('all'); }}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 800, color: currentPath.length === 0 ? 'var(--color-primary)' : 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px', padding: 0 }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: currentPath.length === 0 ? 'var(--color-primary)' : 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px', padding: 0 }}
                 >
                   <HardDrive size={16} /> Gốc
                 </button>
@@ -604,7 +591,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                         const catObj = categories.find(c => c.label === partialLabel);
                         setCategory(catObj ? catObj.id : 'all');
                       }}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 800, color: idx === currentPath.length - 1 ? 'var(--color-primary)' : 'var(--color-text-muted)', padding: 0 }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: idx === currentPath.length - 1 ? 'var(--color-primary)' : 'var(--color-text-muted)', padding: 0 }}
                     >
                       {folder}
                     </button>
@@ -613,17 +600,17 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
               </div>
               
               {/* Storage Progress indicator & Actions */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '10.5px', fontWeight: 800, color: 'var(--color-text-muted)' }}>Dung lượng:</span>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Dung lượng:</span>
                   <div style={{ width: '80px', height: '6px', background: 'var(--color-border)', borderRadius: '999px', overflow: 'hidden', position: 'relative' }}>
                     <div style={{ 
                       height: '100%', 
                       width: `${Math.min((totalSizeBytes / (10 * 1024 * 1024 * 1024)) * 100, 100)}%`, 
-                      background: activeTab === 'personal' ? 'var(--color-indigo)' : 'var(--color-primary)' 
+                      background: activeTab === 'personal' ? '#334155' : 'var(--color-primary)' 
                     }} />
                   </div>
-                  <span style={{ fontSize: '10.5px', color: 'var(--color-text)', fontWeight: 800 }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--color-text)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                     {formatSize(totalSizeBytes)} / 10 GB
                   </span>
                 </div>
@@ -683,15 +670,15 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                </div>
                
                {/* View Switcher (with OS-style 8px border-radius) */}
-               <div style={{ display: 'flex', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '3px' }}>
+               <div style={{ display: 'flex', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '4px' }}>
                   <button 
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 10px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, background: viewMode === 'grid' ? 'var(--color-bg)' : 'transparent', color: viewMode === 'grid' ? 'var(--color-text)' : 'var(--color-text-muted)', transition: 'all 0.2s', border: 'none', cursor: 'pointer' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, background: viewMode === 'grid' ? 'var(--color-bg)' : 'transparent', color: viewMode === 'grid' ? 'var(--color-text)' : 'var(--color-text-muted)', transition: 'background-color 0.15s ease, color 0.15s ease', border: 'none', cursor: 'pointer' }}
                     onClick={() => setViewMode('grid')}
                   >
                     <LayoutGrid size={14} /> Lưới thẻ
                   </button>
                   <button 
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 10px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, background: viewMode === 'list' ? 'var(--color-bg)' : 'transparent', color: viewMode === 'list' ? 'var(--color-text)' : 'var(--color-text-muted)', transition: 'all 0.2s', border: 'none', cursor: 'pointer' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, background: viewMode === 'list' ? 'var(--color-bg)' : 'transparent', color: viewMode === 'list' ? 'var(--color-text)' : 'var(--color-text-muted)', transition: 'background-color 0.15s ease, color 0.15s ease', border: 'none', cursor: 'pointer' }}
                     onClick={() => setViewMode('list')}
                   >
                     <List size={14} /> Danh sách
@@ -743,8 +730,8 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                     {/* Folders Section */}
                     {displayFolders.length > 0 && (
                       <div>
-                        <h5 style={{ fontSize: '0.75rem', fontWeight: 900, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '1rem', letterSpacing: '0.05em' }}>Thư mục ({displayFolders.length})</h5>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem' }}>
+                        <h5 style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '16px', letterSpacing: '0.05em', fontVariantNumeric: 'tabular-nums' }}>Thư mục ({displayFolders.length})</h5>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px' }}>
                           {displayFolders.map(sub => {
                             const displayLabel = currentPath.length === 0 ? sub.label : sub.label.slice(currentPathStr.length + 1);
                             const fileCount = files.filter(f => f.category === sub.id).length;
@@ -756,10 +743,10 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                                 animate={{ opacity: 1, scale: 1 }}
                                 style={{
                                   background: 'var(--color-surface)',
-                                  padding: '0.85rem 1.15rem',
+                                  padding: '12px 16px',
                                   borderRadius: '12px',
-                                  border: '1px solid rgba(226, 232, 240, 0.8)',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.02), 0 4px 12px rgba(0,0,0,0.03)',
+                                  border: '1px solid var(--color-border)',
+                                  boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                                   cursor: 'pointer',
                                   display: 'flex',
                                   alignItems: 'center',
@@ -775,13 +762,13 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                                 }}
                               >
                                 <div style={{ color: '#f59e0b', flexShrink: 0 }}>
-                                  <Folder size={30} fill="#f59e0b" stroke="#f59e0b" />
+                                  <Folder size={28} fill="#f59e0b" stroke="#f59e0b" />
                                 </div>
                                 <div style={{ minWidth: 0, flex: 1 }}>
-                                  <h5 style={{ fontWeight: 750, fontSize: '0.85rem', color: 'var(--color-text)', margin: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={displayLabel}>
+                                  <h5 style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--color-text)', margin: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={displayLabel}>
                                     {displayLabel}
                                   </h5>
-                                  <p style={{ fontSize: '10px', color: 'var(--color-text-muted)', margin: '2px 0 0 0', fontWeight: 700 }}>
+                                  <p style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', margin: '4px 0 0 0', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
                                     {fileCount} tài liệu
                                   </p>
                                 </div>
@@ -880,23 +867,23 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                     {/* Files Section */}
                     {displayFiles.length > 0 && (
                       <div>
-                        <h5 style={{ fontSize: '0.75rem', fontWeight: 900, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '1rem', letterSpacing: '0.05em' }}>Tệp tin ({displayFiles.length})</h5>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.25rem' }}>
+                        <h5 style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '16px', letterSpacing: '0.05em', fontVariantNumeric: 'tabular-nums' }}>Tệp tin ({displayFiles.length})</h5>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px' }}>
                           {displayFiles.map(f => (
                             <motion.div 
                               key={f.id} 
                               layout
-                              initial={{ opacity: 0, scale: 0.9 }}
+                              initial={{ opacity: 0, scale: 0.96 }}
                               animate={{ opacity: 1, scale: 1 }}
-                              style={{ background: 'var(--color-surface)', padding: '1.15rem', borderRadius: '12px', border: '1px solid rgba(226, 232, 240, 0.8)', boxShadow: '0 1px 3px rgba(0,0,0,0.02), 0 4px 12px rgba(0,0,0,0.03)', position: 'relative', overflow: 'visible' }}
+                              style={{ background: 'var(--color-surface)', padding: '16px', borderRadius: '16px', border: '1px solid var(--color-border)', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)', position: 'relative', overflow: 'visible' }}
                               className="hover-shadow"
                             >
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '0.75rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '12px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
-                                  <div style={{ width: '32px', height: '32px', background: getFileIcon(f.name).bg, color: getFileIcon(f.name).color, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: 'none' }}>
+                                  <div style={{ width: '32px', height: '32px', background: getFileIcon(f.name).bg, color: getFileIcon(f.name).color, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: 'none' }}>
                                     {React.cloneElement(getFileIcon(f.name).icon, { size: 16 })}
                                   </div>
-                                  <h4 style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--color-text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.name}>
+                                  <h4 style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--color-text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.name}>
                                     {f.name}
                                   </h4>
                                 </div>
@@ -1025,7 +1012,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                                           }} 
                                           onClick={() => {
                                             setActiveFileMenuId(null);
-                                            addToast('Đã sao chép link liên kết!', 'success');
+                                            addToast('Đã sao chép link liên kết', 'success');
                                             navigator.clipboard.writeText(`${import.meta.env.VITE_API_URL ?? '/backend'}/${f.file_path}`);
                                           }}
                                         >
@@ -1063,29 +1050,29 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                                 </div>
                               </div>
                               
-                              <p style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 700, letterSpacing: '0.02em', marginBottom: (f.project_name || f.campaign_name) ? '0.5rem' : '1.15rem', paddingLeft: '40px' }}>
+                              <p style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600, fontVariantNumeric: 'tabular-nums', marginBottom: (f.project_name || f.campaign_name) ? '8px' : '16px', paddingLeft: '40px' }}>
                                 {formatSize(f.file_size)} • {f.mime_type?.split('/')[1]?.toUpperCase() || 'FILE'}
                               </p>
                               {(f.project_name || f.campaign_name) && (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginLeft: '40px', marginBottom: '1.15rem' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginLeft: '40px', marginBottom: '16px' }}>
                                   {f.project_name && (
-                                    <div style={{ gap: '4px', background: 'rgba(99, 102, 241, 0.08)', color: '#4f46e5', padding: '2px 8px', borderRadius: '6px', fontSize: '9px', fontWeight: 800, display: 'inline-flex', alignItems: 'center' }}>
+                                    <div style={{ gap: '4px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', padding: '2px 8px', borderRadius: '6px', fontSize: '0.6875rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}>
                                       <Building2 size={10} /> {f.project_name}
                                     </div>
                                   )}
                                   {f.campaign_name && (
-                                    <div style={{ gap: '4px', background: 'rgba(16, 185, 129, 0.08)', color: '#10b981', padding: '2px 8px', borderRadius: '6px', fontSize: '9px', fontWeight: 800, display: 'inline-flex', alignItems: 'center' }}>
+                                    <div style={{ gap: '4px', background: 'rgba(16, 185, 129, 0.08)', color: '#059669', padding: '2px 8px', borderRadius: '6px', fontSize: '0.6875rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}>
                                       <Megaphone size={10} /> {f.campaign_name}
                                     </div>
                                   )}
                                 </div>
                               )}
 
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 8px', background: 'var(--color-bg)', borderRadius: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', background: 'var(--color-bg)', borderRadius: '8px' }}>
                                 <Avatar name={f.uploader_name} size="sm" />
                                 <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                                  <span style={{ fontSize: '9.5px', fontWeight: 800, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.uploader_name}</span>
-                                  <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.uploader_name}</span>
+                                  <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', fontWeight: 500, fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <Clock3 size={9} /> {new Date(f.created_at).toLocaleDateString('vi-VN')}
                                   </span>
                                 </div>
@@ -1097,16 +1084,16 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                     )}
                   </div>
                 ) : (
-                  <div className="table-wrap responsive-table-wrap mobile-card-table" style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-2xl)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden', marginBottom: '2rem' }}>
+                  <div className="table-wrap responsive-table-wrap mobile-card-table" style={{ background: 'var(--color-surface)', borderRadius: '16px', border: '1px solid var(--color-border)', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)', overflow: 'hidden', marginBottom: '2rem' }}>
                     <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
                       <thead>
                           <tr>
-                            <th style={{ padding: '1.25rem 2rem', fontSize: '10px', fontWeight: 900, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)' }}>Tên tài liệu</th>
-                            <th style={{ padding: '1.25rem 1.5rem', fontSize: '10px', fontWeight: 900, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)' }}>Loại</th>
-                            <th style={{ padding: '1.25rem 1.5rem', fontSize: '10px', fontWeight: 900, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)' }}>Dung lượng</th>
-                            <th style={{ padding: '1.25rem 1.5rem', fontSize: '10px', fontWeight: 900, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)' }}>Người tải lên</th>
-                            <th style={{ padding: '1.25rem 1.5rem', fontSize: '10px', fontWeight: 900, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)' }}>Ngày tải</th>
-                            <th style={{ padding: '1.25rem 2rem', fontSize: '10px', fontWeight: 900, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)', textAlign: 'right' }}>Hành động</th>
+                            <th style={{ padding: '16px 24px', fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)' }}>Tên tài liệu</th>
+                            <th style={{ padding: '16px 20px', fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)' }}>Loại</th>
+                            <th style={{ padding: '16px 20px', fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)' }}>Dung lượng</th>
+                            <th style={{ padding: '16px 20px', fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)' }}>Người tải lên</th>
+                            <th style={{ padding: '16px 20px', fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)' }}>Ngày tải</th>
+                            <th style={{ padding: '16px 24px', fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)', textAlign: 'right' }}>Hành động</th>
                           </tr>
                       </thead>
                       <tbody>
@@ -1124,16 +1111,16 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                                   setCategory(sub.id);
                                 }}
                               >
-                                <td data-label="Tên tài liệu" style={{ padding: '1.25rem 2rem' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <td data-label="Tên tài liệu" style={{ padding: '16px 24px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                                     <div style={{ color: '#f59e0b' }}>
                                       <Folder size={20} fill="#f59e0b" stroke="#f59e0b" />
                                     </div>
-                                    <span style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '0.875rem' }}>{displayLabel}</span>
+                                    <span style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '0.875rem' }}>{displayLabel}</span>
                                   </div>
                                 </td>
-                                <td data-label="Loại" style={{ padding: '1.25rem 1.5rem' }}>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 750, color: 'var(--color-text-muted)' }}>Thư mục</span>
+                                <td data-label="Loại" style={{ padding: '16px 20px' }}>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Thư mục</span>
                                 </td>
                                 <td data-label="Dung lượng" style={{ padding: '1.25rem 1.5rem' }}>
                                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>-</span>
@@ -1240,22 +1227,22 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                           {/* List view files next */}
                           {displayFiles.map(f => (
                             <tr key={f.id} className="hover-row" style={{ borderBottom: '1px solid var(--color-border-light)' }}>
-                              <td data-label="Tên tài liệu" style={{ padding: '1.25rem 2rem' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                              <td data-label="Tên tài liệu" style={{ padding: '16px 24px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                                     <div style={{ width: '40px', height: '40px', background: getFileIcon(f.name).bg, color: getFileIcon(f.name).color, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none' }}>
                                       {getFileIcon(f.name).icon}
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                      <span style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '0.875rem' }}>{f.name}</span>
+                                      <span style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '0.875rem' }}>{f.name}</span>
                                       {(f.project_name || f.campaign_name) && (
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
                                           {f.project_name && (
-                                            <span style={{ fontSize: '10px', color: '#4f46e5', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                            <span style={{ fontSize: '0.6875rem', color: '#475569', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                               <Building2 size={10} /> {f.project_name}
                                             </span>
                                           )}
                                           {f.campaign_name && (
-                                            <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                            <span style={{ fontSize: '0.6875rem', color: '#059669', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                               <Megaphone size={10} /> {f.campaign_name}
                                             </span>
                                           )}
@@ -1264,20 +1251,20 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                                     </div>
                                   </div>
                               </td>
-                              <td data-label="Loại" style={{ padding: '1.25rem 1.5rem' }}>
-                                <span style={{ fontSize: '0.75rem', fontWeight: 750, color: 'var(--color-text-muted)' }}>{f.mime_type?.split('/')[1]?.toUpperCase() || 'FILE'}</span>
+                              <td data-label="Loại" style={{ padding: '16px 20px' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{f.mime_type?.split('/')[1]?.toUpperCase() || 'FILE'}</span>
                               </td>
-                              <td data-label="Dung lượng" style={{ padding: '1.25rem 1.5rem' }}>
-                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{formatSize(f.file_size || f.size)}</span>
+                              <td data-label="Dung lượng" style={{ padding: '16px 20px' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>{formatSize(f.file_size || f.size)}</span>
                               </td>
-                              <td data-label="Người tải lên" style={{ padding: '1.25rem 1.5rem' }}>
+                              <td data-label="Người tải lên" style={{ padding: '16px 20px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                   <Avatar name={f.uploader_name} size="sm" />
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text)' }}>{f.uploader_name}</span>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)' }}>{f.uploader_name}</span>
                                 </div>
                               </td>
-                              <td data-label="Ngày tải" style={{ padding: '1.25rem 1.5rem' }}>
-                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{new Date(f.created_at).toLocaleDateString('vi-VN')}</span>
+                              <td data-label="Ngày tải" style={{ padding: '16px 20px' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>{new Date(f.created_at).toLocaleDateString('vi-VN')}</span>
                               </td>
                               <td data-label="Hành động" style={{ padding: '1.25rem 2rem', textAlign: 'right' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
@@ -1407,7 +1394,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                                             }} 
                                             onClick={() => {
                                               setActiveFileMenuId(null);
-                                              addToast('Đã sao chép link liên kết!', 'success');
+                                              addToast('Đã sao chép link liên kết', 'success');
                                               navigator.clipboard.writeText(`${import.meta.env.VITE_API_URL ?? '/backend'}/${f.file_path}`);
                                             }}
                                           >
@@ -1694,9 +1681,9 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                   </div>
                 </div>
               </div>
-              <div className="modal-footer" style={{ gap: '1rem' }}>
-                <button className="btn secondary flex-1 hover-lift" onClick={() => setShowEditModal(false)} disabled={loading}>Hủy</button>
-                <button className="btn primary flex-1 hover-lift" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleUpdateFile} disabled={loading}>
+              <div className="modal-footer" style={{ gap: '16px' }}>
+                <button className="btn secondary flex-1" onClick={() => setShowEditModal(false)} disabled={loading}>Hủy</button>
+                <button className="btn primary flex-1" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleUpdateFile} disabled={loading}>
                   {loading && <Loader2 size={16} className="spin" />}
                   <span>{loading ? 'Đang lưu...' : 'Lưu thay đổi'}</span>
                 </button>
@@ -1735,9 +1722,9 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                   />
                 </div>
               </div>
-              <div className="modal-footer" style={{ gap: '1rem' }}>
-                 <button className="btn secondary flex-1 hover-lift" onClick={() => setShowCatModal(false)} disabled={isSavingCategory}>Hủy</button>
-                 <button className="btn primary flex-1 hover-lift" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleSaveCategory} disabled={isSavingCategory}>
+              <div className="modal-footer" style={{ gap: '16px' }}>
+                 <button className="btn secondary flex-1" onClick={() => setShowCatModal(false)} disabled={isSavingCategory}>Hủy</button>
+                 <button className="btn primary flex-1" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleSaveCategory} disabled={isSavingCategory}>
                    {isSavingCategory && <Loader2 size={16} className="spin" />}
                    <span>{isSavingCategory ? 'Đang lưu...' : (editingCat ? 'Cập nhật' : 'Thêm ngay')}</span>
                  </button>

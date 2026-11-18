@@ -2,7 +2,7 @@
 /**
  * Verification of proposed links_qr stats/analytics aliasing & payload contract.
  */
-$phpBin = 'C:\\Users\\LENOVO\\AppData\\Local\\Microsoft\\WinGet\\Packages\\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\\php.exe';
+$phpBin = getenv('PHP_BIN') ?: PHP_BINARY;
 
 // 1. Test code snippet syntax lint
 $code = <<<'PHP'

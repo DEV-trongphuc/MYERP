@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
-import { Sparkles } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { useAuth } from '../../contexts/AuthContext';
 import { BrandChatIcon } from './BrandChatIcon';
@@ -181,23 +180,15 @@ export const ChatFloatingLauncher: React.FC = () => {
         @keyframes chatBeaconPing {
           0% {
             transform: scale(0.95);
-            opacity: 0.75;
+            opacity: 0.7;
           }
           65% {
-            transform: scale(1.48);
+            transform: scale(1.45);
             opacity: 0;
           }
           100% {
-            transform: scale(1.48);
+            transform: scale(1.45);
             opacity: 0;
-          }
-        }
-        @keyframes chatBreathingGlow {
-          0%, 100% {
-            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5), 0 8px 24px rgba(220, 38, 38, 0.45), 0 2px 6px rgba(0, 0, 0, 0.12);
-          }
-          50% {
-            box-shadow: 0 0 0 10px rgba(239, 68, 68, 0), 0 12px 28px rgba(220, 38, 38, 0.65), 0 4px 10px rgba(0, 0, 0, 0.18);
           }
         }
       `}</style>
@@ -216,61 +207,47 @@ export const ChatFloatingLauncher: React.FC = () => {
           bottom: isMobile 
             ? 'calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 14px)' 
             : '24px',
-          right: isMobile ? '16px' : '25px',
+          right: isMobile ? '16px' : '24px',
           width: isMobile ? '48px' : '52px',
           height: isMobile ? '48px' : '52px',
           borderRadius: '50%',
-          background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+          background: '#BD1D2D',
           color: '#ffffff',
           border: 'none',
           display: isMobile && isOverlayOpen ? 'none' : 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'pointer',
-          boxShadow: '0 8px 24px rgba(220, 38, 38, 0.45), 0 2px 6px rgba(0, 0, 0, 0.12)',
+          boxShadow: '0 4px 14px rgba(15, 23, 42, 0.22)',
           zIndex: 10005,
           opacity: isOverlayOpen && isMobile ? 0 : 1,
           pointerEvents: isOverlayOpen && isMobile ? 'none' : 'auto',
-          transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
-          outline: 'none',
-          animation: unreadTotal > 0 ? 'chatBreathingGlow 2.4s ease-in-out infinite' : undefined
+          transition: 'background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s cubic-bezier(0.22, 1, 0.36, 1)',
+          outline: 'none'
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'scale(1.08)';
-          e.currentTarget.style.boxShadow = '0 12px 28px rgba(220, 38, 38, 0.58), 0 4px 10px rgba(0, 0, 0, 0.18)';
+          e.currentTarget.style.backgroundColor = '#A31422';
+          e.currentTarget.style.boxShadow = '0 6px 18px rgba(15, 23, 42, 0.28)';
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.boxShadow = '0 8px 24px rgba(220, 38, 38, 0.45), 0 2px 6px rgba(0, 0, 0, 0.12)';
+          e.currentTarget.style.backgroundColor = '#BD1D2D';
+          e.currentTarget.style.boxShadow = '0 4px 14px rgba(15, 23, 42, 0.22)';
         }}
-        title="Tin nhắn nội bộ (WorkChat) - Click để trò chuyện"
+        title="Tin nhắn nội bộ (WorkChat)"
       >
-        {/* Pulsing Beacon Ripple Aura when unread messages exist */}
+        {/* Live Unread Beacon Ripple when unread messages exist */}
         {unreadTotal > 0 && (
-          <>
-            <span
-              style={{
-                position: 'absolute',
-                inset: '-2px',
-                borderRadius: '50%',
-                background: 'rgba(239, 68, 68, 0.45)',
-                zIndex: -1,
-                pointerEvents: 'none',
-                animation: 'chatBeaconPing 2.4s cubic-bezier(0, 0, 0.2, 1) infinite'
-              }}
-            />
-            <span
-              style={{
-                position: 'absolute',
-                inset: '-2px',
-                borderRadius: '50%',
-                background: 'rgba(239, 68, 68, 0.3)',
-                zIndex: -1,
-                pointerEvents: 'none',
-                animation: 'chatBeaconPing 2.4s cubic-bezier(0, 0, 0.2, 1) infinite 0.8s'
-              }}
-            />
-          </>
+          <span
+            style={{
+              position: 'absolute',
+              inset: '-2px',
+              borderRadius: '50%',
+              background: 'rgba(189, 29, 45, 0.35)',
+              zIndex: -1,
+              pointerEvents: 'none',
+              animation: 'chatBeaconPing 2.4s cubic-bezier(0, 0, 0.2, 1) infinite'
+            }}
+          />
         )}
 
         <BrandChatIcon size={27} variant="solid-white" />
@@ -297,10 +274,11 @@ export const ChatFloatingLauncher: React.FC = () => {
               position: 'absolute',
               top: '-4px',
               right: '-4px',
-              background: '#ef4444',
+              background: '#BD1D2D',
               color: '#ffffff',
               fontSize: '0.72rem',
-              fontWeight: 800,
+              fontWeight: 700,
+              fontVariantNumeric: 'tabular-nums',
               padding: '2px 6px',
               borderRadius: '12px',
               minWidth: '18px',
@@ -308,9 +286,7 @@ export const ChatFloatingLauncher: React.FC = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 2px 6px rgba(239, 68, 68, 0.5)',
-              border: '2px solid #ffffff',
-              animation: 'pulse 2s infinite'
+              border: '2px solid #ffffff'
             }}
           >
             {unreadTotal > 99 ? '99+' : unreadTotal}

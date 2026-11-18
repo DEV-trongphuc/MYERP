@@ -23,6 +23,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { EmptyCard } from '../components/ui/EmptyCard';
 import { useAuthStore } from '../store/authStore';
 import { DistributionNavTabs } from '../components/DistributionNavTabs';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 const OP_LABELS: Record<string, string> = {
   contains: 'Có chứa từ khóa',
@@ -51,7 +52,7 @@ const SortableRuleItem = ({ rule, idx, connections, onEdit, onDelete, isDragDisa
   };
 
   return (
-    <div ref={setNodeRef} style={style} className={`group hover-lift ${isDragging ? 'is-dragging' : ''}`}>
+    <div ref={setNodeRef} style={style} className={`group ${isDragging ? 'is-dragging' : ''}`}>
       <div className="sortable-rule-card" style={{
         display: 'flex', alignItems: 'stretch', margin: '0.5rem', border: '1px solid var(--color-border)',
         borderRadius: 'var(--radius-lg)', background: 'var(--color-surface)', boxShadow: isDragging ? 'var(--shadow-lg)' : 'var(--shadow-xs)',
@@ -74,7 +75,7 @@ const SortableRuleItem = ({ rule, idx, connections, onEdit, onDelete, isDragDisa
           )}
           <div style={{
             width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', fontWeight: 800, color: 'var(--color-primary)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-primary)', fontVariantNumeric: 'tabular-nums',
             marginTop: 8, boxShadow: 'var(--shadow-sm)'
           }}>
             {idx + 1}
@@ -113,7 +114,7 @@ const SortableRuleItem = ({ rule, idx, connections, onEdit, onDelete, isDragDisa
                   if (cId === -3) {
                     return (
                       <span key={cId} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', fontWeight: 700, padding: '4px 8px', background: 'var(--color-bg)', borderRadius: 4, color: 'var(--color-text-muted)' }}>
-                        <Keyboard size={14} color="#ec4899" /> {t("Chỉ Data Nhập tay (Thêm Data Nhanh)")}
+                        <Keyboard size={14} color="#475569" /> {t("Chỉ Data Nhập tay (Thêm Data Nhanh)")}
                       </span>
                     );
                   }
@@ -164,7 +165,7 @@ const SortableRuleItem = ({ rule, idx, connections, onEdit, onDelete, isDragDisa
                     {bIndex > 0 && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <div style={{ flex: 1, height: 1, background: 'var(--color-border-light)' }} />
-                        <span style={{ fontSize: '0.65rem', fontWeight: 800, background: 'var(--color-warning)', color: 'white', padding: '2px 8px', borderRadius: 10 }}>OR</span>
+                        <span style={{ fontSize: '0.65rem', fontWeight: 700, background: 'var(--color-warning)', color: 'white', padding: '2px 8px', borderRadius: 10 }}>OR</span>
                         <div style={{ flex: 1, height: 1, background: 'var(--color-border-light)' }} />
                       </div>
                     )}
@@ -172,7 +173,7 @@ const SortableRuleItem = ({ rule, idx, connections, onEdit, onDelete, isDragDisa
                       {(branch.conditions || []).map((c: any, i: number) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginTop: i > 0 ? '0.5rem' : 0 }}>
                           {i > 0 && (
-                            <span style={{ fontSize: '0.65rem', fontWeight: 800, background: 'var(--color-text-muted)', color: 'white', padding: '2px 6px', borderRadius: 4 }}>
+                            <span style={{ fontSize: '0.65rem', fontWeight: 700, background: 'var(--color-text-muted)', color: 'white', padding: '2px 6px', borderRadius: 4 }}>
                               AND
                             </span>
                           )}
@@ -191,7 +192,7 @@ const SortableRuleItem = ({ rule, idx, connections, onEdit, onDelete, isDragDisa
                             }}>
                               <SlidersHorizontal size={13} style={{ color: '#2563eb' }} /> {c.col}
                             </span>
-                            <span style={{ color: 'var(--color-text-light)', fontSize: '0.8125rem', fontStyle: 'italic' }}>
+                            <span style={{ color: 'var(--color-text-light)', fontSize: '0.8125rem' }}>
                               {t(OP_LABELS[c.op]) || c.op}
                             </span>
                             {c.op !== 'is_empty' && c.op !== 'is_not_empty' && (
@@ -218,15 +219,14 @@ const SortableRuleItem = ({ rule, idx, connections, onEdit, onDelete, isDragDisa
           <div style={{ flex: '0 0 250px' }}>
             <p style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>{t("Hành động xử lý")}</p>
             <div style={{
-              background: 'linear-gradient(135deg, rgba(163, 20, 34, 0.05), rgba(163, 20, 34, 0.15))',
+              background: 'rgba(189, 29, 45, 0.06)',
               border: '1px solid var(--color-primary)',
               color: 'var(--color-primary)',
               padding: '8px 16px',
-              borderRadius: 50,
+              borderRadius: 10,
               fontWeight: 600,
               fontSize: '0.875rem',
               display: 'flex', alignItems: 'center', gap: 10,
-              boxShadow: '0 2px 8px rgba(163, 20, 34, 0.15)'
             }}>
               <div style={{ background: 'var(--color-primary)', padding: 6, borderRadius: '50%', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <MapPin size={16} />
@@ -432,9 +432,10 @@ const RuleSettingsInner = () => {
         fetchAPI('get_mappings')
       ]);
       if (connRes.success && mapRes.success) {
-        const conns = connRes.data.map((c: any) => ({
+        const maps = extractArray(mapRes);
+        const conns = extractArray(connRes).map((c: any) => ({
           ...c,
-          mappings: mapRes.data.filter((m: any) => Number(m.connection_id) === Number(c.id))
+          mappings: maps.filter((m: any) => Number(m.connection_id) === Number(c.id))
         })).filter((c: any) => Number(c.is_silent) !== 1);
         setConnections(conns);
       }
@@ -597,7 +598,7 @@ const RuleSettingsInner = () => {
         body: JSON.stringify(payload)
       });
       if (json.success) {
-        toast.success(editingRule ? t('Cập nhật thành công!') : t('Thêm rule thành công!'));
+        toast.success(editingRule ? t('Cập nhật thành công') : t('Thêm rule thành công'));
         setIsModalOpen(false);
         fetchRules();
       } else {
@@ -615,7 +616,7 @@ const RuleSettingsInner = () => {
     try {
       const json = await fetchAPI(`delete_rule&id=${deleteId}`);
       if (json.success) {
-        toast.success(t('Xóa thành công!'));
+        toast.success(t('Xóa thành công'));
         fetchRules();
       } else {
         toast.error(json.message || t('Lỗi khi xóa'));
@@ -748,9 +749,9 @@ const RuleSettingsInner = () => {
       </div>
 
       <div style={{
-        background: 'linear-gradient(135deg, rgba(163, 20, 34, 0.05) 0%, rgba(163, 20, 34, 0.1) 100%)',
+        background: 'rgba(189, 29, 45, 0.04)',
         border: '1px solid var(--color-primary-light)', borderLeft: '4px solid var(--color-primary)',
-        borderRadius: 'var(--radius-lg)', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.5rem'
+        borderRadius: 'var(--radius-lg)', padding: '20px 24px', display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '24px'
       }}>
         <div style={{
           background: 'var(--color-surface)',
@@ -779,7 +780,7 @@ const RuleSettingsInner = () => {
                 { value: 'null', label: t('Chỉ các Quy tắc "Tất cả kết nối"'), icon: <Globe size={14} color="#BD1D2D" /> },
                 { value: -1, label: t('Tất cả Google Sheets'), icon: <FileSpreadsheet size={14} color="#10b981" /> },
                 { value: -2, label: t('Tất cả API / Landing Pages'), icon: <Zap size={14} color="#f59e0b" /> },
-                { value: -3, label: t('Chỉ nhóm "Data Nhập tay"'), icon: <Keyboard size={14} color="#ec4899" /> },
+                { value: -3, label: t('Chỉ nhóm "Data Nhập tay"'), icon: <Keyboard size={14} color="#475569" /> },
                 ...connections.map(c => ({ value: c.id, label: c.sheet_name, icon: <FileSpreadsheet size={14} color="#10b981" /> }))
               ]}
               value={activeFilter === null ? 'null' : activeFilter.toString()}
@@ -804,7 +805,7 @@ const RuleSettingsInner = () => {
         </div>
 
         {(activeFilter !== 'all' || activeRoundFilter !== 'all') && (
-          <div style={{ fontSize: '0.8125rem', color: 'var(--color-warning)', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ fontSize: '0.8125rem', color: 'var(--color-warning)', display: 'flex', alignItems: 'center', gap: 6 }}>
             <Filter size={14} /> {t("Chế độ lọc đang bật. Kéo thả thứ tự tạm khóa.")}
           </div>
         )}
@@ -870,7 +871,7 @@ const RuleSettingsInner = () => {
                 { value: 'all', label: t('Tất cả mọi kết nối (Sheet & API & Nhập tay)'), icon: <Globe size={14} color="#BD1D2D" /> },
                 { value: -1, label: t('Tất cả các Google Sheets'), icon: <FileSpreadsheet size={14} color="#10b981" /> },
                 { value: -2, label: t('Tất cả các API / Landing Pages'), icon: <Zap size={14} color="#f59e0b" /> },
-                { value: -3, label: t('Chỉ Data Nhập tay (Thêm Data Nhanh)'), icon: <Keyboard size={14} color="#ec4899" /> },
+                { value: -3, label: t('Chỉ Data Nhập tay (Thêm Data Nhanh)'), icon: <Keyboard size={14} color="#475569" /> },
                 ...connections.map(c => ({ value: c.id, label: c.sheet_name, icon: <FileSpreadsheet size={14} color="#10b981" /> }))
               ]}
               value={connectionId}
@@ -885,7 +886,7 @@ const RuleSettingsInner = () => {
               <div key={bIndex} style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '1.25rem', position: 'relative' }}>
                 <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 4, background: 'var(--color-primary)', borderRadius: 'var(--radius-lg) 0 0 var(--radius-lg)' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h4 style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', margin: 0 }}>{t("Nhánh {num}").replace('{num}', String(bIndex + 1))}</h4>
+                  <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', margin: 0 }}>{t("Nhánh {num}").replace('{num}', String(bIndex + 1))}</h4>
                   {branches.length > 1 && (
                     <button type="button" className="btn ghost" style={{ color: 'var(--color-danger)', padding: 4 }} onClick={() => setBranches(branches.filter((_, idx) => idx !== bIndex))}>
                       <Trash2 size={16} />
@@ -901,9 +902,9 @@ const RuleSettingsInner = () => {
                       <div key={i} className="condition-row-responsive" style={{ background: 'transparent', padding: '0', position: 'relative' }}>
                         <div style={{ position: 'relative', width: 32, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                           {i === 0 ? (
-                            <div style={{ background: 'var(--color-primary-light)', color: 'var(--color-primary)', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800, flexShrink: 0, position: 'relative', zIndex: 2 }}>IF</div>
+                            <div style={{ background: 'var(--color-primary-light)', color: 'var(--color-primary)', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, position: 'relative', zIndex: 2 }}>IF</div>
                           ) : (
-                            <div style={{ background: 'var(--color-bg)', color: 'var(--color-text-muted)', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0, position: 'relative', zIndex: 2 }}>AND</div>
+                            <div style={{ background: 'var(--color-bg)', color: 'var(--color-text-muted)', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6875rem', fontWeight: 700, flexShrink: 0, position: 'relative', zIndex: 2 }}>AND</div>
                           )}
                           {!isLast && (
                             <div style={{ position: 'absolute', top: 32, bottom: -20, left: 15, width: 2, background: 'var(--color-border)', zIndex: 1 }} />
@@ -1330,7 +1331,7 @@ const RuleSettingsInner = () => {
                         ...(connections.some(c => c.connection_type === 'landing_page') ? [
                           { value: 'landing_page', label: t('Landing Page API'), icon: <Zap size={14} color="#f59e0b" /> }
                         ] : []),
-                        { value: 'manual', label: t('Nhập tay'), icon: <Keyboard size={14} color="#ec4899" /> }
+                        { value: 'manual', label: t('Nhập tay'), icon: <Keyboard size={14} color="#475569" /> }
                       ]}
                       value={simulateConnectionType}
                       onChange={v => setSimulateConnectionType(String(v))}
@@ -1547,7 +1548,7 @@ const RuleSettingsInner = () => {
 
                     {/* Danh sách Trace Logs */}
                     <div>
-                      <h5 style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text-light)', margin: '0 0 10px', textTransform: 'uppercase' }}>
+                      <h5 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text-light)', margin: '0 0 12px', textTransform: 'uppercase' }}>
                         {t("Chi tiết quy trình quét quy tắc (Trace Logs)")}
                       </h5>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -1594,7 +1595,7 @@ const RuleSettingsInner = () => {
                               {/* Chi tiết điều kiện kiểm tra */}
                               <div style={{ padding: '8px 12px', background: 'var(--color-surface)', fontSize: '0.775rem', color: 'var(--color-text-muted)' }}>
                                 {isSkipped ? (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontStyle: 'italic' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <AlertCircle size={14} /> {t(traceItem.reason)}
                                   </div>
                                 ) : (
@@ -1605,7 +1606,7 @@ const RuleSettingsInner = () => {
                                           <span style={{ background: 'var(--color-bg)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600, color: 'var(--color-text-light)' }}>
                                             {c.col}
                                           </span>
-                                          <span style={{ fontStyle: 'italic', fontSize: '0.725rem' }}>
+                                          <span style={{ fontSize: '0.725rem' }}>
                                             {t(OP_LABELS[c.op]) || c.op}
                                           </span>
                                           {c.op !== 'is_empty' && c.op !== 'is_not_empty' && (
@@ -1619,7 +1620,7 @@ const RuleSettingsInner = () => {
                                         </span>
                                       </div>
                                     ))}
-                                    <div style={{ borderTop: '1px solid #f1f5f9', marginTop: 4, paddingTop: 4, fontSize: '0.725rem', fontStyle: 'italic', color: '#94a3b8' }}>
+                                    <div style={{ borderTop: '1px solid #f1f5f9', marginTop: 4, paddingTop: 4, fontSize: '0.725rem', color: '#94a3b8' }}>
                                       {t("Kết luận:")} {t(traceItem.reason)}
                                     </div>
                                   </div>
@@ -1710,7 +1711,8 @@ const RuleSettingsInner = () => {
                             alignItems: 'center', 
                             justifyContent: 'center', 
                             fontSize: '0.75rem', 
-                            fontWeight: 800, 
+                            fontWeight: 700, 
+                            fontVariantNumeric: 'tabular-nums',
                             color: 'var(--color-primary)',
                             flexShrink: 0
                           }}>
@@ -1721,17 +1723,16 @@ const RuleSettingsInner = () => {
                           </span>
                           <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>&rarr;</span>
                           <span style={{ 
-                            background: 'linear-gradient(135deg, rgba(163, 20, 34, 0.05), rgba(163, 20, 34, 0.12))',
+                            background: 'rgba(189, 29, 45, 0.06)',
                             border: '1px solid var(--color-primary-light)',
                             color: 'var(--color-primary)',
-                            padding: '4px 14px',
-                            borderRadius: '50px',
-                            fontWeight: 700,
+                            padding: '4px 12px',
+                            borderRadius: '8px',
+                            fontWeight: 600,
                             fontSize: '0.75rem',
                             whiteSpace: 'nowrap',
                             display: 'inline-flex',
                             alignItems: 'center',
-                            boxShadow: '0 2px 4px rgba(163, 20, 34, 0.05)'
                           }}>
                             {r.round_name || `Vòng ${r.target_round_id}`}
                           </span>
@@ -1826,7 +1827,7 @@ const RuleSettingsInner = () => {
             }}>
               <Layers size={20} color="#3b82f6" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
-                <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
+                <h5 style={{ fontSize: '0.875rem', fontWeight: 700, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                   {t("1. Quét theo Thứ tự Ưu tiên (Priority Scan)")}
                 </h5>
                 <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
@@ -1849,7 +1850,7 @@ const RuleSettingsInner = () => {
             }}>
               <Server size={20} color="#10b981" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
-                <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
+                <h5 style={{ fontSize: '0.875rem', fontWeight: 700, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                   {t("2. Kết nối đa nguồn (Integration Sources)")}
                 </h5>
                 <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
@@ -1872,7 +1873,7 @@ const RuleSettingsInner = () => {
             }}>
               <Cpu size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
-                <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
+                <h5 style={{ fontSize: '0.875rem', fontWeight: 700, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                   {t("3. Chế độ Im lặng (Silent Mode) & Ghi đè (Inject Data)")}
                 </h5>
                 <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>

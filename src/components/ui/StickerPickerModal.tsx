@@ -251,7 +251,7 @@ export const StickerPickerModal: React.FC<StickerPickerModalProps> = ({
           background: 'var(--color-bg, #f8fafc)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '1.1rem' }}>✨</span>
+            <Smile size={16} strokeWidth={1.75} style={{ color: '#BD1D2D' }} />
             <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>
               {activeTab === 'emoji' ? 'Biểu cảm & Emoji' : activeTab === 'corporate' ? 'Nhãn dán: Doanh nghiệp' : `Nhãn dán: ${currentPack?.name || 'Sticker'}`}
             </span>

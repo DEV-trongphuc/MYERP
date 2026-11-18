@@ -10,6 +10,7 @@ import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { useAuthStore } from '../store/authStore';
 import { canManageSystemSettings } from '../utils/roleUtils';
 import { DistributionNavTabs } from '../components/DistributionNavTabs';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 const SYSTEM_FIELDS = [
   // --- Thông tin Cá nhân & Liên hệ ---
@@ -449,13 +450,14 @@ const IntegrationsInner = () => {
         if (cFields.length > 0) {
           const formattedCF = cFields.map((cf: any) => ({
             value: `cf_${cf.id}`,
-            label: `✨ ${cf.field_name || cf.name || 'Trường tùy chỉnh'} (${cf.field_type || 'Custom'})`
+            label: `${cf.field_name || cf.name || 'Trường tùy chỉnh'} (${cf.field_type || 'Custom'})`
           }));
           setCustomSystemFields(formattedCF);
         }
       }
       if (connRes.success && mapRes.success) {
-        const conns = connRes.data.map((c: any) => ({
+        const maps = extractArray(mapRes);
+        const conns = extractArray(connRes).map((c: any) => ({
           ...c,
           is_active: Boolean(Number(c.is_active)),
           sync_interval: Number(c.sync_interval),
@@ -463,7 +465,7 @@ const IntegrationsInner = () => {
           is_silent: Boolean(Number(c.is_silent)),
           sync_saleperson: Boolean(Number(c.sync_saleperson)),
           notify_admin: Boolean(Number(c.notify_admin !== undefined ? c.notify_admin : (c.connection_type === 'landing_page' ? 1 : 0))),
-          mappings: mapRes.data.filter((m: any) => Number(m.connection_id) === Number(c.id))
+          mappings: maps.filter((m: any) => Number(m.connection_id) === Number(c.id))
         }));
         setConnections(conns);
 
@@ -1689,7 +1691,7 @@ fetch("${webhookUrl(selected.webhook_token)}", {
                   <div style={{ padding: '12px 16px', background: 'var(--color-info-light)', border: '1px solid var(--color-border)', borderRadius: 8, display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: '1.25rem' }}>
                     <Info size={18} color="var(--color-primary)" style={{ flexShrink: 0, marginTop: 2 }} />
                     <p style={{ fontSize: '0.8125rem', color: 'var(--color-text)', margin: 0, lineHeight: 1.5 }}>
-                      <strong>{t('Mẹo cấu hình:')}</strong> {t('Bạn có thể map')} <strong>{t('nhiều cột trên Sheets')}</strong> {t('vào')} <strong>{t('cùng 1 trường hệ thống')}</strong> {t('(ví dụ: Nguồn Data = Cột UTM Source + Cột Campaign, hoặc Ghi Chú = Sở thích + Khung giờ). Hệ thống sẽ tự động gộp dữ liệu lại cho bạn!')}
+                      <strong>{t('Mẹo cấu hình:')}</strong> {t('Bạn có thể map')} <strong>{t('nhiều cột trên Sheets')}</strong> {t('vào')} <strong>{t('cùng 1 trường hệ thống')}</strong> {t('(ví dụ: Nguồn Data = Cột UTM Source + Cột Campaign, hoặc Ghi Chú = Sở thích + Khung giờ). Hệ thống sẽ tự động gộp dữ liệu lại cho bạn.')}
                     </p>
                   </div>
 
@@ -1740,7 +1742,7 @@ fetch("${webhookUrl(selected.webhook_token)}", {
                                   {m.custom_label}
                                 </span>
                               ) : (
-                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem', fontStyle: 'italic' }}>
+                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem' }}>
                                   {t('Để mặc định (Tên cột)')}
                                 </span>
                               )}
@@ -1760,7 +1762,7 @@ fetch("${webhookUrl(selected.webhook_token)}", {
                                     setNewMappingCustomLabel(m.custom_label || '');
                                   }}
                                   title={t("Chỉnh sửa mapping")}
-                                  style={{ padding: 6, borderRadius: 8, color: 'var(--color-text-muted)', transition: 'all 0.2s', background: editingMappingId === m.id ? 'var(--color-warning-light)' : 'transparent' }}
+                                  style={{ padding: 6, borderRadius: 8, color: 'var(--color-text-muted)', transition: 'color 0.2s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1)', background: editingMappingId === m.id ? 'var(--color-warning-light)' : 'transparent' }}
                                   onMouseEnter={e => { (e.currentTarget.style.color = 'var(--color-warning)'); (e.currentTarget.style.background = 'var(--color-warning-light)'); }}
                                   onMouseLeave={e => { (e.currentTarget.style.color = 'var(--color-text-muted)'); (e.currentTarget.style.background = editingMappingId === m.id ? 'var(--color-warning-light)' : 'transparent'); }}
                                 >
@@ -1769,7 +1771,7 @@ fetch("${webhookUrl(selected.webhook_token)}", {
                                 <button
                                   onClick={() => handleDeleteMapping(m.id)}
                                   title={t("Xóa mapping")}
-                                  style={{ padding: 6, borderRadius: 8, color: 'var(--color-text-muted)', transition: 'all 0.2s' }}
+                                  style={{ padding: 6, borderRadius: 8, color: 'var(--color-text-muted)', transition: 'color 0.2s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1)' }}
                                   onMouseEnter={e => { (e.currentTarget.style.color = 'var(--color-danger)'); (e.currentTarget.style.background = 'var(--color-danger-light)'); }}
                                   onMouseLeave={e => { (e.currentTarget.style.color = 'var(--color-text-muted)'); (e.currentTarget.style.background = 'transparent'); }}
                                 >
@@ -1877,7 +1879,7 @@ fetch("${webhookUrl(selected.webhook_token)}", {
                     />
                     {newSpreadsheetId.length >= 40 && (
                       <p style={{ fontSize: '0.75rem', color: '#eab308', marginTop: 4 }}>
-                        💡 {t('Không quét được tự động. Vui lòng chia sẻ quyền')} "{t('Người xem')}" {t('cho Sheet để quét được danh sách trang tính.')}
+                        {t('Lưu ý: Không quét được tự động. Vui lòng chia sẻ quyền')} "{t('Người xem')}" {t('cho Sheet để quét được danh sách trang tính.')}
                       </p>
                     )}
                   </div>
@@ -2128,7 +2130,7 @@ fetch("${webhookUrl(selected.webhook_token)}", {
                             {m.custom_label}
                           </span>
                         ) : (
-                          <span style={{ color: '#94a3b8', fontSize: '0.75rem', fontStyle: 'italic' }}>{t('Mặc định')}</span>
+                          <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>{t('Mặc định')}</span>
                         )}
                       </div>
                       <div style={{ color: 'var(--color-text-secondary, #475569)', fontSize: '0.875rem', fontWeight: 700 }}>{t(SYSTEM_FIELDS.find(f => f.value === m.sys_field)?.label || m.sys_field)}</div>

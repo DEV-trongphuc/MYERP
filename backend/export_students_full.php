@@ -7,14 +7,10 @@ require_once __DIR__ . '/db_connect.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
-// Check authorization (Token or Diag token)
-$token = $_GET['token'] ?? '';
-$diagToken = 'Ideas_Diag_Secure_Token_2026_9e88d6c701fbc6b7';
-$isAuthorized = false;
-
-if ($token === $diagToken) {
-    $isAuthorized = true;
-}
+// Check authorization (CLI or configured Diag token)
+$token = (string)($_GET['token'] ?? '');
+$diagToken = (string)($_ENV['DIAG_TOKEN'] ?? $_ENV['MYERP_DIAG_TOKEN'] ?? getenv('DIAG_TOKEN') ?: '');
+$isAuthorized = (php_sapi_name() === 'cli') || ($diagToken !== '' && hash_equals($diagToken, $token));
 
 if (!$isAuthorized) {
     http_response_code(403);

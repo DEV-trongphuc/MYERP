@@ -579,7 +579,7 @@ export const LecturerInvitationModal: React.FC<LecturerInvitationModalProps> = (
       await navigator.clipboard.writeText(generateEmailHtml());
       setCopiedType('html');
       setTimeout(() => setCopiedType(null), 2500);
-      if (addToast) addToast('Đã sao chép toàn bộ HTML Email vào Clipboard!', 'success');
+      if (addToast) addToast('Đã sao chép toàn bộ HTML Email vào Clipboard.', 'success');
     } catch {
       // fallback
     }
@@ -649,11 +649,11 @@ export const LecturerInvitationModal: React.FC<LecturerInvitationModalProps> = (
           type: 'success',
           text:
             json.message ||
-            `Đã gửi thành công Thư mời giảng & Hợp đồng tới ${lecturerEmail} (CC Học vụ: ${ccEmails})!`,
+            `Đã gửi thành công Thư mời giảng & Hợp đồng tới ${lecturerEmail} (CC Học vụ: ${ccEmails}).`,
         });
         if (addToast) {
           addToast(
-            `Đã gửi Thư mời giảng chuyên đề ${subjectName} tới GV ${lecturerName} thành công!`,
+            `Đã gửi Thư mời giảng chuyên đề ${subjectName} tới GV ${lecturerName} thành công.`,
             'success'
           );
         }
@@ -709,8 +709,8 @@ export const LecturerInvitationModal: React.FC<LecturerInvitationModalProps> = (
         {/* HEADER */}
         <div
           style={{
-            padding: '14px 22px',
-            background: 'linear-gradient(135deg, #BD1D2D 0%, #8C111E 100%)',
+            padding: '16px 20px',
+            background: '#BD1D2D',
             color: '#ffffff',
             display: 'flex',
             alignItems: 'center',
@@ -1438,8 +1438,8 @@ export const LecturerInvitationModal: React.FC<LecturerInvitationModalProps> = (
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Sparkles className="w-4 h-4 text-amber-500" />
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Sparkles size={16} strokeWidth={1.75} color="#BD1D2D" />
                 <span>Bản xem trước Email (Live WYSIWYG)</span>
               </div>
               <div style={{ display: 'flex', gap: '6px' }}>
@@ -1573,21 +1573,18 @@ export const LecturerInvitationModal: React.FC<LecturerInvitationModalProps> = (
               disabled={isSending}
               onClick={handleSendEmail}
               style={{
-                background: isSending
-                  ? '#94a3b8'
-                  : 'linear-gradient(135deg, #BD1D2D 0%, #991b1b 100%)',
+                background: isSending ? '#94a3b8' : '#BD1D2D',
                 border: 'none',
                 color: '#ffffff',
                 padding: '8px 20px',
                 borderRadius: '8px',
                 fontSize: '13px',
-                fontWeight: 700,
+                fontWeight: 600,
                 cursor: isSending ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                boxShadow: '0 2px 6px rgba(189,29,45,0.25)',
-                transition: 'all 0.15s ease',
+                transition: 'background-color 0.16s cubic-bezier(0.22, 1, 0.36, 1)',
               }}
             >
               {isSending ? (

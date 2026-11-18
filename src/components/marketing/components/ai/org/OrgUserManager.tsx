@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useChatPage, OrgUser } from '../../../contexts/ChatPageContext';
 import { api } from '../../../services/storageAdapter';
-import { Users, UserPlus, Search, MoreVertical, Shield, ShieldAlert, Trash2, Edit2, Check, X, AlertTriangle, Ban, BarChart, Clock, Lock, ArrowRight, UserCheck, User, ChevronDown, MessageSquare, FileCode, ImageIcon, Sparkles } from 'lucide-react';
+import { Users, UserPlus, Search, Shield, ShieldAlert, Trash2, Edit2, Check, X, AlertTriangle, Ban, Clock, Lock, ArrowRight, UserCheck, User, ChevronDown, MessageSquare, FileCode, ImageIcon, Cpu } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ConfirmModal from '../../common/ConfirmModal';
 import { getMktPortalRoot } from '../../../utils/portalRoot';
@@ -205,19 +205,19 @@ const OrgUserManager: React.FC<OrgUserManagerProps> = ({ initialEditUserId, cate
                 {!hideHeader && (
                     <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 p-4 lg:p-6 ${isDarkTheme ? 'bg-[#1E2532]/20' : 'bg-slate-50/50'}`}>
                         {[
-                            { label: 'Total Users', value: users.length, icon: Users, color: 'text-blue-500', bg: 'bg-blue-50' },
-                            { label: 'Active', value: users.filter(u => u.status === 'active').length, icon: UserCheck, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-                            { label: 'Warning', value: users.filter(u => u.status === 'warning').length, icon: AlertTriangle, color: 'text-[var(--color-primary)]', bg: 'bg-amber-50' },
-                            { label: 'Banned', value: users.filter(u => u.status === 'banned').length, icon: Ban, color: 'text-rose-500', bg: 'bg-rose-50' }
+                            { label: 'Total Users', value: users.length, icon: Users, color: 'text-slate-700 dark:text-slate-200', bg: 'bg-slate-100 dark:bg-slate-800' },
+                            { label: 'Active', value: users.filter(u => u.status === 'active').length, icon: UserCheck, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+                            { label: 'Warning', value: users.filter(u => u.status === 'warning').length, icon: AlertTriangle, color: 'text-[#BD1D2D]', bg: 'bg-[#BD1D2D]/10' },
+                            { label: 'Banned', value: users.filter(u => u.status === 'banned').length, icon: Ban, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-500/10' }
                         ].map((stat, idx) => (
-                            <div key={idx} className={`p-4 rounded-xl border transition-all ${isDarkTheme ? 'bg-[#1E2532] border-slate-800 shadow-inner shadow-slate-950/20' : 'bg-white border-slate-100 shadow-sm'}`}>
+                            <div key={idx} className={`p-4 rounded-xl border transition-colors ${isDarkTheme ? 'bg-[#1E2532] border-slate-800' : 'bg-white border-slate-200 shadow-xs'}`}>
                                 <div className="flex items-center justify-between mb-2">
-                                    <div className={`p-2 rounded-lg ${stat.bg} ${stat.color} ${isDarkTheme ? 'bg-opacity-10' : ''}`}>
-                                        <stat.icon size={18} />
+                                    <div className={`p-2 rounded-lg ${stat.bg} ${stat.color}`}>
+                                        <stat.icon size={18} strokeWidth={1.75} />
                                     </div>
-                                    <span className={`text-lg font-black ${isDarkTheme ? 'text-slate-200' : 'text-slate-800'}`}>{stat.value}</span>
+                                    <span className={`text-lg font-bold tabular-nums ${isDarkTheme ? 'text-slate-100' : 'text-[#0F172A]'}`}>{stat.value}</span>
                                 </div>
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{stat.label}</span>
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{stat.label}</span>
                             </div>
                         ))}
                     </div>
@@ -254,28 +254,28 @@ const OrgUserManager: React.FC<OrgUserManagerProps> = ({ initialEditUserId, cate
                 </div>
 
                 <div className="px-4 lg:px-6 pb-6">
-                    <div className={`rounded-[18px] border shadow-sm overflow-hidden ${isDarkTheme ? 'bg-[#1E2532]/30 border-slate-800' : 'bg-white border-slate-200'}`}>
+                    <div className={`rounded-2xl border shadow-xs overflow-hidden ${isDarkTheme ? 'bg-[#1E2532]/30 border-slate-800' : 'bg-white border-slate-200'}`}>
                         <table className="w-full text-left text-sm border-collapse">
                             <thead>
-                                <tr className={`text-[10px] font-black uppercase tracking-wide border-b ${isDarkTheme ? 'bg-slate-800/50 text-slate-400 border-slate-700' : 'bg-slate-50/80 text-slate-400 border-slate-100'}`}>
+                                <tr className={`text-[10px] font-bold uppercase tracking-wide border-b ${isDarkTheme ? 'bg-slate-800/50 text-slate-400 border-slate-700' : 'bg-slate-50/80 text-slate-500 border-slate-200'}`}>
                                     <th className="px-6 py-4">User Details</th>
                                     <th className="px-6 py-4">Current Role</th>
                                     <th className="px-6 py-4">Status & Access</th>
                                     <th className="px-6 py-4 text-right">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className={`divide-y ${isDarkTheme ? 'divide-slate-800' : 'divide-slate-50'}`}>
+                            <tbody className={`divide-y ${isDarkTheme ? 'divide-slate-800' : 'divide-slate-100'}`}>
                                 {loading && users.length === 0 ? (
-                                    <tr><td colSpan={4} className="p-12 text-center text-slate-400 font-medium italic">Loading database...</td></tr>
+                                    <tr><td colSpan={4} className="p-12 text-center text-slate-400 font-medium">Loading database...</td></tr>
                                 ) : filteredUsers.length === 0 ? (
-                                    <tr><td colSpan={4} className="p-12 text-center text-slate-400 font-medium italic">{searchTerm ? `No users found for "${searchTerm}"` : 'No users have been added yet.'}</td></tr>
+                                    <tr><td colSpan={4} className="p-12 text-center text-slate-400 font-medium">{searchTerm ? `No users found for "${searchTerm}"` : 'No users have been added yet.'}</td></tr>
                                 ) : filteredUsers.map(user => (
-                                    <tr key={user.id} className={`transition-colors group ${isDarkTheme ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50/50'}`}>
+                                    <tr key={user.id} className={`transition-colors group ${isDarkTheme ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50/70'}`}>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-4">
-                                                <div className={`w-12 h-12 rounded-[14px] flex items-center justify-center text-sm font-bold shadow-inner border-2 ${user.status === 'banned' ? (isDarkTheme ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' : 'bg-rose-50 text-rose-500 border-rose-100') :
-                                                    user.status === 'warning' ? (isDarkTheme ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)] border-[var(--color-primary)]/20' : 'bg-amber-50 text-[var(--color-primary)] border-amber-100') :
-                                                        (isDarkTheme ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-slate-50 text-slate-600 border-white')
+                                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-sm font-bold border ${user.status === 'banned' ? (isDarkTheme ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' : 'bg-rose-50 text-rose-500 border-rose-200') :
+                                                    user.status === 'warning' ? (isDarkTheme ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)] border-[var(--color-primary)]/20' : 'bg-amber-50 text-[var(--color-primary)] border-amber-200') :
+                                                        (isDarkTheme ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-slate-100 text-slate-600 border-slate-200')
                                                     }`}>
                                                     {user.full_name.substring(0, 2).toUpperCase()}
                                                 </div>
@@ -287,7 +287,7 @@ const OrgUserManager: React.FC<OrgUserManagerProps> = ({ initialEditUserId, cate
                                                         {user.gender === 'other' && <span className="text-[10px]" title="Other">👤</span>}
                                                         {Boolean((user as any).erp_user_id) && (
                                                             <span
-                                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-[var(--color-primary)]/10 text-[var(--color-primary)] border border-[var(--color-primary)]/20"
+                                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-[var(--color-primary)]/10 text-[var(--color-primary)] border border-[var(--color-primary)]/20 tabular-nums"
                                                                 title={`Đồng bộ từ Hồ sơ Nhân sự MYERP (#${(user as any).erp_user_id})`}
                                                             >
                                                                 Nhân sự MYERP #{(user as any).erp_user_id}
@@ -296,10 +296,10 @@ const OrgUserManager: React.FC<OrgUserManagerProps> = ({ initialEditUserId, cate
                                                     </div>
                                                     <div className="text-[11px] text-slate-500 font-medium truncate">{user.email}</div>
                                                     {((user as any).job_title || (user as any).department) && (
-                                                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-bold text-slate-400 truncate">
+                                                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-semibold text-slate-400 truncate">
                                                             {(user as any).job_title && <span>{(user as any).job_title}</span>}
                                                             {(user as any).job_title && (user as any).department && <span>•</span>}
-                                                            {(user as any).department && <span className="text-indigo-500">{(user as any).department}</span>}
+                                                            {(user as any).department && <span className="text-[#BD1D2D] dark:text-slate-300">{(user as any).department}</span>}
                                                         </div>
                                                     )}
                                                 </div>
@@ -307,26 +307,26 @@ const OrgUserManager: React.FC<OrgUserManagerProps> = ({ initialEditUserId, cate
                                         </td>
                                         <td className="px-6 py-4">
                                                 <div className="flex flex-col gap-1">
-                                                <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-xl text-[10px] font-bold uppercase tracking-wide w-fit shadow-sm border ${user.role === 'admin' ? 'bg-rose-700 text-white border-rose-600' :
-                                                    user.role === 'assistant' ? 'bg-sky-500 text-white border-sky-400' :
+                                                <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-xl text-[10px] font-bold uppercase tracking-wide w-fit border ${user.role === 'admin' ? 'bg-[#BD1D2D] text-white border-[#9A1523]' :
+                                                    user.role === 'assistant' ? 'bg-slate-800 text-white border-slate-700' :
                                                         (isDarkTheme ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-600 border-slate-200')
                                                     }`}>
                                                     {user.role === 'admin' ? <ShieldAlert className="w-3 h-3" /> : <Shield className="w-3 h-3" />}
                                                     {user.role}
                                                 </span>
                                                 {/* [P18-A4 FIX] Show actual last_login timestamp from DB instead of hardcoded "Just now" */}
-                                                <span className="text-[9px] text-slate-400 ml-1 font-bold leading-none">
+                                                <span className="text-[10px] text-slate-400 ml-1 font-medium leading-none tabular-nums">
                                                     Last active: {formatLastLogin((user as any).last_login)}
                                                 </span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
-                                                <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 ${user.status === 'active' ? (isDarkTheme ? 'text-emerald-400 bg-emerald-900/30 border border-emerald-800/50' : 'text-emerald-500 bg-emerald-50 border border-emerald-100') :
-                                                    user.status === 'banned' ? (isDarkTheme ? 'text-rose-400 bg-rose-900/30 border border-rose-800/50' : 'text-rose-600 bg-rose-50 border border-rose-100') :
-                                                        (isDarkTheme ? 'text-amber-400 bg-amber-900/30 border border-amber-800/50' : 'text-[var(--color-primary)] bg-amber-50 border border-amber-100')
+                                                <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 ${user.status === 'active' ? (isDarkTheme ? 'text-emerald-400 bg-emerald-900/30 border border-emerald-800/50' : 'text-emerald-600 bg-emerald-50 border border-emerald-200') :
+                                                    user.status === 'banned' ? (isDarkTheme ? 'text-rose-400 bg-rose-900/30 border border-rose-800/50' : 'text-rose-600 bg-rose-50 border border-rose-200') :
+                                                        (isDarkTheme ? 'text-amber-400 bg-amber-900/30 border border-amber-800/50' : 'text-[var(--color-primary)] bg-amber-50 border border-amber-200')
                                                     }`}>
-                                                    <div className={`w-1.5 h-1.5 rounded-full ${user.status === 'active' ? 'bg-emerald-500 animate-pulse' :
+                                                    <div className={`w-1.5 h-1.5 rounded-full ${user.status === 'active' ? 'bg-emerald-500' :
                                                         user.status === 'banned' ? 'bg-rose-500' :
                                                             'bg-[var(--color-primary)]'
                                                         }`} />
@@ -365,23 +365,23 @@ const OrgUserManager: React.FC<OrgUserManagerProps> = ({ initialEditUserId, cate
 
             {isAddModalOpen && createPortal(
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/40 backdrop-blur-[1px] animate-in fade-in duration-300" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-                    <div className={`rounded-[18px] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.5)] w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 border ${isDarkTheme ? 'bg-[#0B0F17] border-slate-800' : 'bg-white border-white'}`}>
+                    <div className={`rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border ${isDarkTheme ? 'bg-[#0B0F17] border-slate-800' : 'bg-white border-slate-200'}`}>
                         {/* Modal Header */}
                         <div className="p-8 pb-4 flex items-center justify-between relative">
                             <div className="flex items-center gap-4">
-                                <div className="w-14 h-14 rounded-[14px] bg-gradient-to-br from-[var(--color-primary)] to-[#9A1523] flex items-center justify-center text-white shadow-xl shadow-[var(--color-primary)]/20">
-                                    {editingUser ? <Edit2 className="w-7 h-7" /> : <UserPlus className="w-7 h-7" />}
+                                <div className="w-12 h-12 rounded-xl bg-[#BD1D2D] flex items-center justify-center text-white">
+                                    {editingUser ? <Edit2 className="w-6 h-6" strokeWidth={1.75} /> : <UserPlus className="w-6 h-6" strokeWidth={1.75} />}
                                 </div>
                                 <div>
                                     <h3 className={`text-2xl font-bold tracking-tight ${isDarkTheme ? 'text-white' : 'text-slate-800'}`}>
                                         {editingUser ? 'Update Member' : 'Add New Member'}
                                     </h3>
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mt-0.5">Workspace access control</p>
+                                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-0.5">Workspace access control</p>
                                 </div>
                             </div>
                             <button
                                 onClick={() => setIsAddModalOpen(false)}
-                                className={`w-10 h-10 flex items-center justify-center rounded-[14px] transition-all ${isDarkTheme ? 'bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'bg-slate-50 text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}
+                                className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors ${isDarkTheme ? 'bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700' : 'bg-slate-100 text-slate-500 hover:text-slate-700 hover:bg-slate-200'}`}
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -485,7 +485,7 @@ const OrgUserManager: React.FC<OrgUserManagerProps> = ({ initialEditUserId, cate
                                                         }
                                                     });
                                                 }}
-                                                className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${formData.role === role.id ? 'bg-gradient-to-br from-[var(--color-primary)]/5 to-[var(--color-primary)]/10 border-[var(--color-primary)] shadow-lg shadow-[var(--color-primary)]/10' : (isDarkTheme ? 'bg-slate-800/50 border-transparent hover:border-slate-700' : 'bg-slate-50 border-transparent hover:border-slate-200')}`}
+                                                className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border transition-colors ${formData.role === role.id ? 'bg-[var(--color-primary)]/10 border-[var(--color-primary)]' : (isDarkTheme ? 'bg-slate-800/50 border-slate-800 hover:border-slate-700' : 'bg-slate-50 border-slate-200 hover:border-slate-300')}`}
                                             >
                                                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${formData.role === role.id ? 'bg-[var(--color-primary)] text-white' : (isDarkTheme ? 'bg-slate-800 text-slate-500' : 'bg-white text-slate-400')}`}>
                                                     <role.icon className="w-4 h-4" />
@@ -554,9 +554,9 @@ const OrgUserManager: React.FC<OrgUserManagerProps> = ({ initialEditUserId, cate
                                 )}
 
                                 {/* AI Capabilities */}
-                                <div className={`border-2 rounded-[18px] p-5 space-y-4 ${isDarkTheme ? 'bg-slate-800/40 border-slate-800' : 'bg-gradient-to-br from-slate-50 to-slate-100/50 border-slate-100'}`}>
+                                <div className={`border rounded-2xl p-5 space-y-4 ${isDarkTheme ? 'bg-slate-800/40 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                                     <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-2">
-                                        <Sparkles className="w-3.5 h-3.5" />
+                                        <Cpu className="w-3.5 h-3.5" strokeWidth={1.75} />
                                         AI Capability Access
                                     </h4>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -614,7 +614,7 @@ const OrgUserManager: React.FC<OrgUserManagerProps> = ({ initialEditUserId, cate
                                 type="submit"
                                 form="user-form"
                                 disabled={isSubmitting}
-                                className="px-10 py-3.5 bg-[var(--color-primary)] text-white hover:bg-[#9A1523] rounded-[14px] text-[11px] font-bold uppercase tracking-wider transition-all shadow-xl shadow-[var(--color-primary)]/20 flex items-center gap-2 hover:scale-[1.02] active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100"
+                                className="px-8 py-3 bg-[var(--color-primary)] text-white hover:bg-[#9A1523] rounded-xl text-[11px] font-semibold uppercase tracking-wider transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                                 {isSubmitting ? 'Saving...' : (editingUser ? 'Sync Updates' : 'Confirm Registration')}
                                 <ArrowRight className="w-4 h-4 ml-1" />

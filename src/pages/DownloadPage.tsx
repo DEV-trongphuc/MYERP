@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Download, Monitor, ShieldCheck, Zap, BellRing, 
-  AlertCircle, CheckCircle2, ChevronRight,
-  Sparkles, Send, Info, LayoutGrid, ArrowRight,
-  Sliders, MessageSquare, Flame, Share2, Laptop, X, HelpCircle
+  Download, Monitor, BellRing, 
+  AlertCircle, CheckCircle2,
+  Send, Info, LayoutGrid,
+  Share2, X, Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -110,7 +110,7 @@ export function DownloadPage() {
       const perm = await Notification.requestPermission();
       setNotificationStatus(perm);
       if (perm === 'granted') {
-        new Notification('MYERP - Đã kết nối thông báo!', {
+        new Notification('MYERP - Đã kết nối thông báo', {
           body: 'Bạn sẽ nhận được thông báo thời gian thực ngay trên màn hình máy tính.',
           icon: '/LOGO.jpg',
           badge: '/LOGO.jpg'
@@ -129,8 +129,8 @@ export function DownloadPage() {
       return;
     }
     try {
-      new Notification('🔔 MYERP Lead mới & Tin nhắn', {
-        body: 'Khách hàng vừa gửi yêu cầu tư vấn mới lúc ' + new Date().toLocaleTimeString('vi-VN') + '. Bấm để xem chi tiết!',
+      new Notification('MYERP Lead mới & Tin nhắn', {
+        body: 'Khách hàng vừa gửi yêu cầu tư vấn mới lúc ' + new Date().toLocaleTimeString('vi-VN') + '. Bấm để xem chi tiết.',
         icon: '/LOGO.jpg',
         badge: '/LOGO.jpg'
       });
@@ -155,28 +155,14 @@ export function DownloadPage() {
       overflowX: 'hidden',
       boxSizing: 'border-box'
     }}>
-      {/* Soft Elegant Rose Gradient Background Backdrop */}
+      {/* Soft Clean Rose Gradient Background Backdrop */}
       <div style={{
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
-        height: '620px',
-        background: 'radial-gradient(1200px 500px at 50% 0%, #FFF5F5 0%, #FFF8F8 45%, #FFFFFF 100%)',
-        pointerEvents: 'none',
-        zIndex: 0
-      }} />
-
-      {/* Subtle Ambient Red Light Beam */}
-      <div style={{
-        position: 'absolute',
-        top: '-120px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        width: '750px',
-        height: '400px',
-        background: 'radial-gradient(circle, rgba(225, 29, 72, 0.05) 0%, rgba(244, 63, 94, 0.01) 50%, transparent 70%)',
-        filter: 'blur(70px)',
+        height: '560px',
+        background: 'linear-gradient(180deg, #FFF5F5 0%, #FFFFFF 100%)',
         pointerEvents: 'none',
         zIndex: 0
       }} />
@@ -185,7 +171,7 @@ export function DownloadPage() {
       <header style={{ 
         width: '100%', 
         maxWidth: '1200px', 
-        padding: '1.75rem 2rem',
+        padding: '24px 32px',
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center',
@@ -206,7 +192,7 @@ export function DownloadPage() {
             }} 
           />
           <div>
-            <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px', lineHeight: 1.2 }}>
+            <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px', lineHeight: 1.2 }}>
               MYERP
               <span style={{ 
                 fontSize: '0.65rem', 
@@ -214,7 +200,7 @@ export function DownloadPage() {
                 background: '#FEE2E2', 
                 color: '#991B1B', 
                 borderRadius: '6px', 
-                fontWeight: 800,
+                fontWeight: 700,
                 letterSpacing: '0.04em'
               }}>
                 DESKTOP APP
@@ -231,15 +217,15 @@ export function DownloadPage() {
           alignItems: 'center',
           gap: '8px',
           fontSize: '0.85rem',
-          fontWeight: 700,
+          fontWeight: 600,
           color: '#334155',
           textDecoration: 'none',
-          padding: '9px 18px',
+          padding: '8px 16px',
           borderRadius: '10px',
           background: '#FFFFFF',
           border: '1px solid #E2E8F0',
           boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          transition: 'all 0.2s ease'
+          transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1)'
         }} className="nav-dashboard-btn">
           <LayoutGrid size={15} style={{ color: '#BD1D2D' }} />
           {hasToken ? 'Vào Dashboard' : 'Đăng nhập'}
@@ -250,10 +236,10 @@ export function DownloadPage() {
       <main style={{ 
         width: '100%', 
         maxWidth: '1200px', 
-        padding: '1rem 2rem 5rem 2rem',
+        padding: '16px 32px 64px 32px',
         display: 'flex', 
         flexDirection: 'column', 
-        gap: '4rem',
+        gap: '64px',
         position: 'relative',
         zIndex: 2,
         boxSizing: 'border-box'
@@ -268,25 +254,13 @@ export function DownloadPage() {
           flexDirection: 'column', 
           alignItems: 'center' 
         }}>
-          {/* IDEAS Cute Mascot Sticker Floating */}
+          {/* IDEAS Mascot Sticker */}
           <motion.div 
-            initial={{ opacity: 0, scale: 0.8 }}
+            initial={{ opacity: 0, scale: 0.94 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.35 }}
-            style={{ position: 'relative', marginBottom: '1.25rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+            transition={{ duration: 0.3 }}
+            style={{ position: 'relative', marginBottom: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
           >
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: '130px',
-              height: '130px',
-              borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(225, 29, 72, 0.12) 0%, rgba(244, 63, 94, 0.02) 50%, transparent 70%)',
-              filter: 'blur(20px)',
-              pointerEvents: 'none'
-            }} />
             <img 
               src="/stickers/ideas/ideas_1.webp" 
               alt="IDEAS Mascot Sticker" 
@@ -294,33 +268,32 @@ export function DownloadPage() {
                 width: '110px', 
                 height: '110px', 
                 objectFit: 'contain',
-                filter: 'drop-shadow(0 10px 18px rgba(189, 29, 45, 0.12))',
-                animation: 'mascotFloat 3.8s ease-in-out infinite'
+                filter: 'drop-shadow(0 10px 18px rgba(15, 23, 42, 0.08))'
               }} 
             />
           </motion.div>
 
           {/* Pill Badge */}
           <motion.div 
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
+            transition={{ duration: 0.25 }}
             style={{
               background: '#FFFFFF',
-              border: '1px solid #FEE2E2',
-              boxShadow: '0 2px 10px rgba(189, 29, 45, 0.06)',
+              border: '1px solid #E2E8F0',
+              boxShadow: '0 1px 4px rgba(15, 23, 42, 0.04)',
               padding: '6px 16px',
-              borderRadius: '24px',
+              borderRadius: '999px',
               fontSize: '0.78rem',
-              fontWeight: 700,
+              fontWeight: 600,
               color: '#991B1B',
               display: 'inline-flex',
               alignItems: 'center',
               gap: '8px',
-              marginBottom: '1.5rem'
+              marginBottom: '24px'
             }}
           >
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 8px #10B981' }} />
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981' }} />
             Hỗ trợ cài đặt trực tiếp trên cả Windows và macOS
           </motion.div>
 
@@ -328,13 +301,13 @@ export function DownloadPage() {
           <motion.h1 
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05, duration: 0.3 }}
+            transition={{ delay: 0.05, duration: 0.25 }}
             style={{ 
               fontSize: '2.75rem', 
-              fontWeight: 900, 
+              fontWeight: 800, 
               lineHeight: 1.2,
               color: '#0F172A',
-              margin: '0 0 1.25rem 0',
+              margin: '0 0 20px 0',
               letterSpacing: '-0.03em'
             }}
           >
@@ -345,12 +318,12 @@ export function DownloadPage() {
           <motion.p 
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1, duration: 0.3 }}
+            transition={{ delay: 0.1, duration: 0.25 }}
             style={{ 
               fontSize: '1.08rem', 
               color: '#475569', 
               lineHeight: 1.6,
-              margin: '0 0 2.25rem 0',
+              margin: '0 0 32px 0',
               maxWidth: '680px'
             }}
           >
@@ -361,24 +334,24 @@ export function DownloadPage() {
           <motion.div 
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.15, duration: 0.3 }}
-            style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', justifyContent: 'center' }}
+            transition={{ delay: 0.12, duration: 0.25 }}
+            style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}
           >
             {isStandalone ? (
               <div style={{
                 background: '#ECFDF5',
                 border: '1px solid #A7F3D0',
                 color: '#047857',
-                padding: '14px 28px',
+                padding: '12px 24px',
                 borderRadius: '12px',
-                fontWeight: 800,
+                fontWeight: 700,
                 fontSize: '0.95rem',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px'
+                gap: '8px'
               }}>
                 <CheckCircle2 size={20} />
-                Bạn đang sử dụng MYERP ở chế độ Desktop App!
+                Bạn đang sử dụng MYERP ở chế độ Desktop App
               </div>
             ) : (
               <button 
@@ -388,16 +361,16 @@ export function DownloadPage() {
                   background: '#BD1D2D',
                   color: '#FFFFFF',
                   border: 'none',
-                  borderRadius: '12px',
-                  padding: '15px 32px',
+                  borderRadius: '10px',
+                  padding: '14px 28px',
                   fontSize: '1rem',
-                  fontWeight: 800,
+                  fontWeight: 700,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '10px',
-                  boxShadow: '0 8px 20px rgba(189, 29, 45, 0.28)',
-                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                  gap: '8px',
+                  boxShadow: '0 4px 12px rgba(189, 29, 45, 0.22)',
+                  transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1)'
                 }}
               >
                 <Download size={18} />
@@ -411,21 +384,21 @@ export function DownloadPage() {
                 background: '#FFFFFF',
                 border: '1px solid #E2E8F0',
                 color: '#1E293B',
-                borderRadius: '12px',
-                padding: '15px 24px',
+                borderRadius: '10px',
+                padding: '14px 24px',
                 fontSize: '0.95rem',
-                fontWeight: 700,
+                fontWeight: 600,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
                 boxShadow: '0 1px 4px rgba(0, 0, 0, 0.04)',
-                transition: 'all 0.2s'
+                transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1)'
               }}
               className="test-notify-btn"
             >
               <BellRing size={18} style={{ color: '#D97706' }} />
-              {testNotificationSent ? 'Đã gửi thông báo!' : 'Thử thông báo Desktop'}
+              {testNotificationSent ? 'Đã gửi thông báo' : 'Thử thông báo Desktop'}
             </button>
           </motion.div>
         </div>
@@ -434,14 +407,14 @@ export function DownloadPage() {
         <div id="browser-omnibox-guide" style={{
           background: '#FFFFFF',
           border: '1px solid #E2E8F0',
-          borderRadius: '24px',
-          padding: '2.5rem',
-          boxShadow: '0 20px 45px -10px rgba(15, 23, 42, 0.06), 0 0 1px rgba(15, 23, 42, 0.08)',
+          borderRadius: '20px',
+          padding: '32px',
+          boxShadow: '0 12px 32px -10px rgba(15, 23, 42, 0.05)',
           position: 'relative'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.75rem', flexWrap: 'wrap', gap: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
             <div>
-              <h2 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#0F172A', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#0F172A', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <Monitor size={22} style={{ color: '#BD1D2D' }} />
                 Hướng dẫn cài đặt theo Trình duyệt của bạn
               </h2>
@@ -451,20 +424,20 @@ export function DownloadPage() {
             </div>
 
             {/* Browser Tabs */}
-            <div style={{ display: 'flex', background: '#F1F5F9', borderRadius: '10px', padding: '4px', flexWrap: 'wrap', gap: '2px' }}>
+            <div style={{ display: 'flex', background: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '3px', flexWrap: 'wrap', gap: '2px' }}>
               <button 
                 onClick={() => setActiveBrowserTab('chrome')}
                 style={{
                   background: activeBrowserTab === 'chrome' ? '#FFFFFF' : 'transparent',
-                  color: activeBrowserTab === 'chrome' ? '#0F172A' : '#64748B',
-                  boxShadow: activeBrowserTab === 'chrome' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                  color: activeBrowserTab === 'chrome' ? '#BD1D2D' : '#64748B',
+                  boxShadow: activeBrowserTab === 'chrome' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                   border: 'none',
                   borderRadius: '7px',
-                  padding: '7px 16px',
+                  padding: '6px 14px',
                   fontSize: '0.8125rem',
-                  fontWeight: 700,
+                  fontWeight: activeBrowserTab === 'chrome' ? 700 : 600,
                   cursor: 'pointer',
-                  transition: 'all 0.15s'
+                  transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
                 }}
               >
                 Google Chrome (Win/Mac)
@@ -473,15 +446,15 @@ export function DownloadPage() {
                 onClick={() => setActiveBrowserTab('edge')}
                 style={{
                   background: activeBrowserTab === 'edge' ? '#FFFFFF' : 'transparent',
-                  color: activeBrowserTab === 'edge' ? '#0F172A' : '#64748B',
-                  boxShadow: activeBrowserTab === 'edge' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                  color: activeBrowserTab === 'edge' ? '#BD1D2D' : '#64748B',
+                  boxShadow: activeBrowserTab === 'edge' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                   border: 'none',
                   borderRadius: '7px',
-                  padding: '7px 16px',
+                  padding: '6px 14px',
                   fontSize: '0.8125rem',
-                  fontWeight: 700,
+                  fontWeight: activeBrowserTab === 'edge' ? 700 : 600,
                   cursor: 'pointer',
-                  transition: 'all 0.15s'
+                  transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
                 }}
               >
                 Microsoft Edge
@@ -490,15 +463,15 @@ export function DownloadPage() {
                 onClick={() => setActiveBrowserTab('safari')}
                 style={{
                   background: activeBrowserTab === 'safari' ? '#FFFFFF' : 'transparent',
-                  color: activeBrowserTab === 'safari' ? '#0F172A' : '#64748B',
-                  boxShadow: activeBrowserTab === 'safari' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                  color: activeBrowserTab === 'safari' ? '#BD1D2D' : '#64748B',
+                  boxShadow: activeBrowserTab === 'safari' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                   border: 'none',
                   borderRadius: '7px',
-                  padding: '7px 16px',
+                  padding: '6px 14px',
                   fontSize: '0.8125rem',
-                  fontWeight: 700,
+                  fontWeight: activeBrowserTab === 'safari' ? 700 : 600,
                   cursor: 'pointer',
-                  transition: 'all 0.15s'
+                  transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
                 }}
               >
                 Apple Safari (macOS)
@@ -513,7 +486,7 @@ export function DownloadPage() {
             border: '1px solid #E2E8F0',
             overflow: 'hidden',
             boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)',
-            marginBottom: '2rem'
+            marginBottom: '28px'
           }}>
             {/* Window Top Bar */}
             <div style={{
@@ -525,9 +498,9 @@ export function DownloadPage() {
               borderBottom: '1px solid #E2E8F0'
             }}>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <span style={{ width: '11px', height: '11px', borderRadius: '50%', background: '#EF4444' }} />
-                <span style={{ width: '11px', height: '11px', borderRadius: '50%', background: '#F59E0B' }} />
-                <span style={{ width: '11px', height: '11px', borderRadius: '50%', background: '#10B981' }} />
+                <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#EF4444' }} />
+                <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#F59E0B' }} />
+                <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10B981' }} />
               </div>
 
               <div style={{
@@ -569,37 +542,36 @@ export function DownloadPage() {
               <div style={{
                 flex: 1,
                 background: '#F8FAFC',
-                borderRadius: '24px',
+                borderRadius: '999px',
                 padding: '8px 16px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                border: '1.5px solid #FCA5A5',
-                boxShadow: '0 0 0 4px rgba(239, 68, 68, 0.08)',
+                border: '1px solid #FCA5A5',
+                boxShadow: '0 0 0 3px rgba(239, 68, 68, 0.06)',
                 position: 'relative'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.825rem' }}>
-                  <span style={{ color: '#10B981', fontSize: '0.75rem' }}>🔒</span>
+                  <Lock size={13} style={{ color: '#10B981' }} />
                   <span style={{ color: '#94A3B8' }}>https://</span>
                   <span style={{ color: '#0F172A', fontWeight: 600 }}>{typeof window !== 'undefined' && window.location?.host ? window.location.host : 'app.your-domain.com'}</span>
                   <span style={{ color: '#64748B' }}>/download</span>
                 </div>
 
                 {/* THE TARGET INSTALL BADGE IN SEARCH BAR */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   {activeBrowserTab === 'safari' ? (
                     <div 
-                      className="omnibox-badge-pulse"
                       style={{
                         background: '#FFF1F2',
-                        border: '1.5px solid #BD1D2D',
-                        borderRadius: '16px',
+                        border: '1px solid #BD1D2D',
+                        borderRadius: '8px',
                         padding: '4px 12px',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '6px',
                         fontSize: '0.78rem',
-                        fontWeight: 800,
+                        fontWeight: 700,
                         color: '#BD1D2D'
                       }}
                     >
@@ -609,25 +581,24 @@ export function DownloadPage() {
                         background: '#BD1D2D',
                         color: '#FFFFFF',
                         fontSize: '0.62rem',
-                        padding: '1px 6px',
+                        padding: '2px 6px',
                         borderRadius: '4px',
-                        fontWeight: 900
+                        fontWeight: 700
                       }}>MACOS</span>
                     </div>
                   ) : (
                     <div 
                       onClick={handleTriggerInstall}
-                      className="omnibox-badge-pulse"
                       style={{
                         background: '#FFF1F2',
-                        border: '1.5px solid #BD1D2D',
-                        borderRadius: '16px',
+                        border: '1px solid #BD1D2D',
+                        borderRadius: '8px',
                         padding: '4px 12px',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '6px',
                         fontSize: '0.78rem',
-                        fontWeight: 800,
+                        fontWeight: 700,
                         color: '#BD1D2D',
                         cursor: 'pointer'
                       }}
@@ -638,14 +609,12 @@ export function DownloadPage() {
                         background: '#BD1D2D',
                         color: '#FFFFFF',
                         fontSize: '0.62rem',
-                        padding: '1px 6px',
+                        padding: '2px 6px',
                         borderRadius: '4px',
-                        fontWeight: 900
+                        fontWeight: 700
                       }}>BẤM VÀO ĐÂY</span>
                     </div>
                   )}
-
-                  <span style={{ color: '#94A3B8', fontSize: '0.9rem' }}>☆</span>
                 </div>
               </div>
             </div>
@@ -653,12 +622,12 @@ export function DownloadPage() {
 
           {/* 3 Step Instructions */}
           {activeBrowserTab === 'safari' ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
               <div style={{
                 background: '#F8FAFC',
                 border: '1px solid #E2E8F0',
                 borderRadius: '16px',
-                padding: '1.5rem',
+                padding: '24px',
                 position: 'relative'
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
@@ -666,15 +635,15 @@ export function DownloadPage() {
                     width: '32px', height: '32px', borderRadius: '50%',
                     background: '#FEE2E2', color: '#991B1B',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 900, fontSize: '0.85rem'
+                    fontWeight: 700, fontSize: '0.85rem', fontVariantNumeric: 'tabular-nums'
                   }}>1</div>
                   <img src="/stickers/ideas/ideas_4.webp" alt="Sticker 1" style={{ width: '48px', height: '48px', objectFit: 'contain' }} />
                 </div>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0F172A', margin: '0 0 6px 0' }}>
                   Bấm nút Share trên Safari Mac
                 </h4>
                 <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
-                  Trên thanh công cụ Safari ở góc trên bên phải, bấm vào biểu tượng <strong>Chia sẻ (hình ô vuông có mũi tên hướng lên 📤)</strong> hoặc vào menu <em>File (Tệp)</em>.
+                  Trên thanh công cụ Safari ở góc trên bên phải, bấm vào biểu tượng <strong>Chia sẻ (Share)</strong> hoặc vào menu <strong>File (Tệp)</strong>.
                 </p>
               </div>
 
@@ -682,7 +651,7 @@ export function DownloadPage() {
                 background: '#F8FAFC',
                 border: '1px solid #E2E8F0',
                 borderRadius: '16px',
-                padding: '1.5rem',
+                padding: '24px',
                 position: 'relative'
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
@@ -690,11 +659,11 @@ export function DownloadPage() {
                     width: '32px', height: '32px', borderRadius: '50%',
                     background: '#FEE2E2', color: '#991B1B',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 900, fontSize: '0.85rem'
+                    fontWeight: 700, fontSize: '0.85rem', fontVariantNumeric: 'tabular-nums'
                   }}>2</div>
                   <img src="/stickers/ideas/ideas_2.webp" alt="Sticker 2" style={{ width: '48px', height: '48px', objectFit: 'contain' }} />
                 </div>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0F172A', margin: '0 0 6px 0' }}>
                   Chọn "Thêm vào Dock" (Add to Dock)
                 </h4>
                 <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
@@ -706,7 +675,7 @@ export function DownloadPage() {
                 background: '#F8FAFC',
                 border: '1px solid #E2E8F0',
                 borderRadius: '16px',
-                padding: '1.5rem',
+                padding: '24px',
                 position: 'relative'
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
@@ -714,11 +683,11 @@ export function DownloadPage() {
                     width: '32px', height: '32px', borderRadius: '50%',
                     background: '#DCFCE7', color: '#166534',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 900, fontSize: '0.85rem'
+                    fontWeight: 700, fontSize: '0.85rem', fontVariantNumeric: 'tabular-nums'
                   }}>3</div>
                   <img src="/stickers/ideas/ideas_16.webp" alt="Sticker 3" style={{ width: '48px', height: '48px', objectFit: 'contain' }} />
                 </div>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0F172A', margin: '0 0 6px 0' }}>
                   Mở app từ Dock / Launchpad
                 </h4>
                 <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
@@ -727,12 +696,12 @@ export function DownloadPage() {
               </div>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
               <div style={{
                 background: '#F8FAFC',
                 border: '1px solid #E2E8F0',
                 borderRadius: '16px',
-                padding: '1.5rem',
+                padding: '24px',
                 position: 'relative'
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
@@ -740,11 +709,11 @@ export function DownloadPage() {
                     width: '32px', height: '32px', borderRadius: '50%',
                     background: '#FEE2E2', color: '#991B1B',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 900, fontSize: '0.85rem'
+                    fontWeight: 700, fontSize: '0.85rem', fontVariantNumeric: 'tabular-nums'
                   }}>1</div>
                   <img src="/stickers/ideas/ideas_4.webp" alt="Sticker 1" style={{ width: '48px', height: '48px', objectFit: 'contain' }} />
                 </div>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0F172A', margin: '0 0 6px 0' }}>
                   Bấm biểu tượng trên thanh URL
                 </h4>
                 <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
@@ -756,7 +725,7 @@ export function DownloadPage() {
                 background: '#F8FAFC',
                 border: '1px solid #E2E8F0',
                 borderRadius: '16px',
-                padding: '1.5rem',
+                padding: '24px',
                 position: 'relative'
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
@@ -764,15 +733,15 @@ export function DownloadPage() {
                     width: '32px', height: '32px', borderRadius: '50%',
                     background: '#FEE2E2', color: '#991B1B',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 900, fontSize: '0.85rem'
+                    fontWeight: 700, fontSize: '0.85rem', fontVariantNumeric: 'tabular-nums'
                   }}>2</div>
                   <img src="/stickers/ideas/ideas_2.webp" alt="Sticker 2" style={{ width: '48px', height: '48px', objectFit: 'contain' }} />
                 </div>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0F172A', margin: '0 0 6px 0' }}>
                   Xác nhận "Cài đặt" (Install)
                 </h4>
                 <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
-                  Trình duyệt sẽ hiển thị hộp thoại xác nhận <em>"Cài đặt ứng dụng MYERP?"</em>. Bấm nút <strong>Cài đặt (Install)</strong> để hoàn tất trong 1 giây.
+                  Trình duyệt sẽ hiển thị hộp thoại xác nhận <strong>"Cài đặt ứng dụng MYERP?"</strong>. Bấm nút <strong>Cài đặt (Install)</strong> để hoàn tất.
                 </p>
               </div>
 
@@ -780,7 +749,7 @@ export function DownloadPage() {
                 background: '#F8FAFC',
                 border: '1px solid #E2E8F0',
                 borderRadius: '16px',
-                padding: '1.5rem',
+                padding: '24px',
                 position: 'relative'
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
@@ -788,11 +757,11 @@ export function DownloadPage() {
                     width: '32px', height: '32px', borderRadius: '50%',
                     background: '#DCFCE7', color: '#166534',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 900, fontSize: '0.85rem'
+                    fontWeight: 700, fontSize: '0.85rem', fontVariantNumeric: 'tabular-nums'
                   }}>3</div>
                   <img src="/stickers/ideas/ideas_16.webp" alt="Sticker 3" style={{ width: '48px', height: '48px', objectFit: 'contain' }} />
                 </div>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0F172A', margin: '0 0 6px 0' }}>
                   Mở app & Ghim vào Taskbar / Dock
                 </h4>
                 <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
@@ -807,16 +776,16 @@ export function DownloadPage() {
         <div style={{
           display: 'grid',
           gridTemplateColumns: '1.15fr 1fr',
-          gap: '2.5rem',
+          gap: '40px',
           alignItems: 'center'
         }} className="notify-grid">
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#B45309', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#B45309', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               <BellRing size={16} /> BẢO ĐẢM THÔNG BÁO REALTIME TRÊN MÁY TÍNH
             </div>
             
-            <h3 style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0F172A', margin: 0, lineHeight: 1.3 }}>
+            <h3 style={{ fontSize: '1.65rem', fontWeight: 700, color: '#0F172A', margin: 0, lineHeight: 1.3 }}>
               Nhận thông báo Lead và Tin nhắn tức thời ngay trên màn hình {detectedOS === 'mac' ? 'macOS' : 'PC'}
             </h3>
 
@@ -911,11 +880,11 @@ export function DownloadPage() {
                   <span style={{ fontSize: '0.7rem', color: '#94A3B8' }}>Vừa xong</span>
                 </div>
                 <p style={{ fontSize: '0.8rem', color: '#475569', margin: '0 0 8px 0', lineHeight: 1.4 }}>
-                  Khách hàng <strong>Nguyễn Văn A</strong> vừa đăng ký gói tư vấn. Bấm vào đây để mở thông tin chi tiết!
+                  Khách hàng <strong>Nguyễn Văn A</strong> vừa đăng ký gói tư vấn. Bấm vào đây để mở thông tin chi tiết.
                 </p>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <span style={{ fontSize: '0.72rem', background: '#BD1D2D', color: '#FFFFFF', padding: '3px 10px', borderRadius: '6px', fontWeight: 700 }}>Xem ngay</span>
-                  <span style={{ fontSize: '0.72rem', background: '#E2E8F0', color: '#475569', padding: '3px 10px', borderRadius: '6px', fontWeight: 600 }}>Bỏ qua</span>
+                  <span style={{ fontSize: '0.72rem', background: '#BD1D2D', color: '#FFFFFF', padding: '4px 10px', borderRadius: '6px', fontWeight: 600 }}>Xem ngay</span>
+                  <span style={{ fontSize: '0.72rem', background: '#E2E8F0', color: '#475569', padding: '4px 10px', borderRadius: '6px', fontWeight: 600 }}>Bỏ qua</span>
                 </div>
               </div>
             </div>
@@ -929,13 +898,13 @@ export function DownloadPage() {
                 borderRadius: '10px',
                 padding: '10px 14px',
                 fontSize: '0.8125rem',
-                fontWeight: 700,
+                fontWeight: 600,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
-                transition: 'all 0.15s'
+                transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
               }}
               className="test-notify-btn"
             >
@@ -1025,9 +994,10 @@ export function DownloadPage() {
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
               style={{
                 background: '#FFFFFF',
-                borderRadius: '24px',
+                borderRadius: '20px',
                 border: '1px solid #E2E8F0',
-                boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.3)',
+                padding: 0,
+                boxShadow: '0 24px 60px -15px rgba(0, 0, 0, 0.3)',
                 maxWidth: '560px',
                 width: '100%',
                 overflow: 'hidden',
@@ -1037,8 +1007,8 @@ export function DownloadPage() {
             >
               {/* Modal Header */}
               <div style={{
-                background: 'linear-gradient(135deg, #FFF5F5 0%, #FFF8F8 100%)',
-                padding: '22px 24px',
+                background: '#FFF5F5',
+                padding: '20px 24px',
                 borderBottom: '1px solid #FEE2E2',
                 display: 'flex',
                 alignItems: 'center',
@@ -1051,10 +1021,10 @@ export function DownloadPage() {
                     style={{ width: '42px', height: '42px', objectFit: 'contain' }}
                   />
                   <div>
-                    <h3 style={{ fontSize: '1.125rem', fontWeight: 900, color: '#0F172A', margin: 0 }}>
+                    <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>
                       Vị trí bấm Cài đặt ứng dụng
                     </h3>
-                    <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '2px 0 0 0' }}>
+                    <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '4px 0 0 0' }}>
                       Cài đặt trực tiếp qua trình duyệt {detectedOS === 'mac' ? 'macOS' : 'Windows'} (Không cần tải file exe)
                     </p>
                   </div>
@@ -1065,7 +1035,7 @@ export function DownloadPage() {
                   style={{
                     background: '#FFFFFF',
                     border: '1px solid #E2E8F0',
-                    borderRadius: '50%',
+                    borderRadius: '8px',
                     width: '32px',
                     height: '32px',
                     display: 'flex',
@@ -1073,7 +1043,7 @@ export function DownloadPage() {
                     justifyContent: 'center',
                     color: '#64748B',
                     cursor: 'pointer',
-                    transition: 'all 0.15s'
+                    transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
                   }}
                 >
                   <X size={16} />
@@ -1081,13 +1051,13 @@ export function DownloadPage() {
               </div>
 
               {/* Modal Body */}
-              <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {detectedOS === 'mac' && activeBrowserTab === 'safari' ? (
                   <div style={{
                     background: '#F8FAFC',
-                    border: '1.5px dashed #CBD5E1',
-                    borderRadius: '16px',
-                    padding: '16px 18px',
+                    border: '1px dashed #CBD5E1',
+                    borderRadius: '12px',
+                    padding: '16px',
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: '12px'
@@ -1096,16 +1066,16 @@ export function DownloadPage() {
                       width: '32px', height: '32px', borderRadius: '8px',
                       background: '#FEE2E2', color: '#BD1D2D',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontWeight: 800, flexShrink: 0
+                      fontWeight: 700, flexShrink: 0
                     }}>
                       <Share2 size={16} />
                     </div>
                     <div>
-                      <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0F172A', marginBottom: '4px' }}>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0F172A', marginBottom: '4px' }}>
                         Dành cho Apple Safari (macOS)
                       </div>
                       <p style={{ fontSize: '0.825rem', color: '#475569', margin: 0, lineHeight: 1.5 }}>
-                        Bấm nút <strong>Chia sẻ (Share 📤)</strong> trên góc Safari hoặc vào thanh menu <strong>Tệp (File)</strong> &gt; chọn <strong>Thêm vào Dock (Add to Dock)</strong>.
+                        Bấm nút <strong>Chia sẻ (Share)</strong> trên góc Safari hoặc vào thanh menu <strong>Tệp (File)</strong> &gt; chọn <strong>Thêm vào Dock (Add to Dock)</strong>.
                       </p>
                     </div>
                   </div>
@@ -1114,27 +1084,27 @@ export function DownloadPage() {
                     {/* Cách 1: Nút trên thanh địa chỉ */}
                     <div style={{
                       background: '#FFF5F5',
-                      border: '1.5px solid #FCA5A5',
-                      borderRadius: '16px',
-                      padding: '16px 18px',
+                      border: '1px solid #FCA5A5',
+                      borderRadius: '12px',
+                      padding: '16px',
                       display: 'flex',
                       alignItems: 'flex-start',
                       gap: '12px'
                     }}>
                       <div style={{
-                        width: '34px', height: '34px', borderRadius: '10px',
+                        width: '32px', height: '32px', borderRadius: '8px',
                         background: '#BD1D2D', color: '#FFFFFF',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontWeight: 900, fontSize: '0.85rem', flexShrink: 0
+                        fontWeight: 700, fontSize: '0.85rem', flexShrink: 0, fontVariantNumeric: 'tabular-nums'
                       }}>
                         1
                       </div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0F172A', marginBottom: '4px' }}>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0F172A', marginBottom: '4px' }}>
                           Cách 1: Bấm biểu tượng Cài đặt trên thanh URL
                         </div>
                         <p style={{ fontSize: '0.825rem', color: '#475569', margin: 0, lineHeight: 1.5 }}>
-                          Nhìn lên <strong>góc phải thanh địa chỉ (URL)</strong> của trình duyệt, bạn sẽ thấy biểu tượng <strong>máy tính có mũi tên xuống 🖥️ / 📥</strong>. Bấm vào đó &gt; chọn <strong>"Cài đặt"</strong>.
+                          Nhìn lên <strong>góc phải thanh địa chỉ (URL)</strong> của trình duyệt, bạn sẽ thấy biểu tượng <strong>máy tính có mũi tên xuống</strong>. Bấm vào đó &gt; chọn <strong>"Cài đặt"</strong>.
                         </p>
                       </div>
                     </div>
@@ -1143,26 +1113,26 @@ export function DownloadPage() {
                     <div style={{
                       background: '#F8FAFC',
                       border: '1px solid #E2E8F0',
-                      borderRadius: '16px',
-                      padding: '16px 18px',
+                      borderRadius: '12px',
+                      padding: '16px',
                       display: 'flex',
                       alignItems: 'flex-start',
                       gap: '12px'
                     }}>
                       <div style={{
-                        width: '34px', height: '34px', borderRadius: '10px',
+                        width: '32px', height: '32px', borderRadius: '8px',
                         background: '#F1F5F9', color: '#475569',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontWeight: 900, fontSize: '0.85rem', flexShrink: 0
+                        fontWeight: 700, fontSize: '0.85rem', flexShrink: 0, fontVariantNumeric: 'tabular-nums'
                       }}>
                         2
                       </div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0F172A', marginBottom: '4px' }}>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0F172A', marginBottom: '4px' }}>
                           Cách 2: Qua Menu 3 chấm (⋮)
                         </div>
                         <p style={{ fontSize: '0.825rem', color: '#475569', margin: 0, lineHeight: 1.5 }}>
-                          Bấm nút <strong>3 chấm (⋮)</strong> góc trên cùng bên phải trình duyệt &gt; chọn <strong>"Cài đặt MYERP"</strong> (hoặc <em>Lưu và chia sẻ &gt; Cài đặt trang web dưới dạng ứng dụng</em>).
+                          Bấm nút <strong>3 chấm (⋮)</strong> góc trên cùng bên phải trình duyệt &gt; chọn <strong>"Cài đặt MYERP"</strong> (hoặc <strong>Lưu và chia sẻ &gt; Cài đặt trang web dưới dạng ứng dụng</strong>).
                         </p>
                       </div>
                     </div>
@@ -1170,7 +1140,7 @@ export function DownloadPage() {
                 )}
 
                 {/* Footer button */}
-                <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
                   <button
                     type="button"
                     onClick={() => {
@@ -1183,20 +1153,20 @@ export function DownloadPage() {
                       background: '#BD1D2D',
                       color: '#FFFFFF',
                       border: 'none',
-                      borderRadius: '12px',
-                      padding: '13px 20px',
+                      borderRadius: '10px',
+                      padding: '12px 20px',
                       fontSize: '0.9rem',
-                      fontWeight: 800,
+                      fontWeight: 700,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '8px',
-                      boxShadow: '0 4px 12px rgba(189, 29, 45, 0.25)'
+                      boxShadow: '0 4px 12px rgba(189, 29, 45, 0.2)'
                     }}
                   >
                     <CheckCircle2 size={16} />
-                    Đã hiểu! Xem hình minh họa
+                    Đã hiểu, xem hình minh họa
                   </button>
                 </div>
               </div>
@@ -1207,44 +1177,16 @@ export function DownloadPage() {
 
       {/* Styles */}
       <style>{`
-        @keyframes mascotFloat {
-          0%, 100% {
-            transform: translateY(0px) rotate(0deg);
-          }
-          50% {
-            transform: translateY(-8px) rotate(1.5deg);
-          }
-        }
-        .omnibox-badge-pulse {
-          animation: omniboxPulseLight 2s infinite ease-in-out;
-        }
-        @keyframes omniboxPulseLight {
-          0%, 100% {
-            box-shadow: 0 0 0 0 rgba(189, 29, 45, 0.2);
-            transform: scale(1);
-          }
-          50% {
-            box-shadow: 0 0 0 6px rgba(189, 29, 45, 0.15);
-            transform: scale(1.02);
-          }
-        }
         .main-cta-btn:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 10px 24px rgba(189, 29, 45, 0.38) !important;
           background: #A81423 !important;
-        }
-        .main-cta-btn:active {
-          transform: translateY(0);
         }
         .test-notify-btn:hover {
           background: #F1F5F9 !important;
           border-color: #CBD5E1 !important;
-          transform: translateY(-1px);
         }
         .nav-dashboard-btn:hover {
           background: #F8FAFC !important;
           border-color: #CBD5E1 !important;
-          transform: translateY(-1px);
         }
         @media (max-width: 860px) {
           .notify-grid {

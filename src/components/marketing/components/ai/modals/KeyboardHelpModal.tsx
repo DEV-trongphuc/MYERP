@@ -72,7 +72,7 @@ export const KeyboardHelpModal: React.FC<KeyboardHelpModalProps> = ({ isOpen, on
             onClick={onClose}
         >
             <div
-                className={`w-full max-w-md rounded-[18px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 ${isDarkTheme ? 'bg-[#0F172A] border border-slate-800' : 'bg-white'}`}
+                className={`w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 ${isDarkTheme ? 'bg-[#0F172A] border border-slate-800' : 'bg-white border border-slate-200'}`}
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
@@ -95,7 +95,7 @@ export const KeyboardHelpModal: React.FC<KeyboardHelpModalProps> = ({ isOpen, on
                 <div className="px-6 py-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
                     {shortcutGroups.map((group, gIdx) => (
                         <div key={gIdx} className="mb-6 last:mb-0">
-                            <h4 className={`text-[10px] font-black uppercase tracking-widest mb-3 ${isDarkTheme ? 'text-slate-500' : 'text-slate-400'}`}>
+                            <h4 className={`text-[10px] font-semibold uppercase tracking-widest mb-3 ${isDarkTheme ? 'text-slate-500' : 'text-slate-400'}`}>
                                 {group.title}
                             </h4>
                             <div className="space-y-1">
@@ -114,7 +114,7 @@ export const KeyboardHelpModal: React.FC<KeyboardHelpModalProps> = ({ isOpen, on
 
                 {/* Footer */}
                 <div className={`px-6 py-4 text-center border-t ${isDarkTheme ? 'border-slate-800 bg-slate-900/50 text-slate-500' : 'border-slate-100 bg-slate-50/50 text-slate-400'}`}>
-                    <p className="text-xs">Mẹo: Sử dụng phím tắt giúp bạn làm việc nhanh hơn gấp 2 lần!</p>
+                    <p className="text-xs">Mẹo: Sử dụng phím tắt giúp thao tác nhanh hơn</p>
                 </div>
             </div>
         </div>,

@@ -84,7 +84,7 @@ const WaitConfig: React.FC<WaitConfigProps> = ({ config, onChange, disabled }) =
           <button
             key={m.id}
             onClick={() => updateConfig({ mode: m.id })}
-            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${mode === m.id ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors ${mode === m.id ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             {m.label}
           </button>
@@ -155,7 +155,7 @@ const WaitConfig: React.FC<WaitConfigProps> = ({ config, onChange, disabled }) =
               disabled={disabled}
             />
           </div>
-          <p className="text-[10px] text-slate-400 font-medium italic">
+          <p className="text-[10px] text-slate-500 font-medium">
             * Nếu thời điểm thiết lập đã trôi qua trong ngày, Khách hàng sẽ đợi đến thời điểm đó của chu kỳ kế tiếp (ví dụ: Thứ Hai tuần sau).
           </p>
         </div>
@@ -223,7 +223,7 @@ const WaitConfig: React.FC<WaitConfigProps> = ({ config, onChange, disabled }) =
               disabled={disabled}
             />
           </div>
-          <p className="text-[10px] text-slate-400 font-medium italic">
+          <p className="text-[10px] text-slate-500 font-medium">
             * Khách hàng sẽ chờ tại bước này cho đến đúng ngày và giờ bạn đã chọn. Nếu ngày đó đã trôi qua, Khách hàng sẽ đi tiếp ngay lập tức.
           </p>
         </div>

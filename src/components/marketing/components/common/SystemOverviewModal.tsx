@@ -10,6 +10,7 @@ import ZaloReportTab from '../zalo/ZaloReportTab';
 import AIChatReport from '../reports/AIChatReport';
 import WebJourneyReport from '../reports/WebJourneyReport';
 import Modal from './Modal';
+import { ensureArray, extractArray } from '../../../../utils/safeArray';
 
 interface Props {
     isOpen: boolean;
@@ -219,24 +220,24 @@ export const SystemOverviewModal: React.FC<Props> = ({ isOpen, onClose, isDarkTh
                                         <AreaChart data={data.chart_data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                             <defs>
                                                 <linearGradient id="colorWeb" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                                                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                                    <stop offset="5%" stopColor="#334155" stopOpacity={0.18} />
+                                                    <stop offset="95%" stopColor="#334155" stopOpacity={0} />
                                                 </linearGradient>
                                                 <linearGradient id="colorAi" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#BD1D2D" stopOpacity={0.3} />
-                                                    <stop offset="95%" stopColor="#BD1D2D" stopOpacity={0} />
+                                                    <stop offset="5%" stopColor="#C6333D" stopOpacity={0.2} />
+                                                    <stop offset="95%" stopColor="#C6333D" stopOpacity={0} />
                                                 </linearGradient>
                                             </defs>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} dy={10} />
-                                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }} dy={8} />
+                                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} />
                                             <Tooltip
-                                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                                                labelStyle={{ fontWeight: 'bold', color: '#1e293b', marginBottom: '8px' }}
+                                                contentStyle={{ borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)', fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}
+                                                labelStyle={{ fontWeight: 700, color: '#0f172a', marginBottom: '6px' }}
                                             />
-                                            <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                                            <Area type="monotone" name="Truy cập Web" dataKey="web" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorWeb)" />
-                                            <Area type="monotone" name="AI Phản hồi" dataKey="ai" stroke="#BD1D2D" strokeWidth={3} fillOpacity={1} fill="url(#colorAi)" />
+                                            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '12px', paddingTop: '16px' }} />
+                                            <Area type="monotone" name="Truy cập Web" dataKey="web" stroke="#334155" strokeWidth={2.25} fillOpacity={1} fill="url(#colorWeb)" />
+                                            <Area type="monotone" name="AI Phản hồi" dataKey="ai" stroke="#C6333D" strokeWidth={2.25} fillOpacity={1} fill="url(#colorAi)" />
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -256,7 +257,7 @@ export const SystemOverviewModal: React.FC<Props> = ({ isOpen, onClose, isDarkTh
                                     <div className="space-y-3">
                                         {data.top_campaigns.length === 0 ? (
                                             <div className="text-center py-6 text-sm text-slate-400">Chưa có dữ liệu chiến dịch</div>
-                                        ) : data.top_campaigns.map((camp: any, idx: number) => (
+                                        ) : ensureArray(data?.top_campaigns).map((camp: any, idx: number) => (
                                             <div key={idx} className="flex items-center justify-between p-3 rounded-[14px] border border-slate-50 hover:bg-slate-50 transition-colors">
                                                 <div className="min-w-0 flex-1 mr-4">
                                                     <p className="text-sm font-bold text-slate-800 truncate mb-1">{camp.name}</p>
@@ -286,7 +287,7 @@ export const SystemOverviewModal: React.FC<Props> = ({ isOpen, onClose, isDarkTh
                                     <div className="space-y-3">
                                         {data.top_flows.length === 0 ? (
                                             <div className="text-center py-6 text-sm text-slate-400">Chưa có dữ liệu kịch bản</div>
-                                        ) : data.top_flows.map((flow: any, idx: number) => (
+                                        ) : ensureArray(data?.top_flows).map((flow: any, idx: number) => (
                                             <div key={idx} className="flex items-center justify-between p-3 rounded-xl border border-slate-50 hover:bg-slate-50 transition-colors">
                                                 <div className="min-w-0 flex-1 mr-4">
                                                     <p className="text-sm font-bold text-slate-800 truncate mb-1">{flow.name}</p>
@@ -369,7 +370,7 @@ const EmailSentChart: React.FC = () => {
             // which doesn't match the generic ApiResponse<T> shape (only has success/data/message)
             const res = await api.get<any>(url) as any;
             if (res.success) {
-                setChartData(res.data || []);
+                setChartData(extractArray(res));
                 setSummary(res.summary || { total: 0, peak: 0 });
                 if (res.years?.length) setAvailableYears(res.years);
             }
@@ -473,16 +474,16 @@ const EmailSentChart: React.FC = () => {
                     </div>
                     <div>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tổng gửi</p>
-                        <p className="text-xl font-black text-slate-800">{loading ? '—' : summary.total.toLocaleString()}</p>
+                        <p className="text-xl font-bold text-slate-900 tabular-nums">{loading ? '—' : summary.total.toLocaleString('vi-VN')}</p>
                     </div>
                 </div>
                 <div className="px-6 py-3 flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-[var(--radius-md)] bg-indigo-50 flex items-center justify-center">
-                        <TrendingUp className="w-4 h-4 text-indigo-600" />
+                    <div className="w-8 h-8 rounded-[var(--radius-md)] bg-slate-100 flex items-center justify-center">
+                        <TrendingUp className="w-4 h-4 text-slate-700" />
                     </div>
                     <div>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cao nhất / kỳ</p>
-                        <p className="text-xl font-black text-slate-800">{loading ? '—' : summary.peak.toLocaleString()}</p>
+                        <p className="text-xl font-bold text-slate-900 tabular-nums">{loading ? '—' : summary.peak.toLocaleString('vi-VN')}</p>
                     </div>
                 </div>
             </div>
@@ -492,52 +493,38 @@ const EmailSentChart: React.FC = () => {
                 {loading ? (
                     <div className="px-4 h-full flex items-end gap-3 pb-6">
                         {[40, 65, 35, 80, 55, 90, 60, 75, 45, 70, 50, 85].map((h, idx) => (
-                            <div key={idx} className="flex-1 bg-slate-100 rounded-t-[6px] animate-pulse" style={{ height: `${h}%` }} />
+                            <div key={idx} className="flex-1 bg-slate-100 rounded-t-[4px] animate-pulse" style={{ height: `${h}%` }} />
                         ))}
                     </div>
                 ) : (
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={chartData} margin={{ top: 8, right: 12, left: -10, bottom: 0 }} barCategoryGap="20%">
-                            <defs>
-                                <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#c084fc" stopOpacity={1} />
-                                    <stop offset="100%" stopColor="#7c3aed" stopOpacity={0.85} />
-                                </linearGradient>
-                                <linearGradient id="barGradientPeak" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#e11d48" stopOpacity={1} />
-                                    <stop offset="100%" stopColor="#BD1D2D" stopOpacity={1} />
-                                </linearGradient>
-                                <linearGradient id="barGradientZero" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#e2e8f0" stopOpacity={1} />
-                                    <stop offset="100%" stopColor="#cbd5e1" stopOpacity={1} />
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                             <XAxis
                                 dataKey="label"
                                 axisLine={false}
                                 tickLine={false}
-                                tick={{ fontSize: mode === 'monthly' ? 10 : 12, fill: '#94a3b8', fontWeight: 700 }}
+                                tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }}
                                 dy={8}
                                 interval={mode === 'monthly' ? 2 : 0}
                             />
                             <YAxis
                                 axisLine={false}
                                 tickLine={false}
-                                tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }}
+                                tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }}
                                 tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v}
                             />
-                            <Tooltip content={<CustomBarTooltip />} cursor={{ fill: 'rgba(189,29,45,0.06)', radius: 6 }} />
-                            <Bar dataKey="sent" radius={[6, 6, 0, 0]} maxBarSize={mode === 'monthly' ? 18 : 48}>
+                            <Tooltip content={<CustomBarTooltip />} cursor={{ fill: 'rgba(15, 23, 42, 0.04)', radius: 4 }} />
+                            <Bar dataKey="sent" radius={[4, 4, 0, 0]} maxBarSize={mode === 'monthly' ? 18 : 48}>
                                 {chartData.map((entry, index) => (
                                     <Cell
                                         key={`cell-${index}`}
                                         fill={
                                             entry.sent === 0
-                                                ? 'url(#barGradientZero)'
+                                                ? '#e2e8f0'
                                                 : entry.sent === maxVal
-                                                ? 'url(#barGradientPeak)'
-                                                : 'url(#barGradient)'
+                                                ? '#C6333D'
+                                                : '#334155'
                                         }
                                     />
                                 ))}
@@ -550,16 +537,16 @@ const EmailSentChart: React.FC = () => {
             {/* Legend */}
             <div className="px-6 pb-4 flex items-center gap-4">
                 <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-purple-600" />
-                    <span className="text-[10px] font-bold text-slate-500">Email / ZNS đã gửi</span>
+                    <div className="w-2.5 h-2.5 rounded-full bg-slate-700" />
+                    <span className="text-[11px] font-medium text-slate-500">Email / ZNS đã gửi</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-[var(--color-primary)] ring-2 ring-rose-300" />
-                    <span className="text-[10px] font-bold text-slate-500">Cao nhất</span>
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#C6333D]" />
+                    <span className="text-[11px] font-medium text-slate-500">Cao nhất</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-slate-200" />
-                    <span className="text-[10px] font-bold text-slate-400">Không có gửi</span>
+                    <div className="w-2.5 h-2.5 rounded-full bg-slate-200" />
+                    <span className="text-[11px] font-medium text-slate-400">Không có gửi</span>
                 </div>
             </div>
         </div>

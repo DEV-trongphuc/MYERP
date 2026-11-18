@@ -4,8 +4,8 @@ import { createPortal } from 'react-dom';
 import { 
   Package, Plus, Edit, Trash2, LayoutGrid, List, Search, 
   Filter, History, Share, Clock, CheckCircle, AlertTriangle, 
-  ChevronDown, DollarSign, CalendarDays, Layers, ArrowRight,
-  TrendingDown, TrendingUp, MoreHorizontal, X, Download, FileSpreadsheet, Loader2
+  ChevronDown, DollarSign, CalendarDays, Layers,
+  X, Download, FileSpreadsheet, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '../store/uiStore';
@@ -348,7 +348,7 @@ export default function InventoryPage() {
         },
         defaultFilename: `export_inventory_${Date.now()}.csv`,
         onSuccess: () => {
-          addToast('Tải xuống dữ liệu kho hàng thành công!', 'success');
+          addToast('Tải xuống dữ liệu kho hàng thành công', 'success');
         },
       });
     } catch (err: any) {
@@ -361,15 +361,15 @@ export default function InventoryPage() {
 
   return (
     <div className="page-container anim-fade-up">
-      <div className="page-header" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '1.25rem', marginBottom: '1.5rem', alignItems: 'stretch' }}>
+      <div className="page-header" style={{ display: 'flex', flexDirection: 'column', gap: '20px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '20px', marginBottom: '24px', alignItems: 'stretch' }}>
         {/* Row 1: Title & Actions */}
-        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', width: '100%', flexWrap: 'wrap', gap: '1rem' }}>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', width: '100%', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <h1 className="page-title" style={{ margin: 0 }}>Kho hàng &amp; Sản phẩm</h1>
             <p className="page-subtitle" style={{ margin: '4px 0 0' }}>Quản lý tồn kho sản phẩm, dịch vụ và lịch sử xuất nhập kho.</p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
             <button 
               onClick={handleExport} 
               disabled={isExporting}
@@ -377,7 +377,7 @@ export default function InventoryPage() {
                 height: '36px', 
                 fontSize: '0.8125rem', 
                 padding: '0 12px', 
-                gap: '0.4rem', 
+                gap: '6px', 
                 display: 'flex', 
                 alignItems: 'center', 
                 justifyContent: 'center', 
@@ -387,7 +387,7 @@ export default function InventoryPage() {
                 color: 'var(--color-text)',
                 cursor: isExporting ? 'not-allowed' : 'pointer',
                 fontWeight: 600,
-                transition: 'all 0.2s',
+                transition: 'background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease',
                 flex: isMobile ? '1 1 calc(50% - 4px)' : 'none',
                 opacity: isExporting ? 0.7 : 1
               }} 
@@ -405,7 +405,7 @@ export default function InventoryPage() {
                     height: '36px', 
                     fontSize: '0.8125rem', 
                     padding: '0 12px', 
-                    gap: '0.4rem', 
+                    gap: '6px', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center', 
@@ -415,7 +415,7 @@ export default function InventoryPage() {
                     color: 'var(--color-text)',
                     cursor: 'pointer',
                     fontWeight: 600,
-                    transition: 'all 0.2s',
+                    transition: 'background-color 0.15s ease, border-color 0.15s ease',
                     flex: isMobile ? '1 1 calc(50% - 4px)' : 'none'
                   }} 
                   title="Đồng bộ Google Sheets"
@@ -429,8 +429,8 @@ export default function InventoryPage() {
                   style={{ 
                     height: '36px', 
                     fontSize: '0.8125rem', 
-                    padding: '0 14px', 
-                    gap: '0.4rem', 
+                    padding: '0 16px', 
+                    gap: '6px', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center', 
@@ -440,7 +440,7 @@ export default function InventoryPage() {
                     color: 'white',
                     cursor: 'pointer',
                     fontWeight: 600,
-                    transition: 'all 0.2s',
+                    transition: 'opacity 0.15s ease, background-color 0.15s ease',
                     flex: isMobile ? '1 1 100%' : 'none'
                   }} 
                   title="Khai báo căn / lô"
@@ -614,111 +614,80 @@ export default function InventoryPage() {
 
       {activeTab !== 'purchase_orders' && (
         <>
-          {/* Stats Cards — styled premium like the data distribution dashboard */}
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: isMobile ? '0.5rem' : '1rem', marginBottom: '1.5rem' }}>
+          {/* Stats Cards (Chapter V DNA) */}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: isMobile ? '8px' : '16px', marginBottom: '24px' }}>
             {[
               { 
                 label: 'Tổng số căn / lô', 
                 value: String(batches.length), 
                 icon: Layers, 
-                color: 'var(--color-primary)', 
+                color: '#BD1D2D', 
                 bg: 'rgba(189, 29, 45, 0.08)',
                 sub: 'căn hộ / lô đất đang quản lý',
-                decor: (
-                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                    <path d="M50 20 L80 35 L50 50 L20 35 Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-                    <path d="M20 50 L50 65 L80 50" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    <path d="M20 65 L50 80 L80 65" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )
               },
               { 
                 label: 'Căn còn trống (Available)', 
                 value: String(batches.filter(b => b.current_qty > 5).length), 
                 icon: CheckCircle, 
-                color: '#10b981', 
-                bg: 'rgba(16, 185, 129, 0.08)',
+                color: '#BD1D2D', 
+                bg: 'rgba(189, 29, 45, 0.08)',
                 sub: 'sẵn sàng giao dịch',
-                decor: (
-                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                    <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
-                    <path d="M35 50 L45 60 L65 40" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )
               },
               { 
                 label: 'Đã đặt chỗ / cọc (Booking)', 
                 value: String(batches.filter(b => b.current_qty > 0 && b.current_qty <= 5).length), 
                 icon: Clock, 
-                color: '#f59e0b', 
-                bg: 'rgba(245, 158, 11, 0.08)',
+                color: '#334155', 
+                bg: 'rgba(15, 23, 42, 0.06)',
                 sub: 'đang giữ chỗ/cọc tạm',
-                decor: (
-                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                    <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
-                    <path d="M50 20 L50 50 L70 50" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )
               },
               { 
                 label: 'Đã bán (Sold)', 
                 value: String(batches.filter(b => b.current_qty <= 0).length), 
                 icon: DollarSign, 
-                color: '#ef4444', 
-                bg: 'rgba(239, 68, 68, 0.08)',
+                color: '#334155', 
+                bg: 'rgba(15, 23, 42, 0.06)',
                 sub: 'đã ký hợp đồng mua bán',
-                decor: (
-                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                    <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
-                    <text x="35" y="68" fill="currentColor" fontSize="50" fontWeight="bold">$</text>
-                  </svg>
-                )
               },
             ].map((k, i) => {
               const Icon = k.icon;
               return (
                 <motion.div 
                   key={i} 
-                  className="stat-card hover-lift" 
-                  initial={{ opacity: 0, y: 16 }} 
+                  className="stat-card" 
+                  initial={{ opacity: 0, y: 12 }} 
                   animate={{ opacity: 1, y: 0 }} 
-                  transition={{ delay: i * 0.06 }}
+                  transition={{ delay: i * 0.05 }}
                   style={{ 
                     display: 'flex', 
                     flexDirection: 'column', 
-                    minHeight: '135px',
-                    padding: '1.25rem',
-                    position: 'relative',
-                    overflow: 'hidden'
+                    minHeight: '132px',
+                    padding: '20px',
+                    borderRadius: '16px',
                   }}
                 >
-                  {/* Decorative Background SVG */}
-                  <div className="decor-svg" style={{ color: k.color }}>
-                    {k.decor}
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                    <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-light)' }}>{k.label}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.73rem', color: '#64748b' }}>{k.label}</span>
                     <div className="stat-icon" style={{
                       background: k.bg,
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '50%',
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       color: k.color,
                       flexShrink: 0
                     }}>
-                      <Icon size={18} />
+                      <Icon size={17} />
                     </div>
                   </div>
 
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 2 }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     {loading ? (
                       <div className="skeleton" style={{ height: 28, width: '80%', borderRadius: 6, marginBottom: 8 }} />
                     ) : (
-                      <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '1.5rem', lineHeight: 1.2 }}>{k.value}</div>
+                      <div className="stat-value" style={{ fontWeight: 700, color: i === 1 ? '#BD1D2D' : 'var(--color-text)', fontSize: '1.5rem', lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>{k.value}</div>
                     )}
                     <div className="stat-desc" style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 'auto', fontWeight: 500 }} title={k.sub}>{k.sub}</div>
                   </div>
@@ -856,7 +825,7 @@ export default function InventoryPage() {
                       <td><div className="text-sm truncate" style={{ color: 'var(--color-text-muted)', maxWidth: '200px' }} title={log.reason}>{log.reason}</div></td>
                       <td>
                         <div className="flex items-center gap-2">
-                          <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--color-primary-light)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 900, flexShrink: 0 }}>
+                          <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--color-primary-light)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6875rem', fontWeight: 700, flexShrink: 0 }}>
                             {log.creator_name?.charAt(0)}
                           </div>
                           <span className="font-bold text-sm" style={{ color: 'var(--color-text)' }}>{log.creator_name}</span>
@@ -875,7 +844,7 @@ export default function InventoryPage() {
             <div style={{ width: '96px', height: '96px', background: 'var(--color-bg)', borderRadius: 'var(--radius-full)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem' }}>
               <Package size={48} style={{ color: 'var(--color-text-muted)' }} />
             </div>
-            <h3 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-text)', marginBottom: '0.5rem' }}>Không tìm thấy lô hàng nào</h3>
+            <h3 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '0.5rem' }}>Không tìm thấy lô hàng nào</h3>
             <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', marginBottom: '2rem', lineHeight: 1.5 }}>
               Thử thay đổi bộ lọc, tìm kiếm bằng từ khóa khác hoặc kiểm tra lại điều kiện.
             </p>
@@ -907,8 +876,8 @@ export default function InventoryPage() {
                         <React.Fragment key={b.id}>
                           {isNewDate && (
                             <tr style={{ background: 'var(--color-bg)', cursor: 'pointer' }} onClick={() => toggleDateGroup(dateKey)}>
-                              <td colSpan={6} style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid var(--color-border-light)', borderBottom: '1px solid var(--color-border-light)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', fontWeight: 800, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              <td colSpan={6} style={{ padding: '12px 20px', borderTop: '1px solid var(--color-border-light)', borderBottom: '1px solid var(--color-border-light)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em', fontVariantNumeric: 'tabular-nums' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '4px', background: 'var(--color-border)', color: 'var(--color-text)', transition: 'transform 0.2s', transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}>
                                     <ChevronDown size={14} />
                                   </div>
@@ -924,25 +893,25 @@ export default function InventoryPage() {
                                 <div className="font-bold text-sm" style={{ color: 'var(--color-text)' }}>{b.product_name}</div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
                                   {b.category && <span className="badge info text-xs" style={{ padding: '2px 6px', fontSize: '10px' }}>{b.category}</span>}
-                                  <span style={{ background: 'var(--color-border-light)', color: 'var(--color-text-light)', padding: '2px 10px', borderRadius: '100px', fontSize: '10px', fontWeight: 800, fontFamily: 'monospace', textTransform: 'uppercase', border: '1px solid var(--color-border)' }}>{b.sku || 'No SKU'}</span>
-                                  <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 600 }}>#{b.batch_code}</span>
+                                  <span style={{ background: 'var(--color-border-light)', color: 'var(--color-text-light)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'monospace', textTransform: 'uppercase', border: '1px solid var(--color-border)' }}>{b.sku || 'No SKU'}</span>
+                                  <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>#{b.batch_code}</span>
                                 </div>
                               </td>
                               <td>
-                                <div className="font-bold text-sm">{new Date(b.import_date).toLocaleDateString('vi-VN')}</div>
+                                <div className="font-bold text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>{new Date(b.import_date).toLocaleDateString('vi-VN')}</div>
                                 {b.expiry_date && (
-                                  <div className="text-xs flex items-center gap-1" style={{ marginTop: '0.25rem', color: 'var(--color-text-muted)' }}>
+                                  <div className="text-xs flex items-center gap-1" style={{ marginTop: '0.25rem', color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
                                     <Clock size={12} /> Bàn giao: {new Date(b.expiry_date).toLocaleDateString('vi-VN')}
                                   </div>
                                 )}
                               </td>
                               <td style={{ textAlign: 'right' }}>
-                                <div className="font-bold text-sm">{(b.import_price || 0).toLocaleString()} đ</div>
+                                <div className="font-bold text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>{(b.import_price || 0).toLocaleString()} đ</div>
                                 <div className="text-muted" style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 600, marginTop: '2px' }}>{b.unit || 'm²'}</div>
                               </td>
                               <td style={{ textAlign: 'center' }}>
-                                <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-                                  <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                                  <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                                     {b.current_qty} <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-text-light)' }}>m²</span>
                                   </div>
                                 </div>
@@ -988,36 +957,36 @@ export default function InventoryPage() {
               </div>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '24px' }}>
               {filteredBatches.map(b => {
                 const pct = b.initial_qty > 0 ? Math.min((b.current_qty / b.initial_qty) * 100, 100) : 0;
                 return (
                   <motion.div 
                     key={b.id}
                     layout
-                    className="card hover-lift"
+                    className="card"
                     style={{ borderTop: b.current_qty <= 0 ? '4px solid var(--color-danger)' : b.current_qty <= 5 ? '4px solid var(--color-warning)' : '4px solid var(--color-primary)' }}
                   >
-                    <div style={{ padding: '1.5rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-                        <div style={{ flex: 1, minWidth: 0, paddingRight: '1rem' }}>
-                          <h3 style={{ fontWeight: 800, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '1.125rem' }}>{b.product_name}</h3>
+                    <div style={{ padding: '24px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+                        <div style={{ flex: 1, minWidth: 0, paddingRight: '16px' }}>
+                          <h3 style={{ fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '1.125rem' }}>{b.product_name}</h3>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
                             {b.category && <span className="badge info" style={{ padding: '2px 6px', fontSize: '10px' }}>{b.category}</span>}
-                            <span style={{ background: 'var(--color-border-light)', color: 'var(--color-text-light)', padding: '2px 10px', borderRadius: '100px', fontSize: '10px', fontWeight: 800, fontFamily: 'monospace', textTransform: 'uppercase', border: '1px solid var(--color-border)' }}>{b.sku || 'No SKU'}</span>
-                            <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 600 }}>#{b.batch_code}</span>
+                            <span style={{ background: 'var(--color-border-light)', color: 'var(--color-text-light)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'monospace', textTransform: 'uppercase', border: '1px solid var(--color-border)' }}>{b.sku || 'No SKU'}</span>
+                            <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>#{b.batch_code}</span>
                           </div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
-                          <div style={{ fontSize: '1.125rem', fontWeight: 900, color: 'var(--color-text)' }}>{(b.import_price || 0).toLocaleString()} đ</div>
-                          <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{b.unit}</div>
+                          <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>{(b.import_price || 0).toLocaleString()} đ</div>
+                          <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{b.unit}</div>
                         </div>
                       </div>
 
-                      <div style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-lg)', padding: '1rem', marginBottom: '1.5rem', border: '1px solid var(--color-border-light)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tồn kho hiện tại</span>
-                          <span style={{ fontSize: '0.875rem', fontWeight: 900, color: b.current_qty <= 5 ? 'var(--color-danger)' : 'var(--color-text)' }}>
+                      <div style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-lg)', padding: '16px', marginBottom: '24px', border: '1px solid var(--color-border-light)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tồn kho hiện tại</span>
+                          <span style={{ fontSize: '0.875rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: b.current_qty <= 5 ? 'var(--color-danger)' : 'var(--color-text)' }}>
                             {b.current_qty} <span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>/ {b.initial_qty}</span>
                           </span>
                         </div>
@@ -1105,7 +1074,7 @@ export default function InventoryPage() {
                     <Share size={20} />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: '1.125rem', fontWeight: 800 }}>Xuất kho nội bộ</h2>
+                    <h2 style={{ fontSize: '1.125rem', fontWeight: 700 }}>Xuất kho nội bộ</h2>
                     <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>#{selectedBatch.batch_code} — {selectedBatch.product_name}</p>
                   </div>
                 </div>
@@ -1120,14 +1089,14 @@ export default function InventoryPage() {
                     </div>
                   </div>
                   
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
-                    <div style={{ padding: '0.75rem', background: 'var(--color-bg)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border-light)' }}>
-                      <div style={{ fontSize: '10px', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Tồn hiện tại</div>
-                      <div style={{ fontSize: '1.125rem', fontWeight: 900, color: 'var(--color-text)' }}>{selectedBatch.current_qty} {selectedBatch.unit}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+                    <div style={{ padding: '12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border-light)' }}>
+                      <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>Tồn hiện tại</div>
+                      <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>{selectedBatch.current_qty} {selectedBatch.unit}</div>
                     </div>
-                    <div style={{ padding: '0.75rem', background: 'var(--color-bg)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border-light)' }}>
-                      <div style={{ fontSize: '10px', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Giá vốn lô</div>
-                      <div style={{ fontSize: '1.125rem', fontWeight: 900, color: 'var(--color-text)' }}>{(selectedBatch.import_price || 0).toLocaleString()} đ</div>
+                    <div style={{ padding: '12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border-light)' }}>
+                      <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>Giá vốn lô</div>
+                      <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>{(selectedBatch.import_price || 0).toLocaleString()} đ</div>
                     </div>
                   </div>
 
@@ -1209,7 +1178,7 @@ export default function InventoryPage() {
                     <Edit size={20} />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: '1.125rem', fontWeight: 800 }}>Điều chỉnh tồn kho</h2>
+                    <h2 style={{ fontSize: '1.125rem', fontWeight: 700 }}>Điều chỉnh tồn kho</h2>
                     <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Lô #{selectedBatch.batch_code} — {selectedBatch.product_name}</p>
                   </div>
                 </div>
@@ -1271,7 +1240,7 @@ export default function InventoryPage() {
                     <History size={20} />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: '1.125rem', fontWeight: 800 }}>Lịch sử lô hàng</h2>
+                    <h2 style={{ fontSize: '1.125rem', fontWeight: 700 }}>Lịch sử lô hàng</h2>
                     <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Chi tiết mọi biến động của lô #{selectedBatch.batch_code}</p>
                   </div>
                 </div>
@@ -1289,12 +1258,12 @@ export default function InventoryPage() {
                         <div style={{ background: 'var(--color-bg)', padding: '1rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border-light)' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
                             <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{log.reason}</span>
-                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{log.created_at ? new Date(log.created_at).toLocaleString('vi-VN') : ''}</span>
+                            <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', fontVariantNumeric: 'tabular-nums' }}>{log.created_at ? new Date(log.created_at).toLocaleString('vi-VN') : ''}</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.75rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <span style={{ color: 'var(--color-text-muted)' }}>Thay đổi:</span>
-                              <span style={{ fontWeight: 900, color: log.qty_change > 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                              <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: log.qty_change > 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
                                 {log.qty_change > 0 ? '+' : ''}{log.qty_change} {selectedBatch.unit}
                               </span>
                             </div>

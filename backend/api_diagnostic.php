@@ -11,17 +11,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-// 1. Authentication check
-define('DIAG_TOKEN', 'Ideas_Diag_Secure_Token_2026_9e88d6c701fbc6b7');
-$token = $_REQUEST['token'] ?? '';
-if ($token !== DIAG_TOKEN) {
+// 1. Load environment & Authentication check
+require_once __DIR__ . '/env.php';
+$expectedDiagToken = (string)($_ENV['DIAG_TOKEN'] ?? $_ENV['MYERP_DIAG_TOKEN'] ?? getenv('DIAG_TOKEN') ?: '');
+if (!defined('DIAG_TOKEN')) {
+    define('DIAG_TOKEN', $expectedDiagToken);
+}
+$token = (string)($_REQUEST['token'] ?? '');
+if (DIAG_TOKEN === '' || !hash_equals((string)DIAG_TOKEN, $token)) {
     http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Forbidden: Invalid token']);
+    echo json_encode(['success' => false, 'message' => 'Forbidden: Invalid or unconfigured token']);
     exit;
 }
 
 // 2. Load Database configuration
-require_once __DIR__ . '/env.php';
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/config/Database.php';
 

@@ -241,11 +241,11 @@ const renderContent = (content: string, role: string, onActionClick?: (action: s
                     <button
                         key={`action-${i}`}
                         onClick={() => onActionClick?.(action)}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${onActionClick
-                            ? 'bg-amber-100 text-[#9A1523] border border-amber-200 hover:bg-amber-200 hover:scale-105'
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors shadow-xs ${onActionClick
+                            ? 'bg-amber-100 text-[#9A1523] border border-amber-200 hover:bg-amber-200'
                             : 'bg-slate-50 text-slate-400 border border-slate-100 cursor-default grayscale'}`}
                     >
-                        <Sparkles className={`w-3.5 h-3.5 ${onActionClick ? 'text-[var(--color-primary)]' : 'text-slate-300'}`} />
+                        <Sparkles className={`w-3.5 h-3.5 ${onActionClick ? 'text-[var(--color-primary)]' : 'text-slate-300'}`} strokeWidth={1.75} />
                         {action}
                     </button>
                 ))}
@@ -1252,9 +1252,9 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                                 <h4 className="text-sm font-bold text-slate-800">Cấu hình xuất CSV</h4>
                                 <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">Chọn phạm vi Thời gian bạn muốn trích xuất dữ liệu cuộc trò chuyện.</p>
 
-                                <div className="mt-4 flex bg-slate-100 p-1 rounded-xl border border-slate-200/50">
+                                <div className="mt-4 flex bg-slate-100 p-1 rounded-[10px] border border-slate-200">
                                     {[
-                                        { id: 'all', label: 'Tất cả', icon: Sparkles },
+                                        { id: 'all', label: 'Tất cả', icon: Zap },
                                         { id: 'web', label: 'Web', icon: Globe },
                                         { id: 'zalo', label: 'Zalo', icon: MessageSquare },
                                         { id: 'meta', label: 'Meta', icon: Layout }
@@ -1262,9 +1262,9 @@ export default function ConversationsTab({ propertyId, initialConversationId }: 
                                         <button
                                             key={s.id}
                                             onClick={() => setExportSource(s.id as any)}
-                                            className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-tight flex items-center justify-center gap-1.5 transition-all ${exportSource === s.id ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+                                            className={`flex-1 py-1.5 rounded-[7px] text-[10px] font-bold uppercase flex items-center justify-center gap-1.5 transition-colors ${exportSource === s.id ? 'bg-white text-[#BD1D2D] shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
                                         >
-                                            <s.icon className={`w-3 h-3 ${exportSource === s.id ? 'text-slate-900' : 'text-slate-300'}`} />
+                                            <s.icon className={`w-3 h-3 ${exportSource === s.id ? 'text-[#BD1D2D]' : 'text-slate-400'}`} />
                                             {s.label}
                                         </button>
                                     ))}

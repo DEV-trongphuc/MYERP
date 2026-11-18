@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, Menu, BookOpen, Settings, ImageIcon, User, Search, Sparkles, Wand2, Flag } from 'lucide-react';
+import { Bot, Menu, BookOpen, Settings, User, Search, Sparkles, Flag } from 'lucide-react';
 import { ChatbotInfo } from '../../../types';
 import { AI_MODELS, getModelDisplayName } from '../../../utils/ai-constants';
 
@@ -55,16 +55,16 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({
     onOpenFeedback,
 }) => {
     return (
-        <div className={`sticky top-0 h-14 flex items-center justify-between px-3 sm:px-6 border-b z-30 shrink-0 select-none transition-all duration-500 ${isDarkTheme ? 'bg-[#0B0F17]/90 border-slate-800 text-slate-100' : 'bg-white/80 border-slate-100 text-slate-800'} backdrop-blur-sm`}>
+        <div className={`sticky top-0 h-14 flex items-center justify-between px-3 sm:px-6 border-b z-30 shrink-0 select-none transition-colors duration-300 ${isDarkTheme ? 'bg-[#0B0F17]/90 border-slate-800 text-slate-100' : 'bg-white/85 border-slate-200 text-slate-800'} backdrop-blur-sm`}>
             <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                 <div
-                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary)]-accent flex items-center justify-center text-white shadow-md relative group cursor-pointer transition-transform active:scale-95 shrink-0"
+                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[var(--color-primary)] flex items-center justify-center text-white shadow-xs relative group cursor-pointer transition-opacity hover:opacity-95 shrink-0"
                     onClick={() => setIsSidebarOpen(true)}
                 >
                     {activeBot?.settings?.bot_avatar ? (
                         <img src={activeBot.settings.bot_avatar} className="w-full h-full object-cover rounded-xl" alt="Bot Avatar" />
                     ) : (
-                        <Bot className="w-5 h-5 sm:w-6 sm:h-6" />
+                        <Bot className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={1.75} />
                     )}
                     <div className="absolute inset-0 bg-black/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                         <Menu className="w-4 h-4 text-white" />
@@ -75,14 +75,14 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({
                     <h3 className={`font-bold leading-tight flex items-center gap-1.5 text-sm sm:text-base ${isDarkTheme ? 'text-slate-100' : 'text-slate-800'}`}>
                         <span className="truncate max-w-[120px] sm:max-w-none">{activeBot?.name || 'AI Assistant'}</span>
                         {!isImageGenMode && (
-                            <span className={`hidden sm:inline-flex text-[10px] px-1.5 py-0.5 rounded font-black uppercase tracking-wider shrink-0 ${isDarkTheme ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600'}`}>
+                            <span className={`hidden sm:inline-flex text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider shrink-0 ${isDarkTheme ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600'}`}>
                                 {getModelDisplayName(AI_MODELS.find(m => m.id === selectedModel)?.name || selectedModel, categoryName)}
                             </span>
                         )}
                     </h3>
                     <div className="flex items-center gap-1.5">
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${loadingChat ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500'}`} />
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkTheme ? 'text-slate-500' : 'text-slate-400'}`}>{loadingChat ? 'Thinking...' : 'Active'}</span>
+                        <span className={`text-[10px] font-semibold uppercase tracking-wider ${isDarkTheme ? 'text-slate-500' : 'text-slate-400'}`}>{loadingChat ? 'Thinking...' : 'Active'}</span>
                     </div>
                 </div>
             </div>
@@ -91,7 +91,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({
                 {showOrgSettings && onOpenOrgSettings && (
                     <button
                         onClick={onOpenOrgSettings}
-                        className={`p-2 rounded-xl transition-all active:scale-95 ${isDarkTheme ? 'text-slate-500 hover:text-amber-400 hover:bg-slate-800' : 'text-slate-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5'}`}
+                        className={`p-2 rounded-xl transition-colors ${isDarkTheme ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5'}`}
                         title="Quản trị tổ chức"
                     >
                         <Settings className="w-4 h-4" />
@@ -100,14 +100,14 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({
                 {/* Feedback button */}
                 <button
                     onClick={onOpenFeedback}
-                    className={`p-2 rounded-xl transition-all active:scale-95 ${isDarkTheme ? 'text-slate-500 hover:text-amber-400 hover:bg-slate-800' : 'text-slate-400 hover:text-[#9A1523] hover:bg-amber-50'}`}
+                    className={`p-2 rounded-xl transition-colors ${isDarkTheme ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-400 hover:text-[#BD1D2D] hover:bg-rose-50'}`}
                     title="Gửi feedback / báo lỗi"
                 >
                     <Flag className="w-4 h-4" />
                 </button>
                 <button
                     onClick={() => setIsChatSearchOpen?.(!isChatSearchOpen)}
-                    className={`p-2 rounded-xl transition-all active:scale-95 ${isChatSearchOpen ? (isDarkTheme ? 'bg-slate-800 text-[var(--color-primary)]' : 'bg-slate-100 text-[var(--color-primary)]') : (isDarkTheme ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600')}`}
+                    className={`p-2 rounded-xl transition-colors ${isChatSearchOpen ? (isDarkTheme ? 'bg-slate-800 text-[var(--color-primary)]' : 'bg-slate-100 text-[var(--color-primary)]') : (isDarkTheme ? 'text-slate-400 hover:text-slate-200' : 'text-slate-400 hover:text-slate-600')}`}
                     title="Tìm kiếm tin nhắn"
                 >
                     <Search className="w-4 h-4" />
@@ -115,20 +115,13 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({
                 <button
                     onClick={onOpenSummary}
                     disabled={isSummarizing || loadingChat}
-                    className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl transition-all shadow-sm active:scale-95 relative overflow-hidden group ${isSummarizing ? 'animate-pulse' : ''} ${isDarkTheme ? 'text-white' : 'text-white'}`}
+                    className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl transition-colors shadow-xs relative overflow-hidden group bg-[var(--color-primary)] hover:brightness-95 text-white ${isSummarizing ? 'animate-pulse' : ''}`}
                     title="Tóm tắt nội dung & Key Takeaways"
                 >
-                    {/* Brand Gradient Background */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary)]-accent group-hover:opacity-90 transition-opacity" />
-
-                    <div className="relative flex items-center gap-1.5 pt-0.5">
-                        <Sparkles className={`w-4 h-4 ${isSummarizing ? 'animate-spin' : ''}`} />
-                        <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline pt-0.5">Tóm tắt</span>
+                    <div className="relative flex items-center gap-1.5">
+                        <Sparkles className={`w-4 h-4 ${isSummarizing ? 'animate-spin' : ''}`} strokeWidth={1.75} />
+                        <span className="text-[10px] font-bold uppercase tracking-widest hidden sm:inline">Tóm tắt</span>
                     </div>
-
-                    {isSummarizing && (
-                        <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-white rounded-full animate-ping" />
-                    )}
                 </button>
                 <button
                     onClick={() => {
@@ -140,16 +133,16 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({
                             setGlobalTab('files');
                         }
                     }}
-                    className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl transition-all ${isDocWorkspaceOpen && globalTab === 'files' ? (isDarkTheme ? 'text-white bg-slate-800 border border-slate-700 shadow-sm' : 'text-slate-700 bg-slate-100 border border-slate-200 shadow-sm') : (isDarkTheme ? 'text-slate-500 hover:text-slate-200 border border-transparent hover:bg-slate-800' : 'text-slate-400 hover:text-slate-600 border border-transparent hover:bg-slate-100')}`}
+                    className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl transition-colors ${isDocWorkspaceOpen && globalTab === 'files' ? (isDarkTheme ? 'text-white bg-slate-800 border border-slate-700 shadow-xs' : 'text-slate-800 bg-slate-100 border border-slate-200 shadow-xs') : (isDarkTheme ? 'text-slate-400 hover:text-slate-200 border border-transparent hover:bg-slate-800' : 'text-slate-500 hover:text-slate-700 border border-transparent hover:bg-slate-100')}`}
                     title="Conversation Workspace"
                 >
                     <BookOpen className="w-4 h-4" />
-                    <span className="text-[10px] font-black uppercase tracking-widest pt-0.5 hidden sm:inline">Workspace</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest hidden sm:inline">Workspace</span>
                 </button>
                 {/* Menu toggle - visible on mobile AND tablet (below lg) */}
                 <button
                     onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                    className={`p-2 sm:p-2.5 rounded-xl transition-all active:scale-90 lg:hidden flex items-center justify-center ${isDarkTheme ? 'text-slate-300 bg-slate-800/50 border border-slate-700' : 'text-slate-600 bg-slate-50 border border-slate-100'}`}
+                    className={`p-2 sm:p-2.5 rounded-xl transition-colors lg:hidden flex items-center justify-center ${isDarkTheme ? 'text-slate-300 bg-slate-800/50 border border-slate-700' : 'text-slate-600 bg-slate-50 border border-slate-200'}`}
                 >
                     <Menu className="w-4 h-4" />
                 </button>

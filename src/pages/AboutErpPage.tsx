@@ -3,34 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { AppIcon } from '../components/common/AppIcons';
 import {
   ArrowRight,
-  Sparkles,
   ShieldCheck,
   Layers,
   GitBranch,
-  Target,
-  Users,
-  BarChart3,
   CheckCircle2,
-  Zap,
-  Globe,
-  Bot,
-  FileText,
   GraduationCap,
-  CreditCard,
-  Clock,
-  Scale,
-  Filter,
   Search,
   ExternalLink,
-  Award,
-  Activity,
-  Lock,
-  Cpu,
   ChevronRight,
   AlertTriangle,
-  Building2,
-  BookOpen,
-  Receipt
+  BookOpen
 } from 'lucide-react';
 
 interface SubTabItem {
@@ -406,13 +388,13 @@ export const AboutErpPage: React.FC = () => {
               style={{
                 width: '40px',
                 height: '40px',
-                borderRadius: '12px',
+                borderRadius: '10px',
                 background: 'linear-gradient(135deg, #C6333D 0%, #991B1B 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: '#FFFFFF',
-                fontWeight: 900,
+                fontWeight: 700,
                 fontSize: '1.05rem',
                 boxShadow: '0 6px 16px rgba(198, 51, 61, 0.25)'
               }}
@@ -421,13 +403,13 @@ export const AboutErpPage: React.FC = () => {
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontWeight: 900, fontSize: '1.05rem', letterSpacing: '-0.02em', color: '#0F172A' }}>
+                <span style={{ fontWeight: 700, fontSize: '1.05rem', letterSpacing: '-0.02em', color: '#0F172A' }}>
                   MYERP IDEAS
                 </span>
                 <span
                   style={{
                     fontSize: '0.68rem',
-                    fontWeight: 800,
+                    fontWeight: 700,
                     padding: '2px 8px',
                     borderRadius: '999px',
                     background: '#FEF2F2',
@@ -445,7 +427,7 @@ export const AboutErpPage: React.FC = () => {
             </div>
           </div>
 
-          <nav style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <nav style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             {[
               { label: '7 Phân Hệ Cốt Lõi', target: 'sec-pillars' },
               { label: 'Chia Lead & Scoring', target: 'sec-routing' },
@@ -458,7 +440,7 @@ export const AboutErpPage: React.FC = () => {
                 type="button"
                 onClick={() => scrollToSection(nav.target)}
                 style={{
-                  padding: '7px 13px',
+                  padding: '8px 12px',
                   borderRadius: '8px',
                   border: 'none',
                   background: 'transparent',
@@ -466,7 +448,7 @@ export const AboutErpPage: React.FC = () => {
                   fontSize: '0.8rem',
                   fontWeight: 600,
                   cursor: 'pointer',
-                  transition: 'all 0.15s ease'
+                  transition: 'background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), color 0.18s cubic-bezier(0.22, 1, 0.36, 1)'
                 }}
                 onMouseEnter={e => {
                   e.currentTarget.style.background = '#F1F5F9';
@@ -532,8 +514,8 @@ export const AboutErpPage: React.FC = () => {
                 marginBottom: '20px'
               }}
             >
-              <Sparkles size={14} style={{ color: '#C6333D' }} />
-              <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#0F172A', letterSpacing: '0.03em' }}>
+              <ShieldCheck size={14} style={{ color: '#C6333D' }} />
+              <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#0F172A', letterSpacing: '0.03em' }}>
                 KIẾN TRÚC ENTERPRISE SAAS HỢP NHẤT TOÀN DIỆN • ZERO FAKE DATA • 4-WAY DATA PARITY
               </span>
             </div>
@@ -541,7 +523,7 @@ export const AboutErpPage: React.FC = () => {
             <h1
               style={{
                 fontSize: 'clamp(2rem, 3.8vw, 3.25rem)',
-                fontWeight: 900,
+                fontWeight: 800,
                 lineHeight: 1.15,
                 letterSpacing: '-0.03em',
                 color: '#0F172A',
@@ -765,7 +747,7 @@ export const AboutErpPage: React.FC = () => {
               background: '#FFFFFF',
               border: '1px solid #E2E8F0',
               borderRadius: '20px',
-              padding: '22px',
+              padding: '20px',
               boxShadow: '0 20px 50px rgba(15, 23, 42, 0.06)'
             }}
           >
@@ -841,7 +823,7 @@ export const AboutErpPage: React.FC = () => {
                 {[
                   { title: '1. Chân dung Học viên (Persona)', route: '/?tab=persona', icon: 'Học viên', stat: '8 Chiều Phân Tích', detail: 'Trường, Giới tính, Độ tuổi, Ngành nghề, Chức vụ, Công ty, Tỉnh thành & Học viên đa khóa.' },
                   { title: '2. Tổng quan Lead & Vòng chia', route: '/?tab=leads', icon: 'Tiềm năng', stat: 'Real-time SLA', detail: 'Lưu lượng data theo ngày/giờ, tỷ lệ nhận theo vòng phân bổ, đối soát công bằng & lỗi ticket.' },
-                  { title: '3. Hiệu suất Đội ngũ Sales', route: '/?tab=sales', icon: 'Pipeline', stat: 'Leaderboard 🥇🥈🥉', detail: 'Xếp hạng tư vấn viên có Avatar, tỷ lệ tương tác, chuyển đổi Qualified/Won & doanh thu thực thu.' },
+                  { title: '3. Hiệu suất Đội ngũ Sales', route: '/?tab=sales', icon: 'Pipeline', stat: 'Bảng xếp hạng', detail: 'Xếp hạng tư vấn viên có Avatar, tỷ lệ tương tác, chuyển đổi Qualified/Won & doanh thu thực thu.' },
                   { title: '4. Meta Ads Full-Funnel ROI', route: '/?tab=meta_ads', icon: 'Marketing', stat: 'CPL • CPQ • CPW • ROAS', detail: 'Cây Campaign -> AdSet -> Ad gắn liền kết quả CRM thực tế và xem trực tiếp bài quảng cáo.' },
                   { title: '5. Marketing Omnichannel', route: '/marketing', icon: 'marketing_dashboard', stat: '4 Pipeline Segments', detail: 'Tự động gom tệp theo giai đoạn Pipeline, đo lường Email/ZNS, Automation Flow, Survey & Voucher.' },
                   { title: '6. Tài chính, HR & Kế toán A-Z', route: '/accounting-az', icon: 'Phiếu lương', stat: 'Chuẩn TT200 / TT133', detail: 'Báo cáo P&L, Dòng tiền, Quỹ lương phòng ban, Sổ Nhật Ký Chung và Tờ khai thuế TNCN.' }
@@ -851,11 +833,11 @@ export const AboutErpPage: React.FC = () => {
                     onClick={() => navigate(card.route)}
                     style={{
                       padding: '16px',
-                      borderRadius: '14px',
+                      borderRadius: '12px',
                       border: '1px solid #E2E8F0',
                       background: '#F8FAFC',
                       cursor: 'pointer',
-                      transition: 'all 0.15s ease'
+                      transition: 'border-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1)'
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -900,7 +882,7 @@ export const AboutErpPage: React.FC = () => {
                     key={i}
                     style={{
                       padding: '16px',
-                      borderRadius: '14px',
+                      borderRadius: '12px',
                       border: '1px solid #E2E8F0',
                       background: i === 2 ? '#FFF1F2' : '#F8FAFC'
                     }}
@@ -1018,7 +1000,7 @@ export const AboutErpPage: React.FC = () => {
                     onClick={() => navigate('/accounting-az')}
                     style={{
                       padding: '16px',
-                      borderRadius: '14px',
+                      borderRadius: '12px',
                       border: '1px solid #E2E8F0',
                       background: '#F8FAFC',
                       cursor: 'pointer'
@@ -1047,7 +1029,7 @@ export const AboutErpPage: React.FC = () => {
               <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#C6333D', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>
                 KIẾN TRÚC PHÂN HỆ TOÀN DIỆN (100% MODULE & TAB INVENTORY)
               </div>
-              <h2 style={{ fontSize: '1.85rem', fontWeight: 900, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+              <h2 style={{ fontSize: '1.85rem', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
                 Khám Phá Chi Tiết 7 Trụ Cột & Toàn Bộ Các Tab Nghiệp Vụ
               </h2>
             </div>
@@ -1061,7 +1043,7 @@ export const AboutErpPage: React.FC = () => {
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))',
-              gap: '10px',
+              gap: '12px',
               marginBottom: '28px'
             }}
           >
@@ -1073,14 +1055,14 @@ export const AboutErpPage: React.FC = () => {
                   type="button"
                   onClick={() => setActivePillarId(pillar.id)}
                   style={{
-                    padding: '14px',
-                    borderRadius: '14px',
-                    border: isSelected ? '1.5px solid #0F172A' : '1px solid #E2E8F0',
+                    padding: '16px',
+                    borderRadius: '12px',
+                    border: isSelected ? '1px solid #0F172A' : '1px solid #E2E8F0',
                     background: isSelected ? '#F8FAFC' : '#FFFFFF',
                     textAlign: 'left',
                     cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    boxShadow: isSelected ? '0 8px 20px rgba(15, 23, 42, 0.06)' : 'none'
+                    transition: 'border-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1)',
+                    boxShadow: isSelected ? '0 4px 12px rgba(15, 23, 42, 0.06)' : 'none'
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -1136,10 +1118,10 @@ export const AboutErpPage: React.FC = () => {
                       TRỤ CỘT {activePillar.code} • {activePillar.subtitle}
                     </span>
                   </div>
-                  <h3 style={{ fontSize: '1.45rem', fontWeight: 900, color: '#0F172A', margin: '0 0 10px' }}>
+                  <h3 style={{ fontSize: '1.45rem', fontWeight: 700, color: '#0F172A', margin: '0 0 12px' }}>
                     {activePillar.title}
                   </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {activePillar.highlights.map((hl, i) => (
                       <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '0.85rem', color: '#334155' }}>
                         <CheckCircle2 size={16} style={{ color: '#C6333D', flexShrink: 0, marginTop: '2px' }} />
@@ -1151,12 +1133,12 @@ export const AboutErpPage: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' }}>
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                   {activePillar.metrics.map((m, i) => (
                     <div
                       key={i}
                       style={{
-                        padding: '10px 14px',
+                        padding: '12px 16px',
                         borderRadius: '12px',
                         background: '#F8FAFC',
                         border: '1px solid #E2E8F0',
@@ -1166,7 +1148,7 @@ export const AboutErpPage: React.FC = () => {
                       <div style={{ fontSize: '0.66rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
                         {m.label}
                       </div>
-                      <div style={{ fontSize: '1.05rem', fontWeight: 900, color: i === 1 ? '#C6333D' : '#0F172A', marginTop: '2px' }}>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 700, color: i === 1 ? '#C6333D' : '#0F172A', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
                         {m.value}
                       </div>
                     </div>
@@ -1249,14 +1231,14 @@ export const AboutErpPage: React.FC = () => {
                     onClick={() => navigate(tab.route)}
                     style={{
                       padding: '16px',
-                      borderRadius: '14px',
+                      borderRadius: '12px',
                       border: '1px solid #E2E8F0',
                       background: '#FFFFFF',
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'space-between',
-                      transition: 'all 0.15s ease'
+                      transition: 'border-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1)'
                     }}
                     onMouseEnter={e => {
                       e.currentTarget.style.borderColor = '#CBD5E1';
@@ -1312,7 +1294,7 @@ export const AboutErpPage: React.FC = () => {
             <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#C6333D', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>
               CƠ CHẾ TỰ ĐỘNG HÓA TUYỂN SINH CỐT LÕI
             </div>
-            <h2 style={{ fontSize: '1.85rem', fontWeight: 900, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+            <h2 style={{ fontSize: '1.85rem', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
               Động Cơ Chia Lead Công Bằng (Fair-Share) & Chấm Điểm Lead Đa Chiều (0–100)
             </h2>
           </div>
@@ -1469,8 +1451,8 @@ export const AboutErpPage: React.FC = () => {
                   gap: '8px'
                 }}
               >
-                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155' }}>
-                  Phân hạng tự động: 🔥 Nóng (80–100) • ☀️ Ấm (50–79) • ❄️ Lạnh (&lt;50)
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', fontVariantNumeric: 'tabular-nums' }}>
+                  Phân hạng tự động: Nóng (80–100) • Ấm (50–79) • Lạnh (&lt;50)
                 </span>
                 <button
                   type="button"
@@ -1502,7 +1484,7 @@ export const AboutErpPage: React.FC = () => {
               <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#C6333D', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>
                 CHUẨN HÓA HÀNH TRÌNH TUYỂN SINH QUỐC TẾ
               </div>
-              <h2 style={{ fontSize: '1.85rem', fontWeight: 900, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+              <h2 style={{ fontSize: '1.85rem', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
                 Phễu Tuyển Sinh 14 Giai Đoạn (01 New Lead → 14 Enrolled)
               </h2>
             </div>
@@ -1542,23 +1524,24 @@ export const AboutErpPage: React.FC = () => {
                   key={st.code}
                   onClick={() => setSelectedStageIdx(idx)}
                   style={{
-                    padding: '14px',
-                    borderRadius: '14px',
-                    border: isSelected ? '1.5px solid #C6333D' : '1px solid #E2E8F0',
+                    padding: '16px',
+                    borderRadius: '12px',
+                    border: isSelected ? '1px solid #C6333D' : '1px solid #E2E8F0',
                     background: isSelected ? '#FFF1F2' : '#FFFFFF',
                     cursor: 'pointer',
-                    transition: 'all 0.15s ease'
+                    transition: 'border-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1)'
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <span
                       style={{
                         fontSize: '0.72rem',
-                        fontWeight: 900,
-                        padding: '2px 7px',
+                        fontWeight: 700,
+                        padding: '2px 8px',
                         borderRadius: '6px',
                         background: isSelected ? '#C6333D' : '#F1F5F9',
-                        color: isSelected ? '#FFFFFF' : '#334155'
+                        color: isSelected ? '#FFFFFF' : '#334155',
+                        fontVariantNumeric: 'tabular-nums'
                       }}
                     >
                       BƯỚC {st.code}
@@ -1581,7 +1564,7 @@ export const AboutErpPage: React.FC = () => {
             <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#C6333D', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>
               QUẢN TRỊ NỘI BỘ, TÀI CHÍNH & NHÂN SỰ CHUẨN ENTERPRISE
             </div>
-            <h2 style={{ fontSize: '1.85rem', fontWeight: 900, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+            <h2 style={{ fontSize: '1.85rem', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
               Ma Trận Phê Duyệt Đa Cấp, Đặt Cọc PO/SO & Kế Toán Lương TT200 A-Z
             </h2>
           </div>
@@ -1701,7 +1684,7 @@ export const AboutErpPage: React.FC = () => {
               <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#C6333D', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>
                 BẢN ĐỒ ĐIỀU HƯỚNG NHANH TOÀN HỆ THỐNG
               </div>
-              <h2 style={{ fontSize: '1.75rem', fontWeight: 900, color: '#0F172A', margin: 0 }}>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#0F172A', margin: 0, fontVariantNumeric: 'tabular-nums' }}>
                 Danh Mục Toàn Bộ Chức Năng & Đường Dẫn Trực Tiếp ({allRoutesDirectory.length} Mục)
               </h2>
             </div>
@@ -1742,7 +1725,7 @@ export const AboutErpPage: React.FC = () => {
                 key={`${item.route}-${idx}`}
                 onClick={() => navigate(item.route)}
                 style={{
-                  padding: '14px 16px',
+                  padding: '16px',
                   borderRadius: '12px',
                   border: '1px solid #E2E8F0',
                   background: '#FFFFFF',
@@ -1750,7 +1733,7 @@ export const AboutErpPage: React.FC = () => {
                   display: 'flex',
                   alignItems: 'flex-start',
                   gap: '12px',
-                  transition: 'all 0.15s ease'
+                  transition: 'border-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1)'
                 }}
                 onMouseEnter={e => {
                   e.currentTarget.style.borderColor = '#C6333D';

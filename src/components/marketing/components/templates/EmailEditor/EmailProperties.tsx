@@ -455,7 +455,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                             <div className="space-y-4">
                                 <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Sự kiện Timeline</label>
                                 {selectedBlock.items?.map((item, i) => (
-                                    <div key={item.id || i} className="bg-slate-50 p-4 rounded-[18px] border border-slate-100 relative group animate-in slide-in-from-left-1 space-y-3 transition-all focus-within:z-[50] focus-within:ring-2 focus-within:ring-[#BD1D2D]/20 focus-within:border-[#BD1D2D]/30 focus-within:bg-white shadow-sm hover:shadow-md">
+                                    <div key={item.id || i} className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 relative group animate-in slide-in-from-left-1 space-y-3 transition-colors focus-within:z-[50] focus-within:ring-2 focus-within:ring-[#BD1D2D]/20 focus-within:border-[#BD1D2D]/30 focus-within:bg-white shadow-xs">
                                         <button onClick={() => removeTimelineItem(i)} className="absolute top-3 right-3 text-slate-300 hover:text-rose-500 z-10" title="Xóa sự kiện"><LucideIcons.X className="w-4 h-4" /></button>
                                         <div className="space-y-1">
                                             <label className="text-[8px] font-bold text-slate-400 uppercase px-1">Thời gian / Bước</label>
@@ -793,7 +793,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                                             />
                                                         </div>
-                                                        <span className="text-xs font-mono font-black text-slate-600">{getStyle('checkIconColor') || '#BD1D2D'}</span>
+                                                        <span className="text-xs font-mono font-bold text-slate-600">{getStyle('checkIconColor') || '#BD1D2D'}</span>
                                                     </div>
                                                 </div>
                                             </>
@@ -891,7 +891,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                 <div className="space-y-4 pt-3">
                                     <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Danh sách mục</label>
                                     {selectedBlock.items?.map((item, i) => (
-                                        <div key={item.id} className="bg-slate-50 p-4 rounded-[18px] border border-slate-100 relative group animate-in slide-in-from-left-1 space-y-3 transition-all focus-within:z-[50] focus-within:ring-2 focus-within:ring-[#BD1D2D]/20 focus-within:border-[#BD1D2D]/30 focus-within:bg-white shadow-sm hover:shadow-md">
+                                        <div key={item.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 relative group animate-in slide-in-from-left-1 space-y-3 transition-colors focus-within:z-[50] focus-within:ring-2 focus-within:ring-[#BD1D2D]/20 focus-within:border-[#BD1D2D]/30 focus-within:bg-white shadow-xs">
                                             <button onClick={() => removeTimelineItem(i)} className="absolute top-3 right-3 text-slate-300 hover:text-rose-500 z-10"><LucideIcons.X className="w-4 h-4" /></button>
                                             {getStyle('showItemTitle') !== false && (
                                                 <div className="space-y-1">
@@ -1220,14 +1220,14 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                                 <div key={key} className="flex flex-col gap-1">
                                                     <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
                                                     <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-2 py-1">
-                                                        <button onMouseDown={() => setCnt(cur - 1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-[#BD1D2D] font-black text-base leading-none transition-colors">-</button>
+                                                        <button onMouseDown={() => setCnt(cur - 1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-[#BD1D2D] font-bold text-base leading-none transition-colors">-</button>
                                                         <input
                                                             type="number" min={2} max={20}
                                                             value={cur}
                                                             onChange={e => setCnt(parseInt(e.target.value) || 2)}
-                                                            className="flex-1 text-center text-[11px] font-black text-slate-700 bg-transparent outline-none"
+                                                            className="flex-1 text-center text-[11px] font-bold tabular-nums text-slate-700 bg-transparent outline-none"
                                                         />
-                                                        <button onMouseDown={() => setCnt(cur + 1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-[#BD1D2D] font-black text-base leading-none transition-colors">+</button>
+                                                        <button onMouseDown={() => setCnt(cur + 1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-[#BD1D2D] font-bold text-base leading-none transition-colors">+</button>
                                                     </div>
                                                 </div>
                                             );
@@ -1298,7 +1298,7 @@ const EmailProperties: React.FC<EmailPropertiesProps> = ({
                                                     type="number" min={8} max={48}
                                                     value={parseInt(getStyle('tableFontSize') as string) || 13}
                                                     onChange={e => updateStyle({ tableFontSize: `${e.target.value}px` } as any)}
-                                                    className="w-full text-center text-[11px] font-black text-slate-700 bg-transparent outline-none"
+                                                    className="w-full text-center text-[11px] font-bold tabular-nums text-slate-700 bg-transparent outline-none"
                                                 />
                                                 <span className="text-[9px] text-slate-400">px</span>
                                             </div>

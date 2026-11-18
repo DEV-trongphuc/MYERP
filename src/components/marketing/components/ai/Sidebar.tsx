@@ -41,7 +41,7 @@ const SidebarItem = React.memo(({
                 <button
                     onClick={() => onToggleExpand(bot)}
                     className={`
-                        w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300 group cursor-pointer
+                        w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors group cursor-pointer
                         ${isActive || isExpanded
                             ? (isDarkTheme ? 'bg-slate-800/80 shadow-none' : 'bg-slate-50/80 shadow-sm')
                             : (isDarkTheme ? 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200' : 'text-slate-500 hover:bg-slate-50/50 hover:text-slate-700')
@@ -62,7 +62,7 @@ const SidebarItem = React.memo(({
                 </button>
             </div>
 
-            <div className={`overflow-hidden transition-all duration-300 ${isExpanded ? 'max-h-[500px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+            <div className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${isExpanded ? 'max-h-[500px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
                 <div className="pl-6 space-y-1 py-1">
                     <button
                         onClick={(e) => onNewChat(e, bot)}
@@ -70,7 +70,7 @@ const SidebarItem = React.memo(({
                     >
                         <CornerDownRight className="w-3 h-3 opacity-50" />
                         <Plus className="w-3.5 h-3.5" />
-                        <span className="text-[11px] font-bold uppercase tracking-wider">New Chat</span>
+                        <span className="text-[11px] font-semibold uppercase tracking-wider">New Chat</span>
                     </button>
 
                     {sortedSessions.map((sess: ChatSession) => {
@@ -83,7 +83,7 @@ const SidebarItem = React.memo(({
                                 <div
                                     onClick={() => onNavigate(bot.id, sess.id)}
                                     className={`
-                                    w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all cursor-pointer border border-transparent
+                                    w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors cursor-pointer border border-transparent
                                     ${isSessionActive
                                             ? 'bg-[var(--color-primary)] bg-opacity-10 text-[var(--color-primary)] border-[var(--color-primary)] border-opacity-20'
                                             : (isDarkTheme ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700')
@@ -91,7 +91,7 @@ const SidebarItem = React.memo(({
                                 `}
                                 >
                                     <div
-                                        className={`w-1.5 h-1.5 rounded-full shrink-0 transition-all duration-300 ${isSessionActive ? '' : (isDarkTheme ? 'bg-slate-700' : 'bg-slate-300')}`}
+                                        className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${isSessionActive ? '' : (isDarkTheme ? 'bg-slate-700' : 'bg-slate-300')}`}
                                         style={isSessionActive ? { backgroundColor: brandColor } : {}}
                                     />
                                     <span className="text-[12px] truncate flex-1 text-left font-medium">{sess.title}</span>
@@ -229,28 +229,27 @@ const Sidebar = React.memo(({
 
     return (
         <aside className={`
-            fixed inset-y-0 left-0 z-50 w-[275px] border-r transform transition-all duration-500 ease-in-out lg:relative lg:translate-x-0
+            fixed inset-y-0 left-0 z-50 w-[275px] border-r transition-[transform,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:relative lg:translate-x-0
             ${isDarkTheme ? 'bg-[#05070A] border-slate-800 shadow-none' : 'bg-white border-slate-100 shadow-[4px_0_24px_rgba(0,0,0,0.02)]'}
             ${(isSidebarOpen && !isZenMode) ? 'translate-x-0' : '-translate-x-full lg:ml-[-275px]'}
         `}>
             <div className="flex flex-col h-full">
                 {/* Header */}
-                <div className={`h-28 flex items-center px-6 gap-4 border-b relative group cursor-pointer transition-colors duration-500 ${isDarkTheme ? 'border-slate-800' : 'border-slate-50'}`}>
-                    {/* Animated Logo Icon */}
+                <div className={`h-28 flex items-center px-6 gap-4 border-b relative group cursor-pointer transition-colors ${isDarkTheme ? 'border-slate-800' : 'border-slate-50'}`}>
+                    {/* Logo Icon */}
                     <div className="relative w-12 h-12 shrink-0">
-                        <div className="absolute inset-0 bg-[var(--color-primary)] blur-xl opacity-20 group-hover:opacity-40 transition-opacity duration-500 rounded-full"></div>
-                        <div className="relative w-full h-full flex items-center justify-center bg-gradient-to-br from-[var(--color-primary)] rounded-[14px] shadow-[var(--color-primary)] group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 ease-out border-[var(--color-primary)] border-opacity-20">
-                            <Zap className="w-6 h-6 text-white fill-white/20" strokeWidth={3} />
+                        <div className="w-full h-full flex items-center justify-center bg-[#BD1D2D] rounded-xl text-white">
+                            <Zap className="w-6 h-6 text-white fill-white/20" strokeWidth={2.5} />
                         </div>
                     </div>
 
                     <div className="flex flex-col min-w-0">
-                        <h1 className={`text-2xl font-black tracking-tighter leading-none group-hover:text-[var(--color-primary)] transition-all duration-500 uppercase ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+                        <h1 className={`text-2xl font-bold tracking-tight leading-none group-hover:text-[var(--color-primary)] transition-colors uppercase ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
                             AI-SPACE
                         </h1>
                         <div className="flex items-center gap-2 mt-1.5 opacity-60">
                             <span className="h-3 w-[2px] bg-[var(--color-primary)] bg-opacity-30 rotate-12"></span>
-                            <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] truncate">
+                            <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-[0.2em] truncate">
                                 Powered by {categoryName}
                             </span>
                         </div>
@@ -260,7 +259,7 @@ const Sidebar = React.memo(({
                     {isSidebarOpen && setIsSidebarOpen && (
                         <button
                             onClick={() => setIsSidebarOpen(false)}
-                            className={`absolute right-3 top-3 p-1.5 rounded-lg border transition-all active:scale-95 lg:hidden ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white' : 'bg-slate-50 border-slate-200 text-slate-400 hover:text-slate-700'}`}
+                            className={`absolute right-3 top-3 p-1.5 rounded-lg border transition-colors lg:hidden ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white' : 'bg-slate-50 border-slate-200 text-slate-400 hover:text-slate-700'}`}
                             title="Đóng sidebar"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -280,26 +279,26 @@ const Sidebar = React.memo(({
                             onClick={() => {
                                 navigate(`/ai-space/${categoryId}`);
                             }}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-[14px] transition-all duration-300 group ${viewMode === 'home' && !isOrganizationView ? 'bg-[var(--color-primary)] text-white shadow-[var(--color-primary)]' : (isDarkTheme ? 'text-slate-400 hover:bg-slate-800 border border-transparent' : 'text-slate-600 hover:bg-slate-50 border border-transparent')}`}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors group ${viewMode === 'home' && !isOrganizationView ? 'bg-[var(--color-primary)] text-white' : (isDarkTheme ? 'text-slate-400 hover:bg-slate-800 border border-transparent' : 'text-slate-600 hover:bg-slate-50 border border-transparent')}`}
                         >
-                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all shrink-0 ${viewMode === 'home' && !isOrganizationView ? 'bg-white bg-opacity-20 text-white' : (isDarkTheme ? 'bg-slate-800 text-slate-500 group-hover:bg-slate-700' : 'bg-slate-100 text-slate-400 group-hover:bg-white group-hover:shadow-md')}`}>
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors shrink-0 ${viewMode === 'home' && !isOrganizationView ? 'bg-white/20 text-white' : (isDarkTheme ? 'bg-slate-800 text-slate-500 group-hover:bg-slate-700' : 'bg-slate-100 text-slate-400 group-hover:bg-white')}`}>
                                 <LayoutGrid className="w-4 h-4" />
                             </div>
-                            <span className={`font-bold text-sm tracking-tight ${viewMode === 'home' && !isOrganizationView ? 'text-white' : (isDarkTheme ? 'text-slate-300 group-hover:text-slate-100' : 'text-slate-600 group-hover:text-slate-900')}`}>AI Centers</span>
-                            {viewMode === 'home' && !isOrganizationView && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
+                            <span className={`font-semibold text-sm ${viewMode === 'home' && !isOrganizationView ? 'text-white' : (isDarkTheme ? 'text-slate-300 group-hover:text-slate-100' : 'text-slate-600 group-hover:text-slate-900')}`}>AI Centers</span>
+                            {viewMode === 'home' && !isOrganizationView && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white" />}
                         </button>
 
                         <button
                             onClick={() => {
                                 navigate(`/ai-space/${categoryId}?view=global_workspace`);
                             }}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-[14px] transition-all duration-300 group ${viewMode === 'global_workspace' && !isOrganizationView ? 'bg-[var(--color-primary)] text-white shadow-[var(--color-primary)]' : (isDarkTheme ? 'text-slate-400 hover:bg-slate-800 border border-transparent' : 'text-slate-600 hover:bg-slate-50 border border-transparent')}`}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors group ${viewMode === 'global_workspace' && !isOrganizationView ? 'bg-[var(--color-primary)] text-white' : (isDarkTheme ? 'text-slate-400 hover:bg-slate-800 border border-transparent' : 'text-slate-600 hover:bg-slate-50 border border-transparent')}`}
                         >
-                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all shrink-0 ${viewMode === 'global_workspace' && !isOrganizationView ? 'bg-white bg-opacity-20 text-white' : (isDarkTheme ? 'bg-slate-800 text-slate-500 group-hover:bg-slate-700' : 'bg-slate-100 text-slate-400 group-hover:bg-white group-hover:shadow-md')}`}>
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors shrink-0 ${viewMode === 'global_workspace' && !isOrganizationView ? 'bg-white/20 text-white' : (isDarkTheme ? 'bg-slate-800 text-slate-500 group-hover:bg-slate-700' : 'bg-slate-100 text-slate-400 group-hover:bg-white')}`}>
                                 <Database className="w-4 h-4" />
                             </div>
-                            <span className={`font-bold text-sm tracking-tight ${viewMode === 'global_workspace' && !isOrganizationView ? 'text-white' : (isDarkTheme ? 'text-slate-300 group-hover:text-slate-100' : 'text-slate-600 group-hover:text-slate-900')}`}>Workspace</span>
-                            {viewMode === 'global_workspace' && !isOrganizationView && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
+                            <span className={`font-semibold text-sm ${viewMode === 'global_workspace' && !isOrganizationView ? 'text-white' : (isDarkTheme ? 'text-slate-300 group-hover:text-slate-100' : 'text-slate-600 group-hover:text-slate-900')}`}>Workspace</span>
+                            {viewMode === 'global_workspace' && !isOrganizationView && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white" />}
                         </button>
                     </div>
 
@@ -312,7 +311,7 @@ const Sidebar = React.memo(({
                                 placeholder="Search conversations..."
                                 value={searchTermSessions}
                                 onChange={(e) => setSearchTermSessions(e.target.value)}
-                                className={`w-full border rounded-xl py-2.5 pl-9 pr-3 text-[13px] font-medium transition-all outline-none ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 focus:bg-slate-700 focus:border-[var(--color-primary)]-accent placeholder:text-slate-500' : 'bg-slate-50 border-slate-100 text-slate-600 focus:bg-white focus:border-[var(--color-primary)]-accent focus:ring-4 focus:ring-[var(--color-primary)] focus:ring-opacity-10 placeholder:text-slate-400'}`}
+                                className={`w-full border rounded-xl py-2.5 pl-9 pr-3 text-[13px] font-medium transition-colors outline-none ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-200 focus:bg-slate-700 focus:border-[var(--color-primary)]-accent placeholder:text-slate-500' : 'bg-slate-50 border-slate-100 text-slate-600 focus:bg-white focus:border-[var(--color-primary)]-accent focus:ring-4 focus:ring-[var(--color-primary)] focus:ring-opacity-10 placeholder:text-slate-400'}`}
                             />
                         </div>
                     </div>
@@ -321,7 +320,7 @@ const Sidebar = React.memo(({
                     {recentSessions.length > 0 && (
                         <div className="animate-in fade-in duration-500">
                             <div className="px-4 pb-2 flex items-center justify-between">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{searchTermSessions ? 'Results' : 'Recent'}</span>
+                                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em]">{searchTermSessions ? 'Results' : 'Recent'}</span>
                                 {!searchTermSessions && recentSessions.length > 3 && (
                                     <button
                                         onClick={() => setShowAllRecent(v => !v)}
@@ -347,7 +346,7 @@ const Sidebar = React.memo(({
                                                 }
                                             }}
                                             className={`
-                                            w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 group mx-2 cursor-pointer
+                                            w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-colors group mx-2 cursor-pointer
                                             ${isSessionActive
                                                     ? 'bg-[var(--color-primary)] bg-opacity-10 text-[var(--color-primary)] border border-[var(--color-primary)] border-opacity-20 shadow-sm'
                                                     : (isDarkTheme ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-transparent' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700 border border-transparent')
@@ -368,7 +367,7 @@ const Sidebar = React.memo(({
                                             }}
                                         >
                                             <div
-                                                className={`w-1.5 h-1.5 rounded-full shrink-0 transition-all duration-300 ${isSessionActive ? '' : (isDarkTheme ? 'bg-slate-700' : 'bg-slate-300')}`}
+                                                className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${isSessionActive ? '' : (isDarkTheme ? 'bg-slate-700' : 'bg-slate-300')}`}
                                                 style={isSessionActive ? { backgroundColor: brandColor } : {}}
                                             />
                                             <div className="flex flex-col items-start min-w-0 flex-1">
@@ -406,8 +405,8 @@ const Sidebar = React.memo(({
                     <div className={`pt-2 border-t mx-4 ${isDarkTheme ? 'border-slate-800' : 'border-slate-50'}`}></div>
                     <div>
                         <div className="px-4 pb-3 flex items-center justify-between">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Agents</span>
-                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${isDarkTheme ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-400'}`}>{chatbots.length}</span>
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em]">Agents</span>
+                            <span className={`text-[9px] font-bold tabular-nums px-1.5 py-0.5 rounded-md ${isDarkTheme ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-400'}`}>{chatbots.length}</span>
                         </div>
 
                         <div className="space-y-2">
@@ -475,11 +474,11 @@ const Sidebar = React.memo(({
                 </div>
 
                 {/* Footer */}
-                <div className={`p-4 border-t space-y-2 transition-colors duration-500 ${isDarkTheme ? 'bg-[#0D1117]/30 border-slate-800' : 'bg-white border-slate-50'}`}>
+                <div className={`p-4 border-t space-y-2 transition-colors duration-300 ${isDarkTheme ? 'bg-[#0D1117]/30 border-slate-800' : 'bg-white border-slate-50'}`}>
                     {(orgUser?.role === 'admin' || orgUser?.role === 'assistant') && (
                         <button
                             onClick={onOpenTraining}
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all border border-transparent group ${isOrganizationView ? 'bg-[var(--color-primary)] text-white shadow-[var(--color-primary)]' : (isDarkTheme ? 'text-slate-400 hover:bg-slate-800 hover:text-[var(--color-primary)]' : 'text-slate-500 hover:bg-slate-50 hover:text-[var(--color-primary)]')}`}
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-colors border border-transparent group ${isOrganizationView ? 'bg-[var(--color-primary)] text-white' : (isDarkTheme ? 'text-slate-400 hover:bg-slate-800 hover:text-[var(--color-primary)]' : 'text-slate-500 hover:bg-slate-50 hover:text-[var(--color-primary)]')}`}
                         >
                             <Settings className="w-4 h-4" />
                             <span className="text-[13px] font-bold">Organization</span>
@@ -491,14 +490,14 @@ const Sidebar = React.memo(({
                             e.stopPropagation();
                             onOpenKeyboardHelp?.();
                         }}
-                        className={`w-full flex items-center gap-3 px-4 py-2 rounded-xl border border-transparent transition-all group/help ${isDarkTheme
+                        className={`w-full flex items-center gap-3 px-4 py-2 rounded-xl border border-transparent transition-colors group/help ${isDarkTheme
                             ? 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
                             : 'hover:bg-slate-50 text-slate-500 hover:text-slate-900'
                             }`}
                     >
                         <Keyboard className="w-4 h-4 opacity-70 group-hover/help:opacity-100" />
                         <span className="text-[12px] font-bold">Phím tắt</span>
-                        <div className={`ml-auto px-1.5 py-0.5 rounded border text-[9px] font-black ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-500' : 'bg-white border-slate-200 text-slate-400'
+                        <div className={`ml-auto px-1.5 py-0.5 rounded border text-[9px] font-semibold ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-500' : 'bg-white border-slate-200 text-slate-400'
                             }`}>?</div>
                     </button>
 
@@ -506,17 +505,17 @@ const Sidebar = React.memo(({
                         onClick={onOpenProfile}
                         className={`flex items-center gap-2 px-2 py-2 group cursor-pointer rounded-xl transition-colors ${isDarkTheme ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}>
 
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[var(--color-primary)] to-[var(--color-primary)]-primary-dark flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-[var(--color-primary)] group-hover:scale-110 transition-transform uppercase">
+                        <div className="w-10 h-10 rounded-xl bg-[var(--color-primary)] flex items-center justify-center text-white font-bold text-sm shrink-0 uppercase">
                             {(orgUser?.full_name || categoryName || '?').charAt(0)}
                         </div>
                         <div className="leading-tight overflow-hidden flex-1">
                             <div className="flex items-center gap-2 overflow-hidden">
-                                <div className={`font-bold text-[14px] truncate tracking-tight group-hover:text-[var(--color-primary)] transition-colors ${isDarkTheme ? 'text-slate-200' : 'text-slate-800'}`}>
+                                <div className={`font-bold text-[14px] truncate group-hover:text-[var(--color-primary)] transition-colors ${isDarkTheme ? 'text-slate-200' : 'text-slate-800'}`}>
                                     {orgUser?.full_name || categoryName}
                                 </div>
                                 {orgUser?.role && (
-                                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded shadow-sm border shrink-0 ${orgUser.role === 'admin'
-                                        ? 'bg-[var(--color-primary)] text-white border-amber-400'
+                                    <span className={`text-[8px] font-semibold uppercase px-1.5 py-0.5 rounded border shrink-0 ${orgUser.role === 'admin'
+                                        ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
                                         : orgUser.role === 'assistant'
                                             ? 'bg-blue-500 text-white border-blue-400'
                                             : (isDarkTheme ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-slate-100 text-slate-500 border-slate-200')

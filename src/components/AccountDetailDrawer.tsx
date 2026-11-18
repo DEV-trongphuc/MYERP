@@ -25,6 +25,7 @@ import { useUIStore } from '../store/uiStore';
 import styles from '../pages/EntityDrawer.module.css';
 import { numberToVietnameseText } from '../utils/numberToText';
 import { pushOverlay } from '../utils/overlayStack';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 interface Props {
   isOpen: boolean;
@@ -1724,7 +1725,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                         onClick={() => setActiveTab('erp')}
                         style={{ padding: '8px 0.75rem', fontSize: '0.825rem', display: 'flex', alignItems: 'center', gap: '12px', width: '100%', border: 'none', background: activeTab === 'erp' ? 'var(--color-bg-light)' : 'transparent', borderRadius: '8px', cursor: 'pointer', textAlign: 'left', fontWeight: activeTab === 'erp' ? 700 : 500 }}
                       >
-                        {renderColoredIcon(Building2, '#5856d6')}
+                        {renderColoredIcon(Building2, '#0284c7')}
                         <span style={{ whiteSpace: 'nowrap' }}>{t('Hồ sơ & ERP')}</span>
                       </button>
                       <button
@@ -1733,7 +1734,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                         onClick={() => setActiveTab('assets')}
                         style={{ padding: '8px 0.75rem', fontSize: '0.825rem', display: 'flex', alignItems: 'center', gap: '12px', width: '100%', border: 'none', background: activeTab === 'assets' ? 'var(--color-bg-light)' : 'transparent', borderRadius: '8px', cursor: 'pointer', textAlign: 'left', fontWeight: activeTab === 'assets' ? 700 : 500 }}
                       >
-                        {renderColoredIcon(Package, '#8b5cf6')}
+                        {renderColoredIcon(Package, '#334155')}
                         <span style={{ whiteSpace: 'nowrap' }}>{t('Tài sản cấp phát')}</span>
                       </button>
                       <button
@@ -5372,7 +5373,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                       </label>
                       {deleteCheckResult.other_admins && deleteCheckResult.other_admins.length > 0 ? (
                         <CustomSelect
-                          options={deleteCheckResult.other_admins.map((adm: any) => ({
+                          options={ensureArray(deleteCheckResult?.other_admins).map((adm: any) => ({
                             value: String(adm.id),
                             label: `${adm.name} (${adm.username})`
                           }))}

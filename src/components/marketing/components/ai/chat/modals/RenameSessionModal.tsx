@@ -40,7 +40,7 @@ const RenameSessionModal: React.FC<RenameSessionModalProps> = ({
 
             {/* Modal */}
             <div
-                className={`relative rounded-[18px] shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200 ${isDarkTheme ? 'bg-[#1E2532] border border-slate-700' : 'bg-white'}`}
+                className={`relative rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200 ${isDarkTheme ? 'bg-[#1E2532] border border-slate-700' : 'bg-white border border-slate-200'}`}
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
@@ -60,7 +60,7 @@ const RenameSessionModal: React.FC<RenameSessionModalProps> = ({
                 <div className="p-6">
                     <div className="space-y-4">
                         <div>
-                            <label className={`block text-sm font-bold mb-2 ${isDarkTheme ? 'text-slate-300' : 'text-slate-700'}`}>
+                            <label className={`block text-sm font-semibold mb-2 ${isDarkTheme ? 'text-slate-300' : 'text-slate-700'}`}>
                                 Tên cuộc hội thoại
                             </label>
                             <input
@@ -75,7 +75,7 @@ const RenameSessionModal: React.FC<RenameSessionModalProps> = ({
                                         onClose();
                                     }
                                 }}
-                                className={`w-full px-4 py-3 border-2 rounded-[var(--radius-md)] placeholder-slate-400 outline-none transition-all font-medium ${isDarkTheme ? 'bg-slate-900 border-slate-700 text-slate-100 focus:bg-slate-800 focus:border-[var(--color-primary)]' : 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/10'}`}
+                                className={`w-full px-4 py-3 border rounded-[var(--radius-md)] placeholder-slate-400 outline-none transition-colors font-medium ${isDarkTheme ? 'bg-slate-900 border-slate-700 text-slate-100 focus:bg-slate-800 focus:border-[var(--color-primary)]' : 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/10'}`}
                                 placeholder="Ví dụ: Chiến lược Marketing 2024"
                                 autoFocus
                             />
@@ -90,14 +90,14 @@ const RenameSessionModal: React.FC<RenameSessionModalProps> = ({
                 <div className="px-6 pb-6 flex gap-3">
                     <button
                         onClick={onClose}
-                        className={`flex-1 px-4 py-3 rounded-[var(--radius-md)] font-bold transition-all ${isDarkTheme ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
+                        className={`flex-1 px-4 py-3 rounded-[var(--radius-md)] font-semibold transition-colors ${isDarkTheme ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
                     >
                         Hủy
                     </button>
                     <button
                         onClick={onConfirm}
                         disabled={!sessionTitle.trim()}
-                        className={`flex-1 px-4 py-3 rounded-[var(--radius-md)] font-bold transition-all ${sessionTitle.trim() ? 'bg-[var(--color-primary)] text-white hover:brightness-110 shadow-lg shadow-[var(--color-primary)]/30' : (isDarkTheme ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-slate-200 text-slate-400 cursor-not-allowed')}`}
+                        className={`flex-1 px-4 py-3 rounded-[var(--radius-md)] font-semibold transition-colors ${sessionTitle.trim() ? 'bg-[var(--color-primary)] text-white hover:brightness-110' : (isDarkTheme ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-slate-200 text-slate-400 cursor-not-allowed')}`}
                     >
                         Lưu thay đổi
                     </button>

@@ -13,7 +13,6 @@ import {
   ExternalLink,
   Download,
   Video,
-  Sparkles,
   Lock,
 } from 'lucide-react';
 import {
@@ -872,7 +871,7 @@ export const PublicBooking1on1Page: React.FC = () => {
                     gap: '8px',
                   }}
                 >
-                  <Sparkles size={17} color="#BD1D2D" />
+                  <Calendar size={17} color="#BD1D2D" />
                   ĐĂNG KÝ KHUNG GIỜ HƯỚNG DẪN 1:1 (30 PHÚT)
                 </div>
 

@@ -109,7 +109,7 @@ const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
                         </button>
                         <div className="flex items-center gap-1.5">
                             <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                                Đã chọn <span className="text-[var(--color-primary)] font-black text-sm">{selectedIds.size.toLocaleString('vi-VN')}</span> liên hệ
+                                Đã chọn <span className="text-[var(--color-primary)] font-bold text-sm tabular-nums">{selectedIds.size.toLocaleString('vi-VN')}</span> liên hệ
                             </span>
                             {onClearSelection && (
                                 <button

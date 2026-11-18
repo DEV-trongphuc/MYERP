@@ -46,68 +46,66 @@ const SourcesTabContent: React.FC<SourcesTabContentProps> = ({ stats }) => {
     };
 
     return (
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
             {/* Header Card */}
-            <div className="bg-white p-4 rounded-[18px] border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-xl shadow-lg shadow-blue-500/20 flex items-center justify-center">
+                    <div className="w-11 h-11 bg-[#BD1D2D] text-white rounded-xl flex items-center justify-center">
                         <Share2 className="w-5 h-5" />
                     </div>
                     <div>
-                        <h3 className="text-lg font-black text-slate-800 tracking-tight">Nguồn Truy Cập</h3>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Analysing traffic origins</p>
+                        <h3 className="text-base font-bold text-slate-900">Nguồn truy cập</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">Phân tích lưu lượng theo nguồn gốc</p>
                     </div>
                 </div>
 
-                <div className="flex bg-slate-100/80 p-1 rounded-xl border border-slate-200/50">
+                <div className="flex bg-slate-100 p-1 rounded-[10px] border border-slate-200">
                     <button
                         onClick={() => setMode('session')}
-                        className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${mode === 'session' ? 'bg-white text-slate-800 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                        className={`flex items-center gap-1.5 px-4 py-1.5 rounded-[7px] text-xs font-bold transition-colors whitespace-nowrap ${mode === 'session' ? 'bg-white text-[#BD1D2D] shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
                     >
-                        <Zap className={`w-3 h-3 ${mode === 'session' ? 'fill-slate-600 text-slate-600' : ''}`} />
-                        Theo Phiên
+                        <Zap className={`w-3.5 h-3.5 ${mode === 'session' ? 'text-[#BD1D2D]' : ''}`} />
+                        Theo phiên
                     </button>
                     <button
                         onClick={() => setMode('user')}
-                        className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${mode === 'user' ? 'bg-white text-slate-800 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                        className={`flex items-center gap-1.5 px-4 py-1.5 rounded-[7px] text-xs font-bold transition-colors whitespace-nowrap ${mode === 'user' ? 'bg-white text-[#BD1D2D] shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
                     >
-                        <Users className={`w-3 h-3 ${mode === 'user' ? 'fill-slate-600 text-slate-600' : ''}`} />
+                        <Users className={`w-3.5 h-3.5 ${mode === 'user' ? 'text-[#BD1D2D]' : ''}`} />
                         Người dùng mới
                     </button>
                 </div>
             </div>
 
             {/* Sources List */}
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 gap-3">
                 {groupedSources.map((source, idx) => {
                     const color = getSourceColor(source.source, source.medium);
                     const s = source.source.toLowerCase();
                     const isDirect = s === 'direct' || s === '(direct)';
 
                     const colorClasses: Record<string, string> = {
-                        blue: 'from-blue-500 to-blue-600 bg-blue-50 text-blue-600',
-                        emerald: 'from-emerald-500 to-emerald-600 bg-emerald-50 text-emerald-600',
-                        violet: 'from-blue-500 to-blue-600 bg-blue-50 text-blue-600',
-                        cyan: 'from-cyan-500 to-cyan-600 bg-cyan-50 text-cyan-600',
-                        slate: 'from-slate-500 to-slate-600 bg-slate-50 text-slate-600',
+                        blue: 'bg-[#C6333D] bg-slate-100 text-slate-700',
+                        emerald: 'bg-emerald-600 bg-emerald-50 text-emerald-700',
+                        slate: 'bg-slate-700 bg-slate-100 text-slate-700',
                     };
 
                     return (
-                        <div key={idx} className="group relative bg-white p-3.5 rounded-[14px] border border-slate-100 shadow-sm hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300">
+                        <div key={idx} className="group relative bg-white p-4 rounded-xl border border-slate-200 shadow-xs hover:border-slate-300 transition-colors">
                             <div className="flex items-center justify-between gap-4">
                                 {/* Left side: Source Info */}
                                 <div className="flex items-center gap-3.5 flex-1 min-w-0">
                                     <div className="relative">
-                                        <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center p-2 group-hover:scale-105 group-hover:bg-white border border-slate-100 group-hover:border-blue-100 group-hover:shadow-md group-hover:shadow-blue-50 transition-all duration-300">
-                                            {isDirect ? <Globe className="w-5 h-5 text-slate-400 group-hover:text-blue-500" /> :
+                                        <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center p-2 group-hover:bg-white border border-slate-200 transition-colors">
+                                            {isDirect ? <Globe className="w-5 h-5 text-slate-500 group-hover:text-[#BD1D2D]" /> :
                                                 s.includes('google') ? <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/24px-Google_%22G%22_logo.svg.png" className="w-5 h-5 object-contain" alt="Google" /> :
                                                     s.includes('facebook') || s === 'fb' ? <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/2021_Facebook_icon.svg/24px-2021_Facebook_icon.svg.png" className="w-5 h-5 object-contain" alt="Facebook" /> :
                                                         s.includes('zalo') ? <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Icon_of_Zalo.svg/24px-Icon_of_Zalo.svg.png" className="w-5 h-5 object-contain" alt="Zalo" /> :
-                                                            <div className={`w-3 h-3 rounded-full bg-${color}-500 shadow-[0_0_8px_rgba(var(--color-${color}-500),0.4)]`} />
+                                                            <div className="w-3 h-3 rounded-full bg-slate-600" />
                                             }
                                         </div>
                                         {idx === 0 && (
-                                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 text-white rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-[#BD1D2D] text-white rounded-full flex items-center justify-center border-2 border-white">
                                                 <TrendingUp className="w-2.5 h-2.5" />
                                             </div>
                                         )}
@@ -115,8 +113,8 @@ const SourcesTabContent: React.FC<SourcesTabContentProps> = ({ stats }) => {
 
                                     <div className="min-w-0 flex-1">
                                         <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-sm font-black text-slate-800 capitalize tracking-tight group-hover:text-blue-600 transition-colors">{source.source}</span>
-                                            <span className={`text-[8px] px-1.5 py-0.5 rounded-md font-black uppercase tracking-widest ${colorClasses[color].split(' ').slice(2).join(' ')}`}>
+                                            <span className="text-sm font-bold text-slate-900 capitalize group-hover:text-[#BD1D2D] transition-colors">{source.source}</span>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider ${(colorClasses[color] || colorClasses.slate).split(' ').slice(1).join(' ')}`}>
                                                 {source.medium}
                                             </span>
                                         </div>
@@ -125,14 +123,11 @@ const SourcesTabContent: React.FC<SourcesTabContentProps> = ({ stats }) => {
                                         <div className="flex items-center gap-3">
                                             <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                                 <div
-                                                    className={`h-full bg-gradient-to-r ${colorClasses[color].split(' ').slice(0, 2).join(' ')} rounded-full transition-all duration-1000 ease-out shadow-[0_0_8px_rgba(59,130,246,0.3)]`}
-                                                    style={{
-                                                        width: `${source.percentage}%`,
-                                                        backgroundColor: color === 'blue' ? '#3b82f6' : undefined
-                                                    }}
+                                                    className="h-full bg-[#C6333D] rounded-full transition-[width] duration-500 ease-out"
+                                                    style={{ width: `${source.percentage}%` }}
                                                 />
                                             </div>
-                                            <span className="text-[10px] font-black text-slate-500 tabular-nums">{source.percentage.toFixed(1)}%</span>
+                                            <span className="text-[11px] font-bold text-slate-600 tabular-nums">{source.percentage.toFixed(1)}%</span>
                                         </div>
                                     </div>
                                 </div>
@@ -140,27 +135,26 @@ const SourcesTabContent: React.FC<SourcesTabContentProps> = ({ stats }) => {
                                 {/* Right side: Metrics */}
                                 <div className="flex items-center gap-4 sm:gap-8">
                                     <div className="text-right">
-                                        <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-0.5">
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">
                                             {mode === 'session' ? 'Sessions' : 'New Users'}
                                         </p>
                                         <div className="flex items-center justify-end gap-1.5">
-                                            <span className="text-base font-black text-slate-800 tabular-nums group-hover:scale-105 transition-transform origin-right">
+                                            <span className="text-base font-bold text-slate-900 tabular-nums">
                                                 {source.metric.toLocaleString()}
                                             </span>
-                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                         </div>
                                     </div>
 
                                     {mode === 'session' && (
                                         <div className="hidden sm:block text-right">
-                                            <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-0.5">Visitors</p>
-                                            <span className="text-base font-black text-slate-800 tabular-nums">
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Visitors</p>
+                                            <span className="text-base font-bold text-slate-900 tabular-nums">
                                                 {source.secondary?.toLocaleString()}
                                             </span>
                                         </div>
                                     )}
 
-                                    <div className="hidden lg:flex items-center justify-center w-8 h-8 rounded-lg bg-slate-50 text-slate-300 hover:text-blue-500 hover:bg-blue-50 border border-transparent hover:border-blue-100 transition-all cursor-pointer">
+                                    <div className="hidden lg:flex items-center justify-center w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:text-[#BD1D2D] hover:bg-rose-50 border border-slate-200 transition-colors cursor-pointer">
                                         <ExternalLink className="w-3.5 h-3.5" />
                                     </div>
                                 </div>
@@ -170,13 +164,13 @@ const SourcesTabContent: React.FC<SourcesTabContentProps> = ({ stats }) => {
                 })}
 
                 {groupedSources.length === 0 && (
-                    <div className="py-24 text-center bg-slate-50/50 rounded-[18px] border border-dashed border-slate-200">
-                        <div className="w-20 h-20 bg-white rounded-[18px] shadow-sm flex items-center justify-center mx-auto mb-6">
-                            <Share2 className="w-10 h-10 text-slate-200" />
+                    <div className="py-20 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                        <div className="w-16 h-16 bg-white rounded-2xl border border-slate-200 flex items-center justify-center mx-auto mb-5">
+                            <Share2 className="w-8 h-8 text-slate-300" />
                         </div>
-                        <h4 className="text-lg font-black text-slate-800 mb-1">No traffic data found</h4>
-                        <p className="text-sm font-bold text-slate-400 max-w-[280px] mx-auto leading-relaxed">
-                            Web property hasn't recorded any traffic sources yet.
+                        <h4 className="text-base font-bold text-slate-800 mb-1">Chưa có dữ liệu nguồn truy cập</h4>
+                        <p className="text-xs font-medium text-slate-500 max-w-[280px] mx-auto leading-relaxed">
+                            Trang web chưa ghi nhận lưu lượng truy cập từ các nguồn trong khoảng thời gian này.
                         </p>
                     </div>
                 )}

@@ -10,6 +10,7 @@ import { api } from '../../services/storageAdapter';
 import toast from 'react-hot-toast';
 import Modal from './Modal';
 import { useTheme } from '../../contexts/ThemeContext';
+import { ensureArray, extractArray } from '../../../../utils/safeArray';
 
 interface LibraryFile {
     name: string;
@@ -127,7 +128,7 @@ const FileLibraryModal: React.FC<FileLibraryModalProps> = ({
         try {
             const res = await api.get<LibraryFile[]>('upload?route=library');
             if (res.success) {
-                const list = res.data || [];
+                const list = extractArray(res);
                 cachedLibraryFiles = list;
                 cachedLibraryFilesTs = Date.now();
                 setFiles(list);

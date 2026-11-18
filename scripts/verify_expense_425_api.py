@@ -1,10 +1,24 @@
+import os
 import subprocess
 import sys
 
-sys.stdout.reconfigure(encoding='utf-8')
-SSH_CMD = ['ssh', '-i', r'C:\Users\LENOVO\.ssh\id_ed25519', '-4', '-p', '2210', '-o', 'StrictHostKeyChecking=no', 'vhvxoigh@chiefaiofficer.vn']
+def _get_db_pass():
+    if os.environ.get('DB_PASS'):
+        return os.environ['DB_PASS']
+    env_p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'backend', '.env')
+    if os.path.exists(env_p):
+        with open(env_p, encoding='utf-8') as _f:
+            for _line in _f:
+                if _line.strip().startswith('DB_PASS='):
+                    return _line.split('=', 1)[1].strip().strip('"\'')
+    raise RuntimeError('Missing DB_PASS env variable or backend/.env')
 
-remote_cmd = '''mysql -u vhvxoigh_mail_auto -p"Ideas@812" vhvxoigh_myerp -e "SELECT id, title, amount, currency FROM expenses WHERE id = 425;"'''
+_DB_PASS = _get_db_pass()
+
+sys.stdout.reconfigure(encoding='utf-8')
+SSH_CMD = ['ssh', '-i', os.environ.get('SSH_KEY', os.path.expanduser('~/.ssh/id_ed25519')), '-4', '-p', '2210', '-o', 'StrictHostKeyChecking=no', 'vhvxoigh@chiefaiofficer.vn']
+
+remote_cmd = f'''mysql -u vhvxoigh_mail_auto -p"{_DB_PASS}" vhvxoigh_myerp -e "SELECT id, title, amount, currency FROM expenses WHERE id = 425;"'''
 proc = subprocess.run(SSH_CMD + [remote_cmd], capture_output=True)
 print("STDOUT:", proc.stdout.decode('utf-8', errors='replace'))
 print("STDERR:", proc.stderr.decode('utf-8', errors='replace'))

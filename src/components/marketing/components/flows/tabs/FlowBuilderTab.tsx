@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
-import { ZoomIn, ZoomOut, Move, Undo2, Redo2, Plus, Keyboard, Maximize, Minimize, Sparkles, Loader2, Beaker } from 'lucide-react';
+import { ZoomIn, ZoomOut, Move, Undo2, Redo2, Plus, Keyboard, Maximize, Minimize, Loader2, Beaker } from 'lucide-react';
 import { Flow, FlowStep, FormDefinition } from '../../../types';
 import FlowTree from '../builder/FlowTree';
 import Modal from '../../common/Modal';
@@ -239,7 +239,7 @@ const FlowBuilderTab: React.FC<FlowBuilderTabProps> = memo(({
         <div
             ref={containerRef}
             // z-[100000] ensures it sits above the app layout
-            className={`w-full h-full overflow-hidden bg-[#f8fafc] select-none font-sans transition-all duration-300 ${isFullscreen ? 'fixed inset-0 z-[100000] animate-in zoom-in-[0.98] fade-in duration-300 shadow-2xl' : 'relative'}`}
+            className={`w-full h-full overflow-hidden bg-[#f8fafc] select-none font-sans transition-[inset,transform,opacity] duration-200 ${isFullscreen ? 'fixed inset-0 z-[100000] animate-in zoom-in-[0.98] fade-in duration-200 shadow-2xl' : 'relative'}`}
         >
             {/* Dot Grid Background */}
             <div
@@ -266,33 +266,33 @@ const FlowBuilderTab: React.FC<FlowBuilderTabProps> = memo(({
                     <button onClick={onRedo} disabled={!canRedo || isViewMode} title="Redo (Ctrl+Y)" className="p-2 text-slate-500 hover:bg-slate-50 rounded-lg disabled:opacity-30"><Redo2 className="w-4 h-4" /></button>
                     <div className="w-px h-4 bg-slate-200 mx-1"></div>
                     <button onClick={() => handleZoomCenter(-0.1)} className="p-2 text-slate-500 hover:bg-slate-50 rounded-lg"><ZoomOut className="w-4 h-4" /></button>
-                    <span className="text-[10px] font-bold text-slate-400 min-w-[3rem] text-center">{Math.round(scale * 100)}%</span>
+                    <span className="text-[10px] font-bold text-slate-500 min-w-[3rem] text-center tabular-nums">{Math.round(scale * 100)}%</span>
                     <button onClick={() => handleZoomCenter(0.1)} className="p-2 text-slate-500 hover:bg-slate-50 rounded-lg"><ZoomIn className="w-4 h-4" /></button>
                 </div>
                 <button
                     onClick={() => centerView(1.0)}
-                    className="bg-white p-3 rounded-xl border border-slate-200 shadow-xl text-slate-500 hover:text-slate-800 flow-interactive transition-all active:scale-95"
+                    className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-slate-500 hover:text-slate-800 flow-interactive transition-colors"
                     title="Căn giữa kịch bản (Space)"
                 >
                     <Move className="w-4 h-4" />
                 </button>
                 <button
                     onClick={() => setIsFullscreen(!isFullscreen)}
-                    className={`bg-white p-3 rounded-xl border border-slate-200 shadow-xl flow-interactive transition-all active:scale-95 ${isFullscreen ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : 'text-slate-500 hover:text-emerald-600'}`}
+                    className={`bg-white p-3 rounded-xl border border-slate-200 shadow-sm flow-interactive transition-colors ${isFullscreen ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : 'text-slate-500 hover:text-emerald-600'}`}
                     title={isFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}
                 >
                     {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
                 </button>
                 <button
                     onClick={() => setShowShortcuts(true)}
-                    className="bg-white p-3 rounded-xl border border-slate-200 shadow-xl text-slate-500 hover:text-blue-500 flow-interactive transition-all active:scale-95"
+                    className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-slate-500 hover:text-blue-500 flow-interactive transition-colors"
                     title="Phím tắt & Hướng dẫn"
                 >
                     <Keyboard className="w-4 h-4" />
                 </button>
                 <button
                     onClick={onSimulate}
-                    className="bg-white p-3 rounded-xl border border-slate-200 shadow-xl text-slate-500 hover:text-indigo-600 flow-interactive transition-all active:scale-95"
+                    className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-slate-500 hover:text-[#BD1D2D] flow-interactive transition-colors"
                     title="Chạy thử nghiệm (Simulate)"
                 >
                     <Beaker className="w-4 h-4" />
@@ -310,7 +310,7 @@ const FlowBuilderTab: React.FC<FlowBuilderTabProps> = memo(({
             >
                 <div className="space-y-4">
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                        <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">Chuột (Mouse)</h4>
+                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Chuột (Mouse)</h4>
                         <div className="space-y-2 text-xs font-bold text-slate-700">
                             <div className="flex justify-between items-center bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
                                 <span>Lăn chuột</span>
@@ -328,7 +328,7 @@ const FlowBuilderTab: React.FC<FlowBuilderTabProps> = memo(({
                     </div>
 
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                        <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">Bàn phím (Keyboard)</h4>
+                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Bàn phím (Keyboard)</h4>
                         <div className="space-y-2 text-xs font-bold text-slate-700">
                             <div className="flex justify-between items-center bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
                                 <span><kbd className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-300">Space</kbd></span>
@@ -376,7 +376,7 @@ const FlowBuilderTab: React.FC<FlowBuilderTabProps> = memo(({
                     ) : (
                         <div className="flex flex-col items-center mt-20 flow-interactive">
                             {!isViewMode && (
-                                <button onClick={() => onAddStep('', 'yes')} className="w-32 h-32 rounded-full bg-white border-2 border-dashed border-slate-300 flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-emerald-500 hover:text-emerald-600 hover:scale-105 transition-all shadow-sm group">
+                                <button onClick={() => onAddStep('', 'yes')} className="w-32 h-32 rounded-full bg-white border-2 border-dashed border-slate-300 flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-emerald-500 hover:text-emerald-600 transition-colors shadow-sm group">
                                     <div className="p-4 bg-slate-50 rounded-full group-hover:bg-emerald-50 transition-colors"><Plus className="w-8 h-8" /></div>
                                     <span className="text-xs font-bold uppercase tracking-wider">Start Here</span>
                                 </button>

@@ -313,32 +313,32 @@ const CampaignDeliveryDetailsTab: React.FC<Props> = ({ campaign, allLists, allTa
                 {/* Card 2: Thành công */}
                 <div className="border border-slate-200 dark:border-slate-800 rounded-[16px] p-4 bg-white dark:bg-slate-900 shadow-none flex items-center justify-between group hover:border-slate-300 dark:hover:border-slate-700 transition-colors relative overflow-hidden min-h-[92px]">
                     <div className="relative z-10">
-                        <p className="text-[10px] uppercase font-black text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 leading-none">Thành công</p>
-                        <h4 className="text-xl md:text-2xl font-black text-emerald-600 dark:text-emerald-500 tracking-tight leading-none">{stats.sent.toLocaleString()}</h4>
+                        <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider mb-1.5 leading-none">Thành công</p>
+                        <h4 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-none tabular-nums">{stats.sent.toLocaleString()}</h4>
                     </div>
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 relative z-10" style={{ backgroundColor: '#10b98115', color: '#10b981' }}>
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 relative z-10 bg-slate-100 text-slate-700 border border-slate-200">
                         <CheckCircle2 className="w-4 h-4" />
                     </div>
                 </div>
 
                 {/* Card 3: Lượt mở */}
-                <div className="border border-slate-200 dark:border-slate-800 rounded-[16px] p-4 bg-white dark:bg-slate-900 shadow-none flex items-center justify-between group hover:border-slate-300 dark:hover:border-slate-700 transition-colors relative overflow-hidden min-h-[92px]">
+                <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-4 bg-white dark:bg-slate-900 shadow-none flex items-center justify-between group hover:border-slate-300 dark:hover:border-slate-700 transition-colors relative overflow-hidden min-h-[92px]">
                     <div className="relative z-10">
-                        <p className="text-[10px] uppercase font-black text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 leading-none">{isZns ? 'Người xem' : 'Lượt mở'}</p>
-                        <h4 className="text-xl md:text-2xl font-black text-purple-600 dark:text-purple-550 tracking-tight leading-none">{stats.opened.toLocaleString()}</h4>
+                        <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider mb-1.5 leading-none">{isZns ? 'Người xem' : 'Lượt mở'}</p>
+                        <h4 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-none tabular-nums">{stats.opened.toLocaleString()}</h4>
                     </div>
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 relative z-10" style={{ backgroundColor: '#8b5cf615', color: '#8b5cf6' }}>
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 relative z-10 bg-slate-100 text-slate-700 border border-slate-200">
                         {isZns ? <BadgeCheck className="w-4 h-4" /> : <MailOpen className="w-4 h-4" />}
                     </div>
                 </div>
 
                 {/* Card 4: Thất bại */}
-                <div className="border border-slate-200 dark:border-slate-800 rounded-[16px] p-4 bg-white dark:bg-slate-900 shadow-none flex items-center justify-between group hover:border-slate-300 dark:hover:border-slate-700 transition-colors relative overflow-hidden min-h-[92px]">
+                <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-4 bg-white dark:bg-slate-900 shadow-none flex items-center justify-between group hover:border-slate-300 dark:hover:border-slate-700 transition-colors relative overflow-hidden min-h-[92px]">
                     <div className="relative z-10">
-                        <p className="text-[10px] uppercase font-black text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 leading-none">Thất bại</p>
-                        <h4 className="text-xl md:text-2xl font-black text-rose-600 dark:text-rose-500 tracking-tight leading-none">{stats.failed.toLocaleString()}</h4>
+                        <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider mb-1.5 leading-none">Thất bại</p>
+                        <h4 className="text-xl md:text-2xl font-bold text-[#BD1D2D] dark:text-rose-400 tracking-tight leading-none tabular-nums">{stats.failed.toLocaleString()}</h4>
                     </div>
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 relative z-10" style={{ backgroundColor: '#ec489915', color: '#ec4899' }}>
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 relative z-10 bg-rose-50 text-[#BD1D2D] border border-rose-200/70">
                         <XCircle className="w-4 h-4" />
                     </div>
                 </div>
@@ -578,7 +578,7 @@ const CampaignDeliveryDetailsTab: React.FC<Props> = ({ campaign, allLists, allTa
                                                 />
                                             </td>
                                             <td className="px-6 py-3">
-                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${r.type === 'Reminder' ? 'bg-purple-50 text-purple-600 border-purple-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${r.type === 'Reminder' ? 'bg-rose-50 text-[#BD1D2D] border-rose-200/70' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
                                                     {r.type === 'Main Campaign' ? 'Main' : (r.type || 'Main')}
                                                 </span>
                                             </td>

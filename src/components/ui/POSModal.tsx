@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, Trash2, CheckCircle2, Package, Plus, X, User, 
-  DollarSign, Loader2, FileText, Ban, Receipt, Check, Sparkles
+  DollarSign, Loader2, FileText, Ban, Receipt, Check
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useUIStore } from '../../store/uiStore';
@@ -140,7 +140,7 @@ export const POSModal: React.FC<{ onClose: () => void; defaultContact?: Contact 
         shipping_fee: shippingFee,
         shipping_customer_pay: shippingCustomerPay ? 1 : 0
       });
-      addToast('Tạo đơn hàng thành công!', 'success');
+      addToast('Tạo đơn hàng thành công', 'success');
       window.dispatchEvent(new CustomEvent('erp-action-completed', { detail: { actionType: 'sales_order' } }));
       onClose();
     } catch (err: any) {
@@ -292,14 +292,13 @@ export const POSModal: React.FC<{ onClose: () => void; defaultContact?: Contact 
                             key={p.id} 
                             style={{ 
                               padding: '0.625rem 0.875rem', 
-                              borderRadius: '10px', 
+                              borderRadius: '8px', 
                               display: 'flex', 
                               justifyContent: 'space-between', 
                               alignItems: 'center',
                               cursor: 'pointer',
-                              transition: 'background 0.15s ease'
+                              transition: 'background-color 0.16s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.16s cubic-bezier(0.22, 1, 0.36, 1)'
                             }} 
-                            className="hover-lift"
                             onClick={() => addToCart(p)}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -663,7 +662,7 @@ export const POSModal: React.FC<{ onClose: () => void; defaultContact?: Contact 
                     <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>VND</span>
                   </div>
                   {shippingFee > 0 && (
-                    <div style={{ marginTop: '4px', fontSize: '0.68rem', color: 'var(--color-primary)', fontWeight: 600, fontStyle: 'italic' }}>
+                    <div style={{ marginTop: '4px', fontSize: '0.68rem', color: 'var(--color-primary)', fontWeight: 600 }}>
                       {numberToText(shippingFee)}
                     </div>
                   )}
@@ -672,10 +671,10 @@ export const POSModal: React.FC<{ onClose: () => void; defaultContact?: Contact 
                 {/* Total Payment */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1rem' }}>
                   <div>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Tổng tiền thanh toán
                     </span>
-                    <div style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--color-primary)', letterSpacing: '-0.02em', lineHeight: 1.1, marginTop: '2px' }}>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--color-primary)', lineHeight: 1.1, marginTop: '4px' }}>
                       {FMT_PRICE(finalTotal)}
                     </div>
                   </div>

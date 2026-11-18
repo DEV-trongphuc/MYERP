@@ -7,7 +7,7 @@ import {
     MousePointerClick, Activity, ArrowUpRight,
     Users, GanttChartSquare, RefreshCw, BarChart2,
     Monitor, Smartphone, Tablet,
-    Copy, MousePointer, MessageSquare, Sparkles, ArrowLeft, ShieldCheck, Filter,
+    Copy, MousePointer, MessageSquare, ArrowLeft, ShieldCheck, Filter,
     Bot, Share2
 } from 'lucide-react';
 import PageHero from '../../components/marketing/components/common/PageHero';
@@ -24,6 +24,7 @@ import {
 import { WebProperty, WebStats, Visitor, VisitorStats } from '../../components/marketing/components/web-tracking/types';
 import { useNavigation } from '../../components/marketing/contexts/NavigationContext';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { ensureArray, extractArray } from '../../utils/safeArray';
 
 const OverviewTab = React.lazy(() => import('../../components/marketing/components/web-tracking/OverviewTab'));
 const VisitorsTab = React.lazy(() => import('../../components/marketing/components/web-tracking/VisitorsTab'));
@@ -239,7 +240,7 @@ const WebTracking: React.FC = () => {
 
     const fetchAvailablePages = async () => {
         if (!selectedWebsite || !stats?.topPages) return;
-        const pages = stats.topPages.map(p => p.url);
+        const pages = ensureArray(stats?.topPages).map(p => p.url);
         setAvailablePages(pages);
         if (pages.length > 0 && !heatmapUrl) {
             setHeatmapUrl(pages[0]);
@@ -256,7 +257,7 @@ const WebTracking: React.FC = () => {
             }
             const res = await api.get<any[]>(url);
             if (res.success) {
-                setHeatmapData(res.data || []);
+                setHeatmapData(extractArray(res));
             }
         } catch (e) {
             console.error('Heatmap error:', e);
@@ -339,12 +340,12 @@ const WebTracking: React.FC = () => {
         switch (type) {
             case 'pageview': return <Globe className="w-4 h-4 text-blue-500" />;
             case 'click': return <MousePointerClick className="w-4 h-4 text-emerald-500" />;
-            case 'canvas_click': return <GanttChartSquare className="w-4 h-4 text-indigo-500" />;
+            case 'canvas_click': return <GanttChartSquare className="w-4 h-4 text-slate-600" />;
             case 'scroll': return <ArrowUpRight className="w-4 h-4 text-[var(--color-primary)]" />;
-            case 'identify': return <Users className="w-4 h-4 text-purple-500" />;
+            case 'identify': return <Users className="w-4 h-4 text-[#BD1D2D]" />;
             case 'copy': return <Copy className="w-4 h-4 text-rose-500" />;
             case 'select': return <MousePointer className="w-4 h-4 text-[var(--color-primary)]" />;
-            case 'form': return <Sparkles className="w-4 h-4 text-[#2563eb]" />;
+            case 'form': return <ShieldCheck className="w-4 h-4 text-[#2563eb]" />;
             default: return <Activity className="w-4 h-4 text-slate-400" />;
         }
     };
@@ -433,7 +434,7 @@ const WebTracking: React.FC = () => {
                             loading={loading}
                             title="Tài liệu AI"
                             value={websites.reduce((sum, w) => sum + (Number(w.docs_count ?? w.stats?.docs_count ?? 0) || 0), 0).toLocaleString('vi-VN')}
-                            icon={<Sparkles />}
+                            icon={<ShieldCheck />}
                             color="#64748b"
                             breakdown="Nguồn tri thức đã huấn luyện"
                         />
@@ -519,7 +520,7 @@ const WebTracking: React.FC = () => {
                                 {filteredWebsites.map(site => (
                                     <div
                                         key={site.id}
-                                        className="group bg-[var(--color-surface)] p-5 rounded-[var(--radius-lg)] border border-[var(--color-border)] shadow-[var(--shadow-xs)] hover:border-[var(--color-primary)] hover:shadow-[var(--shadow-md)] transition-all flex flex-col justify-between gap-5 h-full"
+                                        className="group bg-[var(--color-surface)] p-5 rounded-[var(--radius-lg)] border border-[var(--color-border)] shadow-[var(--shadow-xs)] hover:border-[var(--color-primary)] hover:shadow-[var(--shadow-md)] transition-[border-color,box-shadow] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] flex flex-col justify-between gap-5 h-full"
                                     >
                                         <div className="flex justify-between items-start gap-3">
                                             <div className="flex items-center gap-3 min-w-0">

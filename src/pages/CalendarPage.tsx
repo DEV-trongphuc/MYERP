@@ -9,6 +9,7 @@ import api from '../api/axios';
 import { useUIStore } from '../store/uiStore';
 import { useAuth } from '../contexts/AuthContext';
 import { AttendancePageInner } from './AttendancePage';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 export const CalendarPage: React.FC = () => {
   const navigate = useNavigate();
@@ -64,7 +65,7 @@ export const CalendarPage: React.FC = () => {
       }
 
       const res = await api.get('/activities', { params });
-      let fetched = res.data.data?.items || res.data.data || [];
+      let fetched = extractArray(res?.data);
 
       // Load PO & SO if user is accountant or admin/director
       const isAccountantOrAdmin = user && ['accountant', 'admin', 'superadmin', 'super_admin', 'director'].includes(user.role);
@@ -75,8 +76,8 @@ export const CalendarPage: React.FC = () => {
             api.get('/deposits').catch(() => ({ data: [] }))
           ]);
 
-          const poList = poRes.data?.data || poRes.data || [];
-          const soList = soRes.data?.data || soRes.data || [];
+          const poList = extractArray(poRes?.data);
+          const soList = extractArray(soRes?.data);
 
           // Map POs
           const poEvents = poList

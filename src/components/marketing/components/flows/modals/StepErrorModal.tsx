@@ -183,7 +183,7 @@ const StepErrorModal: React.FC<StepErrorModalProps> = ({
                             {selectedIds.length === users.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
                         </button>
                         {selectedIds.length > 0 && (
-                            <span className="text-xs text-slate-500 font-medium">
+                            <span className="text-xs text-slate-500 font-medium tabular-nums">
                                 ({selectedIds.length} đã chọn)
                             </span>
                         )}
@@ -253,7 +253,7 @@ const StepErrorModal: React.FC<StepErrorModalProps> = ({
                         <tbody className="divide-y divide-slate-100">
                             {!Array.isArray(users) || users.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="py-8 text-center text-xs text-slate-400 italic">
+                                    <td colSpan={6} className="py-8 text-center text-xs text-slate-400">
                                         Không có lỗi nào được ghi nhận
                                     </td>
                                 </tr>
@@ -288,13 +288,13 @@ const StepErrorModal: React.FC<StepErrorModalProps> = ({
                                             </p>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <div className="flex items-center gap-1 text-xs text-slate-500">
+                                            <div className="flex items-center gap-1 text-xs text-slate-500 tabular-nums">
                                                 <Clock className="w-3 h-3" />
                                                 {formatTime(user.timestamp)}
                                             </div>
                                         </td>
                                         <td className="px-4 py-3 text-center">
-                                            <span className="text-xs font-bold text-slate-700">
+                                            <span className="text-xs font-bold text-slate-700 tabular-nums">
                                                 {user.attemptCount || 1}
                                             </span>
                                         </td>
@@ -320,7 +320,7 @@ const StepErrorModal: React.FC<StepErrorModalProps> = ({
                         className={`absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-300 ${animateMoveDialogIn ? 'opacity-100' : 'opacity-0'}`}
                         onClick={closeMoveDialog}
                     />
-                    <div className={`bg-white rounded-xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden relative transform transition-all duration-300 ${animateMoveDialogIn ? 'scale-100 opacity-100' : 'scale-[0.95] opacity-0'}`}>
+                    <div className={`bg-white rounded-xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden relative transform transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${animateMoveDialogIn ? 'scale-100 opacity-100' : 'scale-[0.95] opacity-0'}`}>
                         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                             <h3 className="font-bold text-slate-800 flex items-center gap-2">
                                 <ArrowRight className="w-5 h-5 text-blue-600" />
@@ -341,7 +341,7 @@ const StepErrorModal: React.FC<StepErrorModalProps> = ({
                                     <button
                                         key={step.id}
                                         onClick={() => setTargetStep(step)}
-                                        className={`w-full text-left p-3 rounded-[14px] border-2 transition-all flex items-center justify-between group ${targetStep?.id === step.id ? 'border-blue-600 bg-blue-50' : 'border-slate-100 hover:border-slate-200 bg-white'}`}
+                                        className={`w-full text-left p-3 rounded-xl border transition-colors flex items-center justify-between group ${targetStep?.id === step.id ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:border-slate-300 bg-white'}`}
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className={`p-2 rounded-[var(--radius-md)] ${targetStep?.id === step.id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'}`}>
@@ -349,7 +349,7 @@ const StepErrorModal: React.FC<StepErrorModalProps> = ({
                                             </div>
                                             <div>
                                                 <p className="text-xs font-bold text-slate-700">{step.label}</p>
-                                                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">{step.type}</p>
+                                                <p className="text-[10px] text-slate-400 uppercase font-bold">{step.type}</p>
                                             </div>
                                         </div>
                                     </button>
@@ -357,11 +357,11 @@ const StepErrorModal: React.FC<StepErrorModalProps> = ({
                             </div>
 
                             {targetStep && isNextStepEmail && (
-                                <div className="p-4 bg-orange-50 border border-orange-200 rounded-[14px] flex items-start gap-3 animate-in fade-in duration-300">
+                                <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl flex items-start gap-3 animate-in fade-in duration-200">
                                     <AlertTriangle className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
                                     <div className="flex-1">
                                         <h5 className="text-[11px] font-bold text-orange-900 mb-1">Cảnh báo uy tín tên miền</h5>
-                                        <p className="text-[10px] text-orange-700 leading-relaxed italic">
+                                        <p className="text-[10px] text-orange-700 leading-relaxed">
                                             Bước bạn chọn là một bước <strong>gửi Email</strong>. Việc liên tiếp gửi email cho địa chỉ đã từng lỗi có thể làm giảm uy tín tên miền của bạn. Hãy cân nhắc <strong>Dọn dẹp</strong> nếu lỗi trước đó là do địa chỉ không tồn tại.
                                         </p>
                                     </div>

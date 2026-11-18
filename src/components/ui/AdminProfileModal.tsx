@@ -135,7 +135,7 @@ export const AdminProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     <textarea className="form-input" rows={3} style={{ resize: 'none' }} value={formData.bio} onChange={e => setFormData({...formData, bio: e.target.value})} placeholder="Nhập một vài dòng giới thiệu về bạn..." />
                   </div>
 
-                  <button className="btn primary hover-lift" onClick={handleSaveProfile} disabled={loading} style={{ marginTop: '0.5rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                  <button className="btn primary" onClick={handleSaveProfile} disabled={loading} style={{ marginTop: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                     {loading ? <Loader2 size={16} className="spin" /> : <Save size={16} />}
                     <span>{loading ? 'Đang lưu...' : 'Lưu thay đổi'}</span>
                   </button>
@@ -171,7 +171,7 @@ export const AdminProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     </div>
                   </div>
 
-                  <button className="btn primary hover-lift" onClick={handleUpdatePassword} disabled={loading} style={{ marginTop: '0.5rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                  <button className="btn primary" onClick={handleUpdatePassword} disabled={loading} style={{ marginTop: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                     {loading ? <Loader2 size={16} className="spin" /> : <Save size={16} />}
                     <span>{loading ? 'Đang cập nhật...' : 'Cập nhật mật khẩu'}</span>
                   </button>

@@ -1,6 +1,8 @@
 <?php
 // backend/test_notification_trigger.php
-define('DIAG_TOKEN', 'Ideas_Diag_Secure_Token_2026_9e88d6c701fbc6b7');
+if (php_sapi_name() === 'cli' && !defined('DIAG_TOKEN')) {
+    define('DIAG_TOKEN', true);
+}
 require_once __DIR__ . '/test_bootstrap.php';
 require_once __DIR__ . '/NotificationService.php';
 

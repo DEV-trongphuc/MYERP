@@ -821,17 +821,14 @@ const SurveyProperties: React.FC<Props> = ({ survey, selectedBlock, selectedBloc
                                 </p>
                             </div>
                             <SectionDivider label="Automation Flow" />
-                            <div className="bg-gradient-to-br from-amber-50 to-orange-50/30 border border-amber-200/80 rounded-2xl p-4 relative">
-                                <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
-                                    <div className="absolute top-0 right-0 w-24 h-24 bg-amber-400/10 rounded-full blur-xl transform translate-x-1/2 -translate-y-1/2" />
-                                </div>
+                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 relative">
                                 <div className="flex items-center gap-2 mb-3 relative z-10">
-                                    <div className="w-8 h-8 rounded-lg bg-white border border-amber-200/60 flex items-center justify-center text-amber-600">
+                                    <div className="w-8 h-8 rounded-lg bg-white border border-amber-200/80 flex items-center justify-center text-amber-600">
                                         <Zap className="w-4 h-4" />
                                     </div>
                                     <div className="flex-1">
-                                        <h4 className="text-[11px] font-black text-amber-900 tracking-tight leading-none uppercase">Kịch bản sau khảo sát</h4>
-                                        <p className="text-[9px] text-amber-800 mt-0.5 leading-tight">Chăm sóc khách tự động</p>
+                                        <h4 className="text-[11px] font-bold text-amber-900 leading-none uppercase">Kịch bản sau khảo sát</h4>
+                                        <p className="text-[10px] text-amber-800 mt-0.5 leading-tight">Chăm sóc khách tự động</p>
                                     </div>
                                     {/* Toggle */}
                                     <button

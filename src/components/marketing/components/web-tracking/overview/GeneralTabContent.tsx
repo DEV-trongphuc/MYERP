@@ -63,10 +63,10 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
             {!stats ? (
                 <div className="space-y-6">
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <StatCard loading title="Unique Visitors" value={0} icon={<Users />} color="#a31422" />
-                        <StatCard loading title="Total Sessions" value={0} icon={<Zap />} color="#3b82f6" />
-                        <StatCard loading title="Page Views" value={0} icon={<Eye />} color="#10b981" />
-                        <StatCard loading title="Bounce Rate" value={0} icon={<Activity />} color="#f59e0b" />
+                        <StatCard loading title="Unique Visitors" value={0} icon={<Users />} color="#C6333D" />
+                        <StatCard loading title="Total Sessions" value={0} icon={<Zap />} color="#0f172a" />
+                        <StatCard loading title="Page Views" value={0} icon={<Eye />} color="#334155" />
+                        <StatCard loading title="Bounce Rate" value={0} icon={<Activity />} color="#64748b" />
                     </div>
                     <div className="bg-[var(--color-surface)] p-6 rounded-[var(--radius-lg)] h-[380px] border border-[var(--color-border)] animate-pulse" />
                 </div>
@@ -78,18 +78,18 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                             title="Unique Visitors"
                             value={(stats.overview.visitors || 0).toLocaleString('vi-VN')}
                             icon={<Users />}
-                            color="#a31422"
-                            breakdown={<span>Người dùng mới: <b>{(stats.overview.newUsers ?? 0).toLocaleString('vi-VN')}</b></span>}
+                            color="#C6333D"
+                            breakdown={<span>Người dùng mới: <b className="tabular-nums">{(stats.overview.newUsers ?? 0).toLocaleString('vi-VN')}</b></span>}
                         />
                         <StatCard
                             title="Total Sessions"
                             value={(stats.overview.sessions || 0).toLocaleString('vi-VN')}
                             icon={<Zap />}
-                            color="#3b82f6"
+                            color="#0f172a"
                             breakdown={
                                 <span className="inline-flex items-center gap-1.5">
                                     <Clock className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
-                                    TB: <b>{formatDuration(Math.floor(stats.overview.avgDuration || 0))}</b> / phiên
+                                    TB: <b className="tabular-nums">{formatDuration(Math.floor(stats.overview.avgDuration || 0))}</b> / phiên
                                 </span>
                             }
                         />
@@ -97,9 +97,9 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                             title="Page Views"
                             value={(stats.overview.pageViews || 0).toLocaleString('vi-VN')}
                             icon={<Eye />}
-                            color="#10b981"
+                            color="#334155"
                             breakdown={
-                                <span>
+                                <span className="tabular-nums">
                                     {stats.overview.sessions > 0
                                         ? `${(stats.overview.pageViews / stats.overview.sessions).toFixed(1)} trang / phiên`
                                         : 'Tổng lượt xem trang'}
@@ -110,10 +110,10 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                             title="Bounce Rate"
                             value={`${(stats.overview.bounceRate || 0).toFixed(1)}%`}
                             icon={<Activity />}
-                            color="#f59e0b"
+                            color="#64748b"
                             onClick={() => setIsBounceInfoOpen(true)}
                             breakdown={
-                                <span className="inline-flex items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1.5 tabular-nums">
                                     <span>{(stats.overview.bounces || 0).toLocaleString('vi-VN')} / {(stats.overview.sessions || 0).toLocaleString('vi-VN')} phiên</span>
                                     <Info className="w-3.5 h-3.5 text-[var(--color-primary)]" />
                                 </span>
@@ -126,61 +126,61 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                         onClose={() => setIsBounceInfoOpen(false)}
                         title={
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
+                                <div className="p-2 bg-rose-50 text-[#BD1D2D] rounded-xl">
                                     <Activity className="w-5 h-5" />
                                 </div>
-                                <span className="text-xl font-black text-slate-800 tracking-tight">Về Tỷ lệ thoát (Bounce Rate)</span>
+                                <span className="text-xl font-bold text-slate-900">Về Tỷ lệ thoát (Bounce Rate)</span>
                             </div>
                         }
                         size="xl"
                     >
-                        <div className="space-y-8 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
-                            <div className="p-8 bg-slate-50 border border-slate-100 rounded-[18px] relative overflow-hidden group">
-                                <h4 className="flex items-center gap-2 font-black text-lg mb-4 text-slate-800 relative">
-                                    <div className="p-2 bg-rose-600 text-white rounded-xl">
+                        <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+                            <div className="p-6 bg-slate-50 border border-slate-200 rounded-2xl relative overflow-hidden">
+                                <h4 className="flex items-center gap-2 font-bold text-lg mb-3 text-slate-900 relative">
+                                    <div className="p-2 bg-[#BD1D2D] text-white rounded-xl">
                                         <BookOpen className="w-5 h-5" />
                                     </div>
                                     Bounce Rate là gì?
                                 </h4>
-                                <p className="text-sm text-slate-500 leading-relaxed font-medium">
+                                <p className="text-sm text-slate-600 leading-relaxed font-medium">
                                     Bounce rate hay Tỷ lệ thoát là phần trăm số lượt truy cập trang web chỉ xem duy nhất một trang và rời đi ngay lập tức mà không có thêm tương tác nào khác (như nhấn vào link hoặc xem trang thứ hai). Nó đo lường mức độ tương tác và tính hấp dẫn của trang đích.
                                 </p>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="p-8 bg-white border border-slate-100 rounded-[18px] shadow-sm">
-                                    <h5 className="font-black text-slate-800 mb-6 flex items-center gap-2">
+                                <div className="p-6 bg-white border border-slate-200 rounded-2xl shadow-xs">
+                                    <h5 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
                                         <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
                                             <TrendingUp className="w-4 h-4" />
                                         </div>
                                         Tỷ lệ bao nhiêu là tốt?
                                     </h5>
-                                    <p className="text-xs text-slate-500 leading-relaxed font-medium mb-4">
+                                    <p className="text-xs text-slate-600 leading-relaxed font-medium mb-4">
                                         Không có con số "chuẩn" cho mỗi lĩnh vực. Tỷ lệ thoát phụ thuộc rất lớn vào loại trang web và mục đích của trang.
                                     </p>
-                                    <div className="p-4 bg-orange-50 border border-orange-100 rounded-[14px] italic text-[11px] text-orange-800 font-bold">
+                                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 font-medium">
                                         "Ví dụ: Một trang blog trả lời đúng câu hỏi người dùng tìm kiếm có thể có tỷ lệ thoát 90%+ nhưng vẫn là chất lượng tốt."
                                     </div>
                                 </div>
 
-                                <div className="p-8 bg-white border border-slate-100 rounded-[18px] shadow-sm">
-                                    <h5 className="font-black text-slate-800 mb-6 flex items-center gap-2">
-                                        <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
+                                <div className="p-6 bg-white border border-slate-200 rounded-2xl shadow-xs">
+                                    <h5 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                        <div className="w-8 h-8 bg-slate-100 text-slate-700 rounded-lg flex items-center justify-center">
                                             <Table className="w-4 h-4" />
                                         </div>
                                         Trung bình theo ngành
                                     </h5>
                                     <div className="space-y-3">
                                         {[
-                                            { label: 'Bán lẻ / TMĐT', range: '20% - 40%', color: 'text-emerald-500' },
-                                            { label: 'Dịch vụ', range: '10% - 30%', color: 'text-emerald-500' },
-                                            { label: 'Tạo Khách hàng tiềm năng', range: '30% - 50%', color: 'text-blue-500' },
+                                            { label: 'Bán lẻ / TMĐT', range: '20% - 40%', color: 'text-emerald-600' },
+                                            { label: 'Dịch vụ', range: '10% - 30%', color: 'text-emerald-600' },
+                                            { label: 'Tạo Khách hàng tiềm năng', range: '30% - 50%', color: 'text-slate-800' },
                                             { label: 'Nội dung (Content site)', range: '40% - 60%', color: 'text-[var(--color-primary)]' },
-                                            { label: 'Blog / Landing Page', range: '70% - 90%', color: 'text-rose-500' }
+                                            { label: 'Blog / Landing Page', range: '70% - 90%', color: 'text-[#BD1D2D]' }
                                         ].map((item, i) => (
-                                            <div key={i} className="flex items-center justify-between text-[11px] font-bold py-2 border-b border-slate-50 last:border-0">
-                                                <span className="text-slate-500">{item.label}</span>
-                                                <span className={item.color}>{item.range}</span>
+                                            <div key={i} className="flex items-center justify-between text-xs font-semibold py-2 border-b border-slate-100 last:border-0">
+                                                <span className="text-slate-600">{item.label}</span>
+                                                <span className={`${item.color} tabular-nums`}>{item.range}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -193,16 +193,16 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                     <div className="bg-white p-6 rounded-[16px] border border-[#E2E8F0] shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
                         <div className="flex items-center justify-between mb-5">
                             <div>
-                                <h3 className="text-base font-black text-slate-800 flex items-center gap-2.5 tracking-tight">
+                                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2.5">
                                     <div className="w-8 h-8 rounded-lg bg-[rgba(189,29,45,0.08)] text-[#BD1D2D] flex items-center justify-center">
                                         <BarChart2 className="w-4 h-4" />
                                     </div>
-                                    Traffic Trend Analytics
+                                    Thống kê lưu lượng truy cập
                                 </h3>
-                                <p className="text-[11px] text-slate-500 mt-1 font-semibold ml-10">Thống kê lưu lượng truy cập theo thời gian thực</p>
+                                <p className="text-xs text-slate-500 mt-1 font-medium ml-10">Số lượng phiên truy cập và lượt xem trang theo thời gian</p>
                             </div>
                         </div>
-                        <div className="min-h-[350px] bg-white rounded-[14px] p-2 border border-slate-100">
+                        <div className="min-h-[350px] bg-white rounded-xl p-2 border border-slate-100">
                             {chartData.length > 0 ? (
                                 <div className="w-full h-[350px]">
                                     <ResponsiveContainer width="100%" height="100%">
@@ -212,20 +212,20 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                                         >
                                             <defs>
                                                 <linearGradient id="sessionsGradient" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#BD1D2D" stopOpacity={0.35} />
-                                                    <stop offset="95%" stopColor="#BD1D2D" stopOpacity={0.02} />
+                                                    <stop offset="5%" stopColor="#BD1D2D" stopOpacity={0.28} />
+                                                    <stop offset="95%" stopColor="#BD1D2D" stopOpacity={0.01} />
                                                 </linearGradient>
                                                 <linearGradient id="pageViewsGradient" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#334155" stopOpacity={0.3} />
-                                                    <stop offset="95%" stopColor="#334155" stopOpacity={0.02} />
+                                                    <stop offset="5%" stopColor="#334155" stopOpacity={0.22} />
+                                                    <stop offset="95%" stopColor="#334155" stopOpacity={0.01} />
                                                 </linearGradient>
                                             </defs>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={true} horizontal={true} />
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                                             <XAxis
                                                 dataKey="date"
                                                 tickLine={false}
                                                 axisLine={{ stroke: '#e2e8f0' }}
-                                                tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }}
+                                                tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }}
                                                 tickFormatter={(d: string) => {
                                                     const parts = String(d).split('-');
                                                     return parts.length === 3 ? `${parts[2]}/${parts[1]}` : d;
@@ -233,8 +233,8 @@ const GeneralTabContent: React.FC<GeneralTabContentProps> = ({ stats, formatDura
                                             />
                                             <YAxis
                                                 tickLine={false}
-                                                axisLine={{ stroke: '#e2e8f0' }}
-                                                tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }}
+                                                axisLine={false}
+                                                tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }}
                                                 tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v))}
                                             />
                                             <Tooltip content={<CustomTooltip />} />

@@ -13,7 +13,7 @@ import {
   ShieldAlert, RefreshCw, Filter, Zap, Trash2, Plus,
   CheckCircle, AlertTriangle, ChevronLeft, ChevronRight,
   Phone, Mail, Clock, Tag, XCircle,
-  ExternalLink, Check, Shield, Save, Sparkles, X, Settings,
+  ExternalLink, Check, Shield, Save, Sparkles, X, Settings, Info,
   BarChart2, Search, CheckCircle2, GitBranch, Scale, Edit, Bell, Copy,
   Calendar, Users, Send, Database, UserPlus
 } from 'lucide-react';
@@ -25,6 +25,7 @@ import { TableSkeleton, Skeleton, KpiCardSkeleton, ChartSkeleton } from '../comp
 import { detectCountryFromPhone } from '../utils/phoneHelper';
 import { NotificationPreviewModal } from '../components/ui/NotificationPreviewModal';
 import { getLocalDateStr } from '../utils/dateUtils';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 type Lead = {
   id: number;
@@ -379,9 +380,9 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
             borderRadius: '20px',
             fontSize: '0.72rem',
             fontWeight: 600,
-            background: 'rgba(236, 72, 153, 0.12)',
-            color: '#ec4899',
-            border: '1px solid rgba(236, 72, 153, 0.25)',
+            background: 'rgba(245, 158, 11, 0.12)',
+            color: '#d97706',
+            border: '1px solid rgba(245, 158, 11, 0.25)',
             display: 'inline-flex',
             alignItems: 'center'
           }}>
@@ -956,7 +957,7 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
 
       const res = await fetchAPI(`get_held_leads&${queryParams.toString()}`);
       if (res.success) {
-        const data = res.data || [];
+        const data = extractArray(res);
         setHeldLeads(data);
         setHeldLeadsTotalCount(res.total_count ?? 0);
         if (res.counts) {
@@ -1455,7 +1456,7 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
               e.currentTarget.style.borderColor = 'var(--color-border)';
             }}
           >
-            <Sparkles size={14} color="var(--color-primary)" /> {t('Hướng dẫn')}
+            <Info size={14} color="var(--color-primary)" /> {t('Hướng dẫn')}
           </button>
 
           <div className="hide-on-mobile" style={{ width: 1, height: 16, background: 'rgba(189, 29, 45, 0.15)' }} />
@@ -2021,8 +2022,8 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-text-muted)', opacity: 0.5 }} />
-                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem', fontStyle: 'italic' }}>
-                  {t('Không có dữ liệu đánh giá từ AI Pre-screener trong khoảng thời gian này.')}
+                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
+                  {t('Không có dữ liệu đánh giá từ AI Pre-screener trong khoảng thời gian này')}
                 </span>
               </div>
             )}
@@ -2281,7 +2282,7 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
                 gap: 4,
                 whiteSpace: 'nowrap'
               }}>
-                <Sparkles size={12} /> {t(activeTab === 'queue' ? 'Hiển thị toàn bộ lead chờ duyệt' : 'Hiển thị toàn bộ lead chờ AI đánh giá')}
+                <Filter size={12} /> {t(activeTab === 'queue' ? 'Hiển thị toàn bộ lead chờ duyệt' : 'Hiển thị toàn bộ lead chờ AI đánh giá')}
               </div>
             )}
 
@@ -2292,7 +2293,7 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
                 className="btn outline mobile-flex-1"
                 style={{ height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: '0.85rem', borderRadius: 'var(--radius-lg)', width: '100%' }}
               >
-                <Sparkles size={14} color="var(--color-primary)" />
+                <Info size={14} color="var(--color-primary)" />
                 <span>{t('Hướng dẫn')}</span>
               </button>
 
@@ -2357,10 +2358,10 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
                 boxShadow: '0 2px 6px rgba(189, 29, 45, 0.25)',
                 cursor: 'pointer',
                 fontWeight: 600,
-                transition: 'all 0.2s ease'
+                transition: 'opacity 0.2s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1)'
               }}
             >
-              <Sparkles size={15} />
+              <Sparkles size={15} strokeWidth={1.75} />
               <span>{t('Thống kê token AI')}</span>
             </button>
 
@@ -4532,7 +4533,7 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
                 {/* Detailed lead list with token counts */}
                 <div style={{ marginTop: '10px' }}>
                   <h4 style={{ margin: '0 0 12px 0', fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Sparkles size={16} color="var(--color-primary)" />
+                    <Sparkles size={16} strokeWidth={1.75} color="var(--color-primary)" />
                     {t('Chi tiết sử dụng Token trên từng Lead')}
                   </h4>
                   <div style={{
@@ -6766,26 +6767,18 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
                   {/* KPI Cards Row (3 Columns) */}
                   <div className="responsive-grid-3" style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: '0.75rem' }}>
                     {/* Card 1: Tổng khách hàng */}
-                    <div className="stat-card hover-lift total-card" style={{ display: 'flex', flexDirection: 'column', padding: '1rem', minHeight: '120px', borderRadius: '12px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
-                      <div className="decor-svg" style={{ color: '#a31422' }}>
-                        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                          <circle cx="30" cy="50" r="10" stroke="currentColor" strokeWidth="2" />
-                          <circle cx="70" cy="30" r="10" stroke="currentColor" strokeWidth="2" />
-                          <circle cx="70" cy="70" r="10" stroke="currentColor" strokeWidth="2" />
-                          <path d="M40 50 H 55 V 30 H 60 M 55 50 V 70 H 60" stroke="currentColor" strokeWidth="2" />
-                        </svg>
-                      </div>
+                    <div className="stat-card total-card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '120px', borderRadius: '16px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                        <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 800, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Tổng khách hàng')}</span>
-                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(163, 20, 34, 0.08)', color: '#a31422', flexShrink: 0 }}><Users size={16} /></div>
+                        <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Tổng khách hàng')}</span>
+                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', flexShrink: 0 }}><Users size={16} /></div>
                       </div>
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
-                        <div className="stat-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                        <div className="stat-value" style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
                           {statsConsultantData.summary.total_received || 0}
                         </div>
                         <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500 }}>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a31422', display: 'inline-block' }} />
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#BD1D2D', display: 'inline-block' }} />
                             {t('Tổng data đang chăm sóc')}: {statsConsultantData.summary.total_received || 0}
                           </span>
                         </div>
@@ -6793,29 +6786,22 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
                     </div>
 
                     {/* Card 2: Được chia */}
-                    <div className="stat-card hover-lift distributed-card" style={{ display: 'flex', flexDirection: 'column', padding: '1rem', minHeight: '120px', borderRadius: '12px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
-                      <div className="decor-svg" style={{ color: '#007af5' }}>
-                        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                          <circle cx="45" cy="35" r="15" stroke="currentColor" strokeWidth="2" />
-                          <path d="M20 75 C 20 60, 31 50, 45 50 C 59 50, 70 60, 70 75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          <path d="M75 35 H 89 M 82 28 V 42" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        </svg>
-                      </div>
+                    <div className="stat-card distributed-card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '120px', borderRadius: '16px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                        <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 800, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Được chia')}</span>
-                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(0, 122, 245, 0.08)', color: '#007af5', flexShrink: 0 }}><Send size={16} /></div>
+                        <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Được chia')}</span>
+                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', flexShrink: 0 }}><Send size={16} /></div>
                       </div>
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
-                        <div className="stat-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                        <div className="stat-value" style={{ fontSize: '1.45rem', fontWeight: 800, color: '#BD1D2D', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
                           {(statsConsultantData.summary.distributed_count || 0) + (statsConsultantData.summary.coop_count || 0)}
                         </div>
                         <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500, display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#007af5', display: 'inline-block' }} />
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#334155', display: 'inline-block' }} />
                             {t('Chia tự động')}: {statsConsultantData.summary.distributed_count || 0}
                           </span>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fbbf24', display: 'inline-block' }} />
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#64748b', display: 'inline-block' }} />
                             {t('Hợp tác (co.op)')}: {statsConsultantData.summary.coop_count || 0}
                           </span>
                         </div>
@@ -6823,25 +6809,18 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
                     </div>
 
                     {/* Card 4: Tự nhập */}
-                    <div className="stat-card hover-lift out_of_hours-card" style={{ display: 'flex', flexDirection: 'column', padding: '1rem', minHeight: '120px', borderRadius: '12px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
-                      <div className="decor-svg" style={{ color: '#f59e0b' }}>
-                        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                          <circle cx="50" cy="35" r="15" stroke="currentColor" strokeWidth="2" />
-                          <path d="M25 75 C 25 60, 36 50, 50 50 C 64 50, 75 60, 75 75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          <path d="M75 35 H 90 M 82.5 27.5 V 42.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        </svg>
-                      </div>
+                    <div className="stat-card out_of_hours-card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '120px', borderRadius: '16px', border: '1px solid var(--color-border-light)', position: 'relative', overflow: 'hidden' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                        <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 800, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Tự nhập')}</span>
-                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.08)', color: '#f59e0b', flexShrink: 0 }}><UserPlus size={16} /></div>
+                        <span className="stat-label" style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Tự nhập')}</span>
+                        <div className="stat-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', flexShrink: 0 }}><UserPlus size={16} /></div>
                       </div>
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
-                        <div className="stat-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                        <div className="stat-value" style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
                           {statsConsultantData.summary.self_count || 0}
                         </div>
                         <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginTop: 4, fontWeight: 500 }}>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#334155', display: 'inline-block' }} />
                             {t('Tự tạo hoặc giới thiệu')}: {statsConsultantData.summary.self_count || 0}
                           </span>
                         </div>
@@ -6856,18 +6835,12 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
                       <div style={{ height: 180, width: '100%' }}>
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={statsConsultantData.by_date} margin={{ left: -10, right: 5, top: 20, bottom: 0 }}>
-                            <defs>
-                              <linearGradient id="statsDateGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#e63946" stopOpacity={1} />
-                                <stop offset="100%" stopColor="#a31422" stopOpacity={0.8} />
-                              </linearGradient>
-                            </defs>
                             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
-                            <XAxis dataKey="date" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                            <YAxis domain={[0, (max: number) => (max < 5 ? 5 : Math.ceil(max * 1.15))]} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
-                            <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8 }} />
-                            <Bar dataKey="count" fill="url(#statsDateGradient)" radius={[4, 4, 0, 0]} maxBarSize={30} name={t("Data thành công")}>
-                              <LabelList dataKey="count" position="top" style={{ fill: 'var(--color-text)', fontSize: 10, fontWeight: 700 }} offset={6} />
+                            <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
+                            <YAxis domain={[0, (max: number) => (max < 5 ? 5 : Math.ceil(max * 1.15))]} tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} width={34} />
+                            <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8, fontVariantNumeric: 'tabular-nums' }} />
+                            <Bar dataKey="count" fill="#C6333D" radius={[4, 4, 0, 0]} maxBarSize={30} name={t("Data thành công")}>
+                              <LabelList dataKey="count" position="top" style={{ fill: 'var(--color-text)', fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }} offset={6} />
                             </Bar>
                           </BarChart>
                         </ResponsiveContainer>
@@ -6886,9 +6859,9 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
                       <h4 style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--color-text)' }}>{t('Tỷ lệ Trạng thái Data')}</h4>
                       {(() => {
                         const statusChartData = [
-                          { name: t('Thành công'), value: statsConsultantData.summary.successful, color: '#a31422' },
+                          { name: t('Thành công'), value: statsConsultantData.summary.successful, color: '#C6333D' },
                           { name: t('Nhắc lại'), value: statsConsultantData.summary.reminder, color: '#f59e0b' },
-                          { name: t('Lỗi'), value: statsConsultantData.summary.error, color: '#ef4444' }
+                          { name: t('Lỗi'), value: statsConsultantData.summary.error, color: '#334155' }
                         ].filter(item => item.value > 0);
 
                         return statsConsultantData.summary.total > 0 && statusChartData.length > 0 ? (
@@ -6909,7 +6882,7 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
                                       <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
                                   </Pie>
-                                  <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8 }} />
+                                  <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8, fontVariantNumeric: 'tabular-nums' }} />
                                 </PieChart>
                               </ResponsiveContainer>
                             </div>
@@ -6917,7 +6890,7 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
                               {statusChartData.map((item, idx) => (
                                 <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: item.color }} />
-                                  <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
+                                  <span style={{ fontWeight: 600, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                                     {item.name}: <strong style={{ fontSize: '0.8125rem' }}>{item.value}</strong> ({Math.round(item.value / statsConsultantData.summary.total * 100)}%)
                                   </span>
                                 </div>
@@ -6940,12 +6913,12 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={statsConsultantData.rounds} layout="vertical" margin={{ left: -10, right: 10, top: 0, bottom: 0 }}>
                               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border-light)" />
-                              <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                              <YAxis dataKey="round_name" type="category" width={90} tick={{ fontSize: 9, fontWeight: 600 }} axisLine={false} tickLine={false} />
-                              <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8 }} />
-                              <Bar dataKey="successful_count" stackId="a" fill="#a31422" radius={[0, 0, 0, 0]} barSize={12} name={t("Thành công")} />
+                              <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
+                              <YAxis dataKey="round_name" type="category" width={92} tick={{ fontSize: 11, fontWeight: 600, fill: 'var(--color-text)' }} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8, fontVariantNumeric: 'tabular-nums' }} />
+                              <Bar dataKey="successful_count" stackId="a" fill="#C6333D" radius={[0, 0, 0, 0]} barSize={12} name={t("Thành công")} />
                               <Bar dataKey="reminder_count" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} barSize={12} name={t("Nhắc lại")} />
-                              <Bar dataKey="error_count" stackId="a" fill="#ef4444" radius={[0, 4, 4, 0]} barSize={12} name={t("Lỗi")} />
+                              <Bar dataKey="error_count" stackId="a" fill="#334155" radius={[0, 4, 4, 0]} barSize={12} name={t("Lỗi")} />
                             </BarChart>
                           </ResponsiveContainer>
                         </div>

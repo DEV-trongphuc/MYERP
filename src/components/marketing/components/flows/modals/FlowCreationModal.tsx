@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Sparkles, ArrowRight, Gift, Zap, Info, Cake, Tag, Users, RefreshCw, Send, PartyPopper, Ghost, Crown, UserPlus, Snowflake, Check, List, FileInput, Layers, ListPlus, ShoppingCart, Plug, FileSpreadsheet, BellRing, Calendar, MessageSquare, UserMinus, Ticket, Bot, ClipboardList, Clock } from 'lucide-react';
+import { ArrowRight, Gift, Zap, Info, Cake, Tag, Users, RefreshCw, Send, PartyPopper, Ghost, Crown, UserPlus, Snowflake, Check, List, FileInput, Layers, ListPlus, ShoppingCart, Plug, FileSpreadsheet, BellRing, Calendar, MessageSquare, UserMinus, Ticket, Bot, ClipboardList, Clock } from 'lucide-react';
 import Modal from '../../common/Modal';
 import Button from '../../common/Button';
 import Input from '../../common/Input';
@@ -27,8 +27,8 @@ const FLOW_TEMPLATES = [
     badge: 'MYERP SLA',
     appIconKey: 'flow_custom_event',
     icon: RefreshCw,
-    theme: 'indigo',
-    gradient: 'linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%)',
+    theme: 'slate',
+    gradient: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)',
     steps: [
       {
         id: 't1',
@@ -101,8 +101,8 @@ const FLOW_TEMPLATES = [
         iconName: 'briefcase',
         config: {
           actionType: 'notify_owner',
-          title: '🔥 Lead ưu tiên điều phối lại',
-          message: 'Lead chưa được liên hệ sau 2h đã chuyển sang bạn chăm sóc ngay!'
+          title: 'Lead ưu tiên điều phối lại',
+          message: 'Lead chưa được liên hệ sau 2h đã chuyển sang bạn chăm sóc ngay'
         }
       }
     ]
@@ -139,7 +139,7 @@ const FLOW_TEMPLATES = [
         branches: [
           {
             id: 'br_hot',
-            name: '🔥 Lead Nóng (Hot)',
+            name: 'Lead Nóng (Hot)',
             nextStepId: 'crm_hot',
             stepId: 'crm_hot',
             conditionGroup: {
@@ -152,7 +152,7 @@ const FLOW_TEMPLATES = [
           },
           {
             id: 'br_warm',
-            name: '🌤️ Lead Ấm (Warm)',
+            name: 'Lead Ấm (Warm)',
             nextStepId: 'zns_warm',
             stepId: 'zns_warm',
             conditionGroup: {
@@ -169,7 +169,7 @@ const FLOW_TEMPLATES = [
           branches: [
             {
               id: 'br_hot',
-              name: '🔥 Lead Nóng (Hot)',
+              name: 'Lead Nóng (Hot)',
               nextStepId: 'crm_hot',
               stepId: 'crm_hot',
               conditionGroup: {
@@ -182,7 +182,7 @@ const FLOW_TEMPLATES = [
             },
             {
               id: 'br_warm',
-              name: '🌤️ Lead Ấm (Warm)',
+              name: 'Lead Ấm (Warm)',
               nextStepId: 'zns_warm',
               stepId: 'zns_warm',
               conditionGroup: {
@@ -227,7 +227,7 @@ const FLOW_TEMPLATES = [
         label: 'Gửi chuỗi Email nuôi dưỡng',
         iconName: 'mail',
         config: {
-          subject: 'Cẩm nang định hướng lộ trình & kinh nghiệm thực tế dành cho bạn 📚'
+          subject: 'Cẩm nang định hướng lộ trình & kinh nghiệm thực tế dành cho bạn'
         }
       }
     ]
@@ -263,7 +263,7 @@ const FLOW_TEMPLATES = [
         iconName: 'message-square',
         config: {
           template_id: 'after_hours_hold_zns',
-          subject: 'Cảm ơn anh/chị đã đăng ký, Tư vấn viên sẽ liên hệ ngay đầu ca sáng!'
+          subject: 'Cảm ơn anh/chị đã đăng ký, Tư vấn viên sẽ liên hệ ngay đầu ca sáng'
         },
         nextStepId: 'w1'
       },
@@ -320,7 +320,7 @@ const FLOW_TEMPLATES = [
         iconName: 'message-square',
         config: {
           template_id: 'deposit_confirmed_zns',
-          subject: 'Xác nhận biên lai đặt cọc thành công tại hệ thống MYERP!'
+          subject: 'Xác nhận biên lai đặt cọc thành công tại hệ thống MYERP'
         },
         nextStepId: 'mail1'
       },
@@ -330,7 +330,7 @@ const FLOW_TEMPLATES = [
         label: 'Email hướng dẫn thủ tục nhập học',
         iconName: 'mail',
         config: {
-          subject: '🎉 Chào mừng tân học viên! Hướng dẫn thủ tục nhập học & lộ trình đào tạo'
+          subject: 'Chào mừng tân học viên - Hướng dẫn thủ tục nhập học & lộ trình đào tạo'
         },
         nextStepId: 'crm1'
       },
@@ -359,7 +359,7 @@ const FLOW_TEMPLATES = [
     gradient: 'linear-gradient(135deg, #f43f5e 0%, #be123c 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Khi có Lead từ AI', iconName: 'zap', config: { type: 'ai_capture', targetId: '' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Email Chào Mừng', iconName: 'mail', config: { subject: 'Tài liệu bạn yêu cầu từ AI của chúng tôi! 🚀' } }
+      { id: 'a1', type: 'action', label: 'Email Chào Mừng', iconName: 'mail', config: { subject: 'Tài liệu bạn yêu cầu từ hệ thống MYERP' } }
     ]
   },
   {
@@ -374,7 +374,7 @@ const FLOW_TEMPLATES = [
     gradient: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Khi vào Phân khúc', iconName: 'zap', config: { type: 'segment', targetSubtype: 'segment', targetId: '' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Email Chăm sóc Phân khúc', iconName: 'mail', config: { subject: 'Chào mừng bạn đến với nhóm đặc quyền! ✨' } }
+      { id: 'a1', type: 'action', label: 'Email Chăm sóc Phân khúc', iconName: 'mail', config: { subject: 'Chào mừng bạn đến với nhóm đặc quyền' } }
     ]
   },
   {
@@ -385,11 +385,11 @@ const FLOW_TEMPLATES = [
     tags: ['omnichannel'],
     appIconKey: 'flow_list',
     icon: ListPlus,
-    theme: 'indigo',
-    gradient: 'linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)',
+    theme: 'slate',
+    gradient: 'linear-gradient(135deg, #334155 0%, #475569 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Khi vào Danh sách', iconName: 'zap', config: { type: 'segment', targetSubtype: 'list', targetId: '' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Email Chào mừng', iconName: 'mail', config: { subject: 'Cảm ơn bạn đã tham gia cộng đồng! 👋' } }
+      { id: 'a1', type: 'action', label: 'Email Chào mừng', iconName: 'mail', config: { subject: 'Cảm ơn bạn đã tham gia cộng đồng' } }
     ]
   },
   {
@@ -400,11 +400,11 @@ const FLOW_TEMPLATES = [
     tags: ['academic_finance', 'omnichannel'],
     appIconKey: 'flow_purchase',
     icon: ShoppingCart,
-    theme: 'pink',
-    gradient: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)',
+    theme: 'rose',
+    gradient: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Khi Mua hàng', iconName: 'zap', config: { type: 'purchase', targetId: '' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Email Cảm ơn', iconName: 'mail', config: { subject: 'Xác nhận đơn hàng thành công! 🛍️' } }
+      { id: 'a1', type: 'action', label: 'Email Cảm ơn', iconName: 'mail', config: { subject: 'Xác nhận đơn hàng thành công' } }
     ]
   },
   {
@@ -415,11 +415,11 @@ const FLOW_TEMPLATES = [
     tags: ['omnichannel'],
     appIconKey: 'flow_custom_event',
     icon: Zap,
-    theme: 'violet',
-    gradient: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+    theme: 'slate',
+    gradient: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Khi có Custom Event', iconName: 'zap', config: { type: 'custom_event', targetId: '' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Email Phản hồi', iconName: 'mail', config: { subject: 'Chúng tôi nhận được tương tác của bạn! 🚀' } }
+      { id: 'a1', type: 'action', label: 'Email Phản hồi', iconName: 'mail', config: { subject: 'Chúng tôi đã nhận được tương tác của bạn' } }
     ]
   },
   {
@@ -434,7 +434,7 @@ const FLOW_TEMPLATES = [
     gradient: 'linear-gradient(135deg, #10b981 0%, #0d9488 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Khi được gắn nhãn', iconName: 'zap', config: { type: 'tag', targetId: '' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Email Phản hồi Tag', iconName: 'mail', config: { subject: 'Bạn vừa nhận được nhãn mới! Xem ngay ưu đãi' } }
+      { id: 'a1', type: 'action', label: 'Email Phản hồi Tag', iconName: 'mail', config: { subject: 'Bạn vừa nhận được ưu đãi mới' } }
     ]
   },
   {
@@ -449,7 +449,7 @@ const FLOW_TEMPLATES = [
     gradient: 'linear-gradient(135deg, #BD1D2D 0%, #991522 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Khi khách gửi Form', iconName: 'zap', config: { type: 'form', targetId: '' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Email Phản hồi Form', iconName: 'mail', config: { subject: 'Cảm ơn bạn đã quan tâm! Tài liệu của bạn đây' } }
+      { id: 'a1', type: 'action', label: 'Email Phản hồi Form', iconName: 'mail', config: { subject: 'Cảm ơn bạn đã quan tâm - Tài liệu của bạn đây' } }
     ]
   },
   {
@@ -464,7 +464,7 @@ const FLOW_TEMPLATES = [
     gradient: 'linear-gradient(135deg, #fbbf24 0%, #BD1D2D 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Khi nộp Khảo sát', iconName: 'zap', config: { type: 'survey', targetId: '' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Email Cảm ơn', iconName: 'mail', config: { subject: 'Cảm ơn ý kiến đóng góp của bạn! 🙏' } }
+      { id: 'a1', type: 'action', label: 'Email Cảm ơn', iconName: 'mail', config: { subject: 'Cảm ơn ý kiến đóng góp của bạn' } }
     ]
   },
   {
@@ -479,7 +479,7 @@ const FLOW_TEMPLATES = [
     gradient: 'linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Khi Quan tâm Zalo', iconName: 'zap', config: { type: 'zalo_follow', targetId: '' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'zalo_zns', label: 'Tin nhắn Chào mừng Zalo', iconName: 'message-square', config: { subject: 'Chào mừng bạn đã quan tâm OA của chúng tôi! 💐' } }
+      { id: 'a1', type: 'zalo_zns', label: 'Tin nhắn Chào mừng Zalo', iconName: 'message-square', config: { subject: 'Chào mừng bạn đã quan tâm OA của chúng tôi' } }
     ]
   },
   {
@@ -490,12 +490,12 @@ const FLOW_TEMPLATES = [
     tags: ['omnichannel'],
     appIconKey: 'flow_mail',
     icon: Send,
-    theme: 'violet',
-    gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+    theme: 'slate',
+    gradient: 'linear-gradient(135deg, #334155 0%, #1e293b 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Khi gửi Campaign', iconName: 'zap', config: { type: 'campaign', targetId: '' }, nextStepId: 'w1' },
       { id: 'w1', type: 'wait', label: 'Chờ 2 ngày', iconName: 'clock', config: { duration: 2, unit: 'days' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Email Follow-up', iconName: 'mail', config: { subject: 'Bạn có nhận được ưu đãi hôm trước không? 😉' } }
+      { id: 'a1', type: 'action', label: 'Email Follow-up', iconName: 'mail', config: { subject: 'Bạn có nhận được ưu đãi hôm trước không?' } }
     ]
   },
   {
@@ -507,10 +507,10 @@ const FLOW_TEMPLATES = [
     appIconKey: 'flow_zalo',
     icon: MessageSquare,
     theme: 'blue',
-    gradient: 'linear-gradient(135deg, #3b82f6 0%, #4f46e5 100%)',
+    gradient: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Khi có từ khóa: GIÁ, TƯ VẤN', iconName: 'zap', config: { type: 'inbound_message', targetId: 'TƯ VẤN' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Gửi Báo giá / Tài liệu', iconName: 'mail', config: { subject: 'Tài liệu bạn yêu cầu đã sẵn sàng! 📄' } }
+      { id: 'a1', type: 'action', label: 'Gửi Báo giá / Tài liệu', iconName: 'mail', config: { subject: 'Tài liệu bạn yêu cầu đã sẵn sàng' } }
     ]
   },
   {
@@ -526,7 +526,7 @@ const FLOW_TEMPLATES = [
     steps: [
       { id: 't1', type: 'trigger', label: 'Khi Mua hàng thành công', iconName: 'zap', config: { type: 'purchase', targetId: '' }, nextStepId: 'w1' },
       { id: 'w1', type: 'wait', label: 'Chờ 3 ngày', iconName: 'clock', config: { duration: 3, unit: 'days' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Email Ưu đãi Bán thêm', iconName: 'mail', config: { subject: 'Dành riêng cho bạn: Ưu đãi 15% cho sản phẩm đi kèm! 🎁' } }
+      { id: 'a1', type: 'action', label: 'Email Ưu đãi Bán thêm', iconName: 'mail', config: { subject: 'Dành riêng cho bạn: Ưu đãi 15% cho sản phẩm đi kèm' } }
     ]
   },
   {
@@ -538,12 +538,12 @@ const FLOW_TEMPLATES = [
     appIconKey: 'flow_purchase',
     icon: ShoppingCart,
     theme: 'rose',
-    gradient: 'linear-gradient(135deg, #f43f5e 0%, #db2777 100%)',
+    gradient: 'linear-gradient(135deg, #BD1D2D 0%, #991522 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Khi thêm vào giỏ hàng', iconName: 'zap', config: { type: 'custom_event', targetId: 'add_to_cart' }, nextStepId: 'w1' },
       { id: 'w1', type: 'wait', label: 'Chờ 2 giờ', iconName: 'clock', config: { duration: 2, unit: 'hours' }, nextStepId: 'c1' },
       { id: 'c1', type: 'condition', label: 'Đã mua hàng chưa?', iconName: 'filter', config: { conditionType: 'clicked', waitDuration: 2, waitUnit: 'hours' }, yesStepId: '', noStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Email Nhắc giỏ hàng', iconName: 'mail', config: { subject: 'Bạn để quên món đồ yêu thích trong giỏ hàng! 🛒' } }
+      { id: 'a1', type: 'action', label: 'Email Nhắc giỏ hàng', iconName: 'mail', config: { subject: 'Bạn còn sản phẩm chưa hoàn tất trong giỏ hàng' } }
     ]
   },
   {
@@ -555,7 +555,7 @@ const FLOW_TEMPLATES = [
     appIconKey: 'flow_inactivity',
     icon: Snowflake,
     theme: 'blue',
-    gradient: 'linear-gradient(135deg, #3b82f6 0%, #4f46e5 100%)',
+    gradient: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
     steps: [
       {
         id: 't1',
@@ -569,7 +569,7 @@ const FLOW_TEMPLATES = [
         },
         nextStepId: 'a1'
       },
-      { id: 'a1', type: 'action', label: 'Email Lôi kéo', iconName: 'mail', config: { subject: 'Chúng tôi nhớ bạn! Giảm ngay 20% khi quay lại' } }
+      { id: 'a1', type: 'action', label: 'Email Lôi kéo', iconName: 'mail', config: { subject: 'Ưu đãi dành riêng cho bạn: Giảm ngay 20% khi quay lại' } }
     ]
   },
   {
@@ -580,11 +580,11 @@ const FLOW_TEMPLATES = [
     tags: ['omnichannel'],
     appIconKey: 'flow_birthday',
     icon: Cake,
-    theme: 'pink',
-    gradient: 'linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)',
+    theme: 'rose',
+    gradient: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Đúng ngày sinh nhật', iconName: 'zap', config: { type: 'date', dateField: 'dateOfBirth' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Email Tặng Quà', iconName: 'mail', config: { subject: 'Chúc mừng sinh nhật! Nhận quà ngay 🎂' } }
+      { id: 'a1', type: 'action', label: 'Email Tặng Quà', iconName: 'mail', config: { subject: 'Chúc mừng sinh nhật - Quà tặng dành cho bạn' } }
     ]
   },
   {
@@ -595,11 +595,11 @@ const FLOW_TEMPLATES = [
     tags: ['omnichannel'],
     appIconKey: 'flow_custom_event',
     icon: PartyPopper,
-    theme: 'violet',
-    gradient: 'linear-gradient(135deg, #8b5cf6 0%, #d946ef 100%)',
+    theme: 'slate',
+    gradient: 'linear-gradient(135deg, #334155 0%, #0f172a 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Kỷ niệm ngày gia nhập', iconName: 'zap', config: { type: 'date', dateField: 'joinedAt' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Email Tri ân', iconName: 'mail', config: { subject: 'Cảm ơn bạn đã đồng hành cùng chúng tôi suốt 1 năm qua! ❤️' } }
+      { id: 'a1', type: 'action', label: 'Email Tri ân', iconName: 'mail', config: { subject: 'Cảm ơn bạn đã đồng hành cùng chúng tôi suốt 1 năm qua' } }
     ]
   },
   {
@@ -629,7 +629,7 @@ const FLOW_TEMPLATES = [
     gradient: 'linear-gradient(135deg, #10b981 0%, #16a34a 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Khi gia nhập List Sheets', iconName: 'zap', config: { type: 'segment', targetSubtype: 'list', targetId: '' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Email Chào mừng', iconName: 'mail', config: { subject: 'Chào mừng bạn!' } }
+      { id: 'a1', type: 'action', label: 'Email Chào mừng', iconName: 'mail', config: { subject: 'Chào mừng bạn' } }
     ]
   },
   {
@@ -640,8 +640,8 @@ const FLOW_TEMPLATES = [
     tags: ['pipeline_sla', 'academic_finance'],
     appIconKey: 'flow_custom_event',
     icon: BellRing,
-    theme: 'violet',
-    gradient: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+    theme: 'rose',
+    gradient: 'linear-gradient(135deg, #BD1D2D 0%, #991522 100%)',
     steps: [
       {
         id: 't1',
@@ -665,7 +665,7 @@ const FLOW_TEMPLATES = [
         type: 'action',
         label: 'Email Nhắc lịch',
         iconName: 'mail',
-        config: { subject: '⏰ Nhắc nhở: Lịch hẹn của bạn là ngày mai!' }
+        config: { subject: 'Nhắc nhở: Lịch hẹn của bạn là ngày mai' }
       }
     ]
   },
@@ -681,10 +681,10 @@ const FLOW_TEMPLATES = [
     gradient: 'linear-gradient(135deg, #BD1D2D 0%, #991522 100%)',
     steps: [
       { id: 't1', type: 'trigger', label: 'Khi nhận Voucher', iconName: 'zap', config: { type: 'voucher', targetId: '' }, nextStepId: 'a1' },
-      { id: 'a1', type: 'action', label: 'Email tặng mã', iconName: 'mail', config: { subject: 'Mã giảm giá của bạn đây! 🎟️' }, nextStepId: 'w1' },
+      { id: 'a1', type: 'action', label: 'Email tặng mã', iconName: 'mail', config: { subject: 'Mã giảm giá của bạn' }, nextStepId: 'w1' },
       { id: 'w1', type: 'wait', label: 'Chờ hết hạn', iconName: 'clock', config: { duration: 3, unit: 'days' }, nextStepId: 'c1' },
       { id: 'c1', type: 'condition', label: 'Đã mua chưa?', iconName: 'filter', config: { conditionType: 'clicked', waitDuration: 3, waitUnit: 'days' }, yesStepId: '', noStepId: 'a2' },
-      { id: 'a2', type: 'action', label: 'Email Nhắc nhở', iconName: 'mail', config: { subject: 'Mã sắp hết hạn, dùng ngay kẻo lỡ! ⏰' } }
+      { id: 'a2', type: 'action', label: 'Email Nhắc nhở', iconName: 'mail', config: { subject: 'Mã giảm giá của bạn sắp hết hạn' } }
     ]
   },
   {
@@ -701,7 +701,7 @@ const FLOW_TEMPLATES = [
       { id: 't1', type: 'trigger', label: 'Khi khách Dùng mã', iconName: 'zap', config: { type: 'voucher_redeem', targetId: '' }, nextStepId: 'a1' },
       { id: 'a1', type: 'zalo_zns', label: 'Zalo ZNS Cảm ơn', iconName: 'message-square', config: { template_id: 'thanks_zns' }, nextStepId: 'w1' },
       { id: 'w1', type: 'wait', label: 'Chờ 2 ngày', iconName: 'clock', config: { duration: 2, unit: 'days' }, nextStepId: 'a2' },
-      { id: 'a2', type: 'action', label: 'Gửi Email Mời Đánh giá', iconName: 'mail', config: { subject: 'Bạn đánh giá trải nghiệm mua sắm hôm trước thế nào? ⭐' } }
+      { id: 'a2', type: 'action', label: 'Gửi Email Mời Đánh giá', iconName: 'mail', config: { subject: 'Mời bạn đánh giá trải nghiệm mua sắm' } }
     ]
   }
 ];
@@ -808,36 +808,34 @@ const FlowCreationModal: React.FC<FlowCreationModalProps> = ({
   });
 
   const getBorderClass = (theme: string, isSelected: boolean) => {
-    if (!isSelected) return 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-lg hover:-translate-y-1';
+    if (!isSelected) return 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50';
 
     switch (theme) {
-      case 'cyan': return 'border-cyan-400 ring-4 ring-cyan-50 shadow-xl shadow-cyan-100 bg-cyan-50/30';
-      case 'violet': return 'border-blue-400 ring-4 ring-blue-50 shadow-xl shadow-blue-100 bg-blue-50/30';
-      case 'indigo': return 'border-indigo-400 ring-4 ring-indigo-50 shadow-xl shadow-indigo-100 bg-indigo-50/30';
-      case 'blue': return 'border-blue-400 ring-4 ring-blue-50 shadow-xl shadow-blue-100 bg-blue-50/30';
-      case 'rose': return 'border-rose-400 ring-4 ring-rose-50 shadow-xl shadow-rose-100 bg-rose-50/30';
-      case 'pink': return 'border-pink-400 ring-4 ring-pink-50 shadow-xl shadow-pink-100 bg-pink-50/30';
-      case 'amber': case 'orange': return 'border-[var(--color-primary)] ring-4 ring-red-50 shadow-xl shadow-red-100 bg-red-50/30';
-      case 'emerald': return 'border-emerald-400 ring-4 ring-emerald-50 shadow-xl shadow-emerald-100 bg-emerald-50/30';
-      case 'red': return 'border-rose-400 ring-4 ring-rose-50 shadow-xl shadow-rose-100 bg-rose-50/30';
-      default: return 'border-slate-400 ring-4 ring-slate-100';
+      case 'cyan': return 'border-cyan-500 ring-2 ring-cyan-500/15 shadow-sm bg-cyan-50/30';
+      case 'slate': return 'border-slate-800 ring-2 ring-slate-900/10 shadow-sm bg-slate-50/70';
+      case 'blue': return 'border-blue-500 ring-2 ring-blue-500/15 shadow-sm bg-blue-50/30';
+      case 'rose':
+      case 'red':
+      case 'amber':
+      case 'orange': return 'border-[#BD1D2D] ring-2 ring-[#BD1D2D]/15 shadow-sm bg-red-50/20';
+      case 'emerald': return 'border-emerald-500 ring-2 ring-emerald-500/15 shadow-sm bg-emerald-50/30';
+      default: return 'border-slate-800 ring-2 ring-slate-900/10 shadow-sm bg-slate-50/70';
     }
   };
 
   const getCheckColor = (theme: string) => {
     switch (theme) {
-      case 'cyan': return 'text-cyan-500';
-      case 'violet': return 'text-blue-500';
-      case 'indigo': return 'text-indigo-500';
-      case 'blue': return 'text-blue-500';
-      case 'rose': return 'text-rose-500';
-      case 'pink': return 'text-pink-500';
-      case 'amber': case 'orange': return 'text-[var(--color-primary)]';
-      case 'emerald': return 'text-emerald-500';
-      case 'red': return 'text-rose-500';
-      default: return 'text-slate-500';
+      case 'cyan': return 'text-cyan-600';
+      case 'slate': return 'text-slate-900';
+      case 'blue': return 'text-blue-600';
+      case 'rose':
+      case 'red':
+      case 'amber':
+      case 'orange': return 'text-[#BD1D2D]';
+      case 'emerald': return 'text-emerald-600';
+      default: return 'text-slate-700';
     }
-  }
+  };
 
   return (
     <Modal
@@ -869,9 +867,9 @@ const FlowCreationModal: React.FC<FlowCreationModalProps> = ({
                   key={cat.id}
                   type="button"
                   onClick={() => setSelectedCategory(cat.id)}
-                  className={`px-3.5 py-2 rounded-xl text-[11px] font-black transition-all cursor-pointer ${
+                  className={`px-3.5 py-2 rounded-xl text-[11px] font-bold transition-colors cursor-pointer ${
                     isActive
-                      ? 'bg-[var(--color-primary)] text-white shadow-md shadow-red-500/20'
+                      ? 'bg-[var(--color-primary)] text-white shadow-sm'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
@@ -887,28 +885,28 @@ const FlowCreationModal: React.FC<FlowCreationModalProps> = ({
                 <div
                   key={tpl.id}
                   onClick={() => setSelectedTemplate(tpl)}
-                  className={`p-6 rounded-xl border-2 cursor-pointer transition-all duration-500 flex flex-col gap-4 relative overflow-hidden group ${getBorderClass(tpl.theme, isSelected)}`}
+                  className={`p-6 rounded-2xl border cursor-pointer transition-[border-color,background-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] flex flex-col gap-4 relative overflow-hidden group ${getBorderClass(tpl.theme, isSelected)}`}
                 >
-                  <div className={`absolute top-4 right-4 bg-white rounded-full p-1.5 shadow-md border border-slate-50 transition-all duration-300 ${isSelected ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}`}>
-                    <Check className={`w-3.5 h-3.5 ${getCheckColor(tpl.theme)} stroke-[4px]`} />
+                  <div className={`absolute top-4 right-4 bg-white rounded-full p-1.5 shadow-sm border border-slate-200 transition-[transform,opacity] duration-200 ${isSelected ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}`}>
+                    <Check className={`w-3.5 h-3.5 ${getCheckColor(tpl.theme)} stroke-[3]`} />
                   </div>
 
                   <div className="flex items-center justify-between gap-2">
-                    <div 
-                      className={`w-14 h-14 rounded-[14px] flex items-center justify-center shrink-0 transition-all duration-500 ${isSelected ? 'scale-110 rotate-3 drop-shadow-xl' : 'group-hover:scale-110 group-hover:rotate-3'}`}
+                    <div
+                      className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-200"
                     >
-                      <AppIcon name={tpl.appIconKey} size={52} className="rounded-[14px] shadow-md" />
+                      <AppIcon name={tpl.appIconKey} size={52} className="rounded-xl shadow-sm" />
                     </div>
                     {tpl.badge && (
-                      <span className="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-black uppercase tracking-wider">
+                      <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold uppercase tracking-wider">
                         {tpl.badge}
                       </span>
                     )}
                   </div>
                   <div>
-                    <h4 className="font-black text-slate-800 text-[15px] mb-1.5 tracking-tight group-hover:text-[var(--color-primary)] transition-colors">{tpl.name}</h4>
+                    <h4 className="font-bold text-slate-900 text-[15px] mb-1.5 group-hover:text-[var(--color-primary)] transition-colors">{tpl.name}</h4>
                     <p className="text-[11px] text-slate-500 font-medium leading-relaxed">{tpl.desc}</p>
-                    <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
+                    <div className="mt-3 flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 tabular-nums">
                       <Zap className="w-3 h-3 text-amber-500" />
                       <span>{tpl.steps?.length || 0} bước tự động</span>
                     </div>
@@ -921,9 +919,9 @@ const FlowCreationModal: React.FC<FlowCreationModalProps> = ({
       )}
 
       {step === 2 && (
-        <div className="space-y-6 animate-in slide-in-from-right-8 duration-500 p-1">
+        <div className="space-y-6 animate-in slide-in-from-right-8 duration-200 p-1">
           <Input label="Tên kịch bản nội bộ" placeholder="VD: Chào mừng Khách hàng từ Form Landing Page" value={flowName} onChange={(e) => setFlowName(e.target.value)} autoFocus />
-          <div className="p-5 bg-blue-50 border border-blue-100 rounded-[14px] flex gap-3 shadow-inner">
+          <div className="p-5 bg-blue-50 border border-blue-200/80 rounded-xl flex gap-3">
             <Info className="w-4 h-4 text-blue-600 mt-1" />
             <p className="text-[11px] text-blue-700 font-semibold leading-relaxed">Hệ thống sẽ tự động cấu hình các bước cơ bản theo logic của kịch bản "{selectedTemplate?.name}". Bạn có thể chỉnh sửa chi tiết sau khi tạo.</p>
           </div>

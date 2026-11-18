@@ -55,10 +55,10 @@ const AIChatReport: React.FC<AIReportProps> = ({ dateRange }) => {
     };
 
     const stats = [
-        { label: 'TỔNG HỘI THOẠI', value: summary?.total_conversations || 0, icon: MessageSquare, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-        { label: 'AI TRẢ LỜI', value: summary?.ai_replies || 0, icon: Bot, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        { label: 'CHUYỂN HUMAN', value: summary?.human_handovers || 0, icon: User, color: 'text-[var(--color-primary)]', bg: 'bg-amber-50' },
-        { label: 'TỰ ĐỘNG HÓA', value: summary ? ((summary.ai_replies / (summary.ai_replies + summary.human_handovers + 1)) * 100).toFixed(1) + '%' : '0%', icon: Zap, color: 'text-rose-600', bg: 'bg-rose-50' },
+        { label: 'Tổng hội thoại', value: summary?.total_conversations || 0, icon: MessageSquare, color: 'text-[#BD1D2D]', bg: 'bg-[#fef2f2]' },
+        { label: 'AI trả lời', value: summary?.ai_replies || 0, icon: Bot, color: 'text-[#BD1D2D]', bg: 'bg-[#fef2f2]' },
+        { label: 'Chuyển nhân sự', value: summary?.human_handovers || 0, icon: User, color: 'text-slate-700', bg: 'bg-slate-100' },
+        { label: 'Tỷ lệ tự động hóa', value: summary ? ((summary.ai_replies / (summary.ai_replies + summary.human_handovers + 1)) * 100).toFixed(1) + '%' : '0%', icon: Zap, color: 'text-slate-700', bg: 'bg-slate-100' },
     ];
 
     const generateDateRange = (start: string, end: string) => {
@@ -108,63 +108,54 @@ const AIChatReport: React.FC<AIReportProps> = ({ dateRange }) => {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {stats.map((stat, idx) => (
-                    <div key={idx} className="bg-white rounded-[14px] lg:rounded-[18px] p-4 lg:p-6 border border-slate-100 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 group hover:shadow-md transition-all">
-                        <div className="space-y-1 w-full">
-                            <h4 className="text-[9px] lg:text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</h4>
+                    <div key={idx} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                        <div className="space-y-1.5 w-full">
+                            <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{stat.label}</h4>
                             {loading ? (
-                                <div className="h-8 w-24 bg-slate-200 rounded animate-pulse mt-1"></div>
+                                <div className="h-7 w-24 bg-slate-200 rounded animate-pulse mt-1"></div>
                             ) : (
-                                <div className="text-xl lg:text-3xl font-black text-slate-800 tracking-tight">{stat.value.toLocaleString()}</div>
+                                <div className={`text-2xl font-bold tracking-tight tabular-nums ${idx === 1 ? 'text-[#BD1D2D]' : 'text-slate-900'}`}>{typeof stat.value === 'number' ? stat.value.toLocaleString('vi-VN') : stat.value}</div>
                             )}
                         </div>
-                        <div className={`w-10 h-10 lg:w-14 lg:h-14 ${stat.bg} rounded-xl lg:rounded-[14px] flex items-center justify-center shrink-0`}>
-                            <stat.icon className={`w-5 h-5 lg:w-6 lg:h-6 ${stat.color}`} />
+                        <div className={`w-9 h-9 ${stat.bg} rounded-lg flex items-center justify-center shrink-0`}>
+                            <stat.icon className={`w-4 h-4 ${stat.color}`} />
                         </div>
                     </div>
                 ))}
             </div>
 
             {/* Main Chart */}
-            <div className="bg-white p-5 lg:p-8 rounded-[14px] lg:rounded-[18px] border border-slate-100 shadow-sm">
-                <div className="flex items-center justify-between mb-8">
+            <div className="bg-white p-5 lg:p-6 rounded-2xl border border-slate-200 shadow-xs">
+                <div className="flex items-center justify-between mb-6">
                     <div>
-                        <h3 className="text-sm lg:text-base font-black text-slate-800 uppercase tracking-tight">Xu hướng Chat AI</h3>
-                        <p className="text-[9px] lg:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Tin nhắn theo Thời gian</p>
+                        <h3 className="text-base font-bold text-slate-900">Xu hướng tương tác AI Chat</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">Tin nhắn theo ngày trong kỳ</p>
                     </div>
-                    <Bot className="w-5 h-5 lg:w-6 lg:h-6 text-emerald-500 opacity-20" />
+                    <Bot className="w-5 h-5 text-[#BD1D2D]" />
                 </div>
-                <div className="h-[250px] lg:h-[350px]">
+                <div className="h-[250px] lg:h-[320px]">
                     {loading ? (
                         <div className="w-full h-full flex items-end gap-3 p-4 animate-pulse">
                             {[...Array(14)].map((_, i) => (
-                                <div key={i} className="flex-1 bg-slate-100 rounded-t-lg" style={{ height: `${Math.random() * 60 + 20}%` }}></div>
+                                <div key={i} className="flex-1 bg-slate-100 rounded-t-lg" style={{ height: `${((i * 17) % 60) + 20}%` }}></div>
                             ))}
                         </div>
                     ) : (
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={dataWithTotal} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                <defs>
-                                    <linearGradient id="colorYellowAi" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.9} />
-                                        <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                                    </linearGradient>
-                                    <linearGradient id="colorRedAi" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="0%" stopColor="#ec4899" stopOpacity={0.9} />
-                                        <stop offset="100%" stopColor="#ec4899" stopOpacity={0.3} />
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} dy={10} tickFormatter={(val) => val ? val.split('-').slice(1).reverse().join('/') : ''} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} />
+                            <BarChart data={dataWithTotal} margin={{ top: 10, right: 10, left: -16, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} dy={8} tickFormatter={(val) => val ? val.split('-').slice(1).reverse().join('/') : ''} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} />
                                 <Tooltip 
-                                    contentStyle={{ border: 'none', borderRadius: '24px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', padding: '16px' }}
-                                    formatter={(val: number) => [`${val} tin nhắn`, 'Tổng tương tác']}
+                                    cursor={{ fill: 'rgba(15, 23, 42, 0.04)' }}
+                                    contentStyle={{ border: '1px solid #e2e8f0', borderRadius: '10px', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)', padding: '10px 14px', fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}
+                                    formatter={(val: number) => [`${val.toLocaleString('vi-VN')} tin nhắn`, 'Tổng tương tác']}
                                 />
-                                <Bar dataKey="total" radius={[6, 6, 0, 0]} maxBarSize={40}>
+                                <Bar dataKey="total" radius={[4, 4, 0, 0]} maxBarSize={36}>
                                     {dataWithTotal.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.total === maxTotal && maxTotal > 0 ? 'url(#colorRedAi)' : 'url(#colorYellowAi)'} />
+                                        <Cell key={`cell-${index}`} fill={entry.total === maxTotal && maxTotal > 0 ? '#C6333D' : '#334155'} />
                                     ))}
                                 </Bar>
                             </BarChart>

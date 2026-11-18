@@ -12,6 +12,7 @@ import { numberToVietnameseText } from '../../utils/numberToText';
 import { useAuth } from '../../contexts/AuthContext';
 import { compressToWebP } from '../../utils/imageCompress';
 import { VietnameseDateInput } from './VietnameseDateInput';
+import { ensureArray, extractArray } from '../../utils/safeArray';
 
 interface Props {
   isOpen: boolean;
@@ -130,11 +131,11 @@ export const CreateExpenseModal: React.FC<Props> = ({ isOpen, onClose, initialEn
       }
 
       api.get('/contacts').then(res => {
-        setContacts(res.data.data?.items || res.data.data || []);
+        setContacts(extractArray(res?.data));
       }).catch(() => {});
 
       api.get('/suppliers').then(res => {
-        setSuppliers(res.data.data?.items || res.data.data || []);
+        setSuppliers(extractArray(res?.data));
       }).catch(() => {});
     }
   }, [isOpen, initialEntity]);
@@ -246,15 +247,14 @@ export const CreateExpenseModal: React.FC<Props> = ({ isOpen, onClose, initialEn
           <div className="modal-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <div style={{
-                width: 44, height: 44, borderRadius: '12px',
-                background: 'linear-gradient(135deg, #a31422, #BD1D2D)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 8px 16px rgba(163, 20, 34,0.25)'
+                width: 44, height: 44, borderRadius: '10px',
+                background: '#BD1D2D',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}>
-                <DollarSign size={22} color="white" />
+                <DollarSign size={20} color="white" strokeWidth={1.75} />
               </div>
               <div>
-                <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--color-text)' }}>Nhập Chi phí Mới</h3>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)' }}>Nhập Chi phí Mới</h3>
                 <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Ghi nhận và theo dõi chi tiêu của nhóm</p>
               </div>
             </div>
@@ -297,7 +297,7 @@ export const CreateExpenseModal: React.FC<Props> = ({ isOpen, onClose, initialEn
                         <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>₫</span>
                         <input
                           type="text"
-                          style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', fontSize: '0.9375rem', fontWeight: 700, color: 'var(--color-text)' }}
+                          style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', fontSize: '0.9375rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--color-text)' }}
                           placeholder="0"
                           value={formData.amount ? Number(formData.amount).toLocaleString('en-US') : ''}
                           onChange={e => {
@@ -309,7 +309,7 @@ export const CreateExpenseModal: React.FC<Props> = ({ isOpen, onClose, initialEn
                       {formData.amount && Number(formData.amount) > 0 && (
                         <motion.div 
                           initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
-                          style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 700, marginTop: '6px', fontStyle: 'italic' }}
+                          style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 600, marginTop: '8px' }}
                         >
                           Bằng chữ: {numberToVietnameseText(formData.amount)}
                         </motion.div>

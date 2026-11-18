@@ -10,7 +10,7 @@ import QRCodeStyling, {
     CornerDotType,
     Options
 } from '../../shims/qrCodeStyling';
-import { X, Check, ArrowRight, Download, Image as ImageIcon, Smile, Square, Circle, Heart, Sparkles, Smartphone, Info, Trash2, Edit3, ChevronDown, ChevronUp, Upload, FolderOpen, Loader2, Palette, Box, Grid, Type, Sliders, Layout, Layers, Wand2 } from 'lucide-react';
+import { X, Check, ArrowRight, Download, Image as ImageIcon, Smile, Square, Circle, Heart, Smartphone, Info, Trash2, Edit3, ChevronDown, ChevronUp, Upload, FolderOpen, Loader2, Palette, Box, Grid, Type, Sliders, Layout, Layers, Wand2 } from 'lucide-react';
 import Button from '../common/Button';
 import Input from '../common/Input';
 import FileLibraryModal from '../common/FileLibraryModal';
@@ -293,19 +293,19 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
     const PATTERNS: { id: DotType; icon: any }[] = [
         { id: 'square', icon: Square }, { id: 'dots', icon: Circle },
         { id: 'rounded', icon: Smile }, { id: 'extra-rounded', icon: Layers },
-        { id: 'classy', icon: Sparkles }, { id: 'classy-rounded', icon: Heart }
+        { id: 'classy', icon: Wand2 }, { id: 'classy-rounded', icon: Heart }
     ];
 
     const EYE_FRAMES: CornerSquareType[] = ['square', 'dot', 'extra-rounded'];
     const EYE_BALLS: CornerDotType[] = ['square', 'dot'];
 
     const ColorBlock = ({ label, color, isGradient, gradient, onColorChange, onGradientToggle, onGradientChange }: any) => (
-        <div className="space-y-4 p-5 bg-slate-50/50 rounded-[18px] border border-slate-100">
+        <div className="space-y-4 p-5 bg-slate-50/50 rounded-2xl border border-slate-200/80">
             <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-slate-800 uppercase tracking-tighter">{label}</span>
+                <span className="text-xs font-bold text-slate-800 uppercase">{label}</span>
                 {onGradientToggle && (
                     <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Gradient</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Gradient</span>
                         <button 
                             onClick={(e) => { e.preventDefault(); onGradientToggle(!isGradient); }}
                             className={`w-9 h-5 rounded-full p-0.5 transition-colors ${isGradient ? 'bg-emerald-500' : 'bg-slate-200'}`}
@@ -323,7 +323,7 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                     </div>
                     <input 
                         type="text" value={color.toUpperCase()} onChange={e => onColorChange(e.target.value)}
-                        className="flex-1 h-10 px-4 bg-white border border-slate-200 rounded-xl text-xs font-mono font-black text-slate-600 focus:outline-none focus:border-indigo-500"
+                        className="flex-1 h-10 px-4 bg-white border border-slate-200 rounded-xl text-xs font-mono font-semibold text-slate-700 focus:outline-none focus:border-[#BD1D2D]"
                     />
                 </div>
             ) : (
@@ -452,17 +452,17 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                                             </div>
                                             <div className="flex-1" />
                                             <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-3">
-                                                <span className="text-[10px] font-black text-slate-800 uppercase tracking-tighter">Màu khung góc</span>
+                                                <span className="text-[10px] font-bold text-slate-800 uppercase">Màu khung góc</span>
                                                 <div className="flex items-center gap-2">
                                                     <div className="w-8 h-8 rounded-full border border-white shadow-sm overflow-hidden shrink-0 relative flex items-center justify-center">
                                                         <input type="color" value={config.eyeFrameColor} onChange={e => setConfig(prev => ({ ...prev, eyeFrameColor: e.target.value }))} className="absolute w-[200%] h-[200%] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-pointer border-0 p-0" />
                                                     </div>
-                                                    <input type="text" value={config.eyeFrameColor.toUpperCase()} onChange={e => setConfig(prev => ({ ...prev, eyeFrameColor: e.target.value }))} className="flex-1 h-8 px-3 bg-white border border-slate-200 rounded-xl text-[10px] font-mono font-black text-slate-600 focus:outline-none focus:border-indigo-500" />
+                                                    <input type="text" value={config.eyeFrameColor.toUpperCase()} onChange={e => setConfig(prev => ({ ...prev, eyeFrameColor: e.target.value }))} className="flex-1 h-8 px-3 bg-white border border-slate-200 rounded-xl text-[10px] font-mono font-semibold text-slate-700 focus:outline-none focus:border-[#BD1D2D]" />
                                                 </div>
                                             </div>
                                         </div>
                                         <div className="flex flex-col space-y-4 h-full">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase">Chấm bên trong góc</span>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase">Chấm bên trong góc</span>
                                             <div className="grid grid-cols-3 gap-2">
                                                 {EYE_BALLS.map(b => (
                                                     <button 
@@ -475,12 +475,12 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                                             </div>
                                             <div className="flex-1" />
                                             <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-3">
-                                                <span className="text-[10px] font-black text-slate-800 uppercase tracking-tighter">Màu chấm góc</span>
+                                                <span className="text-[10px] font-bold text-slate-800 uppercase">Màu chấm góc</span>
                                                 <div className="flex items-center gap-2">
                                                     <div className="w-8 h-8 rounded-full border border-white shadow-sm overflow-hidden shrink-0 relative flex items-center justify-center">
                                                         <input type="color" value={config.eyeBallColor} onChange={e => setConfig(prev => ({ ...prev, eyeBallColor: e.target.value }))} className="absolute w-[200%] h-[200%] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-pointer border-0 p-0" />
                                                     </div>
-                                                    <input type="text" value={config.eyeBallColor.toUpperCase()} onChange={e => setConfig(prev => ({ ...prev, eyeBallColor: e.target.value }))} className="flex-1 h-8 px-3 bg-white border border-slate-200 rounded-xl text-[10px] font-mono font-black text-slate-600 focus:outline-none focus:border-indigo-500" />
+                                                    <input type="text" value={config.eyeBallColor.toUpperCase()} onChange={e => setConfig(prev => ({ ...prev, eyeBallColor: e.target.value }))} className="flex-1 h-8 px-3 bg-white border border-slate-200 rounded-xl text-[10px] font-mono font-semibold text-slate-700 focus:outline-none focus:border-[#BD1D2D]" />
                                                 </div>
                                             </div>
                                         </div>
@@ -490,11 +490,11 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                         </div>
 
                         {/* Section: Logo & Nền */}
-                        <div className="bg-white rounded-[18px] border border-slate-100 overflow-hidden shadow-sm">
+                        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
                             <div onClick={() => setExpandedSections(prev => prev.includes('logo') ? prev.filter(s => s !== 'logo') : [...prev, 'logo'])} className="p-5 flex items-center justify-between cursor-pointer">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center"><ImageIcon className="w-5 h-5" /></div>
-                                    <span className="text-xs font-black text-slate-800 uppercase tracking-tight">3. Thêm biểu tượng & Nền</span>
+                                    <div className="w-9 h-9 rounded-xl bg-rose-50 text-[#BD1D2D] flex items-center justify-center"><ImageIcon className="w-5 h-5" /></div>
+                                    <span className="text-xs font-bold text-slate-800 uppercase">3. Thêm biểu tượng & Nền</span>
                                 </div>
                                 {expandedSections.includes('logo') ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                             </div>
@@ -506,8 +506,8 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                                             onClick={() => setConfig(prev => ({ ...prev, useDirectLink: !prev.useDirectLink }))}
                                         >
                                             <div>
-                                                <span className="text-xs font-black text-slate-800 uppercase block">Hướng trực tiếp tới Web gốc</span>
-                                                <span className="text-[9px] text-slate-500 font-medium block">Hiển thị tên web của bạn khi quét (Không thống kê click)</span>
+                                                <span className="text-xs font-bold text-slate-800 uppercase block">Hướng trực tiếp tới Web gốc</span>
+                                                <span className="text-[10px] text-slate-500 font-medium block">Hiển thị tên web của bạn khi quét (Không thống kê click)</span>
                                             </div>
                                             <button 
                                                 onClick={(e) => { e.preventDefault(); setConfig(prev => ({ ...prev, useDirectLink: !prev.useDirectLink })); }}
@@ -521,27 +521,27 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                                         <div className="flex-1"><Input label="URL Logo" value={config.logo || ''} onChange={e => setConfig(prev => ({ ...prev, logo: e.target.value || undefined }))} /></div>
                                         <div className="flex items-end gap-2 pb-1">
                                             <button onClick={() => document.getElementById('logo-up')?.click()} className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors"><Upload className="w-4 h-4" /></button>
-                                            <button onClick={() => setIsLibraryOpen(true)} className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center hover:bg-indigo-200 transition-colors"><FolderOpen className="w-4 h-4" /></button>
+                                            <button onClick={() => setIsLibraryOpen(true)} className="w-10 h-10 rounded-xl bg-rose-50 text-[#BD1D2D] flex items-center justify-center hover:bg-rose-100 transition-colors"><FolderOpen className="w-4 h-4" /></button>
                                             <input type="file" id="logo-up" hidden accept="image/*" onChange={handleFileUpload} />
                                         </div>
                                     </div>
                                     {config.logo && (
-                                        <div className="space-y-4 p-5 bg-slate-50/50 rounded-[18px] border border-slate-100">
-                                            <span className="text-xs font-black text-slate-800 uppercase tracking-tighter block mb-2">Tùy chỉnh logo</span>
+                                        <div className="space-y-4 p-5 bg-slate-50/50 rounded-2xl border border-slate-200">
+                                            <span className="text-xs font-bold text-slate-800 uppercase block mb-2">Tùy chỉnh logo</span>
                                             
                                             {/* Slider: Logo Size */}
                                             <div className="space-y-1.5">
                                                 <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase">
                                                     <span>Kích thước logo</span>
-                                                    <span className="font-mono text-slate-600">{(config.logoSize * 100).toFixed(0)}%</span>
+                                                    <span className="font-mono text-slate-700 tabular-nums">{(config.logoSize * 100).toFixed(0)}%</span>
                                                 </div>
                                                 <input 
                                                     type="range" min="10" max="50" value={config.logoSize * 100}
                                                     onChange={e => setConfig(prev => ({ ...prev, logoSize: parseInt(e.target.value) / 100 }))}
                                                     style={{ 
-                                                        background: `linear-gradient(to right, #4f46e5 0%, #4f46e5 ${((config.logoSize * 100 - 10) / 40) * 100}%, #e2e8f0 ${((config.logoSize * 100 - 10) / 40) * 100}%, #e2e8f0 100%)` 
+                                                        background: `linear-gradient(to right, #BD1D2D 0%, #BD1D2D ${((config.logoSize * 100 - 10) / 40) * 100}%, #e2e8f0 ${((config.logoSize * 100 - 10) / 40) * 100}%, #e2e8f0 100%)` 
                                                     }}
-                                                    className="w-full h-2 rounded-full appearance-none cursor-pointer outline-none touch-none hover:shadow-sm [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:bg-indigo-600 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md hover:[&::-webkit-slider-thumb]:scale-110 active:[&::-webkit-slider-thumb]:scale-110 [&::-webkit-slider-thumb]:transition-transform"
+                                                    className="w-full h-2 rounded-full appearance-none cursor-pointer outline-none touch-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:bg-[#BD1D2D] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-sm"
                                                 />
                                             </div>
 
@@ -549,15 +549,15 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                                             <div className="space-y-1.5">
                                                 <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase">
                                                     <span>Khoảng lề logo</span>
-                                                    <span className="font-mono text-slate-600">{config.logoMargin}px</span>
+                                                    <span className="font-mono text-slate-700 tabular-nums">{config.logoMargin}px</span>
                                                 </div>
                                                 <input 
                                                     type="range" min="0" max="20" value={config.logoMargin}
                                                     onChange={e => setConfig(prev => ({ ...prev, logoMargin: parseInt(e.target.value) }))}
                                                     style={{ 
-                                                        background: `linear-gradient(to right, #4f46e5 0%, #4f46e5 ${(config.logoMargin / 20) * 100}%, #e2e8f0 ${(config.logoMargin / 20) * 100}%, #e2e8f0 100%)` 
+                                                        background: `linear-gradient(to right, #BD1D2D 0%, #BD1D2D ${(config.logoMargin / 20) * 100}%, #e2e8f0 ${(config.logoMargin / 20) * 100}%, #e2e8f0 100%)` 
                                                     }}
-                                                    className="w-full h-2 rounded-full appearance-none cursor-pointer outline-none touch-none hover:shadow-sm [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:bg-indigo-600 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md hover:[&::-webkit-slider-thumb]:scale-110 active:[&::-webkit-slider-thumb]:scale-110 [&::-webkit-slider-thumb]:transition-transform"
+                                                    className="w-full h-2 rounded-full appearance-none cursor-pointer outline-none touch-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:bg-[#BD1D2D] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-sm"
                                                 />
                                             </div>
 
@@ -565,15 +565,15 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                                             <div className="space-y-1.5">
                                                 <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase">
                                                     <span>Bo góc logo</span>
-                                                    <span className="font-mono text-slate-600">{config.logoRadius || 0}%</span>
+                                                    <span className="font-mono text-slate-700 tabular-nums">{config.logoRadius || 0}%</span>
                                                 </div>
                                                 <input 
                                                     type="range" min="0" max="50" value={config.logoRadius || 0}
                                                     onChange={e => setConfig(prev => ({ ...prev, logoRadius: parseInt(e.target.value) }))}
                                                     style={{ 
-                                                        background: `linear-gradient(to right, #4f46e5 0%, #4f46e5 ${((config.logoRadius || 0) / 50) * 100}%, #e2e8f0 ${((config.logoRadius || 0) / 50) * 100}%, #e2e8f0 100%)` 
+                                                        background: `linear-gradient(to right, #BD1D2D 0%, #BD1D2D ${((config.logoRadius || 0) / 50) * 100}%, #e2e8f0 ${((config.logoRadius || 0) / 50) * 100}%, #e2e8f0 100%)` 
                                                     }}
-                                                    className="w-full h-2 rounded-full appearance-none cursor-pointer outline-none touch-none hover:shadow-sm [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:bg-indigo-600 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md hover:[&::-webkit-slider-thumb]:scale-110 active:[&::-webkit-slider-thumb]:scale-110 [&::-webkit-slider-thumb]:transition-transform"
+                                                    className="w-full h-2 rounded-full appearance-none cursor-pointer outline-none touch-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:bg-[#BD1D2D] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-sm"
                                                 />
                                             </div>
                                         </div>
@@ -620,46 +620,42 @@ const QRDesignerModal: React.FC<any> = ({ isOpen, onClose, onSave, initialConfig
                     {/* Dot Grid Background */}
                     <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, #000 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
                     
-                    {/* Accent glowing orbs */}
-                    <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-[var(--color-primary)]/10 rounded-full blur-[100px] -mr-48 -mt-48 transition-all" />
-                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-[var(--color-primary)]/10 rounded-full blur-[100px] -ml-40 -mb-40 transition-all" />
-
                     <div className="relative z-10 w-full max-w-[360px] flex flex-col items-center">
                         <div className="mb-6 flex gap-3">
-                            <div className="px-5 py-2 bg-white text-emerald-600 border border-emerald-100 text-[10px] font-black rounded-full uppercase tracking-widest shadow-sm shadow-emerald-100/50 flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Preview
+                            <div className="px-5 py-2 bg-white text-emerald-700 border border-emerald-200 text-[10px] font-bold rounded-full uppercase tracking-wider shadow-xs flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Preview
                             </div>
                             <button 
                                 onClick={handleDownload} 
-                                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-black rounded-full uppercase tracking-widest transition-all flex items-center gap-2 shadow-lg shadow-slate-200"
+                                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold rounded-full uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm"
                             >
                                 <Download className="w-3.5 h-3.5" /> Tải về
                             </button>
                         </div>
                         
                         <div className="mb-8 text-center px-2">
-                            <h5 className="font-black text-slate-800 text-2xl tracking-tight leading-loose truncate max-w-[360px]">{linkName}</h5>
+                            <h5 className="font-bold text-slate-900 text-2xl leading-snug truncate max-w-[360px]">{linkName}</h5>
                         </div>
 
                         {/* Clean QR Canvas Frame */}
                         <div 
-                            className="bg-white p-4 rounded-[18px] shadow-xl shadow-slate-200/40 border border-slate-100 transition-all duration-700 w-full"
+                            className="bg-white p-4 rounded-2xl shadow-lg border border-slate-200 w-full"
                         >
                             <div 
-                                className="relative flex flex-col items-center justify-center transition-all duration-700 overflow-hidden w-full aspect-square max-w-[320px] mx-auto"
+                                className="relative flex flex-col items-center justify-center overflow-hidden w-full aspect-square max-w-[320px] mx-auto"
                                 style={{
                                     border: config.frameId !== 'none' ? `16px solid ${config.frameColor}` : 'none',
-                                    borderRadius: '18px',
+                                    borderRadius: '16px',
                                     padding: config.frameId !== 'none' ? '28px 24px 56px' : '0',
                                     background: config.frameId !== 'none' ? config.frameColor : 'transparent',
                                 }}
                             >
-                                <div className="bg-white p-2 rounded-2xl relative z-10 w-full h-full flex flex-col items-center justify-center shadow-inner">
+                                <div className="bg-white p-2 rounded-xl relative z-10 w-full h-full flex flex-col items-center justify-center shadow-inner">
                                     <div ref={qrRef} className="w-full h-full [&>svg]:w-full [&>svg]:h-full [&>canvas]:w-full [&>canvas]:h-full" />
                                 </div>
                                 {config.frameId !== 'none' && (
                                     <div className="absolute bottom-5 left-0 right-0 text-center z-10 px-4">
-                                        <span className="text-[11px] font-black text-white tracking-[0.4em] uppercase drop-shadow-md truncate block w-full">{config.frameText || 'SCAN ME!'}</span>
+                                        <span className="text-[11px] font-bold text-white tracking-[0.3em] uppercase truncate block w-full">{config.frameText || 'QUÉT MÃ QR'}</span>
                                     </div>
                                 )}
                             </div>

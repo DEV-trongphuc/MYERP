@@ -1820,8 +1820,8 @@ IDEAS`;
         {/* MODAL HEADER */}
         <div
           style={{
-            padding: '14px 20px',
-            background: 'linear-gradient(135deg, #BD1D2D 0%, #8C111E 100%)',
+            padding: '16px 20px',
+            background: '#BD1D2D',
             color: '#ffffff',
             display: 'flex',
             alignItems: 'center',
@@ -2246,13 +2246,13 @@ IDEAS`;
                     alignItems: 'center',
                     gap: '6px',
                     fontSize: '0.76rem',
-                    fontWeight: 800,
+                    fontWeight: 700,
                     color: '#0f172a',
                     textTransform: 'uppercase',
                     letterSpacing: '0.03em'
                   }}
                 >
-                  <Sparkles size={14} color="#BD1D2D" />
+                  <Sparkles size={14} strokeWidth={1.75} color="#BD1D2D" />
                   2. Thông tin Giảng viên &amp; Zoom:
                 </span>
                 <span style={{ fontSize: '0.68rem', color: '#16a34a', fontWeight: 700 }}>
@@ -3302,12 +3302,11 @@ IDEAS`;
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
-                    padding: '9px 20px',
-                    fontWeight: 800,
+                    padding: '8px 20px',
+                    fontWeight: 600,
                     fontSize: '0.84rem',
-                    background: 'linear-gradient(135deg, #BD1D2D 0%, #8C111E 100%)',
-                    borderRadius: '10px',
-                    boxShadow: '0 4px 12px rgba(189, 29, 45, 0.25)'
+                    background: '#BD1D2D',
+                    borderRadius: '8px',
                   }}
                 >
                   Tiếp tục: Chọn Người Nhận <ChevronRight size={16} />
@@ -3353,13 +3352,13 @@ IDEAS`;
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
-                    padding: '9px 20px',
-                    fontWeight: 800,
+                    padding: '8px 20px',
+                    fontWeight: 600,
                     fontSize: '0.84rem',
-                    background: finalRecipientEmails.length === 0 ? '#94a3b8' : 'linear-gradient(135deg, #BD1D2D 0%, #8C111E 100%)',
+                    background: finalRecipientEmails.length === 0 ? '#94a3b8' : '#BD1D2D',
                     cursor: finalRecipientEmails.length === 0 ? 'not-allowed' : 'pointer',
-                    borderRadius: '10px',
-                    boxShadow: finalRecipientEmails.length === 0 ? 'none' : '0 4px 12px rgba(189, 29, 45, 0.25)'
+                    borderRadius: '8px',
+                    fontVariantNumeric: 'tabular-nums',
                   }}
                 >
                   Tiếp tục: Soạn &amp; Xem Trước ({finalRecipientEmails.length}) <ChevronRight size={16} />
@@ -3376,14 +3375,14 @@ IDEAS`;
                   className="btn outline"
                   onClick={() => {
                     navigator.clipboard.writeText(zaloText).then(() => {
-                      notify('Đã sao chép nội dung tin nhắn Zalo vào Clipboard!', 'success');
+                      notify('Đã sao chép nội dung tin nhắn Zalo vào Clipboard.', 'success');
                     });
                   }}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     fontSize: '0.78rem',
                     color: '#334155',
                     borderColor: '#cbd5e1'
@@ -3394,7 +3393,7 @@ IDEAS`;
                 </button>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <button
                   type="button"
                   className="btn outline"
@@ -3404,7 +3403,7 @@ IDEAS`;
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     fontSize: '0.82rem',
                     color: '#334155'
                   }}
@@ -3416,7 +3415,7 @@ IDEAS`;
                   className="btn outline"
                   onClick={handleSafeClose}
                   disabled={isSending}
-                  style={{ fontWeight: 700, fontSize: '0.8rem' }}
+                  style={{ fontWeight: 600, fontSize: '0.8rem' }}
                 >
                   Đóng
                 </button>
@@ -3429,13 +3428,13 @@ IDEAS`;
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
-                    padding: '9px 20px',
-                    fontWeight: 800,
+                    padding: '8px 20px',
+                    fontWeight: 600,
                     fontSize: '0.84rem',
-                    background: finalRecipientEmails.length === 0 ? '#94a3b8' : 'linear-gradient(135deg, #BD1D2D 0%, #8C111E 100%)',
+                    background: finalRecipientEmails.length === 0 ? '#94a3b8' : '#BD1D2D',
                     cursor: finalRecipientEmails.length === 0 || isSending ? 'not-allowed' : 'pointer',
-                    borderRadius: '10px',
-                    boxShadow: '0 4px 12px rgba(189, 29, 45, 0.25)'
+                    borderRadius: '8px',
+                    fontVariantNumeric: 'tabular-nums',
                   }}
                 >
                   {isSending ? (

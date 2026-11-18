@@ -1,8 +1,9 @@
 import subprocess
+import shutil
 import sys
 import os
 
-PHP_BIN = r"C:\Users\LENOVO\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe"
+PHP_BIN = os.environ.get("PHP_BIN") or shutil.which("php") or "php"
 
 files = [
     r"backend\automation\tracking_processor.php",

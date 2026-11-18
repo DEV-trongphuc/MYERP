@@ -662,13 +662,13 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                 onClick={handleClose}
             />
             <div
-                style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-                className={`w-full max-w-5xl rounded-xl flex flex-col max-h-[92vh] border transform transition-all duration-500 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-97 opacity-0 translate-y-4'} ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80 shadow-[0_24px_60px_rgba(0,0,0,0.6)] text-slate-100' : 'bg-white border-slate-200/80 shadow-[0_24px_50px_rgba(0,0,0,0.1),0_1px_3px_rgba(0,0,0,0.02)] text-slate-800'}`}
+                style={{ transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)' }}
+                className={`w-full max-w-5xl rounded-xl flex flex-col max-h-[92vh] border transform transition-[transform,opacity] duration-200 ${animateIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-97 opacity-0 translate-y-4'} ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80 shadow-[0_24px_60px_rgba(0,0,0,0.6)] text-slate-100' : 'bg-white border-slate-200/80 shadow-[0_24px_50px_rgba(0,0,0,0.1),0_1px_3px_rgba(0,0,0,0.02)] text-slate-800'}`}
             >
                 {/* Header */}
-                <div className={`px-6 py-5 border-b flex items-center justify-between rounded-t-[18px] ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80' : 'bg-slate-50/50 border-slate-100'}`}>
+                <div className={`px-6 py-5 border-b flex items-center justify-between rounded-t-xl ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80' : 'bg-slate-50/50 border-slate-200'}`}>
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-[14px] bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shadow-xs border border-blue-200">
                             {stepType === 'zalo_zns' ? (
                                 <img
                                     src={`${EXTERNAL_ASSET_BASE}/imgs/zalolog.png`}
@@ -683,7 +683,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                         </div>
                         <div>
                             <h3 className="text-base font-bold text-slate-800">{title}</h3>
-                            <p className="text-xs text-slate-500 font-medium">
+                            <p className="text-xs text-slate-500 font-medium tabular-nums">
                                 Tổng số: {pagination.total} {['clicks', 'zns_clicked'].includes(activeTab) ? 'lượt click' : 'Khách hàng'}
                                 {selectedIds.size > 0 && ` • ${selectedIds.size} đã chọn`}
                             </p>
@@ -694,27 +694,27 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                 
                                 if (type === 'condition') {
                                     return (
-                                        <div className="w-full mt-4 p-4 bg-slate-50/80 rounded-[14px] border border-slate-100">
+                                        <div className="w-full mt-4 p-4 bg-slate-50/80 rounded-xl border border-slate-200">
                                             <div className="flex items-center gap-2 mb-3">
                                                 <GitMerge className="w-4 h-4 text-slate-400" />
                                                 <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Thống kê điều kiện</h4>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-3">
+                                            <div className="grid grid-cols-2 gap-3 tabular-nums">
                                                 <div 
                                                     onClick={() => onBranchClick?.(activeBranchFilter === 'matched' ? null : 'matched')}
-                                                    className={`p-3 rounded-[14px] border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === 'matched' ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20' : 'bg-white border-emerald-100 hover:border-emerald-300'}`}
+                                                    className={`p-3 rounded-xl border shadow-xs flex flex-col items-center justify-center relative overflow-hidden group transition-colors cursor-pointer ${activeBranchFilter === 'matched' ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20' : 'bg-white border-emerald-200 hover:border-emerald-300'}`}
                                                 >
                                                     <div className={`absolute inset-0 bg-emerald-50 transition-opacity ${activeBranchFilter === 'matched' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
                                                     <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider mb-1 relative z-10 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Đúng điều kiện</span>
-                                                    <span className="text-2xl font-black text-emerald-700 relative z-10">{s.matched || 0}</span>
+                                                    <span className="text-2xl font-bold text-emerald-700 relative z-10">{s.matched || 0}</span>
                                                 </div>
                                                 <div 
                                                     onClick={() => onBranchClick?.(activeBranchFilter === 'timed_out' ? null : 'timed_out')}
-                                                    className={`p-3 rounded-[14px] border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === 'timed_out' ? 'bg-rose-50 border-rose-500 ring-2 ring-rose-500/20' : 'bg-white border-rose-100 hover:border-rose-300'}`}
+                                                    className={`p-3 rounded-xl border shadow-xs flex flex-col items-center justify-center relative overflow-hidden group transition-colors cursor-pointer ${activeBranchFilter === 'timed_out' ? 'bg-rose-50 border-rose-500 ring-2 ring-rose-500/20' : 'bg-white border-rose-200 hover:border-rose-300'}`}
                                                 >
                                                     <div className={`absolute inset-0 bg-rose-50 transition-opacity ${activeBranchFilter === 'timed_out' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
                                                     <span className="text-[11px] font-bold text-rose-600 uppercase tracking-wider mb-1 relative z-10 flex items-center gap-1.5"><X className="w-3.5 h-3.5" /> Sai điều kiện</span>
-                                                    <span className="text-2xl font-black text-rose-700 relative z-10">{s.timed_out || 0}</span>
+                                                    <span className="text-2xl font-bold text-rose-700 relative z-10">{s.timed_out || 0}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -723,27 +723,27 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                 
                                 if (type === 'split_test') {
                                     return (
-                                        <div className="w-full mt-4 p-4 bg-slate-50/80 rounded-[14px] border border-slate-100">
+                                        <div className="w-full mt-4 p-4 bg-slate-50/80 rounded-xl border border-slate-200">
                                             <div className="flex items-center gap-2 mb-3">
                                                 <Beaker className="w-4 h-4 text-slate-400" />
                                                 <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Thống kê A/B Test</h4>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-3">
+                                            <div className="grid grid-cols-2 gap-3 tabular-nums">
                                                 <div 
                                                     onClick={() => onBranchClick?.(activeBranchFilter === 'path_a' ? null : 'path_a')}
-                                                    className={`p-3 rounded-[14px] border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === 'path_a' ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20' : 'bg-white border-blue-100 hover:border-blue-300'}`}
+                                                    className={`p-3 rounded-xl border shadow-xs flex flex-col items-center justify-center relative overflow-hidden group transition-colors cursor-pointer ${activeBranchFilter === 'path_a' ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20' : 'bg-white border-blue-200 hover:border-blue-300'}`}
                                                 >
                                                     <div className={`absolute inset-0 bg-blue-50 transition-opacity ${activeBranchFilter === 'path_a' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
-                                                    <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider mb-1 relative z-10 flex items-center gap-1.5"><span className="w-4 h-4 rounded bg-blue-100 text-blue-700 flex items-center justify-center font-black">A</span> Nhánh A</span>
-                                                    <span className="text-2xl font-black text-blue-700 relative z-10">{s.path_a || 0}</span>
+                                                    <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider mb-1 relative z-10 flex items-center gap-1.5"><span className="w-4 h-4 rounded bg-blue-100 text-blue-700 flex items-center justify-center font-bold">A</span> Nhánh A</span>
+                                                    <span className="text-2xl font-bold text-blue-700 relative z-10">{s.path_a || 0}</span>
                                                 </div>
                                                 <div 
                                                     onClick={() => onBranchClick?.(activeBranchFilter === 'path_b' ? null : 'path_b')}
-                                                    className={`p-3 rounded-[14px] border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === 'path_b' ? 'bg-fuchsia-50 border-fuchsia-500 ring-2 ring-fuchsia-500/20' : 'bg-white border-fuchsia-100 hover:border-fuchsia-300'}`}
+                                                    className={`p-3 rounded-xl border shadow-xs flex flex-col items-center justify-center relative overflow-hidden group transition-colors cursor-pointer ${activeBranchFilter === 'path_b' ? 'bg-slate-100 border-slate-600 ring-2 ring-slate-500/20' : 'bg-white border-slate-200 hover:border-slate-300'}`}
                                                 >
-                                                    <div className={`absolute inset-0 bg-fuchsia-50 transition-opacity ${activeBranchFilter === 'path_b' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
-                                                    <span className="text-[11px] font-bold text-fuchsia-600 uppercase tracking-wider mb-1 relative z-10 flex items-center gap-1.5"><span className="w-4 h-4 rounded bg-fuchsia-100 text-fuchsia-700 flex items-center justify-center font-black">B</span> Nhánh B</span>
-                                                    <span className="text-2xl font-black text-fuchsia-700 relative z-10">{s.path_b || 0}</span>
+                                                    <div className={`absolute inset-0 bg-slate-100 transition-opacity ${activeBranchFilter === 'path_b' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
+                                                    <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1 relative z-10 flex items-center gap-1.5"><span className="w-4 h-4 rounded bg-slate-200 text-slate-800 flex items-center justify-center font-bold">B</span> Nhánh B</span>
+                                                    <span className="text-2xl font-bold text-slate-800 relative z-10">{s.path_b || 0}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -754,30 +754,30 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                     const branches = stepConfig?.branches || [];
                                     const bStats = s.branchStats || {};
                                     return (
-                                        <div className="w-full mt-4 p-4 bg-slate-50/80 rounded-[14px] border border-slate-100">
+                                        <div className="w-full mt-4 p-4 bg-slate-50/80 rounded-xl border border-slate-200">
                                             <div className="flex items-center gap-2 mb-3">
                                                 <GitMerge className="w-4 h-4 text-slate-400" />
                                                 <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Thống kê rẽ nhánh</h4>
                                             </div>
-                                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 tabular-nums">
                                                 {branches.map((b: any, idx: number) => (
                                                     <div 
                                                         key={b.id} 
                                                         onClick={() => onBranchClick?.(activeBranchFilter === b.label ? null : b.label)}
-                                                        className={`p-3 rounded-[14px] border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === b.label ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-500/20' : 'bg-white border-indigo-100 hover:border-indigo-300'}`}
+                                                        className={`p-3 rounded-xl border shadow-xs flex flex-col items-center justify-center relative overflow-hidden group transition-colors cursor-pointer ${activeBranchFilter === b.label ? 'bg-rose-50 border-[#BD1D2D] ring-2 ring-rose-500/15' : 'bg-white border-slate-200 hover:border-slate-300'}`}
                                                     >
-                                                        <div className={`absolute inset-0 bg-indigo-50/50 transition-opacity ${activeBranchFilter === b.label ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
-                                                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 relative z-10 text-center truncate w-full px-2" title={b.label || "Nhánh "}>{b.label || "Nhánh "}</span>
-                                                        <span className={`text-xl font-black relative z-10 ${activeBranchFilter === b.label ? 'text-indigo-700' : 'text-indigo-600'}`}>{bStats[b.label] || 0}</span>
+                                                        <div className={`absolute inset-0 bg-rose-50/50 transition-opacity ${activeBranchFilter === b.label ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
+                                                        <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1 relative z-10 text-center truncate w-full px-2" title={b.label || "Nhánh "}>{b.label || "Nhánh "}</span>
+                                                        <span className={`text-xl font-bold relative z-10 ${activeBranchFilter === b.label ? 'text-[#BD1D2D]' : 'text-slate-800'}`}>{bStats[b.label] || 0}</span>
                                                     </div>
                                                 ))}
                                                 <div 
                                                     onClick={() => onBranchClick?.(activeBranchFilter === 'fallback' ? null : 'fallback')}
-                                                    className={`p-3 rounded-[14px] border shadow-sm flex flex-col items-center justify-center relative overflow-hidden group transition-all cursor-pointer ${activeBranchFilter === 'fallback' ? 'bg-slate-100 border-slate-500 ring-2 ring-slate-500/20' : 'bg-white border-slate-200 hover:border-slate-400'}`}
+                                                    className={`p-3 rounded-xl border shadow-xs flex flex-col items-center justify-center relative overflow-hidden group transition-colors cursor-pointer ${activeBranchFilter === 'fallback' ? 'bg-slate-100 border-slate-500 ring-2 ring-slate-500/20' : 'bg-white border-slate-200 hover:border-slate-400'}`}
                                                 >
                                                     <div className={`absolute inset-0 bg-slate-50 transition-opacity ${activeBranchFilter === 'fallback' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
                                                     <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 relative z-10">Mặc định</span>
-                                                    <span className={`text-xl font-black relative z-10 ${activeBranchFilter === 'fallback' ? 'text-slate-900' : 'text-slate-700'}`}>{bStats['Fallback'] || bStats['fallback'] || 0}</span>
+                                                    <span className={`text-xl font-bold relative z-10 ${activeBranchFilter === 'fallback' ? 'text-slate-900' : 'text-slate-700'}`}>{bStats['Fallback'] || bStats['fallback'] || 0}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -829,7 +829,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
 
                                     setTargetAddStepId(initialTarget);
                                 }}
-                                className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-bold transition-all"
+                                className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors"
                             >
                                 <UserPlus className="w-3.5 h-3.5" />
                                 <span>Thêm User</span>
@@ -837,12 +837,12 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                         )}
                         <button
                             onClick={handleExportCSV}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-xs font-bold transition-all"
+                            className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-xs font-bold transition-colors"
                         >
                             <Download className="w-3.5 h-3.5" />
                             <span>Xuất CSV</span>
                         </button>
-                        <button onClick={onClose} className="p-2 hover:bg-white hover:shadow-md rounded-full text-slate-400 transition-all">
+                        <button onClick={onClose} className="p-2 hover:bg-white hover:shadow-md rounded-full text-slate-400 transition-colors">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
@@ -857,15 +857,15 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                             placeholder="Tìm kiếm email..."
                             value={searchTerm}
                             onChange={(e) => onSearchChange(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
+                            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors font-medium"
                         />
                     </div>
                     <div className="flex items-center gap-2">
                         {stepType === 'action' && (
                             <button
                                 onClick={() => onTabChange(activeTab === 'preview' ? 'all_touched' : 'preview')}
-                                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-bold transition-all border shadow-sm ${activeTab === 'preview'
-                                    ? 'bg-blue-600 text-white border-blue-600 shadow-blue-200'
+                                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-bold transition-colors border shadow-xs ${activeTab === 'preview'
+                                    ? 'bg-blue-600 text-white border-blue-600'
                                     : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400 hover:text-blue-600'
                                     }`}
                             >
@@ -884,43 +884,43 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                     <div className="px-6 py-3 border-b border-slate-50 flex gap-2 overflow-x-auto" style={{ minHeight: '56px' }}>
                         <button
                             onClick={() => onTabChange('all_touched')}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${activeTab === 'all_touched' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-200'}`}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${activeTab === 'all_touched' ? 'bg-rose-50 text-[#BD1D2D] border-rose-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                         >
                             Đã đi qua
                         </button>
                         <button
                             onClick={() => onTabChange('waiting')}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${activeTab === 'waiting' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-200'}`}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${activeTab === 'waiting' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                         >
                             Đang chờ gửi
                         </button>
                         <button
                             onClick={() => onTabChange('opened')}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${activeTab === 'opened' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-200'}`}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${activeTab === 'opened' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                         >
                             Đã mở mail
                         </button>
                         <button
                             onClick={() => onTabChange('failed')}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${activeTab === 'failed' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-200'}`}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${activeTab === 'failed' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                         >
                             Gửi lỗi
                         </button>
                         <button
                             onClick={() => onTabChange('unsubscribed')}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${activeTab === 'unsubscribed' ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-200'}`}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${activeTab === 'unsubscribed' ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                         >
                             Hủy đăng ký
                         </button>
                         <button
                             onClick={() => onTabChange('clicks')}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${activeTab === 'clicks' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-200'}`}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${activeTab === 'clicks' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                         >
                             Lượt Click
                         </button>
                         <button
                             onClick={() => onTabChange('report')}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${activeTab === 'report' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-200'}`}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${activeTab === 'report' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                         >
                             Báo cáo
                         </button>
@@ -929,12 +929,12 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
 
                 {stepType === 'zalo_zns' && (
                     <div className="px-6 py-3 border-b border-slate-50 flex gap-2 overflow-x-auto" style={{ minHeight: '56px' }}>
-                        <button onClick={() => onTabChange('zns_sent')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${activeTab === 'zns_sent' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-200'}`}>Gửi thành công</button>
-                        <button onClick={() => onTabChange('waiting')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${activeTab === 'waiting' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-200'}`}>Đang chờ gửi</button>
-                        <button onClick={() => onTabChange('zns_clicked')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${activeTab === 'zns_clicked' ? 'bg-cyan-50 text-cyan-600 border-cyan-200' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-200'}`}>Đã Click Link</button>
-                        <button onClick={() => onTabChange('zns_replied')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${activeTab === 'zns_replied' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-200'}`}>Đã Phản hồi</button>
-                        <button onClick={() => onTabChange('zns_failed')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${activeTab === 'zns_failed' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-200'}`}>Gửi lỗi</button>
-                        <button onClick={() => onTabChange('zns_skipped')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${activeTab === 'zns_skipped' ? 'bg-slate-50 text-slate-600 border-slate-200' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-200'}`}>Bỏ qua</button>
+                        <button onClick={() => onTabChange('zns_sent')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${activeTab === 'zns_sent' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>Gửi thành công</button>
+                        <button onClick={() => onTabChange('waiting')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${activeTab === 'waiting' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>Đang chờ gửi</button>
+                        <button onClick={() => onTabChange('zns_clicked')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${activeTab === 'zns_clicked' ? 'bg-cyan-50 text-cyan-600 border-cyan-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>Đã Click Link</button>
+                        <button onClick={() => onTabChange('zns_replied')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${activeTab === 'zns_replied' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>Đã Phản hồi</button>
+                        <button onClick={() => onTabChange('zns_failed')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${activeTab === 'zns_failed' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>Gửi lỗi</button>
+                        <button onClick={() => onTabChange('zns_skipped')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${activeTab === 'zns_skipped' ? 'bg-slate-50 text-slate-600 border-slate-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>Bỏ qua</button>
                     </div>
                 )}
 
@@ -943,15 +943,15 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                     <div className="px-6 py-3 border-b border-slate-50 flex gap-2 overflow-x-auto" style={{ minHeight: '56px' }}>
                         <button
                             onClick={() => onTabChange('all_touched')}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${activeTab === 'all_touched' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-200'}`}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${activeTab === 'all_touched' ? 'bg-rose-50 text-[#BD1D2D] border-rose-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                         >
                             Đã đi qua
                         </button>
                         <button
                             onClick={() => onTabChange('waiting')}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${activeTab === 'waiting' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-200'}`}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${activeTab === 'waiting' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                         >
-                            đang chạy
+                            Đang chạy
                         </button>
                     </div>
                 )}
@@ -994,7 +994,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                                 <Check className="absolute w-3.5 h-3.5 text-white pointer-events-none" />
                                                             </div>
                                                         </button>
-                                                        <span className="text-xs font-bold text-slate-700">Đã chọn <span className="text-orange-600 font-black text-sm">{selectedIds.size}</span> Khách hàng</span>
+                                                        <span className="text-xs font-bold text-slate-700 tabular-nums">Đã chọn <span className="text-orange-600 font-bold text-sm">{selectedIds.size}</span> Khách hàng</span>
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         {stepType !== 'inactive' && (
@@ -1002,7 +1002,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                                 <button
                                                                     onClick={handleBulkExecute}
                                                                     disabled={bulkActionLoading}
-                                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-100 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200 rounded-lg text-xs font-bold shadow-sm transition-all disabled:opacity-50"
+                                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-300 rounded-lg text-xs font-bold shadow-xs transition-colors disabled:opacity-50"
                                                                 >
                                                                     <Play className="w-3.5 h-3.5" />
                                                                     <span>{bulkActionLoading ? 'Đang gửi...' : 'Complete & Next'}</span>
@@ -1010,7 +1010,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                                 <button
                                                                     onClick={handleBulkSkip}
                                                                     disabled={bulkActionLoading}
-                                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-100 text-blue-600 hover:bg-blue-50 hover:border-blue-200 rounded-lg text-xs font-bold shadow-sm transition-all disabled:opacity-50"
+                                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-300 rounded-lg text-xs font-bold shadow-xs transition-colors disabled:opacity-50"
                                                                 >
                                                                     <SkipForward className="w-3.5 h-3.5" />
                                                                     <span>{bulkActionLoading ? 'Đang gửi...' : 'Bỏ qua & Next'}</span>
@@ -1025,7 +1025,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                                 <button
                                                                     onClick={() => setQuickActionsOpen(!quickActionsOpen)}
                                                                     disabled={bulkActionLoading}
-                                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700 rounded-lg text-xs font-bold shadow-sm transition-all disabled:opacity-50"
+                                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0F172A] text-white hover:bg-slate-800 border border-slate-700 rounded-lg text-xs font-bold shadow-xs transition-colors disabled:opacity-50"
                                                                 >
                                                                     <Tag className="w-3.5 h-3.5" />
                                                                     <span>Hành động nhanh</span>
@@ -1033,7 +1033,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                                 </button>
 
                                                                 {quickActionsOpen && (
-                                                                    <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                                    <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
                                                                         <button
                                                                             onClick={() => {
                                                                                 setQuickActionsOpen(false);
@@ -1087,7 +1087,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                         <button
                                                             onClick={handleBulkRemove}
                                                             disabled={bulkActionLoading}
-                                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-100 text-rose-600 hover:bg-rose-50 hover:border-rose-200 rounded-lg text-xs font-bold shadow-sm transition-all disabled:opacity-50"
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300 rounded-lg text-xs font-bold shadow-xs transition-colors disabled:opacity-50"
                                                         >
                                                             <Trash2 className="w-3.5 h-3.5" />
                                                             <span>{isGlobalSelected ? 'Loại bỏ TẤT CẢ' : 'Loại bỏ'}</span>
@@ -1106,7 +1106,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                             type="checkbox"
                                                             checked={selectedIds.size === participants.length && participants.length > 0}
                                                             onChange={handleSelectAll}
-                                                            className="peer w-5 h-5 cursor-pointer appearance-none rounded-md border-2 border-slate-300 transition-all checked:border-[#2563eb] checked:bg-[#2563eb] hover:border-[#2563eb]"
+                                                            className="peer w-5 h-5 cursor-pointer appearance-none rounded-md border-2 border-slate-300 transition-colors checked:border-[#2563eb] checked:bg-[#2563eb] hover:border-[#2563eb]"
                                                         />
                                                         <Check className="absolute w-3.5 h-3.5 text-white pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" />
                                                     </div>
@@ -1168,9 +1168,9 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                         <tr className="bg-orange-50/50">
                                             <td colSpan={['waiting', 'failed', 'unsubscribed', 'zns_failed', 'inactive', 'zns_skipped'].includes(activeTab) ? 5 : 4} className="px-6 py-2.5 text-center">
                                                 {isGlobalSelected ? (
-                                                    <p className="text-xs font-medium text-slate-600">đã chọn tất cả <span className="font-bold text-orange-600">{pagination.total.toLocaleString()}</span> Khách hàng. <button onClick={() => setIsGlobalSelected(false)} className="ml-2 text-blue-600 font-bold hover:underline">Bỏ chọn</button></p>
+                                                    <p className="text-xs font-medium text-slate-600 tabular-nums">Đã chọn tất cả <span className="font-bold text-orange-600">{pagination.total.toLocaleString()}</span> Khách hàng. <button onClick={() => setIsGlobalSelected(false)} className="ml-2 text-blue-600 font-bold hover:underline">Bỏ chọn</button></p>
                                                 ) : (
-                                                    <p className="text-xs font-medium text-slate-600">Đã chọn {participants.length} Khách hàng. <button onClick={() => setIsGlobalSelected(true)} className="ml-1 text-orange-600 font-bold hover:underline italic underline-offset-2">Chọn tất cả {pagination.total.toLocaleString()} Khách hàng?</button></p>
+                                                    <p className="text-xs font-medium text-slate-600 tabular-nums">Đã chọn {participants.length} Khách hàng. <button onClick={() => setIsGlobalSelected(true)} className="ml-1 text-orange-600 font-bold hover:underline underline-offset-2">Chọn tất cả {pagination.total.toLocaleString()} Khách hàng?</button></p>
                                                 )}
                                             </td>
                                         </tr>
@@ -1210,7 +1210,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                                 type="checkbox"
                                                                 checked={selectedIds.has(participantId)}
                                                                 onChange={() => handleSelectOne(participantId)}
-                                                                className="peer w-5 h-5 cursor-pointer appearance-none rounded-md border-2 border-slate-300 transition-all checked:border-[#2563eb] checked:bg-[#2563eb] hover:border-[#2563eb]"
+                                                                className="peer w-5 h-5 cursor-pointer appearance-none rounded-md border-2 border-slate-300 transition-colors checked:border-[#2563eb] checked:bg-[#2563eb] hover:border-[#2563eb]"
                                                             />
                                                             <Check className="absolute w-3.5 h-3.5 text-white pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" />
                                                         </div>
@@ -1250,7 +1250,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                                 {p.branchName}
                                                             </span>
                                                         ) : (
-                                                            <span className="text-[10px] text-slate-400 italic">Chưa rẽ nhánh</span>
+                                                            <span className="text-[10px] text-slate-400">Chưa rẽ nhánh</span>
                                                         )}
                                                     </td>
                                                 )}
@@ -1264,7 +1264,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                                 handleResendInit(p);
                                                             }}
                                                             disabled={bulkActionLoading && (resendingParticipant?.id === participantId || resendingParticipant?.subscriber_id === participantId)}
-                                                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all inline-flex items-center justify-center border border-slate-100 shadow-sm bg-white disabled:opacity-50"
+                                                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors inline-flex items-center justify-center border border-slate-200 shadow-xs bg-white disabled:opacity-50"
                                                             title="Gửi lại cho người này"
                                                         >
                                                             {bulkActionLoading && (resendingParticipant?.id === participantId || resendingParticipant?.subscriber_id === participantId) ? (
@@ -1287,11 +1287,11 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                             </span>
                                                         </td>
                                                         <td className="px-6 py-3 text-center">
-                                                            <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                                            <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold tabular-nums">
                                                                 {p.completion_count || 1}
                                                             </span>
                                                         </td>
-                                                        <td className="px-6 py-3 text-xs font-medium text-slate-500 text-right">
+                                                        <td className="px-6 py-3 text-xs font-medium text-slate-500 text-right tabular-nums">
                                                             <span className="inline-flex items-center gap-1">
                                                                 <Clock className="w-3 h-3" />
                                                                 {formatTime(p.completedAt || p.updatedAt || p.enteredAt)}
@@ -1367,7 +1367,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                         {activeTab === 'opened' && (
                                                             <>
                                                                 <td className="px-6 py-3 text-center">
-                                                                    <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                                                    <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold tabular-nums">
                                                                         {p.open_count || 1}
                                                                     </span>
                                                                 </td>
@@ -1453,7 +1453,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                                                 const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                                                                                 const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
                                                                                 return (
-                                                                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600">
+                                                                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold tabular-nums text-amber-600">
                                                                                         <Clock className="w-3.5 h-3.5" />
                                                                                         Còn {d > 0 ? `${d}d ` : ''}{h > 0 ? `${h}h ` : ''}{m}m
                                                                                     </span>
@@ -1471,7 +1471,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                                         // For ALL other steps (Email, Action, etc.): Show scheduledAt
                                                                         const timeInfo = calculateTimeRemaining(p.scheduledAt);
                                                                         return (
-                                                                            <div className="flex flex-col">
+                                                                            <div className="flex flex-col tabular-nums">
                                                                                 <span className={`inline-flex items-center gap-1 text-[11px] font-bold ${timeInfo.isUrgent
                                                                                     ? 'text-blue-600'
                                                                                     : (new Date(p.scheduledAt) > new Date() ? 'text-blue-600' : 'text-amber-600')
@@ -1544,7 +1544,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                         ) : null}
 
                                                         {activeTab !== 'inactive' && activeTab !== 'unsubscribed' && activeTab !== 'opened' && activeTab !== 'all_touched' && activeTab !== 'waiting' && activeTab !== 'failed' && stepType !== 'zalo_zns' && (
-                                                            <td className="px-6 py-3 text-[11px] text-slate-500 font-mono text-right">
+                                                            <td className="px-6 py-3 text-[11px] text-slate-500 font-mono tabular-nums text-right">
                                                                 {p.ip || '--'}
                                                             </td>
                                                         )}
@@ -1562,21 +1562,21 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                 {/* Footer / Pagination */}
                 {
                     pagination.totalPages > 1 && (
-                        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 rounded-b-[18px] flex items-center justify-between">
+                        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50/50 rounded-b-xl flex items-center justify-between">
                             <button
                                 disabled={pagination.page <= 1}
                                 onClick={() => onPageChange(pagination.page - 1)}
-                                className="px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-[var(--radius-md)] hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                                className="px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-[var(--radius-md)] hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-xs"
                             >
                                 Trước
                             </button>
-                            <span className="text-xs font-bold text-slate-600 bg-white px-3 py-1 rounded-lg border border-slate-200">
+                            <span className="text-xs font-bold tabular-nums text-slate-600 bg-white px-3 py-1 rounded-lg border border-slate-200">
                                 Trang {pagination.page} / {pagination.totalPages}
                             </span>
                             <button
                                 disabled={pagination.page >= pagination.totalPages}
                                 onClick={() => onPageChange(pagination.page + 1)}
-                                className="px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-[var(--radius-md)] hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                                className="px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-[var(--radius-md)] hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-xs"
                             >
                                 Sau
                             </button>
@@ -1612,7 +1612,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
             {isAddModalOpen && (
                 <div className="fixed inset-0 z-[2147483645] flex items-center justify-center bg-slate-950/70 p-4">
                     <div className={`w-full max-w-3xl border rounded-xl shadow-2xl animate-in fade-in zoom-in-97 duration-200 flex flex-col max-h-[90vh] ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80 text-slate-100' : 'bg-white border-slate-200/80 text-slate-800'}`}>
-                        <div className={`px-6 py-4 border-b flex items-center justify-between rounded-t-[18px] shrink-0 ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80' : 'bg-slate-50/50 border-slate-100'}`}>
+                        <div className={`px-6 py-4 border-b flex items-center justify-between rounded-t-xl shrink-0 ${isDarkTheme ? 'bg-[#11151d] border-slate-800/80' : 'bg-slate-50/50 border-slate-200'}`}>
                             <h3 className={`font-bold flex items-center gap-2 ${isDarkTheme ? 'text-slate-200' : 'text-slate-800'}`}>
                                 <UserPlus className="w-5 h-5 text-blue-600" />
                                 Thêm người dùng vào bước này
@@ -1625,7 +1625,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                             
                             {/* Danh sách List Multi-select */}
                             <div>
-                                <label className="block text-[11px] font-black text-slate-500 mb-2 uppercase tracking-wide">
+                                <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wide">
                                     Thêm từ dữ liệu hệ thống
                                 </label>
                                 
@@ -1634,19 +1634,19 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                     <div className="flex bg-slate-100 p-0.5 rounded-lg w-full mb-1">
                                         <button
                                             onClick={() => setAddSourceTab('list')}
-                                            className={`flex-1 py-1.5 rounded-md text-[9px] font-bold uppercase transition-all flex items-center justify-center gap-1.5 ${addSourceTab === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                            className={`flex-1 py-1.5 rounded-md text-[9px] font-bold uppercase transition-colors flex items-center justify-center gap-1.5 ${addSourceTab === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                                         >
                                             <List className="w-3 h-3" /> Danh sách
                                         </button>
                                         <button
                                             onClick={() => setAddSourceTab('sync')}
-                                            className={`flex-1 py-1.5 rounded-md text-[9px] font-bold uppercase transition-all flex items-center justify-center gap-1.5 ${addSourceTab === 'sync' ? 'bg-white shadow-sm text-green-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                            className={`flex-1 py-1.5 rounded-md text-[9px] font-bold uppercase transition-colors flex items-center justify-center gap-1.5 ${addSourceTab === 'sync' ? 'bg-white shadow-sm text-green-600' : 'text-slate-400 hover:text-slate-600'}`}
                                         >
                                             <Globe className="w-3 h-3" /> Đồng bộ
                                         </button>
                                         <button
                                             onClick={() => setAddSourceTab('segment')}
-                                            className={`flex-1 py-1.5 rounded-md text-[9px] font-bold uppercase transition-all flex items-center justify-center gap-1.5 ${addSourceTab === 'segment' ? 'bg-white shadow-sm text-orange-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                            className={`flex-1 py-1.5 rounded-md text-[9px] font-bold uppercase transition-colors flex items-center justify-center gap-1.5 ${addSourceTab === 'segment' ? 'bg-white shadow-sm text-orange-600' : 'text-slate-400 hover:text-slate-600'}`}
                                         >
                                             <Layers className="w-3 h-3" /> Phân khúc
                                         </button>
@@ -1659,14 +1659,14 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                             value={addSearchTerm} 
                                             onChange={e => setAddSearchTerm(e.target.value)} 
                                             placeholder="Tìm kiếm nhanh..." 
-                                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-[var(--radius-md)] text-xs font-semibold outline-none focus:border-slate-400 transition-all" 
+                                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-[var(--radius-md)] text-xs font-semibold outline-none focus:border-slate-400 transition-colors" 
                                         />
                                     </div>
 
                                     <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-3 p-1">
                                         {availableLists.length === 0 && availableSegments.length === 0 ? (
-                                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-[14px] text-center">
-                                                <p className="text-sm text-slate-500 italic">Hệ thống chưa có danh sách này.</p>
+                                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center">
+                                                <p className="text-sm text-slate-500">Hệ thống chưa có danh sách này.</p>
                                             </div>
                                         ) : (
                                             (addSourceTab === 'segment' ? availableSegments : availableLists)
@@ -1677,18 +1677,18 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                 return (
                                                 <label 
                                                     key={list.id} 
-                                                    className={`w-full flex items-center justify-between p-4 rounded-[14px] border-2 transition-all duration-300 group relative overflow-hidden ${isSelected ? 'border-blue-500 bg-blue-50 shadow-md ring-4 ring-blue-500/5' : 'border-transparent bg-slate-50 hover:bg-white hover:border-slate-200 hover:shadow-sm'} cursor-pointer`}
+                                                    className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-colors duration-200 group relative overflow-hidden ${isSelected ? 'border-blue-500 bg-blue-50 shadow-sm ring-4 ring-blue-500/5' : 'border-transparent bg-slate-50 hover:bg-white hover:border-slate-200 hover:shadow-xs'} cursor-pointer`}
                                                 >
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-[14px] transition-all duration-500 ${isSelected ? 'bg-blue-500 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-400 group-hover:text-slate-600 shadow-sm'}`}>
+                                                        <div className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-xl transition-colors duration-200 ${isSelected ? 'bg-blue-500 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-400 group-hover:text-slate-600 shadow-xs'}`}>
                                                             {addSourceTab === 'list' ? <List className="w-5 h-5" /> : (addSourceTab === 'segment' ? <Layers className="w-5 h-5" /> : (list.source === 'MISA CRM' ? <MisaIcon className="w-5 h-5" /> : <GoogleSheetsIcon className="w-5 h-5" />))}
                                                         </div>
                                                         <div className="text-left overflow-hidden">
-                                                            <p className={`text-[13px] font-black tracking-tight transition-colors ${isSelected ? 'text-slate-900' : 'text-slate-700'}`}>{list.name}</p>
-                                                            <p className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 transition-colors ${isSelected ? 'text-blue-600/70' : 'text-slate-400'}`}>{list.count || 0} LIÊN HỆ {list.source && list.source !== 'Manual' && `- ${list.source}`}</p>
+                                                            <p className={`text-[13px] font-bold transition-colors ${isSelected ? 'text-slate-900' : 'text-slate-700'}`}>{list.name}</p>
+                                                            <p className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 tabular-nums transition-colors ${isSelected ? 'text-blue-600/80' : 'text-slate-400'}`}>{list.count || 0} LIÊN HỆ {list.source && list.source !== 'Manual' && `- ${list.source}`}</p>
                                                         </div>
                                                     </div>
-                                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ml-2 ${isSelected ? 'border-blue-500 bg-blue-500 text-white scale-110 shadow-sm' : 'border-slate-200 bg-white group-hover:border-slate-400'}`}>
+                                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors shrink-0 ml-2 ${isSelected ? 'border-blue-500 bg-blue-500 text-white shadow-xs' : 'border-slate-200 bg-white group-hover:border-slate-400'}`}>
                                                         {isSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
                                                     </div>
                                                     <input 
@@ -1714,11 +1714,11 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
 
                             {/* Raw Data Textarea */}
                             <div>
-                                <label className="block text-[11px] font-black text-slate-500 mb-2 uppercase tracking-wide">
+                                <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wide">
                                     Danh sách Email / SĐT / UID (Nhập thủ công)
                                 </label>
                                 <textarea
-                                    className="w-full h-28 px-4 py-3 bg-slate-50 border border-slate-200 rounded-[14px] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-mono text-slate-700 resize-none"
+                                    className="w-full h-28 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-colors text-sm font-mono text-slate-700 resize-none"
                                     placeholder="example@gmail.com&#10;0912345678&#10;84912345678..."
                                     value={addEmails}
                                     onChange={e => setAddEmails(e.target.value)}
@@ -1738,7 +1738,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                         <button
                                             type="button"
                                             onClick={() => setBranchSelectOpen(!branchSelectOpen)}
-                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] hover:bg-slate-100 hover:border-slate-300 transition-all text-sm font-bold text-slate-700 flex items-center justify-between group"
+                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] hover:bg-slate-100 hover:border-slate-300 transition-colors text-sm font-bold text-slate-700 flex items-center justify-between group"
                                         >
                                             <div className="flex items-center gap-2">
                                                 {/* Display Logic */}
@@ -1770,15 +1770,15 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                     className="fixed inset-0 z-40"
                                                     onClick={() => setBranchSelectOpen(false)}
                                                 ></div>
-                                                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-[14px] shadow-xl border border-slate-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-200 ring-4 ring-slate-400/10 max-h-[300px] overflow-y-auto custom-scrollbar">
+                                                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-200 p-2 z-50 ring-4 ring-slate-400/10 max-h-[300px] overflow-y-auto custom-scrollbar">
                                                     {/* Option 1: Default */}
                                                     <div
                                                         onClick={() => {
                                                             setTargetAddStepId(stepId || '');
                                                             setBranchSelectOpen(false);
                                                         }}
-                                                        className={`px-3 py-2.5 rounded-lg flex items-center gap-2 cursor-pointer transition-all ${(!targetAddStepId || targetAddStepId === stepId)
-                                                            ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                                                        className={`px-3 py-2.5 rounded-lg flex items-center gap-2 cursor-pointer transition-colors ${(!targetAddStepId || targetAddStepId === stepId)
+                                                            ? 'bg-blue-600 text-white shadow-sm'
                                                             : 'hover:bg-slate-50 text-slate-600'
                                                             }`}
                                                     >
@@ -1790,7 +1790,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                     <div className="my-2 h-px bg-slate-100"></div>
 
                                                     <div className="px-3 pb-2 pt-1">
-                                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
                                                             Bắt buộc vào nhánh (Bỏ qua logic)
                                                         </span>
                                                     </div>
@@ -1805,8 +1805,8 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                                                         setTargetAddStepId(b.id);
                                                                         setBranchSelectOpen(false);
                                                                     }}
-                                                                    className={`px-3 py-2.5 rounded-lg flex items-center gap-2 cursor-pointer transition-all ${isSelected
-                                                                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                                                                    className={`px-3 py-2.5 rounded-lg flex items-center gap-2 cursor-pointer transition-colors ${isSelected
+                                                                        ? 'bg-blue-600 text-white shadow-sm'
                                                                         : 'hover:bg-slate-50 text-slate-600'
                                                                         }`}
                                                                 >
@@ -1833,18 +1833,18 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                             {/* Timing Options for Wait step */}
                             {((targetAddStepId ? availableBranches.find(b => b.id === targetAddStepId) : stepData)?.type === 'wait' || stepData?.type === 'wait') && (
                                 <div>
-                                    <label className="block text-[11px] font-black text-slate-500 mb-2 uppercase tracking-wide">
+                                    <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wide">
                                         Thời gian thực thi (Cho bước Wait)
                                     </label>
                                     <div className="grid grid-cols-2 gap-3">
-                                        <label className={`flex flex-col gap-1 p-3 rounded-[14px] border border-slate-200 cursor-pointer transition-all ${timingMode === 'native' ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-500/50' : 'hover:bg-slate-50'}`}>
+                                        <label className={`flex flex-col gap-1 p-3 rounded-xl border border-slate-200 cursor-pointer transition-colors ${timingMode === 'native' ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-500/50' : 'hover:bg-slate-50'}`}>
                                             <div className="flex items-center gap-2">
                                                 <input type="radio" checked={timingMode === 'native'} onChange={() => setTimingMode('native')} className="w-4 h-4 text-blue-600 focus:ring-blue-500" />
                                                 <span className="text-sm font-bold text-slate-700">Chờ theo cài đặt</span>
                                             </div>
                                             <p className="text-[10px] text-slate-500 ml-6 leading-tight">Tuân thủ thời gian đợi của bước này.</p>
                                         </label>
-                                        <label className={`flex flex-col gap-1 p-3 rounded-[14px] border border-slate-200 cursor-pointer transition-all ${timingMode === 'immediate' ? 'bg-orange-50 border-orange-300 ring-1 ring-orange-500/50' : 'hover:bg-slate-50'}`}>
+                                        <label className={`flex flex-col gap-1 p-3 rounded-xl border border-slate-200 cursor-pointer transition-colors ${timingMode === 'immediate' ? 'bg-orange-50 border-orange-300 ring-1 ring-orange-500/50' : 'hover:bg-slate-50'}`}>
                                             <div className="flex items-center gap-2">
                                                 <input type="radio" checked={timingMode === 'immediate'} onChange={() => setTimingMode('immediate')} className="w-4 h-4 text-orange-600 focus:ring-orange-500" />
                                                 <span className="text-sm font-bold text-slate-700">Bỏ qua Wait</span>
@@ -1857,16 +1857,16 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
 
                             {/* Deduplication Estimate Display */}
                             {(!addEmails.trim() && addListIds.length === 0) ? null : isEstimating ? (
-                                <div className="flex items-center gap-2 text-blue-600 bg-blue-50 p-3 rounded-[14px] text-xs font-medium border border-blue-100">
+                                <div className="flex items-center gap-2 text-blue-600 bg-blue-50 p-3 rounded-xl text-xs font-medium border border-blue-200">
                                     <Loader2 className="w-4 h-4 animate-spin text-blue-500" /> Đang kiểm tra trùng lặp hệ thống...
                                 </div>
                             ) : estimateData ? (
-                                <div className="bg-emerald-50 border border-emerald-100 rounded-[14px] p-4">
+                                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
                                     <div className="flex items-start gap-4">
-                                        <div className="w-10 h-10 rounded-full bg-white shadow-sm border border-emerald-100 flex items-center justify-center shrink-0">
+                                        <div className="w-10 h-10 rounded-full bg-white shadow-xs border border-emerald-200 flex items-center justify-center shrink-0">
                                             <Check className="w-5 h-5 text-emerald-600" />
                                         </div>
-                                        <div>
+                                        <div className="tabular-nums">
                                             <h4 className="text-sm font-bold text-emerald-800">Sẽ thêm <span className="text-xl mx-0.5">{estimateData.valid}</span> Khách hàng vào Flow</h4>
                                             <p className="text-[11px] text-emerald-700 mt-1.5 opacity-90 leading-relaxed">
                                                 Tổng hợp được <b>{estimateData.total_found}</b> liên hệ từ danh sách.<br/>
@@ -1878,10 +1878,10 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                             ) : null}
 
                         </div>
-                        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-[18px] shrink-0">
+                        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3 rounded-b-xl shrink-0">
                             <button
                                 onClick={() => setIsAddModalOpen(false)}
-                                className="px-4 py-2 text-slate-600 font-semibold text-sm hover:bg-white hover:shadow-sm rounded-[var(--radius-md)] transition-all border border-transparent hover:border-slate-200"
+                                className="px-4 py-2 text-slate-600 font-semibold text-sm hover:bg-white hover:shadow-xs rounded-[var(--radius-md)] transition-colors border border-transparent hover:border-slate-200"
                             >
                                 Hủy bỏ
                             </button>
@@ -1922,7 +1922,7 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                                     }).finally(() => setAddingUsers(false));
                                 }}
                                 disabled={addingUsers || isEstimating}
-                                className="px-4 py-2 bg-[var(--color-primary)] text-white font-bold text-sm rounded-[var(--radius-md)] hover:opacity-95 shadow-lg transition-all flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                                className="px-4 py-2 bg-[var(--color-primary)] text-white font-bold text-sm rounded-[var(--radius-md)] hover:opacity-95 shadow-sm transition-opacity flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                             >
                                 {addingUsers ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
                                 {addingUsers ? 'Đang thêm...' : 'Thêm ngay'}
@@ -1949,23 +1949,23 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
 
             {/* Quick Action: Tag Selection Modal */}
             {tagModalOpen && (
-                <div className="fixed inset-0 z-[2147483645] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-md rounded-xl shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-300">
+                <div className="fixed inset-0 z-[2147483645] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-md rounded-xl shadow-2xl border border-slate-200 p-6">
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-[14px] bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100">
+                            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-200">
                                 <Tag className="w-5 h-5" />
                             </div>
                             <div>
                                 <h3 className="text-base font-bold text-slate-800">Gắn Tag Khách hàng</h3>
-                                <p className="text-xs text-slate-500">Chọn tag muốn gắn cho {isGlobalSelected ? pagination.total : selectedIds.size} Khách hàng</p>
+                                <p className="text-xs text-slate-500 tabular-nums">Chọn tag muốn gắn cho {isGlobalSelected ? pagination.total : selectedIds.size} Khách hàng</p>
                             </div>
                         </div>
 
                         <div className="space-y-4">
                             <div>
-                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Chọn Tag</label>
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2 block">Chọn Tag</label>
                                 <select
-                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
+                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-colors font-medium"
                                     value={selectedTag}
                                     onChange={(e) => setSelectedTag(e.target.value)}
                                 >
@@ -1979,14 +1979,14 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                             <div className="flex gap-3 pt-2">
                                 <button
                                     onClick={() => setTagModalOpen(false)}
-                                    className="flex-1 py-2.5 px-4 bg-slate-50 text-slate-600 font-bold text-sm rounded-[var(--radius-md)] hover:bg-slate-100 transition-all border border-slate-200"
+                                    className="flex-1 py-2.5 px-4 bg-slate-50 text-slate-600 font-bold text-sm rounded-[var(--radius-md)] hover:bg-slate-100 transition-colors border border-slate-200"
                                 >
                                     Hủy bỏ
                                 </button>
                                 <button
                                     onClick={handleBulkAddTag}
                                     disabled={bulkActionLoading || !selectedTag}
-                                    className="flex-[2] py-2.5 px-4 bg-[var(--color-primary)] text-white font-bold text-sm rounded-[var(--radius-md)] hover:opacity-95 shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                    className="flex-[2] py-2.5 px-4 bg-[var(--color-primary)] text-white font-bold text-sm rounded-[var(--radius-md)] hover:opacity-95 shadow-sm transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {bulkActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                                     <span>Xác nhận gắn Tag</span>
@@ -1999,23 +1999,23 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
 
             {/* Quick Action: List Selection Modal */}
             {listModalOpen && (
-                <div className="fixed inset-0 z-[2147483645] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-md rounded-xl shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-300">
+                <div className="fixed inset-0 z-[2147483645] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-md rounded-xl shadow-2xl border border-slate-200 p-6">
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-[14px] bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100">
+                            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-200">
                                 <List className="w-5 h-5" />
                             </div>
                             <div>
                                 <h3 className="text-base font-bold text-slate-800">Thêm vào Danh sách</h3>
-                                <p className="text-xs text-slate-500">Chọn list muốn thêm {isGlobalSelected ? pagination.total : selectedIds.size} Khách hàng vào</p>
+                                <p className="text-xs text-slate-500 tabular-nums">Chọn list muốn thêm {isGlobalSelected ? pagination.total : selectedIds.size} Khách hàng vào</p>
                             </div>
                         </div>
 
                         <div className="space-y-4">
                             <div>
-                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Chọn Danh sách</label>
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2 block">Chọn Danh sách</label>
                                 <select
-                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
+                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-[var(--radius-md)] text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-colors font-medium"
                                     value={selectedList}
                                     onChange={(e) => setSelectedList(e.target.value)}
                                 >
@@ -2029,14 +2029,14 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                             <div className="flex gap-3 pt-2">
                                 <button
                                     onClick={() => setListModalOpen(false)}
-                                    className="flex-1 py-2.5 px-4 bg-slate-50 text-slate-600 font-bold text-sm rounded-[var(--radius-md)] hover:bg-slate-100 transition-all border border-slate-200"
+                                    className="flex-1 py-2.5 px-4 bg-slate-50 text-slate-600 font-bold text-sm rounded-[var(--radius-md)] hover:bg-slate-100 transition-colors border border-slate-200"
                                 >
                                     Hủy bỏ
                                 </button>
                                 <button
                                     onClick={handleBulkAddToList}
                                     disabled={bulkActionLoading || !selectedList}
-                                    className="flex-[2] py-2.5 px-4 bg-[var(--color-primary)] text-white font-bold text-sm rounded-[var(--radius-md)] hover:opacity-95 shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                    className="flex-[2] py-2.5 px-4 bg-[var(--color-primary)] text-white font-bold text-sm rounded-[var(--radius-md)] hover:opacity-95 shadow-sm transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {bulkActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                                     <span>Xác nhận thêm vào List</span>
@@ -2049,32 +2049,32 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
 
             {/* Quick Action: Status Selection Modal */}
             {statusModalOpen && (
-                <div className="fixed inset-0 z-[2147483645] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-md rounded-xl shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-300">
+                <div className="fixed inset-0 z-[2147483645] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-md rounded-xl shadow-2xl border border-slate-200 p-6">
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-[14px] bg-emerald-50 flex items-center justify-center text-emerald-600 border border-emerald-100">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 border border-emerald-200">
                                 <Check className="w-5 h-5" />
                             </div>
                             <div>
                                 <h3 className="text-base font-bold text-slate-800">Đổi Trạng thái liên hệ</h3>
-                                <p className="text-xs text-slate-500">Cập nhật Trạng thái cho {isGlobalSelected ? pagination.total : selectedIds.size} Khách hàng</p>
+                                <p className="text-xs text-slate-500 tabular-nums">Cập nhật Trạng thái cho {isGlobalSelected ? pagination.total : selectedIds.size} Khách hàng</p>
                             </div>
                         </div>
 
                         <div className="space-y-4">
                             <div>
-                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Chọn Trạng thái mới</label>
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2 block">Chọn Trạng thái mới</label>
                                 <div className="grid grid-cols-2 gap-2">
                                     {[
-                                        { value: 'active', label: 'Hoạt động', bg: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
-                                        { value: 'unsubscribed', label: 'Hủy đăng ký', bg: 'bg-orange-50 text-orange-600 border-orange-100' },
-                                        { value: 'bounced', label: 'Bounced', bg: 'bg-rose-50 text-rose-600 border-rose-100' },
+                                        { value: 'active', label: 'Hoạt động', bg: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
+                                        { value: 'unsubscribed', label: 'Hủy đăng ký', bg: 'bg-orange-50 text-orange-600 border-orange-200' },
+                                        { value: 'bounced', label: 'Bounced', bg: 'bg-rose-50 text-rose-600 border-rose-200' },
                                         { value: 'complained', label: 'Khiếu nại', bg: 'bg-slate-100 text-slate-600 border-slate-200' }
                                     ].map(status => (
                                         <button
                                             key={status.value}
                                             onClick={() => setSelectedStatus(status.value)}
-                                            className={`px-4 py-3 rounded-[var(--radius-md)] border text-xs font-bold transition-all flex items-center justify-between ${selectedStatus === status.value ? status.bg + ' ring-2 ring-offset-1 select-none' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-300'}`}
+                                            className={`px-4 py-3 rounded-[var(--radius-md)] border text-xs font-bold transition-colors flex items-center justify-between ${selectedStatus === status.value ? status.bg + ' ring-2 ring-offset-1 select-none' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                                         >
                                             {status.label}
                                             {selectedStatus === status.value && <Check className="w-3 h-3" />}
@@ -2086,14 +2086,14 @@ const StepParticipantsModal: React.FC<StepParticipantsModalProps> = ({
                             <div className="flex gap-3 pt-2">
                                 <button
                                     onClick={() => setStatusModalOpen(false)}
-                                    className="flex-1 py-2.5 px-4 bg-slate-50 text-slate-600 font-bold text-sm rounded-[var(--radius-md)] hover:bg-slate-100 transition-all border border-slate-200"
+                                    className="flex-1 py-2.5 px-4 bg-slate-50 text-slate-600 font-bold text-sm rounded-[var(--radius-md)] hover:bg-slate-100 transition-colors border border-slate-200"
                                 >
                                     Hủy bỏ
                                 </button>
                                 <button
                                     onClick={handleBulkChangeStatus}
                                     disabled={bulkActionLoading || !selectedStatus}
-                                    className="flex-[2] py-2.5 px-4 bg-emerald-600 text-white font-bold text-sm rounded-[var(--radius-md)] hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                    className="flex-[2] py-2.5 px-4 bg-emerald-600 text-white font-bold text-sm rounded-[var(--radius-md)] hover:bg-emerald-700 shadow-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {bulkActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                                     <span>Xác nhận đổi Trạng thái</span>

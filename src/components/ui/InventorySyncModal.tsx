@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { useUIStore } from '../../store/uiStore';
 import { fetchAPI } from '../../utils/api';
 import { CustomSelect } from './CustomSelect';
+import { ensureArray, extractArray } from '../../utils/safeArray';
 
 interface InventorySyncModalProps {
   isOpen: boolean;
@@ -127,7 +128,7 @@ export const InventorySyncModal: React.FC<InventorySyncModalProps> = ({ isOpen, 
     try {
       const res = await fetchAPI(`fetch_columns&id=${selected.spreadsheet_id}&name=${encodeURIComponent(selected.sheet_name)}`);
       if (res.success) {
-        setColumns(res.data || []);
+        setColumns(extractArray(res));
       } else {
         toast.error(res.message || 'Không thể tải danh sách cột từ Sheet');
       }
@@ -297,15 +298,15 @@ export const InventorySyncModal: React.FC<InventorySyncModalProps> = ({ isOpen, 
     try {
       const res = await fetchAPI(`force_sync&id=${selected.id}`);
       if (res.success) {
-        setSyncLogs(prev => prev + '\n\n--- KẾT QUẢ ĐỒNG BỘ ---\n' + (res.output || 'Đồng bộ hoàn tất thành công.'));
-        toast.success('Đồng bộ hoàn tất!');
+        setSyncLogs(prev => prev + '\n\n--- KẾT QUẢ ĐỒNG BỘ ---\n' + (res.output || 'Đồng bộ hoàn tất.'));
+        toast.success('Đồng bộ hoàn tất');
         fetchData();
       } else {
-        setSyncLogs(prev => prev + '\n\n❌ LỖI ĐỒNG BỘ: ' + (res.message || 'Không rõ nguyên nhân'));
+        setSyncLogs(prev => prev + '\n\n[LỖI ĐỒNG BỘ]: ' + (res.message || 'Không rõ nguyên nhân'));
         toast.error('Lỗi đồng bộ');
       }
     } catch (e: any) {
-      setSyncLogs(prev => prev + '\n\n❌ LỖI KẾT NỐI: ' + e.message);
+      setSyncLogs(prev => prev + '\n\n[LỖI KẾT NỐI]: ' + e.message);
       toast.error('Lỗi kết nối');
     } finally {
       setIsForceSyncing(false);
@@ -502,9 +503,9 @@ export const InventorySyncModal: React.FC<InventorySyncModalProps> = ({ isOpen, 
 
                     <div className="flex gap-2">
                       {editingMappingId && (
-                        <button type="button" className="btn outline sm hover-lift" onClick={() => { setEditingMappingId(null); setNewMappingCol(''); setNewMappingCustomLabel(''); }} disabled={isSavingMapping}>Hủy</button>
+                        <button type="button" className="btn outline sm" onClick={() => { setEditingMappingId(null); setNewMappingCol(''); setNewMappingCustomLabel(''); }} disabled={isSavingMapping}>Hủy</button>
                       )}
-                      <button type="submit" className="btn primary sm hover-lift" style={{ height: 38, display: 'inline-flex', alignItems: 'center', gap: '6px' }} disabled={isSavingMapping}>
+                      <button type="submit" className="btn primary sm" style={{ height: 38, display: 'inline-flex', alignItems: 'center', gap: '8px' }} disabled={isSavingMapping}>
                         {isSavingMapping && <RefreshCw size={14} className="spin" />}
                         <span>{editingMappingId ? (isSavingMapping ? 'Đang cập nhật...' : 'Cập nhật') : (isSavingMapping ? 'Đang thêm...' : 'Thêm')}</span>
                       </button>
@@ -600,7 +601,7 @@ export const InventorySyncModal: React.FC<InventorySyncModalProps> = ({ isOpen, 
                   <FileSpreadsheet size={22} />
                 </div>
                 <div>
-                  <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text)', margin: 0 }}>Kết nối Google Sheets</h2>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>Kết nối Google Sheets</h2>
                   <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: 0, opacity: 0.7 }}>Kết nối bảng tính của bạn để đồng bộ giỏ hàng.</p>
                 </div>
               </div>
@@ -691,7 +692,7 @@ export const InventorySyncModal: React.FC<InventorySyncModalProps> = ({ isOpen, 
                 {/* Chu kỳ đồng bộ */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <label className="form-label" style={{ fontWeight: 800, color: '#334155', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: 0.5, margin: 0 }}>CHU KỲ ĐỒNG BỘ</label>
+                    <label className="form-label" style={{ fontWeight: 700, color: '#334155', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.04em', margin: 0 }}>CHU KỲ ĐỒNG BỘ</label>
                     <span style={{ fontSize: '0.75rem', color: '#94a3b8', cursor: 'pointer' }}>(?) Cơ chế hoạt động?</span>
                   </div>
 
@@ -757,16 +758,15 @@ export const InventorySyncModal: React.FC<InventorySyncModalProps> = ({ isOpen, 
                     disabled={isSaving} 
                     style={{ 
                       padding: '10px 20px', 
-                      borderRadius: 10, 
+                      borderRadius: 8, 
                       display: 'inline-flex', 
                       alignItems: 'center', 
-                      gap: 6, 
-                      boxShadow: '0 4px 12px rgba(163, 20, 34, 0.15)',
-                      fontWeight: 700
+                      gap: 8, 
+                      fontWeight: 600
                     }}
                   >
                     {isSaving && <RefreshCw size={14} className="spin" />}
-                    {isSaving ? 'Đang kết nối...' : 'Kiểm tra kết nối >'}
+                    {isSaving ? 'Đang kết nối...' : 'Kiểm tra kết nối'}
                   </button>
                 </div>
               </form>

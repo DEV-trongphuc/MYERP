@@ -9,7 +9,7 @@ import AITrainingDetail from './training/AITrainingDetail';
 import AdminLogsTab from './training/AdminLogsTab';
 import AIModals from './modals/AIModals';
 import { ManualAddModal, EditDocModal } from './modals/TrainingModals';
-import { ArrowLeft, Save, Bot, Sparkles, Database, FolderPlus, BrainCircuit, FlaskConical, Search, AlertTriangle, HelpCircle, RefreshCw, X, Copy, Move, Trash2, Check, BookOpen, Palette, Building, Image as ImageIcon, Users, FileInput, ShieldCheck, Zap, Settings, ChevronDown, BarChart2, Activity } from 'lucide-react';
+import { ArrowLeft, Save, Bot, Database, FolderPlus, BrainCircuit, FlaskConical, Search, AlertTriangle, HelpCircle, RefreshCw, X, Copy, Move, Trash2, Check, BookOpen, Palette, Building, Image as ImageIcon, Users, FileInput, ShieldCheck, Zap, Settings, ChevronDown, BarChart2, Activity } from 'lucide-react';
 
 interface AIDoc {
     id: string;
@@ -346,7 +346,7 @@ const AITrainingManager: React.FC<AITrainingManagerProps> = ({ onClose, category
         script.src = `/ai-chat-embedded.js?v=${Date.now()}`;
         document.body.appendChild(script);
 
-        toast.success('Khởi tạo Widget Test...', { icon: '🚀' });
+        toast.success('Khởi tạo Widget Test...');
     }, [selectedProperty, settings]);
 
     const handleSaveTags = async () => {
@@ -1125,7 +1125,7 @@ const AITrainingManager: React.FC<AITrainingManagerProps> = ({ onClose, category
         try {
             const res = await api.post<any>('ai_training?action=auto_learn_synonyms', { property_id: selectedProperty });
             if (res.success) {
-                toast.success(res.message, { icon: '✨' });
+                toast.success(res.message);
                 fetchSettings();
             } else {
                 toast.error(res.message);
@@ -1191,7 +1191,7 @@ const AITrainingManager: React.FC<AITrainingManagerProps> = ({ onClose, category
                 intent_configs: settings.intent_configs
             });
             if (res.success) {
-                toast.success('Đã lưu cấu hình từ đồng nghĩa', { icon: '💾' });
+                toast.success('Đã lưu cấu hình từ đồng nghĩa');
                 fetchSettings();
                 setIsSynonymsModalOpen(false);
             } else {
@@ -1236,7 +1236,7 @@ const AITrainingManager: React.FC<AITrainingManagerProps> = ({ onClose, category
                 items: priorityUpdates
             });
             if (res.success) {
-                toast.success('Đã cập nhật thứ tự', { icon: '✨' });
+                toast.success('Đã cập nhật thứ tự');
             }
         } catch (e) {
             toast.error('Không thể lưu thứ tự mới');
@@ -1370,7 +1370,7 @@ const AITrainingManager: React.FC<AITrainingManagerProps> = ({ onClose, category
 
                 const trainRes = await api.post<any>('ai_training?action=train_docs', { property_id: targetPropertyId });
                 if (trainRes.success && (trainRes as any).async) {
-                    toast.success('Đã kích hoạt huấn luyện tự động cho chatbot đích.', { icon: '✨' });
+                    toast.success('Đã kích hoạt huấn luyện tự động cho chatbot đích.');
                 }
 
                 setTargetPropertyId('');
@@ -1467,17 +1467,17 @@ const AITrainingManager: React.FC<AITrainingManagerProps> = ({ onClose, category
                                 <div className="flex items-center gap-6">
                                     <button
                                         onClick={() => setActiveTab('inbox')}
-                                        className={`w-12 h-12 rounded-[14px] flex items-center justify-center transition-all shadow-sm hover:shadow-md group ${isDarkTheme ? 'bg-slate-800 border border-slate-700 hover:bg-slate-750' : 'bg-white border border-slate-100 hover:bg-slate-50'}`}
+                                        className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-sm group ${isDarkTheme ? 'bg-slate-800 border border-slate-700 hover:bg-slate-750' : 'bg-white border border-slate-100 hover:bg-slate-50'}`}
                                     >
                                         <ArrowLeft className={`w-6 h-6 transition-colors ${isDarkTheme ? 'text-slate-500 group-hover:text-slate-200' : 'text-slate-400 group-hover:text-slate-900'}`} />
                                     </button>
                                     <div className="flex items-center gap-4">
-                                        <div className={`w-14 h-14 rounded-[14px] bg-gradient-to-br from-[var(--color-primary)] to-[#9A1523] flex items-center justify-center text-white shadow-xl shadow-[var(--color-primary)]/20 transition-all duration-500`}>
+                                        <div className="w-14 h-14 rounded-xl bg-[#BD1D2D] flex items-center justify-center text-white shadow-sm">
                                             <Activity className="w-7 h-7" />
                                         </div>
                                         <div>
-                                            <h2 className={`text-2xl font-black tracking-tight ${isDarkTheme ? 'text-white' : 'text-slate-800'}`}>Hệ thống Quản trị</h2>
-                                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Thống kê & Nhật ký hoạt động toàn cục</p>
+                                            <h2 className={`text-2xl font-bold tracking-tight ${isDarkTheme ? 'text-white' : 'text-slate-800'}`}>Hệ thống Quản trị</h2>
+                                            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mt-0.5">Thống kê & Nhật ký hoạt động toàn cục</p>
                                         </div>
                                     </div>
                                 </div>

@@ -3,12 +3,13 @@ import { createPortal } from 'react-dom';
 import {
   X, Calendar, CheckCircle2, Clock, AlertTriangle, BarChart3,
   Users, Search, TrendingUp, CheckSquare, Filter, Award,
-  Sparkles, ArrowUpRight, Flame, ShieldAlert, ChevronRight,
+  ArrowUpRight, Flame, ShieldAlert, ChevronRight,
   ChevronDown, ArrowLeft, Check
 } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { CustomSelect, type SelectOption } from './CustomSelect';
 import { pushOverlay } from '../../utils/overlayStack';
+import { ensureArray, extractArray } from '../../utils/safeArray';
 
 export interface WorkspaceTaskStatsModalProps {
   isOpen: boolean;
@@ -765,7 +766,7 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
                     <span style={{ fontSize: '0.725rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Tổng công việc</span>
                     <CheckSquare size={16} style={{ color: 'var(--color-text-muted)' }} />
                   </div>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--color-text)' }}>
                     {stats.total}
                   </div>
                   <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
@@ -782,15 +783,15 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
                   boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '6px'
+                  gap: '8px'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.725rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Đã hoàn thành</span>
-                    <CheckCircle2 size={16} style={{ color: '#16a34a' }} />
+                    <CheckCircle2 size={16} style={{ color: '#16a34a' }} strokeWidth={1.75} />
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                    <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#16a34a' }}>{stats.done}</span>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#16a34a' }}>({stats.completionRate}%)</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                    <span style={{ fontSize: '1.6rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#16a34a' }}>{stats.done}</span>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: '#16a34a' }}>({stats.completionRate}%)</span>
                   </div>
                   <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--color-border-light, #f1f5f9)', borderRadius: '99px', overflow: 'hidden' }}>
                     <div style={{ width: `${stats.completionRate}%`, height: '100%', backgroundColor: '#16a34a', borderRadius: '99px' }} />
@@ -808,13 +809,13 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
                   boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '6px'
+                  gap: '8px'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.725rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Đang triển khai</span>
-                    <Clock size={16} style={{ color: '#2563eb' }} />
+                    <Clock size={16} style={{ color: '#2563eb' }} strokeWidth={1.75} />
                   </div>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#2563eb' }}>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#2563eb' }}>
                     {stats.inProgress}
                   </div>
                   <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
@@ -831,13 +832,13 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
                   boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '6px'
+                  gap: '8px'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.725rem', fontWeight: 700, color: '#ef4444' }}>Quá hạn xử lý</span>
-                    <ShieldAlert size={16} style={{ color: '#ef4444' }} />
+                    <ShieldAlert size={16} style={{ color: '#ef4444' }} strokeWidth={1.75} />
                   </div>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#ef4444' }}>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#ef4444' }}>
                     {stats.overdue}
                   </div>
                   <span style={{ fontSize: '0.68rem', color: '#ef4444', fontWeight: 600 }}>
@@ -854,13 +855,13 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
                   boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '6px'
+                  gap: '8px'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.725rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Chờ duyệt</span>
-                    <Award size={16} style={{ color: '#8b5cf6' }} />
+                    <Award size={16} style={{ color: '#BD1D2D' }} strokeWidth={1.75} />
                   </div>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#7c3aed' }}>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#0F172A' }}>
                     {stats.pendingApproval}
                   </div>
                   <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
@@ -883,15 +884,15 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
                   backgroundColor: 'var(--color-surface, #ffffff)',
                   boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
                 }}>
-                  <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.875rem', fontWeight: 800, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <TrendingUp size={16} style={{ color: 'var(--color-primary)' }} />
+                  <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <TrendingUp size={16} style={{ color: 'var(--color-primary)' }} strokeWidth={1.75} />
                     Tiến độ công việc
                   </h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600, marginBottom: '4px' }}>
                         <span>Công việc hoàn thành</span>
-                        <span style={{ fontWeight: 800 }}>{stats.done}/{stats.total} việc ({stats.completionRate}%)</span>
+                        <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{stats.done}/{stats.total} việc ({stats.completionRate}%)</span>
                       </div>
                       <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--color-border-light, #f1f5f9)', borderRadius: '99px', overflow: 'hidden' }}>
                         <div style={{ width: `${stats.completionRate}%`, height: '100%', backgroundColor: '#16a34a', borderRadius: '99px' }} />
@@ -901,7 +902,7 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600, marginBottom: '4px' }}>
                         <span>Đang triển khai (1% - 99%)</span>
-                        <span style={{ fontWeight: 800 }}>{stats.inProgress} việc ({stats.total > 0 ? Math.round((stats.inProgress / stats.total) * 100) : 0}%)</span>
+                        <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{stats.inProgress} việc ({stats.total > 0 ? Math.round((stats.inProgress / stats.total) * 100) : 0}%)</span>
                       </div>
                       <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--color-border-light, #f1f5f9)', borderRadius: '99px', overflow: 'hidden' }}>
                         <div style={{ width: `${stats.total > 0 ? (stats.inProgress / stats.total) * 100 : 0}%`, height: '100%', backgroundColor: '#2563eb', borderRadius: '99px' }} />
@@ -913,38 +914,38 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
                 {/* Priority Breakdown */}
                 <div style={{
                   padding: '1.25rem',
-                  borderRadius: '18px',
+                  borderRadius: '16px',
                   border: '1px solid var(--color-border-light, #e2e8f0)',
                   backgroundColor: 'var(--color-surface, #ffffff)',
                   boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
                 }}>
-                  <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.875rem', fontWeight: 800, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <AlertTriangle size={16} style={{ color: '#f59e0b' }} />
+                  <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <AlertTriangle size={16} style={{ color: '#f59e0b' }} strokeWidth={1.75} />
                     Mức độ ưu tiên
                   </h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: '10px', backgroundColor: 'var(--color-bg, #f8fafc)', border: '1px solid var(--color-border-light)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444' }} />
-                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>Khẩn cấp / Cao</span>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)' }}>Khẩn cấp / Cao</span>
                       </div>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#ef4444' }}>{stats.urgent} việc</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#ef4444' }}>{stats.urgent} việc</span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: '10px', backgroundColor: 'var(--color-bg, #f8fafc)', border: '1px solid var(--color-border-light)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f59e0b' }} />
-                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>Trung bình / Tiêu chuẩn</span>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)' }}>Trung bình / Tiêu chuẩn</span>
                       </div>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#d97706' }}>{stats.normal} việc</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#d97706' }}>{stats.normal} việc</span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: '10px', backgroundColor: 'var(--color-bg, #f8fafc)', border: '1px solid var(--color-border-light)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#64748b' }} />
-                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>Thấp / Khi rảnh</span>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)' }}>Thấp / Khi rảnh</span>
                       </div>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text-muted)' }}>{stats.low} việc</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--color-text-muted)' }}>{stats.low} việc</span>
                     </div>
                   </div>
                 </div>
@@ -953,21 +954,21 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
               {/* 3. Assignee Leaderboard / Team Performance */}
               <div style={{
                 padding: '1.25rem',
-                borderRadius: '18px',
+                borderRadius: '16px',
                 border: '1px solid var(--color-border-light, #e2e8f0)',
                 backgroundColor: 'var(--color-surface, #ffffff)',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Users size={16} style={{ color: 'var(--color-primary)' }} />
+                  <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Users size={16} style={{ color: 'var(--color-primary)' }} strokeWidth={1.75} />
                     {isPersonalOnly
                       ? 'Hiệu suất cá nhân của bạn'
                       : isManager
                         ? 'Thống kê hiệu suất đội ngũ quản lý'
                         : 'Thống kê hiệu suất theo Nhân sự thực hiện'}
                   </h4>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
                     {isPersonalOnly
                       ? 'Chỉ tính công việc được phân công cho bạn'
                       : `${stats.userLeaderboard.length} nhân sự có việc trong kỳ`}
@@ -975,7 +976,7 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '260px', overflowY: 'auto' }} className="custom-scrollbar">
-                  {stats.userLeaderboard.map((item, idx) => {
+                  {ensureArray(stats?.userLeaderboard).map((item, idx) => {
                     const uRate = item.total > 0 ? Math.round((item.done / item.total) * 100) : 0;
                     return (
                       <div
@@ -985,35 +986,35 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           padding: '8px 12px',
-                          borderRadius: '12px',
+                          borderRadius: '10px',
                           backgroundColor: 'var(--color-bg, #f8fafc)',
                           border: '1px solid var(--color-border-light, #f1f5f9)',
                           gap: '12px'
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '180px' }}>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: idx === 0 ? '#f59e0b' : 'var(--color-text-muted)', width: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '180px' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: idx === 0 ? '#f59e0b' : 'var(--color-text-muted)', width: '20px' }}>
                             #{idx + 1}
                           </span>
                           <Avatar src={item.user.avatar_url || item.user.avatar} name={item.user.full_name} size={30} />
                           <div style={{ overflow: 'hidden' }}>
-                            <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <div style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {item.user.full_name}
                             </div>
-                            <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
+                            <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
                               Tổng {item.total} việc
                             </div>
                           </div>
                         </div>
 
                         {/* Progress visual bar */}
-                        <div style={{ flex: 1, maxWidth: '240px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: 600 }}>
+                        <div style={{ flex: 1, maxWidth: '240px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                             <span style={{ color: '#16a34a' }}>Xong: {item.done}</span>
                             {item.overdue > 0 && <span style={{ color: '#ef4444' }}>Trễ: {item.overdue}</span>}
                             <span style={{ color: 'var(--color-text-muted)' }}>{uRate}%</span>
                           </div>
-                          <div style={{ width: '100%', height: '5px', backgroundColor: 'var(--color-border-light)', borderRadius: '99px', overflow: 'hidden' }}>
+                          <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--color-border-light)', borderRadius: '99px', overflow: 'hidden' }}>
                             <div style={{ width: `${uRate}%`, height: '100%', backgroundColor: uRate === 100 ? '#16a34a' : 'var(--color-primary)', borderRadius: '99px' }} />
                           </div>
                         </div>
@@ -1030,14 +1031,14 @@ export const WorkspaceTaskStatsModal: React.FC<WorkspaceTaskStatsModalProps> = (
                               background: 'rgba(189, 29, 45, 0.08)',
                               color: 'var(--color-primary, #BD1D2D)',
                               fontSize: '0.75rem',
-                              fontWeight: 700,
+                              fontWeight: 600,
                               cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
                               gap: '4px',
-                              padding: '5px 10px',
+                              padding: '6px 12px',
                               borderRadius: '8px',
-                              transition: 'all 0.15s ease'
+                              transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
                             }}
                             onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(189, 29, 45, 0.16)'; }}
                             onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'rgba(189, 29, 45, 0.08)'; }}

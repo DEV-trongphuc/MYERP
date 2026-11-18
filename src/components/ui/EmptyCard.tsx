@@ -13,7 +13,9 @@ interface EmptyCardProps {
 export const EmptyCard: React.FC<EmptyCardProps> = ({ icon, title, description, actionText, onAction, action }) => {
   return (
     <div className={styles.emptyCard}>
-      <div className={styles.iconWrapper}>{icon}</div>
+      <div className={styles.iconFrame} aria-hidden="true">
+        <div className={styles.iconWrapper}>{icon}</div>
+      </div>
       <h3 className={styles.title}>{title}</h3>
       <p className={styles.description}>{description}</p>
       {actionText && onAction && (

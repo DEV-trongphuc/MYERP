@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, CheckCircle2, Clock, Sparkles, RefreshCw, X, Fingerprint, MapPin, FileText } from 'lucide-react';
+import { Camera, CheckCircle2, Clock, RefreshCw, X, Fingerprint, MapPin, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { CustomModal } from './CustomModal';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -636,29 +636,28 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
             width: '72px',
             height: '72px',
             borderRadius: '50%',
-            background: 'rgba(139, 92, 246, 0.15)',
-            color: '#7c3aed',
+            background: 'rgba(189, 29, 45, 0.08)',
+            color: '#BD1D2D',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '2.5rem',
-            boxShadow: '0 8px 24px rgba(124, 58, 237, 0.2)'
+            fontSize: '2.5rem'
           }}>
-            <FileText size={38} color="#7c3aed" />
+            <FileText size={36} color="#BD1D2D" strokeWidth={1.75} />
           </div>
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-text)' }}>
+            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--color-text)' }}>
               {t('Đã quá giờ tan ca hôm nay')}
             </h3>
             <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: '8px 0 0', lineHeight: 1.5 }}>
               {t(`Ca làm việc hôm nay đã kết thúc lúc ${afternoonShiftEnd}. Bạn không thể chấm công vào ca trực tiếp mà cần tạo phiếu Cập nhật / Giải trình công để Quản lý phê duyệt.`)}
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
             <button 
               className="btn outline" 
               onClick={onClose} 
-              style={{ borderRadius: '24px', padding: '10px 20px', fontWeight: 600 }}
+              style={{ borderRadius: '8px', padding: '10px 20px', fontWeight: 600 }}
             >
               {t('Đóng')}
             </button>
@@ -669,21 +668,20 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
                 navigate(`/approvals?create=attendance_bulk&date=${todayStr}`);
               }} 
               style={{ 
-                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', 
+                background: '#BD1D2D', 
                 color: '#ffffff', 
                 border: 'none', 
-                borderRadius: '24px', 
+                borderRadius: '8px', 
                 padding: '10px 24px', 
-                fontWeight: 700, 
+                fontWeight: 600, 
                 display: 'flex', 
                 alignItems: 'center', 
-                gap: '6px',
-                cursor: 'pointer',
-                boxShadow: '0 4px 16px rgba(124, 58, 237, 0.35)'
+                gap: '8px',
+                cursor: 'pointer'
               }}
             >
-              <FileText size={16} />
-              <span>{t('Tạo phiếu Cập nhật công ngay')}</span>
+              <FileText size={16} strokeWidth={1.75} />
+              <span>{t('Tạo phiếu Cập nhật công')}</span>
             </button>
           </div>
         </div>
@@ -728,16 +726,16 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
             </p>
           </div>
           {todayCheckIn.reason && (
-            <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-light)', margin: 0, fontStyle: 'italic', background: 'var(--color-bg)', padding: '8px 16px', borderRadius: '8px', border: '1px dashed var(--color-border)' }}>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-light)', margin: 0, background: 'var(--color-bg)', padding: '8px 16px', borderRadius: '8px', border: '1px dashed var(--color-border)' }}>
               "{todayCheckIn.reason}"
             </p>
           )}
-          <button className="btn primary" onClick={onClose} style={{ backgroundColor: '#BD1D2D', border: 'none', borderRadius: '24px', padding: '10px 32px', fontWeight: 600, marginTop: '0.5rem' }}>
+          <button className="btn primary" onClick={onClose} style={{ backgroundColor: '#BD1D2D', border: 'none', borderRadius: '8px', padding: '10px 32px', fontWeight: 600, marginTop: '0.5rem' }}>
             {t('Đồng ý')}
           </button>
         </div>
       ) : isSuccessScreen ? (
-        /* 2. Stunning Success Screen (Auto Closes after 2s) */
+        /* 2. Success Screen (Auto Closes after 2s) */
         <div style={{
           display: 'flex',
           flexDirection: 'column',
@@ -749,60 +747,58 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
           position: 'relative',
           overflow: 'hidden'
         }}>
-          {/* Animated Glowing Ring Aura */}
-          <div style={{ position: 'relative', width: 90, height: 90, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div className="checkin-pulse-ring" />
+          <div style={{ position: 'relative', width: 88, height: 88, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div 
               className="checkin-success-badge"
               style={{
-                width: 84,
-                height: 84,
+                width: 80,
+                height: 80,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                background: '#10B981',
                 color: '#ffffff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 12px 30px rgba(16, 185, 129, 0.4)',
                 zIndex: 2
               }}
             >
-              <CheckCircle2 size={46} strokeWidth={2.5} />
+              <CheckCircle2 size={44} strokeWidth={2.2} />
             </div>
           </div>
 
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--color-text)', margin: '0 0 8px 0', letterSpacing: '-0.02em' }}>
-            {successMeta?.isCheckOut ? t('CHẤM CÔNG RA CA THÀNH CÔNG!') : t('CHẤM CÔNG THÀNH CÔNG!')}
+          <h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--color-text)', margin: '0 0 8px 0' }}>
+            {successMeta?.isCheckOut ? t('Chấm công ra ca thành công') : t('Chấm công thành công')}
           </h2>
           
           <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: '0 0 1.25rem 0', maxWidth: '340px', lineHeight: 1.5 }}>
             {successMeta?.isCheckOut 
-              ? t('Hẹn gặp lại bạn vào ca làm việc tiếp theo. Chúc bạn một buổi tối vui vẻ!')
+              ? t('Đã ghi nhận giờ ra ca. Hẹn gặp lại bạn vào ca làm việc tiếp theo.')
               : successMeta?.isLate 
-                ? t('Đã ghi nhận thời gian chấm công vào ca hôm nay!')
-                : t('Cổng nhận data tự động hôm nay đã mở. Chúc bạn giao dịch chốt cọc bùng nổ!')}
+                ? t('Đã ghi nhận thời gian chấm công vào ca hôm nay.')
+                : t('Cổng nhận data tự động hôm nay đã mở.')}
           </p>
 
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
             gap: 8,
-            padding: '6px 16px',
-            borderRadius: '20px',
+            padding: '8px 16px',
+            borderRadius: '8px',
             background: 'rgba(16, 185, 129, 0.08)',
             border: '1px solid rgba(16, 185, 129, 0.2)',
-            color: '#10b981',
+            color: '#059669',
             fontSize: '0.8125rem',
-            fontWeight: 700,
+            fontWeight: 600,
+            fontVariantNumeric: 'tabular-nums',
             marginBottom: '2rem'
           }}>
-            <Clock size={15} />
+            <Clock size={15} strokeWidth={1.75} />
             <span>{successMeta?.time || ''} • {successMeta?.date || ''}</span>
           </div>
 
           {/* 2.2s Animated Countdown Progress Bar */}
           <div style={{ width: '100%', maxWidth: '260px', height: 4, background: 'var(--color-border-light)', borderRadius: 99, overflow: 'hidden', margin: '0 auto 1.5rem auto' }}>
-            <div className="checkin-progress-bar" style={{ height: '100%', background: 'linear-gradient(90deg, #10b981, #059669)', borderRadius: 99, animation: 'checkin-progress-fill 2.2s linear forwards' }} />
+            <div className="checkin-progress-bar" style={{ height: '100%', background: '#10B981', borderRadius: 99, animation: 'checkin-progress-fill 2.2s linear forwards' }} />
           </div>
         </div>
       ) : (
@@ -956,9 +952,9 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
                               alignItems: 'center',
                               justifyContent: 'center',
                               fontSize: '1.5rem',
-                              fontWeight: 900,
-                              boxShadow: '0 0 24px rgba(16, 185, 129, 0.8)',
-                              border: '2px solid rgba(255, 255, 255, 0.6)',
+                              fontWeight: 700,
+                              fontVariantNumeric: 'tabular-nums',
+                              border: '2px solid rgba(255, 255, 255, 0.85)',
                               zIndex: 30
                             }}>
                               {faceScanProgress >= 68 ? '1' : faceScanProgress >= 34 ? '2' : '3'}
@@ -1010,7 +1006,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                 zIndex: 15
               }}>
-                <Sparkles size={13} className={faceScanProgress > 60 ? 'spin' : ''} />
+                <Fingerprint size={14} strokeWidth={1.75} />
                 <span>
                   {scanStatusText || t('Vui lòng đưa khuôn mặt vào khung hình...')}
                 </span>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Sparkles, ArrowRight, Check } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
@@ -12,19 +12,8 @@ const STORAGE_KEY = 'has_seen_ideas_si_intro_v1';
 
 export const FeatureIntroModal: React.FC<FeatureIntroModalProps> = ({ isOpen, onClose }) => {
   const { openChat, startDirectChat } = useChatStore();
-  const [dontShowAgain, setDontShowAgain] = useState(true);
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
-  );
+  const [dontShowAgain, setDontShowAgain] = React.useState(true);
   const inFlightRef = useRef(false);
-
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   if (!isOpen || typeof document === 'undefined') return null;
 
@@ -99,18 +88,18 @@ export const FeatureIntroModal: React.FC<FeatureIntroModalProps> = ({ isOpen, on
     >
       <div
         style={{
-          backgroundColor: '#ffffff',
-          borderRadius: '24px',
+          backgroundColor: '#FFFFFF',
+          borderRadius: '16px',
           width: '100%',
           maxWidth: '380px',
           padding: '24px 20px 20px',
-          boxShadow: '0 25px 60px -12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(220, 38, 38, 0.1)',
+          boxShadow: '0 20px 48px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px #E2E8F0',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           textAlign: 'center',
           position: 'relative',
-          animation: 'featureIntroZoomIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+          animation: 'featureIntroZoomIn 0.2s cubic-bezier(0.22, 1, 0.36, 1)',
           boxSizing: 'border-box'
         }}
         onClick={(e) => e.stopPropagation()}
@@ -124,55 +113,44 @@ export const FeatureIntroModal: React.FC<FeatureIntroModalProps> = ({ isOpen, on
             position: 'absolute',
             top: '12px',
             right: '12px',
-            background: '#f1f5f9',
-            border: 'none',
-            borderRadius: '50%',
+            background: '#F1F5F9',
+            border: '1px solid #E2E8F0',
+            borderRadius: '8px',
             width: '32px',
             height: '32px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#64748b',
+            color: '#64748B',
             cursor: 'pointer',
-            transition: 'all 0.15s ease',
+            transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
             zIndex: 10,
             touchAction: 'manipulation'
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#fee2e2';
-            e.currentTarget.style.color = '#dc2626';
+            e.currentTarget.style.backgroundColor = '#FEE2E2';
+            e.currentTarget.style.color = '#BD1D2D';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#f1f5f9';
-            e.currentTarget.style.color = '#64748b';
+            e.currentTarget.style.backgroundColor = '#F1F5F9';
+            e.currentTarget.style.color = '#64748B';
           }}
         >
-          <X size={16} />
+          <X size={16} strokeWidth={1.75} />
         </button>
 
         {/* Centered Sticker Mascot */}
         <div
           style={{
             position: 'relative',
-            width: '130px',
-            height: '130px',
-            marginBottom: '14px',
+            width: '120px',
+            height: '120px',
+            marginBottom: '12px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
           }}
         >
-          {/* Soft pulsing glow behind sticker */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: '-8px',
-              borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(220, 38, 38, 0.25) 0%, rgba(220, 38, 38, 0.05) 60%, transparent 70%)',
-              filter: 'blur(8px)',
-              pointerEvents: 'none'
-            }}
-          />
           <img
             src="/stickers/ideas/ideas_3.webp"
             alt="AI IDEAS Mascot"
@@ -181,12 +159,11 @@ export const FeatureIntroModal: React.FC<FeatureIntroModalProps> = ({ isOpen, on
               (e.currentTarget as HTMLImageElement).src = '/ideas_bot.png';
             }}
             style={{
-              width: '120px',
-              height: '120px',
+              width: '112px',
+              height: '112px',
               objectFit: 'contain',
               position: 'relative',
-              zIndex: 2,
-              filter: 'drop-shadow(0 8px 16px rgba(189, 29, 45, 0.25))'
+              zIndex: 2
             }}
           />
         </div>
@@ -196,85 +173,81 @@ export const FeatureIntroModal: React.FC<FeatureIntroModalProps> = ({ isOpen, on
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '5px',
-            padding: '3px 10px',
-            borderRadius: '999px',
-            background: '#fef2f2',
-            border: '1px solid #fecaca',
-            color: '#dc2626',
+            gap: '4px',
+            padding: '4px 10px',
+            borderRadius: '6px',
+            background: '#F8FAFC',
+            border: '1px solid #E2E8F0',
+            color: '#475569',
             fontSize: '0.68rem',
-            fontWeight: 800,
+            fontWeight: 600,
             letterSpacing: '0.04em',
             textTransform: 'uppercase',
             marginBottom: '8px'
           }}
         >
-          <Sparkles size={11} color="#dc2626" />
-          <span>TÍNH NĂNG MỚI ĐẶC QUYỀN</span>
+          <Sparkles size={12} strokeWidth={1.75} color="#BD1D2D" />
+          <span>Trợ lý AI Nội bộ</span>
         </div>
 
         {/* AI Name & Title */}
         <h2
           style={{
-            fontSize: '1.35rem',
-            fontWeight: 900,
-            lineHeight: 1.2,
-            margin: '0 0 4px',
-            color: '#1e293b',
-            letterSpacing: '-0.02em'
+            fontSize: '1.25rem',
+            fontWeight: 700,
+            lineHeight: 1.25,
+            margin: '0 0 8px',
+            color: '#0F172A'
           }}
         >
-          <span style={{ color: '#BD1D2D' }}>IDEAS SI</span> — Super Intelligent 🧠⚡
+          <span style={{ color: '#BD1D2D' }}>IDEAS SI</span> — Trợ lý Doanh nghiệp
         </h2>
 
         <p
           style={{
             margin: '0 0 20px',
             fontSize: '0.82rem',
-            color: '#64748b',
-            lineHeight: 1.45,
+            color: '#64748B',
+            lineHeight: 1.5,
             maxWidth: '320px'
           }}
         >
-          Trợ lý Siêu Trí tuệ Doanh nghiệp & Đồng hành Tuyển sinh Quốc tế
+          Trợ lý điều hành tác nghiệp doanh nghiệp và hỗ trợ tuyển sinh quốc tế.
         </p>
 
-        {/* Big Experience Button */}
+        {/* Primary Action Button */}
         <button
           type="button"
           onClick={handleStartChat}
           style={{
             width: '100%',
-            minHeight: '48px',
+            minHeight: '44px',
             padding: '12px 20px',
-            borderRadius: '14px',
-            background: 'linear-gradient(135deg, #BD1D2D 0%, #dc2626 50%, #b91c1c 100%)',
-            color: '#ffffff',
+            borderRadius: '10px',
+            background: '#BD1D2D',
+            color: '#FFFFFF',
             border: 'none',
-            fontSize: '0.94rem',
-            fontWeight: 800,
+            fontSize: '0.9rem',
+            fontWeight: 600,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '8px',
-            boxShadow: '0 6px 18px rgba(189, 29, 45, 0.35)',
-            transition: 'all 0.15s ease',
+            transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
             touchAction: 'manipulation',
             WebkitTapHighlightColor: 'transparent',
             userSelect: 'none'
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-1px)';
-            e.currentTarget.style.boxShadow = '0 8px 22px rgba(189, 29, 45, 0.45)';
+            e.currentTarget.style.backgroundColor = '#A31422';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 6px 18px rgba(189, 29, 45, 0.35)';
+            e.currentTarget.style.backgroundColor = '#BD1D2D';
           }}
         >
-          <span>Trải nghiệm ngay</span>
-          <ArrowRight size={17} />
+          <span>Mở IDEAS SI</span>
+          <ArrowRight size={16} strokeWidth={1.75} />
         </button>
 
         {/* Don't show again toggle */}
@@ -283,29 +256,29 @@ export const FeatureIntroModal: React.FC<FeatureIntroModalProps> = ({ isOpen, on
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '6px',
-            fontSize: '0.72rem',
-            color: '#64748b',
+            gap: '8px',
+            fontSize: '0.75rem',
+            color: '#64748B',
             cursor: 'pointer',
             userSelect: 'none',
-            marginTop: '14px'
+            marginTop: '16px'
           }}
         >
           <div
             onClick={() => setDontShowAgain(!dontShowAgain)}
             style={{
-              width: '15px',
-              height: '15px',
+              width: '16px',
+              height: '16px',
               borderRadius: '4px',
-              border: dontShowAgain ? '1px solid #dc2626' : '1px solid #cbd5e1',
-              background: dontShowAgain ? '#dc2626' : '#ffffff',
+              border: dontShowAgain ? '1px solid #BD1D2D' : '1px solid #CBD5E1',
+              background: dontShowAgain ? '#BD1D2D' : '#FFFFFF',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transition: 'all 0.15s ease'
+              transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
             }}
           >
-            {dontShowAgain && <Check size={11} color="#ffffff" strokeWidth={3} />}
+            {dontShowAgain && <Check size={11} color="#ffffff" strokeWidth={2.5} />}
           </div>
           <span>Không tự động hiển thị lại khi đăng nhập</span>
         </label>

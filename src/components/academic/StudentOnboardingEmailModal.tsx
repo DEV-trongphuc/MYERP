@@ -225,15 +225,15 @@ export const StudentOnboardingEmailModal: React.FC<StudentOnboardingEmailModalPr
   const handleSendEmail = async () => {
     if (isSending) return;
     if (!emailForm.to_email?.trim()) {
-      if (addToast) addToast('Vui lòng nhập email người nhận!', 'error');
+      if (addToast) addToast('Vui lòng nhập email người nhận.', 'error');
       return;
     }
     if (!emailForm.subject?.trim()) {
-      if (addToast) addToast('Vui lòng nhập tiêu đề email!', 'error');
+      if (addToast) addToast('Vui lòng nhập tiêu đề email.', 'error');
       return;
     }
     if (!emailForm.content?.trim()) {
-      if (addToast) addToast('Vui lòng nhập nội dung email!', 'error');
+      if (addToast) addToast('Vui lòng nhập nội dung email.', 'error');
       return;
     }
 
@@ -257,7 +257,7 @@ export const StudentOnboardingEmailModal: React.FC<StudentOnboardingEmailModalPr
         });
       }
 
-      if (addToast) addToast('Đã gửi Thư tiếp nhận học viên thành công!', 'success');
+      if (addToast) addToast('Đã gửi Thư tiếp nhận học viên thành công.', 'success');
       if (onSuccess) onSuccess();
       onClose();
     } catch (err: any) {
@@ -278,7 +278,7 @@ export const StudentOnboardingEmailModal: React.FC<StudentOnboardingEmailModalPr
     navigator.clipboard.writeText(textToCopy).then(() => {
       setCopiedZalo(true);
       setTimeout(() => setCopiedZalo(false), 2500);
-      if (addToast) addToast('Đã sao chép mẫu Tin nhắn Zalo Tiếp nhận!', 'success');
+      if (addToast) addToast('Đã sao chép mẫu Tin nhắn Zalo Tiếp nhận.', 'success');
     });
   };
 
@@ -388,7 +388,7 @@ export const StudentOnboardingEmailModal: React.FC<StudentOnboardingEmailModalPr
               gap: '8px',
             }}
           >
-            <Sparkles size={16} style={{ color: '#BD1D2D', flexShrink: 0 }} />
+            <Sparkles size={16} strokeWidth={1.75} style={{ color: '#BD1D2D', flexShrink: 0 }} />
             <div>Hệ thống sẽ gửi email chính thức tới học viên và tự động ghi nhật ký tương tác với tên của bạn.</div>
           </div>
 
@@ -714,7 +714,7 @@ export const StudentOnboardingEmailModal: React.FC<StudentOnboardingEmailModalPr
                           e.currentTarget.style.display = 'none';
                         }}
                       />
-                      <span style={{ fontWeight: 900, fontSize: '1.05rem', color: '#ffffff' }}>{orgName}</span>
+                      <span style={{ fontWeight: 700, fontSize: '1.05rem', color: '#ffffff' }}>{orgName}</span>
                     </div>
                     <span style={{ fontSize: '0.72rem', background: 'rgba(0,0,0,0.2)', padding: '3px 8px', borderRadius: '4px', color: '#ffffff' }}>
                       Academic Department
@@ -807,18 +807,18 @@ export const StudentOnboardingEmailModal: React.FC<StudentOnboardingEmailModalPr
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 14px',
+              padding: '8px 16px',
               borderRadius: '8px',
               border: '1px solid #e2e8f0',
               background: '#f8fafc',
               color: '#0f172a',
               fontSize: '0.8rem',
-              fontWeight: 700,
+              fontWeight: 600,
               cursor: 'pointer',
             }}
           >
             {copiedZalo ? <Check size={14} color="#059669" /> : <Copy size={14} />}
-            <span>{copiedZalo ? 'Đã sao chép!' : 'Copy Tin nhắn Zalo Tiếp nhận'}</span>
+            <span>{copiedZalo ? 'Đã sao chép' : 'Copy Tin nhắn Zalo Tiếp nhận'}</span>
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -827,7 +827,7 @@ export const StudentOnboardingEmailModal: React.FC<StudentOnboardingEmailModalPr
               onClick={onClose}
               disabled={isSending}
               style={{
-                padding: '8px 14px',
+                padding: '8px 16px',
                 borderRadius: '8px',
                 border: '1px solid #e2e8f0',
                 background: '#ffffff',
@@ -847,15 +847,14 @@ export const StudentOnboardingEmailModal: React.FC<StudentOnboardingEmailModalPr
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
-                padding: '8px 18px',
+                padding: '8px 16px',
                 borderRadius: '8px',
                 border: 'none',
-                background: 'linear-gradient(135deg, #BD1D2D, #8C111E)',
+                background: '#BD1D2D',
                 color: '#ffffff',
                 fontSize: '0.82rem',
-                fontWeight: 700,
+                fontWeight: 600,
                 cursor: isSending ? 'not-allowed' : 'pointer',
-                boxShadow: '0 2px 4px rgba(189, 29, 45, 0.2)',
               }}
             >
               {isSending ? (

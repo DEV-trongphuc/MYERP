@@ -4,7 +4,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import {
-    Plus, X, Save, ZoomIn, ZoomOut, Move, Maximize, Minimize,
+    Plus, X, Save, ZoomIn, ZoomOut, Move,
     MessageSquare, Zap, Flag, GitBranch, FormInput, Trash2,
     AlertTriangle, MousePointerClick, Bot, MoreHorizontal,
     CheckCircle2, Keyboard
@@ -63,7 +63,7 @@ const StraightConnector: React.FC<{ height?: number }> = ({ height = 64 }) => (
 
 // ── Branch Connector — SVG lines ONLY, no text (labels done in HTML) ───────────
 const BranchConnector: React.FC<{ count: number; height?: number }> = ({ count, height = CONNECTOR_H }) => {
-    const branchColors = ['#2563eb', '#8b5cf6', '#10b981', '#f43f5e', '#3b82f6'];
+    const branchColors = ['#2563eb', '#475569', '#10b981', '#BD1D2D', '#0f172a'];
     const midX = 50;
     const midY = height / 2;
     const endY = height + 4;
@@ -108,25 +108,25 @@ const ButtonPill: React.FC<{ btn: ScenarioNodeBtn; colorIdx: number }> = ({ btn,
 
     // Color schemes
     const schemes = [
-        { icon: 'text-[#9A1523]', circle: 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523]', border: 'border-amber-200', shadow: 'shadow-amber-100', text: 'text-amber-800' },
-        { icon: 'text-blue-700', circle: 'bg-gradient-to-br from-blue-400 to-blue-600', border: 'border-blue-200', shadow: 'shadow-blue-100', text: 'text-blue-800' },
-        { icon: 'text-pink-700', circle: 'bg-gradient-to-br from-rose-400 to-rose-500', border: 'border-rose-200', shadow: 'shadow-rose-100', text: 'text-rose-800' },
-        { icon: 'text-blue-700', circle: 'bg-gradient-to-br from-blue-400 to-blue-600', border: 'border-blue-200', shadow: 'shadow-blue-100', text: 'text-blue-800' },
+        { icon: 'text-[#BD1D2D]', circle: 'bg-[#BD1D2D]', border: 'border-rose-200', shadow: 'shadow-xs', text: 'text-[#9A1523]' },
+        { icon: 'text-slate-700', circle: 'bg-slate-800', border: 'border-slate-200', shadow: 'shadow-xs', text: 'text-slate-800' },
+        { icon: 'text-blue-700', circle: 'bg-blue-600', border: 'border-blue-200', shadow: 'shadow-xs', text: 'text-blue-800' },
+        { icon: 'text-slate-700', circle: 'bg-slate-700', border: 'border-slate-200', shadow: 'shadow-xs', text: 'text-slate-800' },
     ];
 
-    const wildScheme = { circle: 'bg-gradient-to-br from-emerald-400 to-emerald-600', border: 'border-emerald-200', shadow: 'shadow-emerald-100', text: 'text-emerald-800' };
+    const wildScheme = { circle: 'bg-emerald-600', border: 'border-emerald-200', shadow: 'shadow-xs', text: 'text-emerald-800' };
     const scheme = isWild ? wildScheme : schemes[colorIdx % schemes.length];
 
     return (
-        <div className={`flex items-center gap-2 pl-1.5 pr-4 py-1.5 rounded-full bg-white border shadow-lg whitespace-nowrap ${scheme.border} ${scheme.shadow}`}>
+        <div className={`flex items-center gap-2 pl-1.5 pr-4 py-1.5 rounded-full bg-white border whitespace-nowrap ${scheme.border} ${scheme.shadow}`}>
             {/* Circular icon */}
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 shadow-md ${scheme.circle}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${scheme.circle}`}>
                 {isWild
                     ? <Keyboard className="w-3.5 h-3.5 text-white" />
                     : <MousePointerClick className="w-3.5 h-3.5 text-white" />
                 }
             </div>
-            <span className={`text-[11px] font-bold max-w-[140px] truncate ${scheme.text}`}>{labelText}</span>
+            <span className={`text-[11px] font-semibold max-w-[140px] truncate ${scheme.text}`}>{labelText}</span>
         </div>
     );
 };
@@ -137,7 +137,7 @@ const AddBtn: React.FC<{ onClick: () => void }> = ({ onClick }) => (
         <StraightConnector height={36} />
         <button
             onClick={e => { e.stopPropagation(); onClick(); }}
-            className="w-7 h-7 rounded-full bg-white border-2 border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center text-slate-400 hover:text-blue-500 transition-all shadow-sm flow-interactive"
+            className="w-7 h-7 rounded-full bg-white border-2 border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center text-slate-400 hover:text-blue-500 transition-colors shadow-sm flow-interactive"
         >
             <Plus className="w-3.5 h-3.5" />
         </button>
@@ -146,9 +146,9 @@ const AddBtn: React.FC<{ onClick: () => void }> = ({ onClick }) => (
 );
 
 const EndFlag = () => (
-    <div className="flex flex-col items-center opacity-20 mt-1">
+    <div className="flex flex-col items-center opacity-25 mt-1">
         <Flag className="w-4 h-4 text-slate-400" />
-        <span className="text-[9px] font-black text-slate-400 uppercase mt-0.5">End</span>
+        <span className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">End</span>
     </div>
 );
 
@@ -159,7 +159,7 @@ const DeleteConfirm: React.FC<{ label?: string; onConfirm: () => void; onCancel:
     return ReactDOM.createPortal(
         <div className="fixed inset-0 z-[99999999] flex items-center justify-center">
             <div className={`absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-200 ${show ? 'opacity-100' : 'opacity-0'}`} onClick={onCancel} />
-            <div className={`relative bg-white rounded-[14px] shadow-2xl border border-slate-100 p-6 w-full max-w-sm mx-4 transition-all duration-200 ${show ? 'scale-100 opacity-100 translate-y-0' : 'scale-90 opacity-0 translate-y-4'}`}>
+            <div className={`relative bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 w-full max-w-sm mx-4 transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${show ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-2'}`}>
                 <div className="flex items-start gap-4 mb-5">
                     <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
                         <Trash2 className="w-5 h-5 text-rose-600" />
@@ -172,8 +172,8 @@ const DeleteConfirm: React.FC<{ label?: string; onConfirm: () => void; onCancel:
                     </div>
                 </div>
                 <div className="flex gap-2 justify-end">
-                    <button onClick={onCancel} className="h-9 px-4 rounded-xl text-sm font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all">Hủy</button>
-                    <button onClick={onConfirm} className="h-9 px-4 rounded-xl text-sm font-bold bg-rose-500 hover:bg-rose-600 text-white shadow-sm shadow-rose-200 transition-all flex items-center gap-2">
+                    <button onClick={onCancel} className="h-9 px-4 rounded-xl text-sm font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">Hủy</button>
+                    <button onClick={onConfirm} className="h-9 px-4 rounded-xl text-sm font-semibold bg-[#BD1D2D] hover:bg-[#9A1523] text-white transition-colors flex items-center gap-2">
                         <Trash2 className="w-3.5 h-3.5" /> Xóa
                     </button>
                 </div>
@@ -196,19 +196,19 @@ const ButtonRenameModal: React.FC<{
     return ReactDOM.createPortal(
         <div className="fixed inset-0 z-[99999999] flex items-center justify-center">
             <div className={`absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-200 ${show ? 'opacity-100' : 'opacity-0'}`} onClick={onClose} />
-            <div className={`relative bg-white rounded-[14px] shadow-2xl border border-slate-100 p-6 w-full max-w-sm mx-4 transition-all duration-200 ${show ? 'scale-100 opacity-100 translate-y-0' : 'scale-90 opacity-0 translate-y-4'}`}>
+            <div className={`relative bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 w-full max-w-sm mx-4 transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${show ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-2'}`}>
                 <h3 className="text-sm font-bold text-slate-800 mb-4">Mô tả/Tên nhánh</h3>
                 <input 
                     type="text" 
                     value={val} 
                     onChange={e => setVal(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && onSave(val)}
-                    className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-slate-50 text-sm font-bold text-slate-800 outline-none focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all mb-5"
+                    className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#BD1D2D] focus:ring-2 focus:ring-[#BD1D2D]/10 transition-colors mb-5"
                     autoFocus
                 />
                 <div className="flex gap-2 justify-end">
-                    <button onClick={onClose} className="h-9 px-4 rounded-xl text-sm font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all">Hủy</button>
-                    <button onClick={() => onSave(val)} className="h-9 px-5 rounded-xl text-sm font-bold bg-blue-500 hover:bg-blue-600 text-white shadow-sm shadow-blue-200 transition-all">Lưu nhánh</button>
+                    <button onClick={onClose} className="h-9 px-4 rounded-xl text-sm font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">Hủy</button>
+                    <button onClick={() => onSave(val)} className="h-9 px-5 rounded-xl text-sm font-semibold bg-[#BD1D2D] hover:bg-[#9A1523] text-white transition-colors">Lưu nhánh</button>
                 </div>
             </div>
         </div>,
@@ -243,32 +243,30 @@ const NodeCard: React.FC<{
             <div
                 id={`sc-node-${node.id}`}
                 onClick={onClick}
-                className="group relative w-[260px] bg-white rounded-[18px] border border-slate-100 z-20 cursor-pointer
-                    shadow-[0_8px_30px_rgba(0,0,0,0.05)]
-                    hover:shadow-[0_20px_40px_rgba(59,130,246,0.12)]
-                    hover:-translate-y-1.5 hover:ring-2 hover:ring-blue-100
-                    transition-all duration-300 flow-interactive"
+                className="group relative w-[260px] bg-white rounded-2xl border border-slate-200 z-20 cursor-pointer
+                    shadow-xs hover:shadow-md hover:border-slate-300
+                    transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] flow-interactive"
             >
                 <div className="p-5">
                     <div className="flex items-start gap-4">
                         {/* Icon */}
                         {isRoot ? (
-                            <div className="w-12 h-12 rounded-[14px] bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] flex items-center justify-center shrink-0 shadow-lg shadow-amber-200 group-hover:scale-110 group-hover:rotate-3 transition-transform">
-                                <Zap className="w-5 h-5 text-white" />
+                            <div className="w-11 h-11 rounded-xl bg-[#BD1D2D] flex items-center justify-center shrink-0">
+                                <Zap className="w-5 h-5 text-white" strokeWidth={1.75} />
                             </div>
                         ) : (
-                            <div className="w-12 h-12 rounded-[14px] bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center shrink-0 shadow-lg shadow-blue-200 group-hover:scale-110 group-hover:rotate-3 transition-transform">
-                                <MessageSquare className="w-5 h-5 text-white" />
+                            <div className="w-11 h-11 rounded-xl bg-slate-800 flex items-center justify-center shrink-0">
+                                <MessageSquare className="w-5 h-5 text-white" strokeWidth={1.75} />
                             </div>
                         )}
 
                         <div className="flex-1 overflow-hidden pt-0.5">
                             <div className="flex items-center gap-2 mb-1.5">
-                                <p className={`text-[9px] font-bold uppercase tracking-widest leading-none ${isRoot ? 'text-[var(--color-primary)]' : 'text-blue-600'}`}>
+                                <p className={`text-[10px] font-bold uppercase tracking-wider leading-none ${isRoot ? 'text-[#BD1D2D]' : 'text-slate-600'}`}>
                                     {isRoot ? 'Trigger · Bước 1' : 'Reply Node'}
                                 </p>
                                 {hasLeadForm && (
-                                    <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center gap-0.5 shrink-0">
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center gap-0.5 shrink-0">
                                         <FormInput className="w-2.5 h-2.5" /> LEAD
                                     </span>
                                 )}
@@ -277,18 +275,18 @@ const NodeCard: React.FC<{
                             {/* Message — single line */}
                             <p className="text-sm font-bold text-slate-800 truncate leading-tight">
                                 {isRoot && !messages[0] && firstKeyword ? (
-                                    <span className="text-[var(--color-primary)]">Từ khóa: {firstKeyword}</span>
+                                    <span className="text-[#BD1D2D]">Từ khóa: {firstKeyword}</span>
                                 ) : (
                                     <>{messages[0]?.slice(0, 36) || 'Chưa có nội dung...'}{(messages[0]?.length || 0) > 36 && '…'}</>
                                 )}
                             </p>
                             {messages.length > 1 && (
-                                <p className="text-[10px] text-slate-400 font-medium mt-0.5">+{messages.length - 1} tin nhắn nữa</p>
+                                <p className="text-[11px] text-slate-400 font-medium mt-0.5 tabular-nums">+{messages.length - 1} tin nhắn nữa</p>
                             )}
                             {/* Note about branches — no button list */}
                             {buttons.length > 0 && (
-                                <p className="text-[9px] text-slate-400 font-medium mt-1 flex items-center gap-1">
-                                    <GitBranch className="w-3 h-3 text-indigo-400" />
+                                <p className="text-[10px] text-slate-500 font-medium mt-1 flex items-center gap-1 tabular-nums">
+                                    <GitBranch className="w-3 h-3 text-slate-500" />
                                     {buttons.length} nhánh
                                 </p>
                             )}
@@ -297,10 +295,10 @@ const NodeCard: React.FC<{
                 </div>
 
                 {/* Hover quick-edit */}
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50">
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50">
                     <button
                         onClick={e => { e.stopPropagation(); onClick(); }}
-                        className="p-1.5 bg-white/80 backdrop-blur-md border border-slate-100 rounded-full shadow-sm text-slate-400 hover:text-blue-600 hover:shadow-md transform hover:scale-110 transition-all"
+                        className="p-1.5 bg-white border border-slate-200 rounded-full shadow-xs text-slate-400 hover:text-[#BD1D2D] hover:border-slate-300 transition-colors"
                     >
                         <MoreHorizontal className="w-4 h-4" />
                     </button>
@@ -321,7 +319,7 @@ const NodeCard: React.FC<{
                                 <StraightConnector height={22} />
                                 
                                 <div 
-                                    className="z-20 cursor-pointer flow-interactive hover:-translate-y-0.5 hover:scale-105 transition-all"
+                                    className="z-20 cursor-pointer flow-interactive transition-opacity hover:opacity-90"
                                     onClick={(e) => { e.stopPropagation(); onEditBranchLabel(btn.id, btn.label); }}
                                     title="Chỉnh sửa nhanh tên nhánh"
                                 >
@@ -337,7 +335,7 @@ const NodeCard: React.FC<{
                                         <div className="flex flex-col items-center mt-2">
                                             <button
                                                 onClick={e => { e.stopPropagation(); onAddBranch(btn.id); }}
-                                                className="w-7 h-7 rounded-full bg-white border-2 border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center text-slate-400 hover:text-blue-500 transition-all shadow-sm flow-interactive"
+                                                className="w-7 h-7 rounded-full bg-white border-2 border-dashed border-slate-300 hover:border-[#BD1D2D] hover:bg-rose-50 flex items-center justify-center text-slate-400 hover:text-[#BD1D2D] transition-colors shadow-xs flow-interactive"
                                             >
                                                 <Plus className="w-3.5 h-3.5" />
                                             </button>
@@ -416,27 +414,27 @@ const NodeEditPanel: React.FC<{
             <div className="fixed inset-0 z-[99998] flex items-center justify-center p-4" style={{ pointerEvents: animIn ? 'auto' : 'none' }}>
                 <div className={`absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-200 ${animIn ? 'opacity-100' : 'opacity-0'}`} onClick={close} />
 
-                <div className={`relative flex flex-col bg-white rounded-[18px] shadow-2xl border border-slate-100 w-full transition-all duration-200 ${animIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-4'}`}
+                <div className={`relative flex flex-col bg-white rounded-2xl shadow-2xl border border-slate-200 w-full transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${animIn ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-2'}`}
                     style={{ maxWidth: 520, maxHeight: '88vh' }}>
 
                     {/* Header */}
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0 rounded-t-[18px] bg-slate-50/80">
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 shrink-0 rounded-t-2xl bg-slate-50/80">
                         <div className="flex items-center gap-3">
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-md ${isRoot ? 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] shadow-amber-200' : 'bg-gradient-to-br from-blue-400 to-indigo-500 shadow-blue-200'}`}>
-                                {isRoot ? <Zap className="w-4 h-4 text-white" /> : <MessageSquare className="w-4 h-4 text-white" />}
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${isRoot ? 'bg-[#BD1D2D]' : 'bg-slate-800'}`}>
+                                {isRoot ? <Zap className="w-4 h-4 text-white" strokeWidth={1.75} /> : <MessageSquare className="w-4 h-4 text-white" strokeWidth={1.75} />}
                             </div>
                             <div>
                                 <h3 className="text-sm font-bold text-slate-800">{isRoot ? 'Bước 1 — Trigger Node' : 'Reply Node'}</h3>
-                                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-0.5">ID: {node.id}</p>
+                                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mt-0.5 tabular-nums">ID: {node.id}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-1">
                             {!isRoot && (
-                                <button onClick={() => setConfirmDelete(true)} className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all" title="Xóa node">
+                                <button onClick={() => setConfirmDelete(true)} className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors" title="Xóa node">
                                     <Trash2 className="w-4 h-4" />
                                 </button>
                             )}
-                            <button onClick={close} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"><X className="w-5 h-5" /></button>
+                            <button onClick={close} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"><X className="w-5 h-5" /></button>
                         </div>
                     </div>
 
@@ -454,7 +452,7 @@ const NodeEditPanel: React.FC<{
                                     value={keywords || ''}
                                     onChange={e => onKeywordsChange(e.target.value)}
                                     placeholder="Ví dụ: học phí, bao nhiêu tiền, giá..."
-                                    className="w-full h-11 px-4 rounded-[14px] border border-slate-200 bg-slate-50/80 text-sm font-bold text-slate-800 placeholder-slate-400 outline-none focus:border-[var(--color-primary)] focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/10 transition-all"
+                                    className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-slate-50/80 text-sm font-bold text-slate-800 placeholder-slate-400 outline-none focus:border-[var(--color-primary)] focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/10 transition-colors"
                                 />
                             </div>
                         )}
@@ -471,15 +469,15 @@ const NodeEditPanel: React.FC<{
                                         onChange={e => updateMsg(i, e.target.value)}
                                         placeholder={i === 0 ? 'Nhập nội dung chatbot gửi...' : 'Tin nhắn tiếp theo (delay 1 giây)...'}
                                         rows={3}
-                                        className="w-full px-4 py-3 rounded-[14px] border border-slate-200 bg-slate-50/80 text-sm font-medium text-slate-800 placeholder-slate-400 outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-50 transition-all resize-y min-h-[80px]"
+                                        className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/80 text-sm font-medium text-slate-800 placeholder-slate-400 outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-50 transition-colors resize-y min-h-[80px]"
                                     />
                                     {messages.length > 1 && (
-                                        <button onClick={() => removeMsg(i)} className="absolute top-2 right-2 p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all"><X className="w-3.5 h-3.5" /></button>
+                                        <button onClick={() => removeMsg(i)} className="absolute top-2 right-2 p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"><X className="w-3.5 h-3.5" /></button>
                                     )}
                                     {i > 0 && <p className="text-[9px] text-slate-400 font-bold mt-1 pl-1">↪ Gửi sau 1 giây</p>}
                                 </div>
                             ))}
-                            <button onClick={addMsg} className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-xl border border-dashed border-slate-300 text-slate-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/50 transition-all">
+                            <button onClick={addMsg} className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-xl border border-dashed border-slate-300 text-slate-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/50 transition-colors">
                                 <Plus className="w-3 h-3" /> Thêm tin nhắn tiếp theo
                             </button>
                         </div>
@@ -490,16 +488,16 @@ const NodeEditPanel: React.FC<{
                                 <FormInput className="w-3 h-3 text-emerald-500" /> Hành động đặc biệt
                             </label>
                             <button onClick={toggleLeadForm}
-                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-[14px] border-2 text-left transition-all
-                                    ${hasLeadForm ? 'bg-emerald-50 border-emerald-400 shadow-sm shadow-emerald-100' : 'bg-white border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30'}`}>
-                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${hasLeadForm ? 'bg-emerald-500 shadow-md shadow-emerald-200' : 'bg-slate-100'}`}>
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-colors
+                                    ${hasLeadForm ? 'bg-emerald-50 border-emerald-400 shadow-sm' : 'bg-white border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30'}`}>
+                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${hasLeadForm ? 'bg-emerald-500 shadow-sm' : 'bg-slate-100'}`}>
                                     <FormInput className={`w-4 h-4 ${hasLeadForm ? 'text-white' : 'text-slate-400'}`} />
                                 </div>
                                 <div className="flex-1">
-                                    <p className={`text-[11px] font-black font-mono ${hasLeadForm ? 'text-emerald-700' : 'text-slate-700'}`}>[SHOW_LEAD_FORM]</p>
+                                    <p className={`text-[11px] font-bold font-mono ${hasLeadForm ? 'text-emerald-700' : 'text-slate-700'}`}>[SHOW_LEAD_FORM]</p>
                                     <p className="text-[10px] text-slate-400 mt-0.5">Kiểm tra lead → nếu chưa có thì hiện form thu thập</p>
                                 </div>
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${hasLeadForm ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300'}`}>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${hasLeadForm ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300'}`}>
                                     {hasLeadForm && <CheckCircle2 className="w-3 h-3 text-white" />}
                                 </div>
                             </button>
@@ -507,8 +505,8 @@ const NodeEditPanel: React.FC<{
 
                         {/* Buttons */}
                         <div className="space-y-3">
-                            <label className="text-[9px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
-                                <GitBranch className="w-3 h-3 text-indigo-500" /> Nút nhanh / Rẽ nhánh
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
+                                <GitBranch className="w-3 h-3 text-[#BD1D2D]" /> Nút nhanh / Rẽ nhánh
                                 <span className="font-normal normal-case text-slate-400">(tối đa 4)</span>
                             </label>
 
@@ -516,7 +514,7 @@ const NodeEditPanel: React.FC<{
                             {buttons.length < 4 && (
                                 <div className="flex flex-wrap gap-1.5">
                                     {presets.filter(p => !buttons.some(b => b.label === p)).slice(0, 4 - buttons.length).map(p => (
-                                        <button key={p} onClick={() => addBtn(p)} className="px-2.5 py-1 rounded-xl border border-dashed border-slate-200 text-[11px] font-bold text-slate-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/50 transition-all">+ {p}</button>
+                                        <button key={p} onClick={() => addBtn(p)} className="px-2.5 py-1 rounded-xl border border-dashed border-slate-200 text-[11px] font-semibold text-slate-500 hover:border-[#BD1D2D] hover:text-[#BD1D2D] hover:bg-rose-50/50 transition-colors">+ {p}</button>
                                     ))}
                                 </div>
                             )}
@@ -526,11 +524,11 @@ const NodeEditPanel: React.FC<{
                                 {buttons.map((btn, i) => {
                                     const isWild = btn.label === '*';
                                     return (
-                                        <div key={btn.id} className={`flex items-center gap-2 px-3 py-2 rounded-[14px] border ${isWild ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200 shadow-sm'}`}>
-                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${isWild ? 'bg-gradient-to-br from-emerald-400 to-emerald-600' : 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523]'}`}>
+                                        <div key={btn.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${isWild ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200 shadow-xs'}`}>
+                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${isWild ? 'bg-emerald-600' : 'bg-[#BD1D2D]'}`}>
                                                 {isWild ? <Keyboard className="w-3 h-3 text-white" /> : <MousePointerClick className="w-3 h-3 text-white" />}
                                             </div>
-                                            <span className="text-xs font-bold text-slate-700 flex-1 truncate">
+                                            <span className="text-xs font-semibold text-slate-700 flex-1 truncate">
                                                 {isWild ? 'Nhập tự do (bắt mọi tin nhắn)' : btn.label}
                                             </span>
                                             <button onClick={() => removeBtn(btn.id)} className="text-slate-300 hover:text-rose-500 transition-colors shrink-0"><X className="w-3.5 h-3.5" /></button>
@@ -545,8 +543,8 @@ const NodeEditPanel: React.FC<{
                                     <input type="text" value={newBtnLabel} onChange={e => setNewBtnLabel(e.target.value)}
                                         onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addBtn(newBtnLabel))}
                                         placeholder="Nhập tên nút tùy ý..."
-                                        className="flex-1 h-10 px-4 rounded-xl border border-slate-200 bg-slate-50 text-xs font-medium outline-none focus:border-blue-400 focus:bg-white text-slate-800 placeholder-slate-400 transition-all" />
-                                    <button onClick={() => addBtn(newBtnLabel)} className="h-10 px-4 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm shadow-indigo-200">
+                                        className="flex-1 h-10 px-4 rounded-xl border border-slate-200 bg-slate-50 text-xs font-medium outline-none focus:border-[#BD1D2D] focus:bg-white text-slate-800 placeholder-slate-400 transition-colors" />
+                                    <button onClick={() => addBtn(newBtnLabel)} className="h-10 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5">
                                         <Plus className="w-3.5 h-3.5" /> Tạo
                                     </button>
                                 </div>
@@ -554,13 +552,13 @@ const NodeEditPanel: React.FC<{
 
                             {/* Wildcard */}
                             {!buttons.some(b => b.label === '*') && buttons.length < 4 && (
-                                <button onClick={addWildcard} className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-xl border border-dashed border-emerald-200 text-emerald-600 hover:bg-emerald-50 transition-all">
+                                <button onClick={addWildcard} className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-xl border border-dashed border-emerald-200 text-emerald-600 hover:bg-emerald-50 transition-colors">
                                     <Keyboard className="w-3.5 h-3.5" /> + Nhập tự do (cũng là 1 nhánh)
                                 </button>
                             )}
 
                             {buttons.length > 0 && (
-                                <p className="text-[9px] text-slate-400 font-medium flex items-center gap-1">
+                                <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
                                     <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
                                     Mỗi nút tạo 1 nhánh trên canvas. Bấm &ldquo;+&rdquo; dưới nhánh để nối node tiếp theo.
                                 </p>
@@ -569,9 +567,9 @@ const NodeEditPanel: React.FC<{
                     </div>
 
                     {/* Footer */}
-                    <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-slate-100 shrink-0 rounded-b-[18px] bg-slate-50/60">
-                        <button onClick={close} className="h-10 px-5 rounded-xl text-sm font-bold border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all">Hủy</button>
-                        <button onClick={handleSave} className="h-10 px-6 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-blue-500 to-indigo-600 shadow-md shadow-blue-200/60 hover:shadow-blue-300/60 active:scale-95 transition-all flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-slate-200 shrink-0 rounded-b-2xl bg-slate-50/60">
+                        <button onClick={close} className="h-10 px-5 rounded-xl text-sm font-semibold border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">Hủy</button>
+                        <button onClick={handleSave} className="h-10 px-6 rounded-xl text-sm font-semibold text-white bg-[#BD1D2D] hover:bg-[#9A1523] transition-colors flex items-center gap-2">
                             <Save className="w-4 h-4" /> Lưu node
                         </button>
                     </div>
@@ -758,12 +756,12 @@ const ScenarioCanvas: React.FC<CanvasProps> = ({ nodes, onChange, keywords, onKe
 
             {/* Toolbar */}
             <div className="absolute bottom-4 left-4 z-50 flex gap-2">
-                <div className="bg-white p-1.5 rounded-xl border border-slate-200 shadow-xl flex items-center gap-0.5 flow-interactive">
-                    <button onClick={() => zoomStep(-0.1)} className="p-2 text-slate-500 hover:bg-slate-50 rounded-lg"><ZoomOut className="w-4 h-4" /></button>
-                    <span className="text-[10px] font-bold text-slate-400 min-w-[2.5rem] text-center">{Math.round(scale * 100)}%</span>
-                    <button onClick={() => zoomStep(0.1)} className="p-2 text-slate-500 hover:bg-slate-50 rounded-lg"><ZoomIn className="w-4 h-4" /></button>
+                <div className="bg-white p-1.5 rounded-xl border border-slate-200 shadow-lg flex items-center gap-0.5 flow-interactive">
+                    <button onClick={() => zoomStep(-0.1)} className="p-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-colors"><ZoomOut className="w-4 h-4" /></button>
+                    <span className="text-[11px] font-semibold text-slate-500 min-w-[2.5rem] text-center tabular-nums">{Math.round(scale * 100)}%</span>
+                    <button onClick={() => zoomStep(0.1)} className="p-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-colors"><ZoomIn className="w-4 h-4" /></button>
                 </div>
-                <button onClick={centerView} className="bg-white p-3 rounded-xl border border-slate-200 shadow-xl text-slate-500 hover:text-slate-800 flow-interactive transition-all active:scale-95">
+                <button onClick={centerView} className="bg-white p-3 rounded-xl border border-slate-200 shadow-lg text-slate-500 hover:text-slate-800 flow-interactive transition-colors">
                     <Move className="w-4 h-4" />
                 </button>
             </div>

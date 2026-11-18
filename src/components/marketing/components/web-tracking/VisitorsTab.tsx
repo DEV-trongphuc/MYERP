@@ -255,7 +255,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                     title="Đang xem (Live)"
                     value={liveCount.toLocaleString('vi-VN')}
                     icon={<Activity />}
-                    color="#10b981"
+                    color="#C6333D"
                     onClick={() => setLiveModalOpen(true)}
                     breakdown="Click để xem luồng trực tiếp"
                 />
@@ -263,15 +263,15 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                     title="Tổng Visitors"
                     value={(pagination?.total || filteredVisitors.length).toLocaleString('vi-VN')}
                     icon={<Users />}
-                    color="#a31422"
+                    color="#0f172a"
                     onClick={() => setReturningFilter('all')}
-                    breakdown={<span>Trong trang: <b>{visitors.length}</b></span>}
+                    breakdown={<span>Trong trang: <b className="tabular-nums">{visitors.length}</b></span>}
                 />
                 <StatCard
                     title="Khách đã định danh"
                     value={identifiedCount.toLocaleString('vi-VN')}
                     icon={<User />}
-                    color="#3b82f6"
+                    color="#334155"
                     onClick={() => setReturningFilter('identified')}
                     breakdown="Có Email / SĐT / Zalo"
                 />
@@ -279,7 +279,7 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                     title="Khách quay lại (2+)"
                     value={returningCount.toLocaleString('vi-VN')}
                     icon={<Repeat />}
-                    color="#f59e0b"
+                    color="#64748b"
                     onClick={() => setReturningFilter('returning')}
                     breakdown="Từ 2 phiên truy cập trở lên"
                 />
@@ -819,21 +819,21 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                 {/* Journey Stats */}
                                 {visitorStats && (
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 flex-shrink-0">
-                                        <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
+                                        <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl hover:border-slate-300 transition-colors">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Time</p>
-                                            <p className="text-xl font-black text-slate-800">{formatDuration(visitorStats.total_time || 0)}</p>
+                                            <p className="text-xl font-bold text-slate-900 tabular-nums">{formatDuration(visitorStats.total_time || 0)}</p>
                                         </div>
-                                        <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
+                                        <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl hover:border-slate-300 transition-colors">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Page Views</p>
-                                            <p className="text-xl font-black text-slate-800">{visitorStats.page_views || 0}</p>
+                                            <p className="text-xl font-bold text-slate-900 tabular-nums">{visitorStats.page_views || 0}</p>
                                         </div>
-                                        <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
+                                        <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl hover:border-slate-300 transition-colors">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Button Clicks</p>
-                                            <p className="text-xl font-black text-slate-800">{visitorStats.clicks || 0}</p>
+                                            <p className="text-xl font-bold text-slate-900 tabular-nums">{visitorStats.clicks || 0}</p>
                                         </div>
-                                        <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
+                                        <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl hover:border-slate-300 transition-colors">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Canvas Clicks</p>
-                                            <p className="text-xl font-black text-slate-800">{visitorStats.canvas_clicks || 0}</p>
+                                            <p className="text-xl font-bold text-slate-900 tabular-nums">{visitorStats.canvas_clicks || 0}</p>
                                         </div>
                                     </div>
                                 )}
@@ -1033,25 +1033,22 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                     <div className="flex-1 overflow-y-auto pr-2">
                                         <div className="space-y-6">
                                             {/* Retention / Frequency */}
-                                            <div className="relative overflow-hidden bg-white p-5 rounded-[20px] border border-slate-200/50 shadow-lg shadow-slate-100/50">
-                                                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-slate-50 to-slate-100 rounded-full blur-3xl opacity-30" />
+                                            <div className="relative overflow-hidden bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
                                                 <div className="relative">
                                                     <div className="flex items-center gap-2 mb-4">
-                                                        <div className="p-2 bg-slate-50 text-slate-500 border border-slate-100 rounded-xl shadow-sm">
-                                                            <Repeat className="w-4 h-4 text-slate-500" />
+                                                        <div className="p-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl">
+                                                            <Repeat className="w-4 h-4" />
                                                         </div>
-                                                        <h5 className="text-sm font-bold text-slate-800">Mức độ quay lại</h5>
+                                                        <h5 className="text-sm font-bold text-slate-900">Mức độ quay lại</h5>
                                                     </div>
                                                     <div className="grid grid-cols-2 gap-3">
-                                                        <div className="group relative bg-white/80 backdrop-blur-sm p-4 rounded-[14px] border border-slate-200/50 hover:border-emerald-200 hover:shadow-md transition-all duration-300">
-                                                            <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-transparent rounded-[14px] opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                            <p className="relative text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Tổng phiên</p>
-                                                            <p className="relative text-2xl font-black text-slate-800">{(selectedVisitor.sessions || 1).toLocaleString()}</p>
+                                                        <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors">
+                                                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">Tổng phiên</p>
+                                                            <p className="text-2xl font-bold text-slate-900 tabular-nums">{(selectedVisitor.sessions || 1).toLocaleString()}</p>
                                                         </div>
-                                                        <div className="group relative bg-white/80 backdrop-blur-sm p-4 rounded-[14px] border border-slate-200/50 hover:border-emerald-200 hover:shadow-md transition-all duration-300">
-                                                            <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-transparent rounded-[14px] opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                            <p className="relative text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Tần suất</p>
-                                                            <p className="relative text-lg font-black text-slate-800">
+                                                        <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors">
+                                                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">Tần suất</p>
+                                                            <p className="text-lg font-bold text-slate-900">
                                                                 {(selectedVisitor.sessions && selectedVisitor.sessions > 1) ? 'Thường xuyên' : 'Mới'}
                                                             </p>
                                                         </div>
@@ -1060,30 +1057,26 @@ const VisitorsTab: React.FC<VisitorsTabProps> = ({
                                             </div>
 
                                             {/* Engagement */}
-                                            <div className="relative overflow-hidden bg-gradient-to-br from-white to-slate-50 p-5 rounded-[20px] border border-slate-200/50 shadow-lg shadow-slate-100/50">
-                                                <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-emerald-50 to-cyan-50 rounded-full blur-3xl opacity-30" />
+                                            <div className="relative overflow-hidden bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
                                                 <div className="relative">
                                                     <div className="flex items-center gap-2 mb-4">
-                                                        <div className="p-2 bg-gradient-to-br from-emerald-500 to-cyan-600 rounded-xl shadow-lg shadow-emerald-200">
+                                                        <div className="p-2 bg-slate-900 rounded-xl">
                                                             <Clock className="w-4 h-4 text-white" />
                                                         </div>
-                                                        <h5 className="text-sm font-bold text-slate-800">Tương tác theo Thời gian</h5>
+                                                        <h5 className="text-sm font-bold text-slate-900">Tương tác theo Thời gian</h5>
                                                     </div>
                                                     <div className="space-y-2.5">
-                                                        <div className="group flex justify-between items-center p-3.5 bg-white/80 backdrop-blur-sm rounded-[14px] border border-slate-200/50 hover:border-emerald-200 hover:shadow-md transition-all duration-300">
-                                                            <div className="absolute inset-0 bg-gradient-to-r from-emerald-50/50 to-transparent rounded-[14px] opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                            <span className="relative text-xs font-semibold text-slate-600">Lần đầu truy cập</span>
-                                                            <span className="relative text-xs font-black text-slate-800">{safeFormatDate(selectedVisitor.first_visit_at)}</span>
+                                                        <div className="flex justify-between items-center p-3.5 bg-slate-50/70 rounded-xl border border-slate-200/80 hover:border-slate-300 transition-colors">
+                                                            <span className="text-xs font-semibold text-slate-600">Lần đầu truy cập</span>
+                                                            <span className="text-xs font-bold text-slate-900 tabular-nums">{safeFormatDate(selectedVisitor.first_visit_at)}</span>
                                                         </div>
-                                                        <div className="group flex justify-between items-center p-3.5 bg-white/80 backdrop-blur-sm rounded-[14px] border border-slate-200/50 hover:border-cyan-200 hover:shadow-md transition-all duration-300">
-                                                            <div className="absolute inset-0 bg-gradient-to-r from-cyan-50/50 to-transparent rounded-[14px] opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                            <span className="relative text-xs font-semibold text-slate-600">Truy cập gần nhất</span>
-                                                            <span className="relative text-xs font-black text-slate-800">{safeFormatDate(selectedVisitor.last_visit_at)}</span>
+                                                        <div className="flex justify-between items-center p-3.5 bg-slate-50/70 rounded-xl border border-slate-200/80 hover:border-slate-300 transition-colors">
+                                                            <span className="text-xs font-semibold text-slate-600">Truy cập gần nhất</span>
+                                                            <span className="text-xs font-bold text-slate-900 tabular-nums">{safeFormatDate(selectedVisitor.last_visit_at)}</span>
                                                         </div>
-                                                        <div className="group flex justify-between items-center p-3.5 bg-white/80 backdrop-blur-sm rounded-[14px] border border-slate-200/50 hover:border-emerald-200 hover:shadow-md transition-all duration-300">
-                                                            <div className="absolute inset-0 bg-gradient-to-r from-emerald-50/50 to-transparent rounded-[14px] opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                            <span className="relative text-xs font-semibold text-slate-600">Tổng Thời gian onsite</span>
-                                                            <span className="relative text-xs font-black text-emerald-600">{formatDuration(visitorStats?.total_time || 0)}</span>
+                                                        <div className="flex justify-between items-center p-3.5 bg-slate-50/70 rounded-xl border border-slate-200/80 hover:border-slate-300 transition-colors">
+                                                            <span className="text-xs font-semibold text-slate-600">Tổng Thời gian onsite</span>
+                                                            <span className="text-xs font-bold text-[#BD1D2D] tabular-nums">{formatDuration(visitorStats?.total_time || 0)}</span>
                                                         </div>
                                                     </div>
                                                 </div>

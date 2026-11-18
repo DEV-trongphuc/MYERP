@@ -19,13 +19,78 @@ interface AudienceSplitModalProps {
 
 // --- Custom Components ---
 
+const SPLIT_COLOR_MAP: Record<string, {
+    cardSelected: string;
+    triangle: string;
+    iconSelected: string;
+    rowTitle: string;
+    colTitle: string;
+    radioBorder: string;
+    radioDot: string;
+}> = {
+    crimson: {
+        cardSelected: 'border-[#BD1D2D] bg-rose-50/50 shadow-sm ring-1 ring-[#BD1D2D]/20',
+        triangle: 'border-t-[#BD1D2D]',
+        iconSelected: 'bg-[#BD1D2D] text-white shadow-xs',
+        rowTitle: 'text-slate-900',
+        colTitle: 'text-[#BD1D2D]',
+        radioBorder: 'border-[#BD1D2D]',
+        radioDot: 'bg-[#BD1D2D]',
+    },
+    slate: {
+        cardSelected: 'border-slate-800 bg-slate-50 shadow-sm ring-1 ring-slate-800/15',
+        triangle: 'border-t-slate-800',
+        iconSelected: 'bg-slate-800 text-white shadow-xs',
+        rowTitle: 'text-slate-900',
+        colTitle: 'text-slate-900',
+        radioBorder: 'border-slate-800',
+        radioDot: 'bg-slate-800',
+    },
+    emerald: {
+        cardSelected: 'border-emerald-500 bg-emerald-50/50 shadow-sm ring-1 ring-emerald-500/20',
+        triangle: 'border-t-emerald-500',
+        iconSelected: 'bg-emerald-500 text-white shadow-xs',
+        rowTitle: 'text-emerald-950',
+        colTitle: 'text-emerald-700',
+        radioBorder: 'border-emerald-500',
+        radioDot: 'bg-emerald-500',
+    },
+    blue: {
+        cardSelected: 'border-slate-700 bg-slate-50 shadow-sm ring-1 ring-slate-700/15',
+        triangle: 'border-t-slate-700',
+        iconSelected: 'bg-slate-700 text-white shadow-xs',
+        rowTitle: 'text-slate-900',
+        colTitle: 'text-slate-800',
+        radioBorder: 'border-slate-700',
+        radioDot: 'bg-slate-700',
+    },
+    orange: {
+        cardSelected: 'border-amber-500 bg-amber-50/50 shadow-sm ring-1 ring-amber-500/20',
+        triangle: 'border-t-amber-500',
+        iconSelected: 'bg-amber-500 text-white shadow-xs',
+        rowTitle: 'text-amber-950',
+        colTitle: 'text-amber-700',
+        radioBorder: 'border-amber-500',
+        radioDot: 'bg-amber-500',
+    },
+    rose: {
+        cardSelected: 'border-rose-500 bg-rose-50/50 shadow-sm ring-1 ring-rose-500/20',
+        triangle: 'border-t-rose-500',
+        iconSelected: 'bg-rose-500 text-white shadow-xs',
+        rowTitle: 'text-rose-950',
+        colTitle: 'text-rose-700',
+        radioBorder: 'border-rose-500',
+        radioDot: 'bg-rose-500',
+    },
+};
+
 const ActionCard = ({
     selected,
     onClick,
     icon: Icon,
     title,
     subtitle,
-    colorClass = "indigo",
+    colorClass = "crimson",
     layout = "col" // "col" for vertical (Source), "row" for horizontal (Option)
 }: {
     selected: boolean;
@@ -35,46 +100,49 @@ const ActionCard = ({
     subtitle?: string;
     colorClass?: string;
     layout?: "col" | "row";
-}) => (
-    <div
-        onClick={onClick}
-        className={`cursor-pointer rounded-xl border transition-all group relative overflow-hidden flex items-center ${layout === 'col' ? 'flex-col p-3 text-center gap-2 justify-center h-full' : 'p-3 flex-row gap-3 text-left w-full'
-            } ${selected
-                ? `border-${colorClass}-500 bg-${colorClass}-50/50 shadow-md ring-1 ring-${colorClass}-500/20`
-                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-            }`}
-    >
-        {selected && layout === 'col' && <div className={`absolute top-0 right-0 w-0 h-0 border-t-[24px] border-t-${colorClass}-500 border-l-[24px] border-l-transparent`} />}
-        {selected && layout === 'col' && <Check className="absolute top-[2px] right-[2px] w-3 h-3 text-white" strokeWidth={3} />}
+}) => {
+    const tone = SPLIT_COLOR_MAP[colorClass] || SPLIT_COLOR_MAP.crimson;
+    return (
+        <div
+            onClick={onClick}
+            className={`cursor-pointer rounded-xl border transition-colors duration-150 group relative overflow-hidden flex items-center ${layout === 'col' ? 'flex-col p-3 text-center gap-2 justify-center h-full' : 'p-3 flex-row gap-3 text-left w-full'
+                } ${selected
+                    ? tone.cardSelected
+                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                }`}
+        >
+            {selected && layout === 'col' && <div className={`absolute top-0 right-0 w-0 h-0 border-t-[24px] ${tone.triangle} border-l-[24px] border-l-transparent`} />}
+            {selected && layout === 'col' && <Check className="absolute top-[2px] right-[2px] w-3 h-3 text-white" strokeWidth={3} />}
 
-        <div className={`rounded-xl flex items-center justify-center shrink-0 transition-colors ${layout === 'col' ? 'w-10 h-10' : 'w-9 h-9'
-            } ${selected
-                ? `bg-${colorClass}-500 text-white shadow-sm`
-                : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
-            }`}>
-            <Icon className={layout === 'col' ? "w-5 h-5" : "w-4.5 h-4.5"} />
-        </div>
+            <div className={`rounded-xl flex items-center justify-center shrink-0 transition-colors ${layout === 'col' ? 'w-10 h-10' : 'w-9 h-9'
+                } ${selected
+                    ? tone.iconSelected
+                    : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
+                }`}>
+                <Icon className={layout === 'col' ? "w-5 h-5" : "w-4.5 h-4.5"} />
+            </div>
 
-        <div className="flex-1 min-w-0">
-            {layout === 'row' ? (
-                <div className="flex items-center justify-between">
-                    <div>
-                        <div className={`text-xs font-bold leading-tight ${selected ? `text-${colorClass}-900` : 'text-slate-700'}`}>{title}</div>
-                        {subtitle && <div className="text-[10px] text-slate-500 leading-snug">{subtitle}</div>}
+            <div className="flex-1 min-w-0">
+                {layout === 'row' ? (
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className={`text-xs font-bold leading-tight ${selected ? tone.rowTitle : 'text-slate-700'}`}>{title}</div>
+                            {subtitle && <div className="text-[10px] text-slate-500 leading-snug">{subtitle}</div>}
+                        </div>
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${selected ? tone.radioBorder : 'border-slate-300'}`}>
+                            <div className={`w-2 h-2 rounded-full transition-transform duration-150 ${selected ? tone.radioDot : 'scale-0'}`} />
+                        </div>
                     </div>
-                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${selected ? `border-${colorClass}-500` : 'border-slate-300'}`}>
-                        <div className={`w-2 h-2 rounded-full transition-all ${selected ? `bg-${colorClass}-500` : 'scale-0'}`} />
-                    </div>
-                </div>
-            ) : (
-                <>
-                    <div className={`text-xs font-bold leading-tight ${selected ? `text-${colorClass}-700` : 'text-slate-700'}`}>{title}</div>
-                    {subtitle && <div className="text-[10px] text-slate-400 mt-1 font-medium leading-tight">{subtitle}</div>}
-                </>
-            )}
+                ) : (
+                    <>
+                        <div className={`text-xs font-bold leading-tight ${selected ? tone.colTitle : 'text-slate-700'}`}>{title}</div>
+                        {subtitle && <div className="text-[10px] text-slate-400 mt-1 font-medium leading-tight">{subtitle}</div>}
+                    </>
+                )}
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 const CustomSelect = ({
     value,
@@ -103,14 +171,14 @@ const CustomSelect = ({
         <div className="relative" ref={containerRef}>
             <div
                 onClick={() => setIsOpen(!isOpen)}
-                className={`w-full px-3 py-2.5 rounded-xl border cursor-pointer flex items-center justify-between transition-all bg-white text-xs ${isOpen || value ? 'border-indigo-500 ring-4 ring-indigo-500/10' : 'border-slate-200 hover:border-slate-300'
+                className={`w-full px-3 py-2.5 rounded-xl border cursor-pointer flex items-center justify-between transition-colors duration-150 bg-white text-xs ${isOpen || value ? 'border-[#BD1D2D] ring-2 ring-[#BD1D2D]/10' : 'border-slate-200 hover:border-slate-300'
                     }`}
             >
                 <div className="flex items-center gap-2 overflow-hidden">
                     {selectedOption ? (
                         <div className="flex items-center gap-2">
                             <span className="font-bold text-slate-800 truncate">{selectedOption.name}</span>
-                            <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full font-bold">{selectedOption.count?.toLocaleString() || 0}</span>
+                            <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full font-bold tabular-nums">{selectedOption.count?.toLocaleString() || 0}</span>
                         </div>
                     ) : (
                         <span className="text-slate-400 font-medium">{placeholder}</span>
@@ -120,19 +188,19 @@ const CustomSelect = ({
             </div>
             {isOpen && (
                 <div className="absolute z-50 w-full mt-1 bg-white rounded-xl shadow-xl border border-slate-100 py-1 max-h-56 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-200">
-                    <div className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 border-b border-slate-100 sticky top-0">Chọn danh sách đích</div>
+                    <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 border-b border-slate-100 sticky top-0">Chọn danh sách đích</div>
                     {options.map(opt => (
                         <div
                             key={opt.id}
                             onClick={() => { onChange(opt.id); setIsOpen(false); }}
-                            className={`px-3 py-2.5 hover:bg-slate-50 cursor-pointer flex justify-between items-center text-xs group transition-colors ${value === opt.id ? 'bg-indigo-50' : ''}`}
+                            className={`px-3 py-2.5 hover:bg-slate-50 cursor-pointer flex justify-between items-center text-xs group transition-colors ${value === opt.id ? 'bg-rose-50/70' : ''}`}
                         >
-                            <span className={`font-bold ${value === opt.id ? 'text-indigo-700' : 'text-slate-600 group-hover:text-slate-800'}`}>{opt.name}</span>
-                            <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{opt.count?.toLocaleString() || 0}</span>
+                            <span className={`font-bold ${value === opt.id ? 'text-[#BD1D2D]' : 'text-slate-600 group-hover:text-slate-800'}`}>{opt.name}</span>
+                            <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full tabular-nums">{opt.count?.toLocaleString() || 0}</span>
                         </div>
                     ))}
                     {options.length === 0 && (
-                        <div className="px-3 py-4 text-center text-xs text-slate-400 italic">Không có danh sách nào khác</div>
+                        <div className="px-3 py-4 text-center text-xs text-slate-400">Không có danh sách nào khác</div>
                     )}
                 </div>
             )}
@@ -245,7 +313,7 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
                                     <Loader2 className="w-8 h-8 text-[var(--color-primary)] animate-spin" />
                                 </div>
                             </div>
-                            <p className="text-sm font-bold text-slate-600 animate-pulse">Đang xử lý tách dữ liệu...</p>
+                            <p className="text-sm font-semibold text-slate-600">Đang xử lý tách dữ liệu...</p>
                         </div>
                     </div>
                 )}
@@ -253,17 +321,17 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
                 {/* Header */}
                 <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-white/80 backdrop-blur-md shrink-0 sticky top-0 z-10">
                     <div>
-                        <h3 className="text-xl font-black text-slate-800 flex items-center gap-2.5 tracking-tight">
-                            <div className="w-10 h-10 rounded-xl bg-[var(--color-primary-light)] border border-slate-100 text-[var(--color-primary)] flex items-center justify-center shadow-sm">
+                        <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2.5 tracking-tight">
+                            <div className="w-10 h-10 rounded-xl bg-[var(--color-primary-light)] border border-slate-100 text-[var(--color-primary)] flex items-center justify-center shadow-xs">
                                 <Scissors className="w-5 h-5" />
                             </div>
                             Tách Dữ Liệu
                         </h3>
-                        <p className="text-[11px] font-bold text-slate-400 mt-1 uppercase tracking-widest pl-1">
-                            {sourceType === 'segment' ? 'Phân khúc' : 'Danh sách'}: <span className="text-slate-600">{sourceName}</span>
+                        <p className="text-[11px] font-semibold text-slate-400 mt-1 uppercase tracking-widest pl-1">
+                            {sourceType === 'segment' ? 'Phân khúc' : 'Danh sách'}: <span className="text-slate-700">{sourceName}</span>
                         </p>
                     </div>
-                    <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-all">
+                    <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
                         <X className="w-4 h-4" />
                     </button>
                 </div>
@@ -275,7 +343,7 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
                     <div className="space-y-3">
                         <div className="flex items-center justify-between">
                             <h4 className="section-header">1. Phương thức tách</h4>
-                            <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Tổng: {(subscriberCount || 0).toLocaleString()}</span>
+                            <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full tabular-nums">Tổng: {(subscriberCount || 0).toLocaleString()}</span>
                         </div>
 
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -285,7 +353,7 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
                                 icon={Calculator}
                                 selected={tab === 'quantity'}
                                 onClick={() => setTab('quantity')}
-                                colorClass="indigo"
+                                colorClass="crimson"
                                 layout="col"
                             />
                             <ActionCard
@@ -342,19 +410,19 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
 
                         {/* SUB-OPTIONS FOR QUANTITY */}
                         {tab === 'quantity' && (
-                            <div className="mt-4 p-4 bg-white rounded-[14px] border border-indigo-100 shadow-sm animate-in slide-in-from-top-1 space-y-4">
+                            <div className="mt-4 p-4 bg-white rounded-xl border border-slate-200 shadow-xs animate-in slide-in-from-top-1 space-y-4">
                                 <div>
-                                    <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1.5 block">Số lượng cần tách</label>
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 block">Số lượng cần tách</label>
                                     <div className="relative">
                                         <input
                                             type="number"
                                             value={splitQuantity}
                                             onChange={(e) => setSplitQuantity(parseInt(e.target.value) || 0)}
-                                            className="w-full pl-4 pr-12 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 outline-none text-sm font-bold text-slate-700 bg-slate-50 focus:bg-white transition-all"
+                                            className="w-full pl-4 pr-12 py-2.5 rounded-xl border border-slate-200 focus:border-[#BD1D2D] focus:ring-2 focus:ring-[#BD1D2D]/10 outline-none text-sm font-bold text-slate-800 bg-slate-50 focus:bg-white transition-colors tabular-nums"
                                             min={1}
                                             max={subscriberCount}
                                         />
-                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none tabular-nums">
                                             / {(subscriberCount || 0).toLocaleString()}
                                         </div>
                                     </div>
@@ -364,34 +432,34 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
                                         max={subscriberCount}
                                         value={splitQuantity}
                                         onChange={(e) => setSplitQuantity(parseInt(e.target.value))}
-                                        className="w-full mt-3 accent-indigo-500 h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
+                                        className="w-full mt-3 accent-[#BD1D2D] h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2 block">Cách chọn</label>
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Cách chọn</label>
                                     <div className="grid grid-cols-2 gap-3">
                                         <div
                                             onClick={() => setSplitStrategy('random')}
-                                            className={`cursor-pointer border rounded-xl p-3 flex items-center gap-3 transition-all ${splitStrategy === 'random' ? 'bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500' : 'bg-white border-slate-200 hover:border-slate-300'}`}
+                                            className={`cursor-pointer border rounded-xl p-3 flex items-center gap-3 transition-colors duration-150 ${splitStrategy === 'random' ? 'bg-rose-50/70 border-[#BD1D2D] ring-1 ring-[#BD1D2D]' : 'bg-white border-slate-200 hover:border-slate-300'}`}
                                         >
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${splitStrategy === 'random' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${splitStrategy === 'random' ? 'bg-[#BD1D2D] text-white' : 'bg-slate-100 text-slate-400'}`}>
                                                 <Shuffle className="w-4 h-4" />
                                             </div>
                                             <div>
-                                                <div className={`text-xs font-bold ${splitStrategy === 'random' ? 'text-indigo-900' : 'text-slate-700'}`}>Ngẫu nhiên</div>
+                                                <div className={`text-xs font-bold ${splitStrategy === 'random' ? 'text-slate-900' : 'text-slate-700'}`}>Ngẫu nhiên</div>
                                                 <div className="text-[10px] text-slate-400">Random selection</div>
                                             </div>
                                         </div>
                                         <div
                                             onClick={() => setSplitStrategy('top')}
-                                            className={`cursor-pointer border rounded-xl p-3 flex items-center gap-3 transition-all ${splitStrategy === 'top' ? 'bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500' : 'bg-white border-slate-200 hover:border-slate-300'}`}
+                                            className={`cursor-pointer border rounded-xl p-3 flex items-center gap-3 transition-colors duration-150 ${splitStrategy === 'top' ? 'bg-rose-50/70 border-[#BD1D2D] ring-1 ring-[#BD1D2D]' : 'bg-white border-slate-200 hover:border-slate-300'}`}
                                         >
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${splitStrategy === 'top' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${splitStrategy === 'top' ? 'bg-[#BD1D2D] text-white' : 'bg-slate-100 text-slate-400'}`}>
                                                 <ArrowDown className="w-4 h-4" />
                                             </div>
                                             <div>
-                                                <div className={`text-xs font-bold ${splitStrategy === 'top' ? 'text-indigo-900' : 'text-slate-700'}`}>Từ trên xuống</div>
+                                                <div className={`text-xs font-bold ${splitStrategy === 'top' ? 'text-slate-900' : 'text-slate-700'}`}>Từ trên xuống</div>
                                                 <div className="text-[10px] text-slate-400">Top newest</div>
                                             </div>
                                         </div>
@@ -416,18 +484,18 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
                     <div className="space-y-3 pt-2 border-t border-slate-100">
                         <h4 className="section-header mt-4">2. Lưu vào đâu?</h4>
 
-                        <div className="p-4 bg-white rounded-[14px] border border-slate-100 shadow-sm space-y-4">
+                        <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs space-y-4">
                             {/* Toggle */}
-                            <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-200 w-fit gap-0.5">
+                            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-fit gap-0.5">
                                 <button
                                     onClick={() => setDestType('new')}
-                                    className={`px-4 py-1.5 text-[10px] font-bold rounded-lg transition-all ${destType === 'new' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                    className={`px-4 py-1.5 text-[11px] font-semibold rounded-lg transition-colors duration-150 ${destType === 'new' ? 'bg-white text-[#BD1D2D] shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
                                 >
                                     Tạo danh sách mới
                                 </button>
                                 <button
                                     onClick={() => setDestType('existing')}
-                                    className={`px-4 py-1.5 text-[10px] font-bold rounded-lg transition-all ${destType === 'existing' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                    className={`px-4 py-1.5 text-[11px] font-semibold rounded-lg transition-colors duration-150 ${destType === 'existing' ? 'bg-white text-[#BD1D2D] shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
                                 >
                                     Vào danh sách cũ
                                 </button>
@@ -436,13 +504,13 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
                             {destType === 'new' ? (
                                 <div className="relative group animate-in slide-in-from-left-2 fade-in duration-200">
                                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                        <Plus className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                                        <Plus className="h-4 w-4 text-slate-400 group-focus-within:text-[#BD1D2D] transition-colors" />
                                     </div>
                                     <input
                                         type="text"
                                         value={destinationName}
                                         onChange={(e) => setDestinationName(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 outline-none text-xs font-bold text-slate-700 bg-slate-50/50 focus:bg-white shadow-sm transition-all placeholder:font-normal"
+                                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-[#BD1D2D] focus:ring-2 focus:ring-[#BD1D2D]/10 outline-none text-xs font-bold text-slate-700 bg-slate-50/50 focus:bg-white shadow-xs transition-colors placeholder:font-normal"
                                         placeholder="Nhập tên danh sách mới..."
                                     />
                                 </div>
@@ -478,7 +546,7 @@ const AudienceSplitModal: React.FC<AudienceSplitModalProps> = ({ sourceId, sourc
                                 icon={Zap}
                                 selected={createAutomation}
                                 onClick={() => setCreateAutomation(!createAutomation)}
-                                colorClass="indigo"
+                                colorClass="crimson"
                                 layout="row"
                             />
                             <ActionCard

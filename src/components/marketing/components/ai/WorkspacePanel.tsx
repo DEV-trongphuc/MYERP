@@ -68,10 +68,10 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
                             <Database className="w-5 h-5 text-[var(--color-primary)]" />
                         </div>
                         <div>
-                            <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                            <h2 className="text-sm font-bold text-slate-900 uppercase">
                                 WORKSPACE
                             </h2>
-                            <p className="text-xs text-slate-400 font-semibold">
+                            <p className="text-xs text-slate-400 font-semibold tabular-nums">
                                 {filteredDocs.length} tệp tin
                             </p>
                         </div>
@@ -110,7 +110,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
                             placeholder="Tìm trong Workspace..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder:text-slate-400 focus:bg-white focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 outline-none transition-all"
+                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder:text-slate-400 focus:bg-white focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 outline-none transition-colors"
                         />
                     </div>
                 </div>
@@ -169,7 +169,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
                             <div
                                 key={doc.id || idx}
                                 onClick={() => onFileClick(doc)}
-                                className="group relative bg-white border border-slate-200 rounded-xl p-4 hover:border-[var(--color-primary)] hover:shadow-md transition-all cursor-pointer"
+                                className="group relative bg-white border border-slate-200 rounded-xl p-4 hover:border-[var(--color-primary)] hover:shadow-sm transition-colors cursor-pointer"
                             >
                                 <div className="flex items-start gap-3">
                                     {/* Icon */}
@@ -184,12 +184,12 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
                                                 {doc.name}
                                             </h3>
                                             {doc.source === 'workspace' && (
-                                                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-wider rounded-md shrink-0">
+                                                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-semibold uppercase tracking-wider rounded-md shrink-0">
                                                     GLOBAL
                                                 </span>
                                             )}
                                         </div>
-                                        <p className="text-xs text-slate-400 mt-1 font-medium">
+                                        <p className="text-xs text-slate-400 mt-1 font-medium tabular-nums">
                                             {formatFileSize(doc.size)}
                                         </p>
                                     </div>

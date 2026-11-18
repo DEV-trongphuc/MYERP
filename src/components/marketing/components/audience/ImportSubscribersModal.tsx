@@ -330,16 +330,16 @@ const ImportSubscribersModal: React.FC<ImportSubscribersModalProps> = ({
                             <p className="text-[10px] font-bold text-rose-700 uppercase tracking-widest">Trùng file (Bỏ qua)</p>
                         </div>
                         <div className="p-3.5 bg-orange-50 rounded-2xl border border-orange-100 text-center">
-                            <p className="text-2xl font-black text-orange-500">{stats.missingPhone || 0}</p>
+                            <p className="text-2xl font-bold text-orange-600 tabular-nums">{stats.missingPhone || 0}</p>
                             <p className="text-[10px] font-bold text-orange-700 uppercase tracking-widest">Thiếu SĐT (Bỏ qua ZNS)</p>
                         </div>
                     </div>
 
                     {importWarnings.length > 0 && (
                         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3 text-amber-800">
-                            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5 animate-bounce" />
+                            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                             <div className="space-y-1">
-                                <h4 className="text-xs font-black uppercase tracking-wider text-amber-900">Cảnh báo tiêu đề cột</h4>
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-amber-900">Cảnh báo tiêu đề cột</h4>
                                 <ul className="list-disc pl-4 text-xs font-medium space-y-1">
                                     {importWarnings.map((w, idx) => (
                                         <li key={idx}>{w}</li>

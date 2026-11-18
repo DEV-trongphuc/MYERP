@@ -25,6 +25,7 @@ import { isItemAtMyStepToApprove } from '../utils/approvalPermissions';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { VietnameseMonthInput } from '../components/ui/VietnameseMonthInput';
 import { formatDateVN, formatDateTimeVN, formatMonthYearVN, getLocalDateStr } from '../utils/dateUtils';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 const resolveAttachmentUrl = (path: string | null | undefined): string => {
   if (!path) return '';
@@ -1312,9 +1313,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
         const isLate = Number(c.late_minutes || 0) > 0 || c.check_in_time > (c.work_start_time || '08:00');
         let typeName = t('Bổ sung công / Cập nhật công');
-        let typeColor = '#8b5cf6';
-        let typeBg = 'rgba(139, 92, 246, 0.1)';
-        let typeBorder = 'rgba(139, 92, 246, 0.25)';
+        let typeColor = '#0284c7';
+        let typeBg = 'rgba(2, 132, 199, 0.1)';
+        let typeBorder = 'rgba(2, 132, 199, 0.25)';
 
         if (!isSupplementary && (isLate || isPending)) {
           typeName = c.status === 'pending_approval' ? t('Giải trình đi trễ (Chờ duyệt)') : t('Báo cáo đi trễ');
@@ -1392,9 +1393,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         related_user_ids: s.related_user_ids,
         related_users: s.related_users,
         typeName: t('Đăng ký Tăng ca (OT)'),
-        typeColor: '#7c3aed',
-        typeBg: 'rgba(124, 58, 237, 0.1)',
-        typeBorder: 'rgba(124, 58, 237, 0.25)',
+        typeColor: '#0d9488',
+        typeBg: 'rgba(13, 148, 136, 0.1)',
+        typeBorder: 'rgba(13, 148, 136, 0.25)',
         detailTime: `${t('Thời gian')}: ${s.start_time || '17:00'} - ${s.end_time || '19:00'}${s.total_days ? ` (${s.total_days} ${t('công OT')})` : ''}`,
         reason: displayReason || t('Tăng ca xử lý công việc'),
         status: isAppr ? 'approved' : 'pending',
@@ -2391,7 +2392,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     try {
       const res = await fetchAPI('check-ins/bulk-request');
       if (res && res.success) {
-        setBulkRequests(res.data || []);
+        setBulkRequests(extractArray(res));
       } else {
         toast.error(res?.message || t('Lỗi tải danh sách đề xuất'));
       }
@@ -2909,7 +2910,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     try {
       const res = await fetchAPI('get_consultants&all=1');
       if (res.success) {
-        setConsultants(res.data || []);
+        setConsultants(extractArray(res));
       }
     } catch (e: any) {
       console.error('Error fetching consultants list:', e);
@@ -2923,7 +2924,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       const query = `check-ins&from=${range.from}&to=${range.to}&status=${filterStatus}&user_id=${filterUser}`;
       const res = await fetchAPI(query);
       if (res.success) {
-        setCheckIns(res.data || []);
+        setCheckIns(extractArray(res));
       } else {
         toast.error(res.message || t('Lỗi khi tải danh sách chấm công'));
       }
@@ -3944,9 +3945,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                             let tagLabel = (isSales || isViewingSelf) ? (isSupplementary ? (isMobile ? t('C.công') : t('Cập nhật công')) : (isMobile ? t('CI') : t('Check-in'))) : c.user_name;
 
                             if (isSupplementary) {
-                              bg = 'rgba(139, 92, 246, 0.08)';
-                              border = 'rgba(139, 92, 246, 0.25)';
-                              txtColor = '#8B5CF6';
+                              bg = 'rgba(2, 132, 199, 0.08)';
+                              border = 'rgba(2, 132, 199, 0.25)';
+                              txtColor = '#0284c7';
                             }
 
                             const inTimeStr = c.check_in_time ? c.check_in_time.substring(0, 5) : '';
@@ -4077,7 +4078,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                     e.stopPropagation();
                                     handleOpenDayDetail(cell.dateStr, 'requests');
                                   }}
-                                  style={{ fontSize: '0.62rem', padding: '1.5px 5px', borderRadius: '5px', background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}
+                                  style={{ fontSize: '0.62rem', padding: '1.5px 5px', borderRadius: '5px', background: 'rgba(13, 148, 136, 0.12)', color: '#0d9488', fontWeight: 700, fontVariantNumeric: 'tabular-nums', display: 'inline-flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}
                                   title={t('Tăng ca (OT): ') + overtimes.map(o => `${o.user_name} (${o.start_time || ''}-${o.end_time || ''})`).join(', ')}
                                 >
                                   <Zap size={10} /> {overtimes.length} OT
@@ -4129,7 +4130,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                               {lateEarlyList.length > 0 && (() => {
                                 const appr = lateEarlyList.filter(l => Number(l.approved) === 1 || l.status === 'approved').length;
                                 const pend = lateEarlyList.length - appr;
-                                const tooltip = `⏰ ${t('Đi muộn / Về sớm')} (${lateEarlyList.length} ${t('người')}):\n` +
+                                const tooltip = `${t('Đi muộn / Về sớm')} (${lateEarlyList.length} ${t('người')}):\n` +
                                   lateEarlyList.map(l => {
                                     const name = l.user_name || l.full_name || t('Nhân viên');
                                     const isA = Number(l.approved) === 1 || l.status === 'approved';
@@ -4176,7 +4177,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                               {leaveList.length > 0 && (() => {
                                 const appr = leaveList.filter(l => Number(l.approved) === 1 || l.status === 'approved').length;
                                 const pend = leaveList.length - appr;
-                                const tooltip = `🏖️ ${t('Nghỉ phép')} (${leaveList.length} ${t('người')}):\n` +
+                                const tooltip = `${t('Nghỉ phép')} (${leaveList.length} ${t('người')}):\n` +
                                   leaveList.map(l => {
                                     const name = l.user_name || l.full_name || t('Nhân viên');
                                     const isA = Number(l.approved) === 1 || l.status === 'approved';
@@ -4247,9 +4248,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                 } else if (s.shift_type === 'overtime') {
                                   const timeRange = s.start_time && s.end_time ? `${s.start_time}-${s.end_time}` : '';
                                   label = isMobile ? (timeRange ? `OT ${timeRange}` : t('Tăng ca')) : `${t('Tăng ca')} ${timeRange ? `(${timeRange})` : ''}`;
-                                  bg = 'rgba(139, 92, 246, 0.08)';
-                                  border = 'rgba(139, 92, 246, 0.28)';
-                                  text = '#8b5cf6';
+                                  bg = 'rgba(13, 148, 136, 0.08)';
+                                  border = 'rgba(13, 148, 136, 0.28)';
+                                  text = '#0d9488';
                                   ShiftIcon = Zap;
                                 }
 
@@ -5306,7 +5307,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                         padding: '8px 12px',
                         borderRadius: '6px',
                         fontSize: '0.8rem',
-                        borderLeft: '3px solid var(--color-primary, #6366f1)'
+                        borderLeft: '3px solid var(--color-primary, #BD1D2D)'
                       }}>
                         <strong style={{ color: 'var(--color-text)' }}>
                           {getLeaveTypeLabel(item.leave_type)}
@@ -5415,7 +5416,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     const getThemeColor = () => {
       if (createLeaveType === 'leave') return '#f43f5e';
       if (createLeaveType === 'late_early') return '#ff7a00';
-      if (createLeaveType === 'overtime') return '#8b5cf6';
+      if (createLeaveType === 'overtime') return '#0d9488';
       if (createLeaveType === 'remote_work') return '#10b981';
       return 'var(--color-primary, #ef4444)';
     };
@@ -5435,7 +5436,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           };
         case 'overtime':
           return {
-            gradient: 'linear-gradient(135deg, #8b5cf6, #5b21b6)',
+            gradient: 'linear-gradient(135deg, #0d9488, #0f766e)',
             icon: <Zap size={14} />
           };
         case 'remote_work':
@@ -5615,15 +5616,15 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 <div style={{
                   padding: '10px 14px',
                   borderRadius: '10px',
-                  background: 'rgba(139, 92, 246, 0.06)',
-                  border: '1px solid rgba(139, 92, 246, 0.2)',
+                  background: 'rgba(2, 132, 199, 0.06)',
+                  border: '1px solid rgba(2, 132, 199, 0.2)',
                   fontSize: '0.78rem',
                   color: 'var(--color-text)',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '4px'
                 }}>
-                  <div style={{ fontWeight: 700, color: '#8b5cf6', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ fontWeight: 700, color: '#0284c7', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Info size={14} />
                     <span>{t('Định mức hưởng 100% lương theo Điều 115 Bộ luật Lao động 2019:')}</span>
                   </div>
@@ -5632,7 +5633,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     • {t('Con đẻ / con nuôi kết hôn: 01 ngày')}<br />
                     • {t('Tứ thân phụ mẫu / Vợ / Chồng / Con mất: 03 ngày')}<br />
                     • {t('Ông bà nội ngoại / Anh chị em ruột mất: 01 ngày')}<br />
-                    <span style={{ fontStyle: 'italic', color: '#8b5cf6' }}>
+                    <span style={{ color: '#0284c7' }}>
                       *{t('Nếu nghỉ vượt định mức, hệ thống tự động bóc tách cấn trừ vào Nghỉ bù -> Phép năm -> Không lương.')}
                     </span>
                   </div>
@@ -5887,11 +5888,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     options={[
                       { 
                         value: 'compensatory', 
-                        label: t('🏖️ Lấy OT bù (Nghỉ bù) - Quy đổi thành ngày nghỉ bù') 
+                        label: t('Lấy OT bù (Nghỉ bù) - Quy đổi thành ngày nghỉ bù') 
                       },
                       { 
                         value: 'salary', 
-                        label: t('💵 Lấy lương OT (Tính vào lương) - Chi trả tiền tăng ca') 
+                        label: t('Lấy lương OT (Tính vào lương) - Chi trả tiền tăng ca') 
                       }
                     ]}
                     width="100%"
@@ -5971,7 +5972,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 color: 'var(--color-text)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '1.2rem' }}>{otTypeField === 'compensatory' ? '🏖️' : '💵'}</span>
+                  {otTypeField === 'compensatory' ? <Calendar size={18} strokeWidth={1.75} style={{ color: '#0284c7', flexShrink: 0 }} /> : <Zap size={18} strokeWidth={1.75} style={{ color: '#059669', flexShrink: 0 }} />}
                   <div>
                     <div style={{ fontWeight: 700 }}>
                       {otTypeField === 'compensatory' ? t('Quy đổi sang Ngày nghỉ bù:') : t('Quy đổi sang Tiền tăng ca:')}
@@ -6068,8 +6069,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                         ✓ {t('Bạn còn')} {currentMonthWfhStats.quotaRemaining.toFixed(1)} {t('ngày tiêu chuẩn 100% lương trong tháng. Hệ thống tự động chọn 100%.')}
                       </span>
                     ) : (
-                      <span style={{ color: '#dc2626', fontWeight: 600 }}>
-                        ⚠️ {t('Đã hết 2 ngày tiêu chuẩn 100% lương trong tháng. Đơn này tự động áp dụng 50% lương theo quy định.')}
+                      <span style={{ color: '#dc2626', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <AlertTriangle size={13} strokeWidth={1.75} style={{ flexShrink: 0 }} /> {t('Đã hết 2 ngày tiêu chuẩn 100% lương trong tháng. Đơn này tự động áp dụng 50% lương theo quy định.')}
                       </span>
                     )}
                   </div>
@@ -6158,7 +6159,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
                 {Number(wfhSalaryRateField) > 100 && (
                   <div style={{ fontSize: '0.72rem', color: 'var(--color-danger)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span>⚠️</span> {t('Tỷ lệ hưởng lương không được vượt quá 100%')}
+                    <AlertTriangle size={13} strokeWidth={1.75} style={{ flexShrink: 0 }} /> {t('Tỷ lệ hưởng lương không được vượt quá 100%')}
                   </div>
                 )}
               </div>
@@ -6311,9 +6312,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   justifyContent: 'center',
                   cursor: 'pointer',
                   padding: 0,
-                  transition: 'all 0.15s ease'
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease'
                 }}
-                className="hover-scale"
                 title={t('Thêm người liên quan')}
               >
                 <UserPlus size={14} color="var(--color-primary)" />
@@ -6563,8 +6563,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         title: t('Tăng ca (OT)'),
         desc: t('Đăng ký làm thêm giờ để tính ngày công tăng ca và phụ cấp.'),
         icon: <Zap size={18} />,
-        bg: 'linear-gradient(135deg, #8b5cf6, #5b21b6)',
-        color: '#8b5cf6'
+        bg: '#0d9488',
+        color: '#0d9488'
       },
       {
         id: 'remote_work',
@@ -6579,8 +6579,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         title: t('Cập nhật công'),
         desc: t('Đề xuất cập nhật / bổ sung ngày công làm việc thiếu hoặc điều chỉnh giờ công.'),
         icon: <CheckSquare size={18} />,
-        bg: 'linear-gradient(135deg, #6366f1, #4338ca)',
-        color: '#6366f1'
+        bg: '#0284c7',
+        color: '#0284c7'
       }
     ];
 
@@ -7493,7 +7493,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#065f46', textTransform: 'uppercase' }}>
                   {t('TỔNG CÔNG TÍNH LƯƠNG')}
                 </span>
-                <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#059669', marginTop: '2px' }}>
+                <span style={{ fontSize: '1.25rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#059669', marginTop: '2px' }}>
                   {myConfirmation.total_paid_days} <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>công</span>
                 </span>
               </div>
@@ -8053,8 +8053,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     }}
                   />
                 </div>
-                <span style={{ fontSize: '0.72rem', color: '#b91c1c' }}>
-                  {t('⚠️ Quá thời hạn chót trên, hệ thống sẽ tự động duyệt toàn bộ nhân viên chưa xác nhận để chốt bảng lương.')}
+                <span style={{ fontSize: '0.72rem', color: '#b91c1c', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <AlertTriangle size={12} strokeWidth={1.75} style={{ flexShrink: 0 }} /> {t('Quá thời hạn chót trên, hệ thống sẽ tự động duyệt toàn bộ nhân viên chưa xác nhận để chốt bảng lương.')}
                 </span>
               </div>
 
@@ -9327,9 +9327,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                               if (otHours > 0) {
                                 return (
                                   <span style={{
-                                    color: '#7c3aed',
+                                    color: '#0d9488',
                                     fontWeight: 700,
-                                    backgroundColor: 'rgba(124, 58, 237, 0.08)',
+                                    fontVariantNumeric: 'tabular-nums',
+                                    backgroundColor: 'rgba(13, 148, 136, 0.1)',
                                     padding: '3px 8px',
                                     borderRadius: '6px',
                                     fontSize: '0.78rem',
@@ -9337,7 +9338,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                     alignItems: 'center',
                                     gap: '3px'
                                   }}>
-                                    ⚡ {otHours}h OT
+                                    <Zap size={12} strokeWidth={2} /> {otHours}h OT
                                   </span>
                                 );
                               }
@@ -9826,8 +9827,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                 let label = row.status === 'approved' ? (isLate ? t('Hợp lệ') : t('Đúng giờ')) : row.status === 'pending_approval' ? t('Chờ duyệt đi trễ') : t('Bị từ chối');
 
                                 if (isSupplementary) {
-                                  bg = 'rgba(139, 92, 246, 0.1)';
-                                  color = '#8B5CF6';
+                                  bg = 'rgba(2, 132, 199, 0.1)';
+                                  color = '#0284c7';
                                   if (row.status === 'pending_approval') {
                                     label = t('Đang chờ cập nhật công');
                                   } else if (row.status === 'approved') {
@@ -10099,16 +10100,16 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                           alignItems: 'center',
                           justifyContent: 'center',
                           gap: '12px',
-                          background: isSupp ? 'rgba(139, 92, 246, 0.04)' : 'rgba(245, 158, 11, 0.04)',
-                          border: isSupp ? '1px solid rgba(139, 92, 246, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)',
+                          background: isSupp ? 'rgba(2, 132, 199, 0.05)' : 'rgba(245, 158, 11, 0.04)',
+                          border: isSupp ? '1px solid rgba(2, 132, 199, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)',
                           padding: '2.5rem 1.5rem',
                           borderRadius: '12px',
                           textAlign: 'center',
                           height: '100%',
                           minHeight: '220px'
                         }}>
-                          {isSupp ? <Clock size={38} color="#8B5CF6" /> : <AlertCircle size={38} color="var(--color-warning)" />}
-                          <h4 style={{ fontWeight: 700, fontSize: '1rem', color: isSupp ? '#8B5CF6' : 'var(--color-warning)', margin: 0 }}>
+                          {isSupp ? <Clock size={38} color="#0284c7" /> : <AlertCircle size={38} color="var(--color-warning)" />}
+                          <h4 style={{ fontWeight: 700, fontSize: '1rem', color: isSupp ? '#0284c7' : 'var(--color-warning)', margin: 0 }}>
                             {isSupp ? t('Đang chờ cập nhật công') : t('Đang chờ duyệt đi trễ')}
                           </h4>
                           <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', margin: 0, maxWidth: '280px', lineHeight: 1.45 }}>
@@ -10271,7 +10272,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                             <tbody>
                               {sortedDayPersonnel.length === 0 ? (
                                 <tr>
-                                  <td colSpan={6} style={{ textAlign: 'center', padding: '16px', fontStyle: 'italic', fontSize: '0.7rem' }}>
+                                  <td colSpan={6} style={{ textAlign: 'center', padding: '16px', fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
                                     {t('Chưa có danh sách nhân sự')}
                                   </td>
                                 </tr>
@@ -10283,7 +10284,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
                                   return (
                                     <tr key={row.user.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                                      <td style={{ padding: '6px 8px', fontSize: '0.625rem', color: 'var(--color-text-muted)' }}>{i + 1}</td>
+                                      <td style={{ padding: '6px 8px', fontSize: '0.625rem', color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>{i + 1}</td>
                                       <td style={{ padding: '6px 8px', fontSize: '0.6875rem' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                           <Avatar 
@@ -10300,18 +10301,18 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                               </span>
                                             )}
                                             {row.halfLeave && (
-                                              <span style={{ fontSize: '0.58rem', color: '#ea580c', fontWeight: 700, marginTop: '1px' }}>
-                                                🏖️ {Number(row.halfLeave.start_time?.slice(0, 2)) < 12 ? t('Nghỉ nửa sáng') : t('Nghỉ nửa chiều')}
+                                              <span style={{ fontSize: '0.58rem', color: '#ea580c', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '1px' }}>
+                                                <Calendar size={9} /> {Number(row.halfLeave.start_time?.slice(0, 2)) < 12 ? t('Nghỉ nửa sáng') : t('Nghỉ nửa chiều')}
                                               </span>
                                             )}
                                             {row.lateEarly && (
-                                              <span style={{ fontSize: '0.58rem', color: '#d97706', fontWeight: 700, marginTop: '1px' }}>
-                                                ⏰ {(row.lateEarly.start_time && row.lateEarly.start_time >= '12:00') ? t('Về sớm') : t('Đi muộn')} ({row.lateEarly.start_time || ''}-{row.lateEarly.end_time || ''})
+                                              <span style={{ fontSize: '0.58rem', color: '#d97706', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '1px' }}>
+                                                <Clock size={9} /> {(row.lateEarly.start_time && row.lateEarly.start_time >= '12:00') ? t('Về sớm') : t('Đi muộn')} ({row.lateEarly.start_time || ''}-{row.lateEarly.end_time || ''})
                                               </span>
                                             )}
                                             {row.wfh && (
-                                              <span style={{ fontSize: '0.58rem', color: '#059669', fontWeight: 700, marginTop: '1px' }}>
-                                                🏠 WFH
+                                              <span style={{ fontSize: '0.58rem', color: '#059669', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '1px' }}>
+                                                <Home size={9} /> WFH
                                               </span>
                                             )}
                                           </div>
@@ -10334,7 +10335,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                             {c.status === 'approved' ? t('Hợp lệ') : (c.status === 'pending_approval' ? t('Chờ duyệt') : t('Từ chối'))}
                                           </span>
                                         ) : (
-                                          <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{t('Chưa chấm công')}</span>
+                                          <span style={{ color: 'var(--color-text-muted)' }}>{t('Chưa chấm công')}</span>
                                         )}
                                       </td>
                                       <td style={{ padding: '6px 8px', textAlign: 'right' }}>
@@ -10709,8 +10710,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                   {row.user_email || '—'}
                                 </span>
                                 {displayReason && (
-                                  <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px', fontStyle: 'italic', wordBreak: 'break-word' }}>
-                                    💬 {displayReason}
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px', wordBreak: 'break-word' }}>
+                                    {displayReason}
                                   </span>
                                 )}
                               </div>
@@ -10722,7 +10723,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '4px',
-                                color: row.shift_type === 'overtime' ? '#7c3aed' : row.shift_type === 'holiday' ? '#ea580c' : row.shift_type === 'weekend' ? '#2563eb' : '#0284c7'
+                                color: row.shift_type === 'overtime' ? '#0d9488' : row.shift_type === 'holiday' ? '#ea580c' : row.shift_type === 'weekend' ? '#2563eb' : '#0284c7'
                               }}>
                                 {row.shift_type === 'overtime' ? (
                                   <>
@@ -11309,7 +11310,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               width: '28px',
               height: '28px',
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, #6366f1, #4338ca)',
+              background: '#0284c7',
               color: '#ffffff',
               display: 'flex',
               alignItems: 'center',
@@ -11319,7 +11320,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               <CheckSquare size={14} />
             </div>
 
-            <span style={{ fontSize: '0.95rem', fontWeight: 800 }}>
+            <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>
               {t('Đăng ký Cập nhật công')}
             </span>
           </div>
@@ -11486,7 +11487,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                 padding: '2px 6px',
                                 borderRadius: '4px'
                               }}>
-                                🏖️ {day.leave_type || t('Đã có đơn nghỉ')}
+                                <Calendar size={10} /> {day.leave_type || t('Đã có đơn nghỉ')}
                               </span>
                             )}
                           </td>
@@ -11537,7 +11538,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                           </td>
                           <td style={{ padding: '6px 12px' }}>
                             {day.is_on_leave ? (
-                              <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                                 {day.leave_reason || t('Nghỉ theo đơn xin phép (Không áp dụng bù công)')}
                               </span>
                             ) : (
@@ -11722,9 +11723,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   justifyContent: 'center',
                   cursor: 'pointer',
                   padding: 0,
-                  transition: 'all 0.15s ease'
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease'
                 }}
-                className="hover-scale"
                 title={t('Thêm người liên quan')}
               >
                 <UserPlus size={14} color="var(--color-primary)" />
@@ -11892,11 +11892,12 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           <div style={{ 
             padding: '12px 16px', 
             borderRadius: '12px', 
-            background: 'rgba(99, 102, 241, 0.06)', 
-            border: '1px solid rgba(99, 102, 241, 0.15)',
+            background: 'rgba(2, 132, 199, 0.08)', 
+            border: '1px solid rgba(2, 132, 199, 0.2)',
             fontSize: '0.8125rem',
             fontWeight: 700,
-            color: '#4338ca',
+            fontVariantNumeric: 'tabular-nums',
+            color: '#0284c7',
             display: 'flex',
             alignItems: 'center',
             gap: '8px'
@@ -11945,7 +11946,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 height: '38px',
                 padding: '0 24px',
                 borderRadius: '8px',
-                background: 'linear-gradient(135deg, #6366f1, #4338ca)',
+                background: '#0284c7',
                 color: '#ffffff',
                 border: 'none',
                 fontSize: '0.8125rem',
@@ -11955,7 +11956,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px',
-                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.25)'
+                boxShadow: '0 2px 8px rgba(2, 132, 199, 0.2)'
               }}
             >
               {bulkSubmitting ? (

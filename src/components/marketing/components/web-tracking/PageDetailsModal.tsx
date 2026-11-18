@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { X, Eye, Users, Clock, MousePointer2, TrendingDown, Globe, Activity, TrendingUp } from 'lucide-react';
 import { api } from '../../services/storageAdapter';
 import Modal from '../common/Modal';
+import { ensureArray, extractArray } from '../../../../utils/safeArray';
 
 interface PageDetailsModalProps {
     isOpen: boolean;
@@ -144,8 +145,8 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
                             <button
                                 key={device}
                                 onClick={() => setDeviceFilter(device)}
-                                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${deviceFilter === device
-                                    ? 'bg-indigo-600 text-white shadow-sm'
+                                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${deviceFilter === device
+                                    ? 'bg-[#BD1D2D] text-white shadow-xs'
                                     : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                                     }`}
                             >
@@ -191,61 +192,61 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
                         <div className="space-y-6">
                             {/* Overview Stats */}
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
+                                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl hover:border-slate-300 transition-colors">
                                     <div className="flex items-center gap-2 mb-2">
                                         <Eye className="w-4 h-4 text-slate-400" />
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Lượt xem</span>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Lượt xem</span>
                                     </div>
-                                    <p className="text-2xl font-black text-slate-800">{details.overview.totalViews.toLocaleString()}</p>
+                                    <p className="text-2xl font-bold text-slate-900 tabular-nums">{details.overview.totalViews.toLocaleString()}</p>
                                 </div>
 
-                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
+                                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl hover:border-slate-300 transition-colors">
                                     <div className="flex items-center gap-2 mb-2">
                                         <Users className="w-4 h-4 text-slate-400" />
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Visitors</span>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Visitors</span>
                                     </div>
-                                    <p className="text-2xl font-black text-slate-800">{details.overview.uniqueVisitors.toLocaleString()}</p>
+                                    <p className="text-2xl font-bold text-slate-900 tabular-nums">{details.overview.uniqueVisitors.toLocaleString()}</p>
                                 </div>
 
-                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
+                                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl hover:border-slate-300 transition-colors">
                                     <div className="flex items-center gap-2 mb-2">
                                         <Clock className="w-4 h-4 text-slate-400" />
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Thời gian</span>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Thời gian</span>
                                     </div>
-                                    <p className="text-2xl font-black text-slate-800">{formatDuration(Math.round(details.overview.avgTimeOnPage || 0))}</p>
+                                    <p className="text-2xl font-bold text-slate-900 tabular-nums">{formatDuration(Math.round(details.overview.avgTimeOnPage || 0))}</p>
                                 </div>
 
-                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
+                                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl hover:border-slate-300 transition-colors">
                                     <div className="flex items-center gap-2 mb-2">
                                         <MousePointer2 className="w-4 h-4 text-slate-400" />
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Scroll</span>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Scroll</span>
                                     </div>
-                                    <p className="text-2xl font-black text-slate-800">{Math.round(details.overview.avgScrollDepth || 0)}%</p>
+                                    <p className="text-2xl font-bold text-slate-900 tabular-nums">{Math.round(details.overview.avgScrollDepth || 0)}%</p>
                                 </div>
 
-                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
+                                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl hover:border-slate-300 transition-colors">
                                     <div className="flex items-center gap-2 mb-2">
                                         <TrendingDown className="w-4 h-4 text-slate-400" />
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bounce</span>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bounce</span>
                                     </div>
-                                    <p className="text-2xl font-black text-slate-800">{details.overview.bounceRate.toFixed(1)}%</p>
-                                    <p className="text-[9px] text-slate-400 font-medium mt-1">
+                                    <p className="text-2xl font-bold text-slate-900 tabular-nums">{details.overview.bounceRate.toFixed(1)}%</p>
+                                    <p className="text-[10px] text-slate-400 font-medium mt-1 tabular-nums">
                                         {details.overview.bounces}/{details.overview.entrances} entrances
                                     </p>
                                 </div>
 
-                                <div className="bg-slate-50 border border-slate-100 p-4 rounded-[14px] hover:border-slate-200 transition-colors">
+                                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl hover:border-slate-300 transition-colors">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <TrendingUp className={`w-4 h-4 ${details.overview.avgLoadTime > 2500 ? 'text-rose-500' : 'text-slate-400'}`} />
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Avg Load</span>
+                                        <TrendingUp className={`w-4 h-4 ${details.overview.avgLoadTime > 2500 ? 'text-[#BD1D2D]' : 'text-slate-400'}`} />
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Avg Load</span>
                                     </div>
                                     <div className="flex items-baseline gap-1">
-                                        <p className={`text-2xl font-black ${details.overview.avgLoadTime > 2500 ? 'text-rose-600' : 'text-slate-800'}`}>
+                                        <p className={`text-2xl font-bold tabular-nums ${details.overview.avgLoadTime > 2500 ? 'text-[#BD1D2D]' : 'text-slate-900'}`}>
                                             {details.overview.avgLoadTime > 0 ? (details.overview.avgLoadTime / 1000).toFixed(2) : '--'}
                                         </p>
-                                        <span className="text-[11px] font-bold text-slate-400">s</span>
+                                        <span className="text-xs font-bold text-slate-400">s</span>
                                     </div>
-                                    <p className="text-[9px] text-slate-400 font-medium mt-1 truncate">
+                                    <p className="text-[10px] text-slate-400 font-medium mt-1 truncate">
                                         {details.overview.avgLoadTime > 2500 ? 'Tải chậm' : 'Tốc độ tốt'}
                                     </p>
                                 </div>
@@ -254,21 +255,21 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
                             {/* Events */}
                             <div>
                                 <div className="flex items-center gap-3 mb-4">
-                                    <div className="w-10 h-10 rounded-[14px] flex items-center justify-center text-white shadow-lg bg-gradient-to-br from-purple-500 to-indigo-600">
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white bg-[#BD1D2D]">
                                         <Activity className="w-5 h-5" />
                                     </div>
                                     <div className="flex-1">
-                                        <h3 className="text-[15px] font-black text-slate-800 tracking-tight">Tương tác trên trang</h3>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Hành động người dùng</p>
+                                        <h3 className="text-[15px] font-bold text-slate-900">Tương tác trên trang</h3>
+                                        <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Hành động người dùng</p>
                                     </div>
-                                    <div className="flex items-center gap-1 bg-slate-100/50 p-1 rounded-xl border border-slate-200/50">
+                                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-[10px] border border-slate-200">
                                         {(['click', 'canvas', 'other'] as const).map((tab) => (
                                             <button
                                                 key={tab}
                                                 onClick={() => setEventTab(tab)}
-                                                className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all ${eventTab === tab
-                                                    ? 'bg-white text-indigo-600 shadow-sm'
-                                                    : 'text-slate-400 hover:text-slate-600'
+                                                className={`px-3 py-1.5 text-[11px] font-bold rounded-[7px] transition-colors ${eventTab === tab
+                                                    ? 'bg-white text-[#BD1D2D] shadow-xs'
+                                                    : 'text-slate-500 hover:text-slate-700'
                                                     }`}
                                             >
                                                 {tab === 'click' ? 'Button Click' : tab === 'canvas' ? 'Canvas Click' : 'Other'}
@@ -279,7 +280,7 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
 
                                 <div className="space-y-2 min-h-[200px]">
                                     {(() => {
-                                        const filteredEvents = details.events.filter(e => {
+                                        const filteredEvents = ensureArray(details?.events).filter(e => {
                                             if (eventTab === 'click') return e.type === 'click';
                                             if (eventTab === 'canvas') return e.type === 'canvas_click';
                                             return e.type !== 'click' && e.type !== 'canvas_click';
@@ -291,26 +292,26 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
                                                 const displayName = isScroll ? `Cuộn trang ${event.target}%` : (event.target || 'Không rõ');
 
                                                 return (
-                                                    <div key={idx} className="flex items-center justify-between p-3.5 bg-white hover:bg-slate-50 border border-slate-100 rounded-xl transition-all group">
+                                                    <div key={idx} className="flex items-center justify-between p-3.5 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-xl transition-colors group">
                                                         <div className="flex items-center gap-3 min-w-0 flex-1">
-                                                            <div className="w-9 h-9 rounded-lg bg-slate-100 group-hover:bg-indigo-50 flex items-center justify-center text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0">
+                                                            <div className="w-9 h-9 rounded-lg bg-slate-100 group-hover:bg-rose-50 flex items-center justify-center text-slate-500 group-hover:text-[#BD1D2D] transition-colors shrink-0">
                                                                 {renderEventIcon(event.type)}
                                                             </div>
                                                             <div className="min-w-0 flex-1">
-                                                                <p className="text-[11px] font-bold text-slate-700 truncate mb-0.5">{displayName}</p>
-                                                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                                                                <p className="text-xs font-semibold text-slate-800 truncate mb-0.5">{displayName}</p>
+                                                                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                                                                     {event.type.replace('_', ' ')}
                                                                 </p>
                                                             </div>
                                                         </div>
-                                                        <span className="text-[13px] font-black text-slate-800 group-hover:text-indigo-600 transition-colors">{event.count}</span>
+                                                        <span className="text-[13px] font-bold text-slate-900 group-hover:text-[#BD1D2D] transition-colors tabular-nums">{event.count.toLocaleString('vi-VN')}</span>
                                                     </div>
                                                 );
                                             })
                                         ) : (
-                                            <div className="py-12 text-center bg-slate-50/50 rounded-[14px] border border-dashed border-slate-200">
-                                                <Activity className="w-8 h-8 text-slate-200 mx-auto mb-2" />
-                                                <p className="text-slate-400 text-xs font-medium italic">Không có dữ liệu {eventTab}</p>
+                                            <div className="py-12 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                                                <Activity className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                                                <p className="text-slate-500 text-xs font-medium">Không có dữ liệu {eventTab}</p>
                                             </div>
                                         );
                                     })()}
@@ -331,7 +332,7 @@ const PageDetailsModal: React.FC<PageDetailsModalProps> = ({
 
                                 <div className="space-y-2 min-h-[150px]">
                                     {details.sources.length > 0 ? (
-                                        details.sources.map((source, idx) => (
+                                        ensureArray(details?.sources).map((source, idx) => (
                                             <div key={idx} className="flex items-center justify-between p-3.5 bg-white hover:bg-slate-50 border border-slate-100 rounded-xl transition-all group">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-9 h-9 rounded-lg bg-slate-50 flex items-center justify-center p-1.5 shrink-0 group-hover:scale-110 transition-transform">

@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { withRouterFreezer } from '../components/RouterFreezer';
 import {
   Scale, Users, AlertTriangle, BarChart2, Info,
-  TrendingUp, Sparkles, CheckCircle, Layers,
+  TrendingUp, CheckCircle, Layers,
   RotateCcw, Settings, Copy, ChevronDown, ChevronUp, Zap
 } from 'lucide-react';
 import {
@@ -12,6 +12,7 @@ import {
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomModal } from '../components/ui/CustomModal';
 import { fetchAPI, getDefaultDateFilter } from '../utils/api';
+import { ensureArray, extractArray } from '../utils/safeArray';
 import toast from 'react-hot-toast';
 import { KpiCardSkeleton, Skeleton } from '../components/ui/Skeleton';
 import { Avatar } from '../components/ui/Avatar';
@@ -92,7 +93,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
 
   // Initialize/Sync simulation consultants state when actual data changes
   useEffect(() => {
-    if (data?.consultants) {
+    if (Array.isArray(data?.consultants)) {
       setSimConsultants(data.consultants.map((c: any) => ({
         id: c.id,
         name: c.name,
@@ -129,7 +130,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
   };
 
   const handleResetSimulation = () => {
-    if (!data?.consultants) return;
+    if (!Array.isArray(data?.consultants)) return;
     setSimConsultants(data.consultants.map((c: any) => ({
       id: c.id,
       name: c.name,
@@ -243,9 +244,10 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
       const actualCount = c.assigned_count;
       const simCount = rawCounts[i];
 
-      const sourceWeights = data.sources.map((src: string) => {
+      const sourceList = ensureArray(data?.sources);
+      const sourceWeights = sourceList.map((src: string) => {
         if (actualCount > 0) {
-          return c.sources[src] || 0;
+          return c.sources?.[src] || 0;
         } else {
           return 1;
         }
@@ -253,7 +255,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
 
       const distributedSources = distributeProportionally(simCount, sourceWeights);
 
-      data.sources.forEach((src: string, sIdx: number) => {
+      sourceList.forEach((src: string, sIdx: number) => {
         simSources[src] = distributedSources[sIdx];
       });
 
@@ -282,7 +284,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
     try {
       const res = await fetchAPI('get_rounds');
       if (res.success) {
-        const roundsData = res.data || [];
+        const roundsData = extractArray(res);
         setRounds(roundsData);
         
         // Auto-select the first round if no round_id is currently selected/passed
@@ -362,7 +364,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
         body: JSON.stringify(payload)
       });
       if (res.success) {
-        toast.success(t('Đã cập nhật Bù Data thành công!'));
+        toast.success(t('Đã cập nhật Bù Data thành công'));
         setQuickCompModalOpen(false);
         fetchStats();
       } else {
@@ -486,7 +488,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
 
   // Calculate weights and total weight for activeData (used for exact target share calculation)
   const activeWeights = useMemo(() => {
-    if (!activeData || !activeData.consultants) return { weights: [], totalWeight: 0 };
+    if (!activeData || !Array.isArray(activeData.consultants)) return { weights: [], totalWeight: 0 };
     const weights = activeData.consultants.map((con: any) => {
       const conRatio = isSimulating
         ? (simConsultants.find(sc => sc.id === con.id)?.simulatedRatio ?? con.receive_ratio)
@@ -502,7 +504,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
 
   const predictiveTurns = useMemo(() => {
     const targetData = isSimulating ? simulatedData : data;
-    if (!targetData || !targetData.consultants) return 50;
+    if (!targetData || !Array.isArray(targetData.consultants)) return 50;
     const activeCount = targetData.consultants.filter((c: any) => {
       const conRatio = isSimulating
         ? (simConsultants.find(sc => sc.id === c.id)?.simulatedRatio ?? c.receive_ratio)
@@ -517,7 +519,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
 
   const predictiveFairness = useMemo(() => {
     const targetData = isSimulating ? simulatedData : data;
-    if (!targetData || !targetData.consultants || targetData.consultants.length === 0) return null;
+    if (!targetData || !Array.isArray(targetData.consultants) || targetData.consultants.length === 0) return null;
 
     const cons = targetData.consultants.map((c: any) => {
       const conRatio = isSimulating
@@ -645,7 +647,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
   const handleCopyReport = () => {
     const targetData = isSimulating ? simulatedData : data;
     if (!targetData || !targetData.consultants || targetData.consultants.length === 0) {
-      toast.error(t("Không có dữ liệu đối soát để sao chép!"));
+      toast.error(t("Không có dữ liệu đối soát để sao chép"));
       return;
     }
 
@@ -653,16 +655,16 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
       ? (rounds.find(r => String(r.id) === roundFilter)?.round_name || t('Vòng cụ thể'))
       : t('Tất cả các Vòng');
 
-    let text = `📊 ${t('BÁO CÁO ĐỐI SOÁT ĐỘ CÔNG BẰNG PHÂN PHỐI')} ${isSimulating ? t('(GIẢ LẬP)') : t('(THỰC TẾ)')}\n`;
+    let text = `${t('BÁO CÁO ĐỐI SOÁT ĐỘ CÔNG BẰNG PHÂN PHỐI')} ${isSimulating ? t('(GIẢ LẬP)') : t('(THỰC TẾ)')}\n`;
     text += `Round: ${roundName} | ${t('Thời gian')}: ${t(dateFilter)}\n`;
     text += `--------------------------------------------------\n`;
-    text += `📈 ${t('CHỈ SỐ HỆ THỐNG')}:\n`;
+    text += `${t('CHỈ SỐ HỆ THỐNG')}:\n`;
     text += `- ${t('Chỉ số Công bằng (Fairness Index)')}: ${targetData.fairnessIndex}%\n`;
     text += `- ${t('Độ lệch chuẩn (SD)')}: ±${targetData.standardDeviation} ${t('lead')}\n`;
     text += `- ${t('Số lead trung bình')}: ${targetData.mean} ${t('lead / Sale')}\n`;
     text += `- ${t('Tổng lead thành công')}: ${targetData.totalLeads} ${t('lead')} / ${targetData.totalConsultants} ${t('Saleperson')}\n\n`;
 
-    text += `👥 ${t('CHI TIẾT TỪNG TƯ VẤN VIÊN')}:\n`;
+    text += `${t('CHI TIẾT TỪNG TƯ VẤN VIÊN')}:\n`;
 
     targetData.consultants.forEach((c: any, index: number) => {
       const currentRatio = isSimulating
@@ -692,7 +694,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
     });
 
     text += `--------------------------------------------------\n`;
-    text += `💡 ${t('KHUYẾN NGHỊ')}:\n`;
+    text += `${t('KHUYẾN NGHỊ')}:\n`;
     if (targetData.fairnessIndex >= 90) {
       text += `- ${t('Phân phối cực kỳ công bằng. Cấu hình ratio đang hoạt động tối ưu.')}\n`;
     } else if (targetData.fairnessIndex >= 75) {
@@ -708,7 +710,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
   const handleExecuteCopy = () => {
     navigator.clipboard.writeText(copyReportText)
       .then(() => {
-        toast.success(t("Đã sao chép báo cáo đối soát nhanh!"));
+        toast.success(t("Đã sao chép báo cáo đối soát nhanh"));
         setShowCopyModal(false);
       })
       .catch(err => {
@@ -752,16 +754,16 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
   };
 
   // Formatting chart data for Data Source Balance
-  const sourceChartData = activeData?.consultants ? activeData.consultants.map((c: any) => {
+  const sourceChartData = Array.isArray(activeData?.consultants) ? activeData.consultants.map((c: any) => {
     const item: any = { name: c.name };
-    activeData.sources.forEach((src: string) => {
-      item[src] = isSimulating ? Math.round(c.sources[src] || 0) : (c.sources[src] || 0);
+    ensureArray(activeData?.sources).forEach((src: string) => {
+      item[src] = isSimulating ? Math.round(c.sources?.[src] || 0) : (c.sources?.[src] || 0);
     });
     return item;
   }) : [];
 
   // Formatting chart data for Lead Quality (Assigned vs Duplicate vs Faulty Approved)
-  const qualityChartData = activeData?.consultants ? activeData.consultants.map((c: any) => ({
+  const qualityChartData = Array.isArray(activeData?.consultants) ? activeData.consultants.map((c: any) => ({
     name: c.name,
     [t('Data bàn giao')]: Math.round(c.assigned_count),
     [t('Ticket')]: c.total_ticket_count,
@@ -769,7 +771,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
   })) : [];
 
   // Comparison chart data for simulation
-  const simulationChartData = data?.consultants ? data.consultants.map((c: any) => {
+  const simulationChartData = Array.isArray(data?.consultants) ? data.consultants.map((c: any) => {
     const simC = simulatedData?.consultants?.find((sc: any) => sc.id === c.id);
     return {
       name: c.name,
@@ -797,11 +799,11 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
       }}>
         {payload.map((entry: any, index: number) => {
           let color = entry.color;
-          if (entry.value === t('Data bàn giao')) color = 'var(--color-primary)';
-          else if (entry.value === t('Ticket')) color = '#fbbf24';
+          if (entry.value === t('Data bàn giao')) color = '#C6333D';
+          else if (entry.value === t('Ticket')) color = '#64748B';
           else if (entry.value === t('Duyệt Ticket')) color = '#10b981';
-          else if (entry.value === t('Thực tế')) color = 'var(--color-text-muted)';
-          else if (entry.value === t('Giả lập')) color = 'var(--color-primary)';
+          else if (entry.value === t('Thực tế')) color = '#64748B';
+          else if (entry.value === t('Giả lập')) color = '#C6333D';
           else {
             const sIdx = activeData?.sources?.indexOf(entry.value);
             if (sIdx !== undefined && sIdx !== -1) {
@@ -830,25 +832,25 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
     if (active && payload && payload.length) {
       return (
         <div style={{
-          background: 'rgba(15, 23, 42, 0.95)',
-          backdropFilter: 'blur(12px)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
           padding: '12px 16px',
-          borderRadius: '12px',
-          boxShadow: '0 12px 24px rgba(0,0,0,0.25)',
-          color: '#f8fafc'
+          borderRadius: '10px',
+          boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)',
+          color: 'var(--color-text)',
+          fontVariantNumeric: 'tabular-nums'
         }}>
-          <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: 'white', marginBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 6 }}>
+          <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: 8, borderBottom: '1px solid var(--color-border-light)', paddingBottom: 6 }}>
             {label}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {payload.map((p: any, idx: number) => (
               <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, fontSize: '0.75rem' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#94a3b8' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-muted)' }}>
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color || p.fill }} />
                   {p.name}
                 </span>
-                <span style={{ fontWeight: 800, color: 'white' }}>{Math.round(p.value)} {t('lead')}</span>
+                <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{Math.round(p.value)} {t('lead')}</span>
               </div>
             ))}
           </div>
@@ -871,21 +873,21 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
     if (isSimulating && fairness >= 75) {
       return (
         <div style={{
-          background: '#ffffff',
-          border: '1px solid #E2E8F0',
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
           borderRadius: '16px',
-          padding: '1.25rem',
-          marginBottom: '1.5rem',
+          padding: '20px',
+          marginBottom: '24px',
           display: 'flex',
           gap: '12px',
           alignItems: 'flex-start'
         }}>
-          <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: 8, borderRadius: '50%', color: '#10b981', flexShrink: 0 }}>
+          <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: 8, borderRadius: '8px', color: '#10b981', flexShrink: 0 }}>
             <CheckCircle size={18} />
           </div>
           <div>
-            <h4 style={{ fontWeight: 800, fontSize: '0.875rem', color: '#065f46', margin: 0, marginBottom: 4 }}>
-              {t("Cấu Hình Giả Lập Đạt Độ Công Bằng Tốt ({fairness}%)").replace('{fairness}', String(fairness))}
+            <h4 style={{ fontWeight: 700, fontSize: '0.875rem', color: '#065f46', margin: 0, marginBottom: 4, fontVariantNumeric: 'tabular-nums' }}>
+              {t("Cấu hình giả lập đạt độ công bằng tốt ({fairness}%)").replace('{fairness}', String(fairness))}
             </h4>
             <p style={{ fontSize: '0.8125rem', color: '#047857', margin: 0, lineHeight: 1.6 }}>
               {t("Với các thiết lập ratio và ca trực đang giả lập, hệ thống phân phối dự kiến sẽ rất cân bằng.")}
@@ -920,35 +922,32 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
     });
 
     const title = isSimulating
-      ? t("Khuyến Nghị Cấu Hình Giả Lập: Độ lệch phân phối vẫn còn cao ({fairness}%)").replace('{fairness}', String(fairness))
-      : t("Khuyến Nghị Cần Điều Chỉnh: Phát hiện độ lệch phân phối cao thực tế ({fairness}%)").replace('{fairness}', String(fairness));
+      ? t("Khuyến nghị cấu hình giả lập: Độ lệch phân phối vẫn còn cao ({fairness}%)").replace('{fairness}', String(fairness))
+      : t("Khuyến nghị cần điều chỉnh: Phát hiện độ lệch phân phối cao thực tế ({fairness}%)").replace('{fairness}', String(fairness));
 
-    const bgColor = 'linear-gradient(135deg, rgba(239, 68, 68, 0.04) 0%, rgba(239, 68, 68, 0.08) 100%)';
-    const borderColor = 'rgba(239, 68, 68, 0.2)';
-    const borderLeftColor = '#ef4444';
-    const iconColor = '#ef4444';
+    const iconColor = '#BD1D2D';
     const titleColor = '#991b1b';
-    const descColor = '#b91c1c';
+    const descColor = 'var(--color-text-light)';
 
     return (
       <div style={{
-        background: '#ffffff',
-        border: '1px solid #E2E8F0',
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
         borderRadius: '16px',
-        padding: '1.25rem',
-        marginBottom: '1.5rem',
+        padding: '20px',
+        marginBottom: '24px',
         display: 'flex',
         gap: '12px',
         alignItems: 'flex-start'
       }}>
-        <div style={{ background: `${iconColor}15`, padding: 8, borderRadius: '50%', color: iconColor, flexShrink: 0 }}>
+        <div style={{ background: 'rgba(189, 29, 45, 0.08)', padding: 8, borderRadius: '8px', color: iconColor, flexShrink: 0 }}>
           <AlertTriangle size={18} />
         </div>
         <div>
-          <h4 style={{ fontWeight: 800, fontSize: '0.875rem', color: titleColor, marginBottom: 4 }}>
+          <h4 style={{ fontWeight: 700, fontSize: '0.875rem', color: titleColor, marginBottom: 4, fontVariantNumeric: 'tabular-nums' }}>
             {title}
           </h4>
-          <div style={{ fontSize: '0.8125rem', color: descColor, lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ fontSize: '0.8125rem', color: descColor, lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
             <div>
               {maxSurplusSale && (
                 <span>
@@ -981,10 +980,10 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
       {/* Header */}
       <div className="page-header">
         <div>
-          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Scale size={28} color="var(--color-primary)" /> {t("Đối Soát Độ Công Bằng Phân Phối")}
+          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Scale size={28} color="#BD1D2D" /> {t("Đối soát độ công bằng phân phối")}
           </h1>
-          <p className="page-subtitle">{t("Kiểm tra toán học & đo lường độ lệch chuẩn, chỉ số Gini để đảm bảo data được chia công bằng.")}</p>
+          <p className="page-subtitle">{t("Kiểm tra toán học & đo lường độ lệch chuẩn, chỉ số Gini để đảm bảo data được chia công bằng")}</p>
         </div>
         <div className="mobile-w-full" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
           <div className="mobile-flex-1" style={{ position: 'relative', zIndex: 100, width: 180 }}>
@@ -1030,7 +1029,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
             title={t("Bật/Tắt Bộ giả lập phân bổ Live")}
           >
             <Settings size={16} className={isSimulating ? 'spin' : ''} />
-            <span>{isSimulating ? t('Tắt Giả lập') : t('Giả Lập Live')}</span>
+            <span>{isSimulating ? t('Tắt Giả lập') : t('Giả lập Live')}</span>
           </button>
           {roundFilter && (
             <button
@@ -1047,7 +1046,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
               title={t("Bù Data chủ động cho các TVV trong vòng")}
             >
               <Zap size={16} />
-              <span>{t("Bù Chủ Động")}</span>
+              <span>{t("Bù chủ động")}</span>
             </button>
           )}
           <button
@@ -1072,36 +1071,35 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
       {/* Live Simulation Control Panel */}
       {isSimulating && (
         <div style={{
-          background: 'linear-gradient(135deg, rgba(189, 29, 45, 0.06) 0%, rgba(163, 20, 34, 0.1) 100%)',
+          background: 'rgba(189, 29, 45, 0.04)',
           border: '1px solid var(--color-primary)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '1.25rem 1.5rem',
-          marginBottom: '1.5rem',
-          boxShadow: 'var(--shadow-md)',
-          animation: 'slideDown 0.3s ease-out'
+          borderRadius: '16px',
+          padding: '20px 24px',
+          marginBottom: '24px',
+          animation: 'slideDown 0.25s ease-out'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ background: 'var(--color-primary)', color: 'white', padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Sparkles size={18} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ background: '#BD1D2D', color: 'white', width: 32, height: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Zap size={16} />
               </div>
               <div>
-                <h4 style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--color-text)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {t("BỘ GIẢ LẬP PHÂN BỔ LIVE")} <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'var(--color-success)', color: 'white', borderRadius: 4, fontWeight: 700, letterSpacing: '0.05em' }}>ACTIVE</span>
+                <h4 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--color-text)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {t("BỘ GIẢ LẬP PHÂN BỔ LIVE")} <span style={{ fontSize: '0.68rem', padding: '2px 8px', background: 'rgba(16, 185, 129, 0.12)', color: '#059669', borderRadius: 6, fontWeight: 600, letterSpacing: '0.04em' }}>ACTIVE</span>
                 </h4>
-                <p style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', margin: '2px 0 0 0' }}>
+                <p style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', margin: '4px 0 0 0' }}>
                   {t("Thay đổi tần suất nhận hoặc bật/tắt ca trực của từng Sale ở bảng chi tiết bên dưới để thấy các chỉ số tái tính toán ngay lập tức.")}
                 </p>
               </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '2px 8px', height: '32px' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)' }}>{t("Tổng Lead:")}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '2px 8px', height: '32px', fontVariantNumeric: 'tabular-nums' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-light)' }}>{t("Tổng Lead:")}</span>
                 <button
                   type="button"
                   onClick={() => setSimTotalLeads(prev => Math.max(0, prev - 10))}
-                  style={{ border: 'none', background: 'transparent', padding: '0 4px', fontSize: '0.68rem', fontWeight: 800, color: 'var(--color-primary)', cursor: 'pointer' }}
+                  style={{ border: 'none', background: 'transparent', padding: '0 4px', fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-primary)', cursor: 'pointer' }}
                   title={t("Giảm 10 lead")}
                 >
                   -10
@@ -1109,7 +1107,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                 <button
                   type="button"
                   onClick={() => setSimTotalLeads(prev => Math.max(0, prev - 1))}
-                  style={{ border: 'none', background: 'transparent', padding: '0 4px', fontSize: '0.68rem', fontWeight: 800, color: 'var(--color-primary)', cursor: 'pointer' }}
+                  style={{ border: 'none', background: 'transparent', padding: '0 4px', fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-primary)', cursor: 'pointer' }}
                   title={t("Giảm 1 lead")}
                 >
                   -1
@@ -1128,19 +1126,20 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                     width: '60px',
                     height: '24px',
                     textAlign: 'center',
-                    fontWeight: 800,
+                    fontWeight: 700,
                     fontSize: '0.8125rem',
                     border: '1px solid var(--color-border-light)',
                     borderRadius: '4px',
                     background: 'var(--color-bg)',
                     color: 'var(--color-text)',
-                    padding: 0
+                    padding: 0,
+                    fontVariantNumeric: 'tabular-nums'
                   }}
                 />
                 <button
                   type="button"
                   onClick={() => setSimTotalLeads(prev => prev + 1)}
-                  style={{ border: 'none', background: 'transparent', padding: '0 4px', fontSize: '0.68rem', fontWeight: 800, color: 'var(--color-primary)', cursor: 'pointer' }}
+                  style={{ border: 'none', background: 'transparent', padding: '0 4px', fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-primary)', cursor: 'pointer' }}
                   title={t("Tăng 1 lead")}
                 >
                   +1
@@ -1148,7 +1147,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                 <button
                   type="button"
                   onClick={() => setSimTotalLeads(prev => prev + 10)}
-                  style={{ border: 'none', background: 'transparent', padding: '0 4px', fontSize: '0.68rem', fontWeight: 800, color: 'var(--color-primary)', cursor: 'pointer' }}
+                  style={{ border: 'none', background: 'transparent', padding: '0 4px', fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-primary)', cursor: 'pointer' }}
                   title={t("Tăng 10 lead")}
                 >
                   +10
@@ -1168,7 +1167,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', background: 'rgba(189, 29, 45, 0.05)', border: '1px solid rgba(189, 29, 45, 0.2)', padding: '10px 12px', borderRadius: '8px', fontSize: '0.75rem', color: 'var(--color-primary)' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', background: 'rgba(189, 29, 45, 0.05)', border: '1px solid rgba(189, 29, 45, 0.2)', padding: '12px', borderRadius: '8px', fontSize: '0.75rem', color: 'var(--color-primary)' }}>
             <Info size={15} style={{ flexShrink: 0, marginTop: 1, color: 'var(--color-primary)' }} />
             <div>
               <span>{t("Các thay đổi về Ratio nhận và ca trực ở đây chỉ phục vụ mục đích giả lập trực quan để đối soát độ lệch chuẩn & Gini, không ảnh hưởng đến cấu hình thực tế của hệ thống.")}</span>
@@ -1176,22 +1175,22 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
           </div>
 
           {/* Quick Start Guide Section */}
-          <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px dashed rgba(189, 29, 45, 0.2)' }}>
+          <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginTop: '20px', paddingTop: '20px', borderTop: '1px dashed rgba(189, 29, 45, 0.2)' }}>
             <div>
-              <h5 style={{ fontWeight: 800, fontSize: '0.8125rem', color: 'var(--color-primary)', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ display: 'inline-flex', width: 18, height: 18, borderRadius: '50%', background: 'var(--color-primary)', color: 'white', fontSize: '0.7rem', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>1</span>
+              <h5 style={{ fontWeight: 700, fontSize: '0.8125rem', color: 'var(--color-primary)', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ display: 'inline-flex', width: 20, height: 20, borderRadius: '50%', background: 'var(--color-primary)', color: 'white', fontSize: '0.7rem', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>1</span>
                 {t("HƯỚNG DẪN CÁCH GIẢ LẬP")}
               </h5>
-              <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.75rem', color: 'var(--color-text)', lineHeight: 1.6 }}>
-                <li><strong>{t("Bước A:")}</strong> {t("Cuộn xuống")} <strong>{t("Bảng Thống Kê Chi Tiết")}</strong> {t("ở dưới cùng trang.")}</li>
+              <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.75rem', color: 'var(--color-text)', lineHeight: 1.6 }}>
+                <li><strong>{t("Bước A:")}</strong> {t("Cuộn xuống")} <strong>{t("Bảng thống kê chi tiết")}</strong> {t("ở dưới cùng trang.")}</li>
                 <li><strong>{t("Bước B:")}</strong> {t("Click vào thẻ avatar/tên của Sale để giả định Sale đó")} <strong>{t("Trực ca")}</strong> {t("(chấm xanh) hoặc")} <strong>{t("Nghỉ ca")}</strong> {t("(chấm đỏ).")}</li>
                 <li><strong>{t("Bước C:")}</strong> {t("Kéo thanh trượt hoặc nhập số")} <strong>Ratio</strong> {t("của từng Sale để thay đổi lượt nhận lead (Ratio càng lớn thì nhận càng ít lead).")}</li>
                 <li><strong>{t("Kết quả:")}</strong> {t("Các con số lead, biểu đồ và chỉ số công bằng phía trên sẽ tự động tính toán lại ngay lập tức.")}</li>
               </ul>
             </div>
             <div>
-              <h5 style={{ fontWeight: 800, fontSize: '0.8125rem', color: 'var(--color-primary)', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ display: 'inline-flex', width: 18, height: 18, borderRadius: '50%', background: 'var(--color-primary)', color: 'white', fontSize: '0.7rem', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>2</span>
+              <h5 style={{ fontWeight: 700, fontSize: '0.8125rem', color: 'var(--color-primary)', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ display: 'inline-flex', width: 20, height: 20, borderRadius: '50%', background: 'var(--color-primary)', color: 'white', fontSize: '0.7rem', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>2</span>
                 {t("NGUYÊN LÝ VÒNG CHIA (ROUND-ROBIN)")}
               </h5>
               <div style={{ fontSize: '0.75rem', color: 'var(--color-text)', lineHeight: 1.6 }}>
@@ -1207,32 +1206,32 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
         </div>
       )}
 
-      {/* Intro explain card styled identically to RuleSettings */}
+      {/* Intro explain card styled cleanly */}
       <div className="hide-on-mobile responsive-hide-mobile" style={{
-        background: '#ffffff',
-        border: '1px solid #E2E8F0',
-        borderRadius: '16px', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.5rem'
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: '16px', padding: '20px 24px', display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '24px'
       }}>
         <div style={{
-          background: 'var(--color-card, #fff)',
-          width: 40, height: 40, flexShrink: 0,
+          background: 'rgba(189, 29, 45, 0.08)',
+          width: 36, height: 36, flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          borderRadius: '50%', boxShadow: 'var(--shadow-sm)', color: 'var(--color-primary)'
+          borderRadius: '8px', color: '#BD1D2D'
         }}>
-          <Sparkles size={20} />
+          <Scale size={18} strokeWidth={1.75} />
         </div>
         <div>
-          <h4 style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--color-primary)', marginBottom: 4 }}>
+          <h4 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--color-text)', marginBottom: 4 }}>
             {t("Báo cáo Đối soát Công bằng hoạt động thế nào?")}
           </h4>
-          <p style={{ fontSize: '0.875rem', color: 'var(--color-text)', lineHeight: 1.6 }}>
+          <p style={{ fontSize: '0.85rem', color: 'var(--color-text-light)', lineHeight: 1.6, margin: 0 }}>
             {t("Hệ thống áp dụng công thức")} <strong>{t("Hệ số bất bình đẳng Gini")}</strong> {t("và")} <strong>{t("Độ lệch chuẩn")}</strong> {t("thực tế của lượng data bàn giao cho Sale. Chỉ số Công bằng được tính toán bằng cách chuẩn hóa lượng data nhận được chia cho Tỷ lệ (Receive Ratio) thiết lập của từng Sale. Giúp bạn ngay lập tức phát hiện xem có sự bất bình đẳng ngoài ý muốn do lỗi phân phối hoặc Sale offline kéo dài hay không.")}
           </p>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+      <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '24px' }}>
         {loading && !activeData ? (
           Array.from({ length: 4 }).map((_, i) => <KpiCardSkeleton key={i} />)
         ) : (
@@ -1241,49 +1240,52 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
             {(() => {
               const level = getFairnessLevel(activeData?.fairnessIndex || 0);
               return (
-                <div className="stat-card hover-lift" style={{ minHeight: '135px', display: 'flex', flexDirection: 'column', border: '1px solid #E2E8F0', borderRadius: '16px', position: 'relative', overflow: 'hidden' }}>
-                  <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: 60, height: 60, borderRadius: '50%', background: `radial-gradient(circle, ${level.color}10 0%, transparent 70%)` }} />
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', zIndex: 1 }}>
-                    <span className="stat-label" style={{ fontWeight: 800 }}>{t("CHỈ SỐ CÔNG BẰNG")}</span>
-                    <Scale size={18} style={{ color: level.color }} />
+                <div className="stat-card" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <span className="stat-label" style={{ fontWeight: 700, fontSize: '0.73rem', letterSpacing: '0.04em', color: '#64748b' }}>{t("CHỈ SỐ CÔNG BẰNG")}</span>
+                    <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Scale size={16} strokeWidth={1.75} />
+                    </div>
                   </div>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', zIndex: 1 }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '2rem', letterSpacing: '-0.02em', margin: 0 }}>{activeData?.fairnessIndex}%</span>
+                      <span className="stat-value" style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '1.85rem', fontVariantNumeric: 'tabular-nums', margin: 0 }}>{activeData?.fairnessIndex}%</span>
                       {isSimulating && data && (
                         <span style={{
                           fontSize: '0.68rem',
                           padding: '2px 8px',
-                          borderRadius: 20,
+                          borderRadius: 6,
                           background: activeData.fairnessIndex >= data.fairnessIndex ? 'var(--color-success-light)' : 'var(--color-danger-light)',
                           color: activeData.fairnessIndex >= data.fairnessIndex ? 'var(--color-success)' : 'var(--color-danger)',
-                          fontWeight: 700,
+                          fontWeight: 600,
+                          fontVariantNumeric: 'tabular-nums',
                           border: `1px solid ${activeData.fairnessIndex >= data.fairnessIndex ? 'var(--color-success)' : 'var(--color-danger)'}20`
                         }}>
                           {activeData.fairnessIndex >= data.fairnessIndex ? '+' : ''}{(activeData.fairnessIndex - data.fairnessIndex).toFixed(1)}% {t("vs Thật")}
                         </span>
                       )}
-                      <span style={{ fontSize: '0.68rem', padding: '3px 8px', borderRadius: 20, background: level.bg, color: level.color, fontWeight: 700, border: `1px solid ${level.color}20` }}>
+                      <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: 6, background: level.bg, color: level.color, fontWeight: 600, border: `1px solid ${level.color}20` }}>
                         {level.label}
                       </span>
                     </div>
                     {predictiveFairness !== null && activeData && activeData.fairnessIndex < predictiveFairness.maxFairness && (
                       <div style={{ 
-                        fontSize: '0.73rem', 
-                        color: 'var(--color-primary)', 
-                        marginTop: '14px', 
-                        marginBottom: '6px',
+                        fontSize: '0.72rem', 
+                        color: '#BD1D2D', 
+                        marginTop: '12px', 
+                        marginBottom: '8px',
                         display: 'inline-flex', 
                         alignItems: 'center', 
                         gap: '6px',
-                        background: 'var(--color-primary-light)',
-                        padding: '5px 10px',
+                        background: 'rgba(189, 29, 45, 0.06)',
+                        padding: '4px 10px',
                         borderRadius: '8px',
-                        fontWeight: 700,
-                        border: '1px solid rgba(163, 20, 34, 0.15)',
+                        fontWeight: 600,
+                        fontVariantNumeric: 'tabular-nums',
+                        border: '1px solid rgba(189, 29, 45, 0.15)',
                         width: 'fit-content'
                       }}>
-                        <Sparkles size={12} className="spin" style={{ animationDuration: '3s' }} />
+                        <TrendingUp size={12} />
                         <span>
                           {t("Dự báo đạt công bằng cao nhất {fairness}% sau {turns} lượt tới")
                             .replace('{fairness}', String(predictiveFairness.maxFairness))
@@ -1302,22 +1304,25 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
             })()}
 
             {/* Standard Deviation Card */}
-            <div className="stat-card hover-lift" style={{ minHeight: '135px', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span className="stat-label" style={{ fontWeight: 800 }}>{t("ĐỘ LỆCH CHUẨN (SD)")}</span>
-                <AlertTriangle size={18} color="#fbbf24" />
+            <div className="stat-card" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px', position: 'relative' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <span className="stat-label" style={{ fontWeight: 700, fontSize: '0.73rem', letterSpacing: '0.04em', color: '#64748b' }}>{t("ĐỘ LỆCH CHUẨN (SD)")}</span>
+                <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <AlertTriangle size={16} strokeWidth={1.75} />
+                </div>
               </div>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '2rem', letterSpacing: '-0.02em', margin: 0 }}>± {activeData?.standardDeviation || 0}</span>
+                  <span className="stat-value" style={{ fontWeight: 700, color: '#BD1D2D', fontSize: '1.85rem', fontVariantNumeric: 'tabular-nums', margin: 0 }}>± {activeData?.standardDeviation || 0}</span>
                   {isSimulating && data && (
                     <span style={{
                       fontSize: '0.68rem',
                       padding: '2px 8px',
-                      borderRadius: 20,
+                      borderRadius: 6,
                       background: activeData.standardDeviation <= data.standardDeviation ? 'var(--color-success-light)' : 'var(--color-danger-light)',
                       color: activeData.standardDeviation <= data.standardDeviation ? 'var(--color-success)' : 'var(--color-danger)',
-                      fontWeight: 700,
+                      fontWeight: 600,
+                      fontVariantNumeric: 'tabular-nums',
                       border: `1px solid ${activeData.standardDeviation <= data.standardDeviation ? 'var(--color-success)' : 'var(--color-danger)'}20`
                     }}>
                       {activeData.standardDeviation <= data.standardDeviation ? '' : '+'}{(activeData.standardDeviation - data.standardDeviation).toFixed(2)} {t("vs Thật")}
@@ -1331,23 +1336,26 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
             </div>
 
             {/* Average lead count card */}
-            <div className="stat-card hover-lift" style={{ minHeight: '135px', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span className="stat-label" style={{ fontWeight: 800 }}>{t("SỐ LEAD TRUNG BÌNH")}</span>
-                <TrendingUp size={18} color="var(--color-primary)" />
+            <div className="stat-card" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <span className="stat-label" style={{ fontWeight: 700, fontSize: '0.73rem', letterSpacing: '0.04em', color: '#64748b' }}>{t("SỐ LEAD TRUNG BÌNH")}</span>
+                <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <TrendingUp size={16} strokeWidth={1.75} />
+                </div>
               </div>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '2rem', letterSpacing: '-0.02em', margin: 0 }}>{activeData?.mean || 0}</span>
+                  <span className="stat-value" style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '1.85rem', fontVariantNumeric: 'tabular-nums', margin: 0 }}>{activeData?.mean || 0}</span>
                   {isSimulating && data && (
                     <span style={{
                       fontSize: '0.68rem',
                       padding: '2px 8px',
-                      borderRadius: 20,
-                      background: 'var(--color-info-light)',
-                      color: 'var(--color-info)',
-                      fontWeight: 700,
-                      border: '1px solid var(--color-info)20'
+                      borderRadius: 6,
+                      background: 'rgba(51, 65, 85, 0.08)',
+                      color: '#334155',
+                      fontWeight: 600,
+                      fontVariantNumeric: 'tabular-nums',
+                      border: '1px solid rgba(51, 65, 85, 0.15)'
                     }}>
                       {activeData.mean >= data.mean ? '+' : ''}{(activeData.mean - data.mean).toFixed(2)} {t("vs Thật")}
                     </span>
@@ -1360,16 +1368,18 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
             </div>
 
             {/* Total Audited Leads */}
-            <div className="stat-card hover-lift" style={{ minHeight: '135px', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span className="stat-label" style={{ fontWeight: 800 }}>{t("TỔNG LEAD / SALEPERSONS")}</span>
-                <Users size={18} color="#3b82f6" />
+            <div className="stat-card" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <span className="stat-label" style={{ fontWeight: 700, fontSize: '0.73rem', letterSpacing: '0.04em', color: '#64748b' }}>{t("TỔNG LEAD / SALEPERSONS")}</span>
+                <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Users size={16} strokeWidth={1.75} />
+                </div>
               </div>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '2rem', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span>{Math.round(activeData?.totalLeads || 0)} <span style={{ fontSize: '1rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>/ {activeData?.totalConsultants || 0} {t("Saleperson")}</span></span>
+                <div className="stat-value" style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '1.85rem', fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span>{Math.round(activeData?.totalLeads || 0)} <span style={{ fontSize: '0.95rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>/ {activeData?.totalConsultants || 0} {t("Saleperson")}</span></span>
                   {isSimulating && (
-                    <span style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: 20, background: 'var(--color-primary-light)', color: 'var(--color-primary)', fontWeight: 700, border: '1px solid var(--color-primary)20', letterSpacing: '0.05em' }}>
+                    <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: 6, background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', fontWeight: 600, border: '1px solid rgba(189, 29, 45, 0.2)', letterSpacing: '0.04em' }}>
                       {t("GIẢ LẬP")}
                     </span>
                   )}
@@ -1388,12 +1398,12 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
 
       {/* Main Charts area */}
       {!isSimulating && (
-        <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.5rem' }}>
+        <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
 
           {/* Data Source Balance Chart */}
-          <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <div style={{ marginBottom: '1.25rem' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--color-text)' }}>{t("Phân Bổ Cân Bằng Theo Nguồn")}</h3>
+          <div className="card" style={{ padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Phân bổ cân bằng theo nguồn")}</h3>
               <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-light)', marginTop: '4px' }}>
                 {t("Đảm bảo các Sale nhận số lượng lead chất lượng (FB Ads, Google) đồng đều, tránh dồn nguồn kém chất lượng cho một người.")}
               </p>
@@ -1403,18 +1413,10 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                 <Skeleton width="100%" height={300} borderRadius={16} />
               ) : sourceChartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={sourceChartData} margin={{ top: 10, right: 10, left: -25, bottom: 5 }} barGap={5}>
-                    <defs>
-                      {sourceColors.map((color, idx) => (
-                        <linearGradient key={`grad-src-${idx}`} id={`srcGrad-${idx}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={color} stopOpacity={0.95} />
-                          <stop offset="100%" stopColor={color} stopOpacity={0.7} />
-                        </linearGradient>
-                      ))}
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" horizontal={true} vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text)', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} />
+                  <BarChart data={sourceChartData} margin={{ top: 10, right: 12, left: -16, bottom: 4 }} barGap={6}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" strokeOpacity={0.7} horizontal={true} vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748B', fontWeight: 500 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
                     <Tooltip content={<CustomChartTooltip />} cursor={{ fill: 'var(--color-border-light)', opacity: 0.3 }} />
                     <Legend content={renderCustomLegend} />
                     {activeData?.sources && activeData.sources.map((src: string, index: number) => (
@@ -1422,7 +1424,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                         key={src}
                         dataKey={src}
                         stackId="a"
-                        fill={`url(#srcGrad-${index})`}
+                        fill={sourceColors[index % sourceColors.length]}
                         radius={index === activeData.sources.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
                         barSize={32}
                       />
@@ -1437,10 +1439,10 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
 
           {/* Dynamic Simulation Chart / Lead Quality Chart */}
           {isSimulating ? (
-            <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <div style={{ marginBottom: '1.25rem' }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Sparkles size={16} color="var(--color-primary)" /> {t("So Sánh Lead Thực Tế vs. Giả Lập")}
+            <div className="card" style={{ padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <BarChart2 size={16} color="#BD1D2D" /> {t("So sánh Lead thực tế vs. Giả lập")}
                 </h3>
                 <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-light)', marginTop: '4px' }}>
                   {t("So sánh trực quan sự phân bổ lại số lượng lead của từng Sale sau khi thay đổi thiết lập.")}
@@ -1449,24 +1451,14 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
               <div style={{ flex: 1, minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {simulationChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={320}>
-                    <BarChart data={simulationChartData} margin={{ top: 10, right: 10, left: -25, bottom: 5 }} barGap={6}>
-                      <defs>
-                        <linearGradient id="actualLeadsGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="var(--color-text-muted)" stopOpacity={0.6} />
-                          <stop offset="100%" stopColor="var(--color-text-muted)" stopOpacity={0.3} />
-                        </linearGradient>
-                        <linearGradient id="simulatedLeadsGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.95} />
-                          <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0.65} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" horizontal={true} vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text)', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} />
+                    <BarChart data={simulationChartData} margin={{ top: 10, right: 12, left: -16, bottom: 4 }} barGap={6}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" strokeOpacity={0.7} horizontal={true} vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748B', fontWeight: 500 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
                       <Tooltip content={<CustomChartTooltip />} cursor={{ fill: 'var(--color-border-light)', opacity: 0.3 }} />
                       <Legend content={renderCustomLegend} />
-                      <Bar dataKey={t("Thực tế")} fill="url(#actualLeadsGrad)" radius={[4, 4, 0, 0]} barSize={16} />
-                      <Bar dataKey={t("Giả lập")} fill="url(#simulatedLeadsGrad)" radius={[4, 4, 0, 0]} barSize={16} />
+                      <Bar dataKey={t("Thực tế")} fill="#64748B" radius={[4, 4, 0, 0]} barSize={16} />
+                      <Bar dataKey={t("Giả lập")} fill="#C6333D" radius={[4, 4, 0, 0]} barSize={16} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -1476,9 +1468,9 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
             </div>
           ) : (
             /* Quality breakdown bar chart */
-            <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <div style={{ marginBottom: '1.25rem' }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--color-text)' }}>{t("Chất Lượng Lead Nhận Được")}</h3>
+            <div className="card" style={{ padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Chất lượng Lead nhận được")}</h3>
                 <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-light)', marginTop: '4px' }}>
                   {t("Đối soát giữa tỷ lệ lead thật (bàn giao), lead bị trùng lặp, và số data báo lỗi đã được duyệt đền bù của từng Sale.")}
                 </p>
@@ -1488,29 +1480,15 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                   <Skeleton width="100%" height={300} borderRadius={16} />
                 ) : qualityChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={320}>
-                    <BarChart data={qualityChartData} margin={{ top: 10, right: 10, left: -25, bottom: 5 }} barGap={6}>
-                      <defs>
-                        <linearGradient id="assignedGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.95} />
-                          <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0.65} />
-                        </linearGradient>
-                        <linearGradient id="duplicateGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#fbbf24" stopOpacity={0.95} />
-                          <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.65} />
-                        </linearGradient>
-                        <linearGradient id="ticketGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#10b981" stopOpacity={0.95} />
-                          <stop offset="100%" stopColor="#059669" stopOpacity={0.65} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" horizontal={true} vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text)', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} />
+                    <BarChart data={qualityChartData} margin={{ top: 10, right: 12, left: -16, bottom: 4 }} barGap={6}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" strokeOpacity={0.7} horizontal={true} vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748B', fontWeight: 500 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
                       <Tooltip content={<CustomChartTooltip />} cursor={{ fill: 'var(--color-border-light)', opacity: 0.3 }} />
                       <Legend content={renderCustomLegend} />
-                      <Bar dataKey={t("Data bàn giao")} fill="url(#assignedGrad)" radius={[4, 4, 0, 0]} barSize={16} />
-                      <Bar dataKey={t("Ticket")} fill="url(#duplicateGrad)" radius={[4, 4, 0, 0]} barSize={16} />
-                      <Bar dataKey={t("Duyệt Ticket")} fill="url(#ticketGrad)" radius={[4, 4, 0, 0]} barSize={16} />
+                      <Bar dataKey={t("Data bàn giao")} fill="#C6333D" radius={[4, 4, 0, 0]} barSize={16} />
+                      <Bar dataKey={t("Ticket")} fill="#64748B" radius={[4, 4, 0, 0]} barSize={16} />
+                      <Bar dataKey={t("Duyệt Ticket")} fill="#10b981" radius={[4, 4, 0, 0]} barSize={16} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -1523,20 +1501,20 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
       )}
 
       {/* Detail Table */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: '2rem', border: '1px solid var(--color-border)', position: 'relative' }}>
+      <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: '32px', border: '1px solid var(--color-border)', borderRadius: '16px', position: 'relative' }}>
         {isSimulating && (
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'var(--color-primary)', zIndex: 5, animation: 'pulse 2s infinite' }} />
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'var(--color-primary)', zIndex: 5 }} />
         )}
-        <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ padding: '20px', borderBottom: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              {t("Bảng Thống Kê Độ Lệch Chi Tiết")} {isSimulating && <span style={{ fontSize: '0.7rem', padding: '2px 8px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', borderRadius: '6px', fontWeight: 800 }}>{t("MÔ PHỎNG")}</span>}
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              {t("Bảng thống kê độ lệch chi tiết")} {isSimulating && <span style={{ fontSize: '0.7rem', padding: '2px 8px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', borderRadius: '6px', fontWeight: 700 }}>{t("MÔ PHỎNG")}</span>}
             </h3>
             <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-light)', marginTop: '4px' }}>
               {isSimulating ? (
                 <span>{t("Đang ở chế độ giả lập. Bật/tắt ca trực (checkbox) và điều chỉnh thanh trượt (slider) của từng Sale để xem kết quả.")}</span>
               ) : (
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 6px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 8px' }}>
                   <span>{t("Chi tiết từng Sale trong vòng được audit: Tỷ lệ (Ratio) cài đặt, số lead nhận được")}</span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--color-border-light)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--color-border)', fontSize: '0.75rem', fontWeight: 600 }}>
                     <span>{t("Thành công")}</span>
@@ -1551,7 +1529,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                       {t("Bù")}
                     </span>
                   </span>
-                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', fontStyle: 'italic' }}>
+                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
                     {t("(không tính lead bị trùng, lỗi/ticket, nhắc lại, blacklist...)")}
                   </span>
                   <span>{t(", và đánh giá lệch so với trung bình hệ thống.")}</span>
@@ -1559,39 +1537,39 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
               )}
             </div>
           </div>
-          <span style={{ fontSize: '0.7rem', padding: '4px 10px', borderRadius: 8, background: 'var(--color-border-light)', border: '1px solid var(--color-border)', fontWeight: 600, color: 'var(--color-text-light)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: '0.72rem', padding: '4px 12px', borderRadius: 8, background: 'var(--color-border-light)', border: '1px solid var(--color-border)', fontWeight: 600, color: 'var(--color-text-light)', display: 'inline-flex', alignItems: 'center', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
             <Layers size={12} /> {t("Số Sale được đo lường:")} {activeData?.consultants?.length || 0}
           </span>
         </div>
 
         <div className="responsive-table-wrap">
           {loading && !activeData ? (
-            <div style={{ padding: '1.25rem' }}>
+            <div style={{ padding: '20px' }}>
               <Skeleton width="100%" height={24} style={{ marginBottom: 12 }} />
               {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} width="100%" height={56} style={{ marginBottom: 8 }} />)}
             </div>
           ) : activeData?.consultants && activeData.consultants.length > 0 ? (
-            <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', textAlign: 'left' }} className="audit-premium-table">
+            <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', textAlign: 'left', fontVariantNumeric: 'tabular-nums' }} className="audit-premium-table">
               <thead>
                 <tr style={{ background: 'var(--color-border-light)', borderBottom: '1px solid var(--color-border)' }}>
                   <th style={{
-                    padding: '14px 18px',
+                    padding: '12px 16px',
                     fontSize: '0.72rem',
                     color: 'var(--color-text-light)',
                     textTransform: 'uppercase',
-                    fontWeight: 800,
+                    fontWeight: 700,
                     letterSpacing: '0.04em',
                     background: isSimulating ? 'rgba(189, 29, 45, 0.06)' : 'var(--color-border-light)'
                   }}>
                     {isSimulating ? t("Trực ca / Tư vấn viên (Nhập)") : t("Tư vấn viên")}
                   </th>
-                  <th style={{ padding: '14px 18px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.04em' }}>{t("Vòng chia")}</th>
+                  <th style={{ padding: '12px 16px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em' }}>{t("Vòng chia")}</th>
                   <th style={{
-                    padding: '14px 18px',
+                    padding: '12px 16px',
                     fontSize: '0.72rem',
                     color: 'var(--color-text-light)',
                     textTransform: 'uppercase',
-                    fontWeight: 800,
+                    fontWeight: 700,
                     letterSpacing: '0.04em',
                     textAlign: 'center',
                     width: isSimulating ? '180px' : 'auto',
@@ -1599,16 +1577,16 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                   }}>
                     Ratio {isSimulating && t("(Nhập)")}
                   </th>
-                  <th style={{ padding: '14px 18px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.04em', textAlign: 'center' }}>{t("Thành công")}</th>
-                  <th style={{ padding: '14px 18px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.04em' }}>{t("Phân bổ theo Nguồn")}</th>
-                  <th style={{ padding: '14px 18px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.04em', textAlign: 'center' }}>{t("Duyệt Ticket")}</th>
-                  <th style={{ padding: '14px 18px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.04em', textAlign: 'center' }}>{t("Data bù")}</th>
-                  <th style={{ padding: '14px 18px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.04em', textAlign: 'right' }}>{t("Độ Lệch")}</th>
-                  <th style={{ padding: '14px 18px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.04em', textAlign: 'center', width: '110px' }}>{t("Hành động")}</th>
+                  <th style={{ padding: '12px 16px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em', textAlign: 'center' }}>{t("Thành công")}</th>
+                  <th style={{ padding: '12px 16px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em' }}>{t("Phân bổ theo Nguồn")}</th>
+                  <th style={{ padding: '12px 16px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em', textAlign: 'center' }}>{t("Duyệt Ticket")}</th>
+                  <th style={{ padding: '12px 16px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em', textAlign: 'center' }}>{t("Data bù")}</th>
+                  <th style={{ padding: '12px 16px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em', textAlign: 'right' }}>{t("Độ lệch")}</th>
+                  <th style={{ padding: '12px 16px', fontSize: '0.72rem', color: 'var(--color-text-light)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em', textAlign: 'center', width: '112px' }}>{t("Hành động")}</th>
                 </tr>
               </thead>
               <tbody>
-                {activeData.consultants.map((c: any, index: number) => {
+                {ensureArray(activeData?.consultants).map((c: any, index: number) => {
                   const baselineC = data?.consultants?.find((bc: any) => bc.id === c.id);
                   const simC = simConsultants.find((sc: any) => sc.id === c.id) || c;
 
@@ -1639,7 +1617,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                       key={c.id}
                       style={{
                         borderBottom: '1px solid var(--color-border-light)',
-                        transition: 'all 0.25s ease',
+                        transition: 'background-color 0.18s ease',
                         background: isSimulating ? 'rgba(189, 29, 45, 0.01)' : 'transparent',
                         cursor: !isSimulating ? 'pointer' : 'default'
                       }}
@@ -1651,7 +1629,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                       }}
                     >
                       <td style={{
-                        padding: '14px 18px',
+                        padding: '12px 16px',
                         borderLeft: isSimulating ? '3px solid var(--color-primary)' : 'none',
                         background: isSimulating ? 'rgba(189, 29, 45, 0.02)' : 'transparent'
                       }}>
@@ -1675,20 +1653,20 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                             <span style={{ position: 'absolute', bottom: -2, right: -2, width: 12, height: 12, borderRadius: '50%', background: (!isSimulating || simC.simulatedOnShift) ? '#10b981' : '#ef4444', border: '2px solid var(--color-surface)', display: 'block' }} />
                           </div>
                           <div style={{ opacity: (!isSimulating || simC.simulatedOnShift) ? 1 : 0.5 }}>
-                            <span style={{ fontWeight: 700, color: 'var(--color-text)', display: 'block', fontSize: '0.875rem' }}>{c.name}</span>
+                            <span style={{ fontWeight: 600, color: 'var(--color-text)', display: 'block', fontSize: '0.875rem' }}>{c.name}</span>
                             <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
                               ID: {c.id} {isSimulating && !simC.simulatedOnShift && `(${t("Nghỉ")})`}
                             </span>
                           </div>
                         </div>
                       </td>
-                      <td style={{ padding: '14px 18px' }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text)', background: 'var(--color-bg)', padding: '4px 10px', borderRadius: 8, border: '1px solid var(--color-border)', display: 'inline-block' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)', background: 'var(--color-bg)', padding: '4px 10px', borderRadius: 8, border: '1px solid var(--color-border)', display: 'inline-block' }}>
                           {c.round_name}
                         </span>
                       </td>
                       <td style={{
-                        padding: '14px 18px',
+                        padding: '12px 16px',
                         textAlign: 'center',
                         verticalAlign: 'middle',
                         background: isSimulating ? 'rgba(189, 29, 45, 0.04)' : 'transparent'
@@ -1722,7 +1700,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                                   width: '48px',
                                   padding: '2px 4px',
                                   fontSize: '0.75rem',
-                                  fontWeight: 800,
+                                  fontWeight: 700,
                                   textAlign: 'center',
                                   border: '1px solid var(--color-border)',
                                   borderRadius: '6px',
@@ -1732,21 +1710,21 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                                 }}
                               />
                             </div>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: simC.simulatedOnShift ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: simC.simulatedOnShift ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
                               Ratio: {simC.simulatedRatio} {baselineC && baselineC.receive_ratio !== simC.simulatedRatio && (
-                                <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                                <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
                                   ({t("gốc")}: Ratio: {baselineC.receive_ratio})
                                 </span>
                               )}
                             </span>
                           </div>
                         ) : (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '6px 12px', borderRadius: 20, background: 'rgba(189, 29, 45, 0.06)', border: '1px dashed rgba(189, 29, 45, 0.3)', fontWeight: 800, color: 'var(--color-primary)', fontSize: '0.8125rem' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '4px 12px', borderRadius: 8, background: 'rgba(189, 29, 45, 0.06)', border: '1px dashed rgba(189, 29, 45, 0.3)', fontWeight: 700, color: 'var(--color-primary)', fontSize: '0.8125rem' }}>
                             Ratio: {c.receive_ratio}
                           </span>
                         )}
                       </td>
-                      <td style={{ padding: '14px 18px', textAlign: 'center', fontWeight: 900, fontSize: '1.05rem', color: 'var(--color-text)' }}>
+                      <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, fontSize: '1.05rem', color: 'var(--color-text)' }}>
                         {isSimulating && baselineC ? (
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                             <span style={{ color: 'var(--color-primary)', fontSize: '1.05rem' }}>{Math.round(c.assigned_count)}</span>
@@ -1758,12 +1736,12 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                           c.assigned_count
                         )}
                       </td>
-                      <td style={{ padding: '14px 18px', width: '260px', verticalAlign: 'middle' }}>
+                      <td style={{ padding: '12px 16px', width: '260px', verticalAlign: 'middle' }}>
                         {c.assigned_count > 0 ? (
-                          <div className="source-bar-container" style={{ position: 'relative', width: '100%', padding: '6px 0' }}>
+                          <div className="source-bar-container" style={{ position: 'relative', width: '100%', padding: '8px 0' }}>
                             <div style={{ display: 'flex', width: '100%', height: '8px', borderRadius: '4px', overflow: 'hidden', backgroundColor: 'var(--color-border-light)' }}>
-                              {activeData.sources.map((src: string, sIdx: number) => {
-                                const val = c.sources[src] || 0;
+                              {ensureArray(activeData?.sources).map((src: string, sIdx: number) => {
+                                const val = c.sources?.[src] || 0;
                                 if (val === 0) return null;
                                 const pct = (val / c.assigned_count) * 100;
                                 const color = sourceColors[sIdx % sourceColors.length];
@@ -1784,20 +1762,20 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                               <div style={{ fontWeight: 700, fontSize: '0.75rem', marginBottom: '6px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '4px', color: 'var(--color-text)' }}>
                                 {t("Phân bổ nguồn ({name})").replace('{name}', c.name)}
                               </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                                {activeData.sources.map((src: string, sIdx: number) => {
-                                  const val = c.sources[src] || 0;
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {ensureArray(activeData?.sources).map((src: string, sIdx: number) => {
+                                  const val = c.sources?.[src] || 0;
                                   if (val === 0) return null;
                                   const pct = (val / c.assigned_count) * 100;
                                   const color = sourceColors[sIdx % sourceColors.length];
                                   return (
-                                    <div key={src} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', fontSize: '0.7rem' }}>
+                                    <div key={src} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', fontSize: '0.72rem' }}>
                                       <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-light)' }}>
                                         <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: color }} />
                                         {src}
                                       </span>
-                                      <span style={{ fontWeight: 800, color: 'var(--color-text)' }}>
-                                        {Math.round(val * 10) / 10} <span style={{ fontWeight: 500, opacity: 0.7, fontSize: '0.65rem' }}>({pct.toFixed(0)}%)</span>
+                                      <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>
+                                        {Math.round(val * 10) / 10} <span style={{ fontWeight: 500, opacity: 0.7, fontSize: '0.68rem' }}>({pct.toFixed(0)}%)</span>
                                       </span>
                                     </div>
                                   );
@@ -1809,30 +1787,30 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                           <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', opacity: 0.6 }}>-</span>
                         )}
                       </td>
-                      <td style={{ padding: '14px 18px', textAlign: 'center' }}>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                         {c.ticket_count > 0 ? (
-                          <span style={{ color: '#10b981', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.875rem', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(16, 185, 129, 0.15)' }}>
+                          <span style={{ color: '#10b981', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.875rem', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(16, 185, 129, 0.15)' }}>
                             <CheckCircle size={12} /> {c.ticket_count}
                           </span>
                         ) : (
                           <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', opacity: 0.6 }}>-</span>
                         )}
                       </td>
-                      <td style={{ padding: '14px 18px', textAlign: 'center' }}>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                         {c.compensation_count > 0 ? (
-                          <span style={{ color: '#BD1D2D', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.875rem', background: 'rgba(189, 29, 45, 0.08)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(189, 29, 45, 0.15)' }}>
+                          <span style={{ color: '#BD1D2D', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.875rem', background: 'rgba(189, 29, 45, 0.08)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(189, 29, 45, 0.15)' }}>
                             <RotateCcw size={12} /> {c.compensation_count}
                           </span>
                         ) : (
                           <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', opacity: 0.6 }}>-</span>
                         )}
                       </td>
-                      <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                         <span className={`deviation-badge ${deviationClass}`}>
                           {deviationLabel}
                         </span>
                       </td>
-                      <td style={{ padding: '14px 18px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                         <button
                           type="button"
                           className="btn secondary sm"
@@ -1849,7 +1827,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
               </tbody>
             </table>
           ) : (
-            <div style={{ textAlign: 'center', padding: '3.5rem', color: 'var(--color-text-muted)' }}>
+            <div style={{ textAlign: 'center', padding: '48px', color: 'var(--color-text-muted)' }}>
               <CheckCircle size={36} style={{ marginBottom: 12, opacity: 0.5 }} />
               <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{t("Không tìm thấy dữ liệu phân phối phù hợp trong khoảng thời gian đã chọn.")}</p>
             </div>
@@ -1862,15 +1840,15 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
         <CustomModal
           isOpen={quickCompModalOpen}
           onClose={() => setQuickCompModalOpen(false)}
-          title={t("Quản lý Bù Data Chủ Động")}
+          title={t("Quản lý bù Data chủ động")}
           width="560px"
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0.5rem 0' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0', fontVariantNumeric: 'tabular-nums' }}>
             <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
               {t("Vòng:")} <strong>{rounds.find(r => String(r.id) === String(roundFilter))?.round_name || `ID ${roundFilter}`}</strong>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '55vh', overflowY: 'auto' }} className="custom-scrollbar">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '55vh', overflowY: 'auto' }} className="custom-scrollbar">
               {(activeData?.consultants || data?.consultants || []).map((c: any) => {
                 const currentVal = quickCompData[c.id] ?? (c.pending_compensation || 0);
                 const hasChanged = currentVal !== (c.pending_compensation || 0);
@@ -1878,21 +1856,21 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                   <div
                     key={c.id}
                     style={{
-                      padding: '12px 14px',
+                      padding: '12px 16px',
                       borderRadius: 10,
                       border: `1px solid ${hasChanged ? 'var(--color-primary)' : 'var(--color-border-light)'}`,
                       background: hasChanged ? 'rgba(189, 29, 45, 0.03)' : 'var(--color-bg)',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: 8,
-                      transition: 'all 0.2s ease'
+                      transition: 'background-color 0.18s ease, border-color 0.18s ease'
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <Avatar src={c.avatar} name={c.name} size={34} />
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)' }}>{c.name}</div>
+                          <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--color-text)' }}>{c.name}</div>
                           <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>ID: {c.id} • Ratio: {c.receive_ratio} • Hiện có: {c.pending_compensation || 0} suất bù</div>
                         </div>
                       </div>
@@ -1901,18 +1879,18 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                         <button
                           type="button"
                           className="btn outline sm"
-                          style={{ width: 30, height: 30, padding: 0, justifyContent: 'center', fontSize: '1rem', fontWeight: 700 }}
+                          style={{ width: 32, height: 32, padding: 0, justifyContent: 'center', fontSize: '1rem', fontWeight: 700 }}
                           onClick={() => setQuickCompData(prev => ({ ...prev, [c.id]: Math.max(0, (prev[c.id] || 0) - 1) }))}
                         >
                           -
                         </button>
-                        <span style={{ minWidth: 32, textAlign: 'center', fontWeight: 800, fontSize: '1.05rem', color: currentVal > 0 ? 'var(--color-primary)' : 'var(--color-text)' }}>
+                        <span style={{ minWidth: 32, textAlign: 'center', fontWeight: 700, fontSize: '1.05rem', color: currentVal > 0 ? 'var(--color-primary)' : 'var(--color-text)' }}>
                           {currentVal}
                         </span>
                         <button
                           type="button"
                           className="btn outline sm"
-                          style={{ width: 30, height: 30, padding: 0, justifyContent: 'center', fontSize: '1rem', fontWeight: 700 }}
+                          style={{ width: 32, height: 32, padding: 0, justifyContent: 'center', fontSize: '1rem', fontWeight: 700 }}
                           onClick={() => setQuickCompData(prev => ({ ...prev, [c.id]: (prev[c.id] || 0) + 1 }))}
                         >
                           +
@@ -2067,14 +2045,14 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
               <div style={{ 
                 display: 'flex', 
                 gap: 12, 
-                padding: '1rem', 
-                background: '#ffffff', 
-                border: '1px solid #e2e8f0',
+                padding: '16px', 
+                background: 'var(--color-surface)', 
+                border: '1px solid var(--color-border)',
                 borderRadius: '12px'
               }}>
                 <BarChart2 size={20} color="#334155" style={{ flexShrink: 0, marginTop: 2 }} />
                 <div>
-                  <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
+                  <h5 style={{ fontSize: '0.875rem', fontWeight: 700, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                     {t("1. Quy đổi công bằng theo tỉ lệ (Normalized Share)")}
                   </h5>
                   <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
@@ -2087,14 +2065,14 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
               <div style={{ 
                 display: 'flex', 
                 gap: 12, 
-                padding: '1rem', 
-                background: '#ffffff', 
-                border: '1px solid #e2e8f0',
+                padding: '16px', 
+                background: 'var(--color-surface)', 
+                border: '1px solid var(--color-border)',
                 borderRadius: '12px'
               }}>
                 <TrendingUp size={20} color="#BD1D2D" style={{ flexShrink: 0, marginTop: 2 }} />
                 <div>
-                  <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
+                  <h5 style={{ fontSize: '0.875rem', fontWeight: 700, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                     {t("2. Chỉ số chênh lệch chia số (Gini Coefficient)")}
                   </h5>
                   <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
@@ -2107,14 +2085,14 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
               <div style={{ 
                 display: 'flex', 
                 gap: 12, 
-                padding: '1rem', 
-                background: '#ffffff', 
-                border: '1px solid #e2e8f0',
+                padding: '16px', 
+                background: 'var(--color-surface)', 
+                border: '1px solid var(--color-border)',
                 borderRadius: '12px'
               }}>
-                <Sparkles size={20} color="#BD1D2D" style={{ flexShrink: 0, marginTop: 2 }} />
+                <RotateCcw size={20} color="#BD1D2D" style={{ flexShrink: 0, marginTop: 2 }} />
                 <div>
-                  <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
+                  <h5 style={{ fontSize: '0.875rem', fontWeight: 700, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
                     {t("3. Hàng đợi đền bù ưu tiên (Compensation Queue)")}
                   </h5>
                   <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
@@ -2123,7 +2101,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                 </div>
               </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem', borderTop: '1px solid var(--color-border-light)', paddingTop: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px', borderTop: '1px solid var(--color-border-light)', paddingTop: '16px' }}>
               <button className="btn primary" onClick={() => setShowInfoModal(false)}>{t("Đồng ý")}</button>
             </div>
           </div>
@@ -2134,24 +2112,24 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
       <CustomModal
         isOpen={showDetailsModal}
         onClose={() => setShowDetailsModal(false)}
-        title={t("Đối Soát Chi Tiết Data Bù")}
+        title={t("Đối soát chi tiết Data bù")}
         width="600px"
       >
         {showDetailsModal && (
           <>
             {detailsLoading ? (
-              <div style={{ padding: '2rem 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ padding: '32px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
                 <div className="spin" style={{ width: '32px', height: '32px', border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%' }} />
                 <span style={{ fontSize: '0.875rem', color: 'var(--color-text-light)' }}>{t("Đang tải dữ liệu đối soát...")}</span>
               </div>
             ) : compensationDetails ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '0.5rem 0' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '8px 0', fontVariantNumeric: 'tabular-nums' }}>
 
                 {/* Consultant Profile Summary */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--color-border-light)', padding: '12px 16px', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
                   <Avatar src={compensationDetails.avatar} name={compensationDetails.name} size={48} />
                   <div>
-                    <h4 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-text)', margin: 0 }}>
+                    <h4 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
                       {compensationDetails.name}
                     </h4>
                     <p style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', margin: '2px 0 0 0' }}>
@@ -2161,26 +2139,26 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                 </div>
 
                 {/* Core Stats Overview */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div style={{ background: 'rgba(189, 29, 45, 0.04)', border: '1px solid rgba(189, 29, 45, 0.15)', borderRadius: '12px', padding: '12px 16px', textAlign: 'center' }}>
                     <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-light)', display: 'block', textTransform: 'uppercase', marginBottom: '4px' }}>{t("Thành công")}</span>
-                    <span style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-primary)' }}>{compensationDetails.total_assigned}</span>
+                    <span style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--color-primary)' }}>{compensationDetails.total_assigned}</span>
                   </div>
                   <div style={{ background: 'rgba(16, 185, 129, 0.04)', border: '1px solid rgba(16, 185, 129, 0.15)', borderRadius: '12px', padding: '12px 16px', textAlign: 'center' }}>
-                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-light)', display: 'block', textTransform: 'uppercase', marginBottom: '4px' }}>{t("Data Bù Đã Nhận")}</span>
-                    <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#10b981' }}>{compensationDetails.total_compensation_received}</span>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-light)', display: 'block', textTransform: 'uppercase', marginBottom: '4px' }}>{t("Data bù đã nhận")}</span>
+                    <span style={{ fontSize: '1.75rem', fontWeight: 700, color: '#10b981' }}>{compensationDetails.total_compensation_received}</span>
                   </div>
                 </div>
 
                 {/* Compensation Breakdown Header */}
                 <div>
-                  <h5 style={{ fontSize: '0.8125rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 10px 0', borderBottom: '1px dashed var(--color-border)', paddingBottom: '6px' }}>
-                    {t("Thống Kê Chi Tiết Nguồn Bù")}
+                  <h5 style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 12px 0', borderBottom: '1px dashed var(--color-border)', paddingBottom: '8px' }}>
+                    {t("Thống kê chi tiết nguồn bù")}
                   </h5>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {/* Tickets Approved */}
-                    <div style={{ padding: '10px 14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ padding: '12px 16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       <div 
                         onClick={() => toggleSection('ticket')}
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
@@ -2189,10 +2167,10 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                           <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
                             <CheckCircle size={14} />
                           </span>
-                          <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Bù do duyệt ticket lỗi")}</span>
+                          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>{t("Bù do duyệt ticket lỗi")}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
-                          <span style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--color-text)' }}>+{compensationDetails.breakdown.ticket} {t("lead")}</span>
+                          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>+{compensationDetails.breakdown.ticket} {t("lead")}</span>
                           {compensationDetails.breakdown.ticket_details && compensationDetails.breakdown.ticket_details.length > 0 && (
                             expandedSections.ticket ? <ChevronUp size={14} style={{ color: 'var(--color-text-muted)' }} /> : <ChevronDown size={14} style={{ color: 'var(--color-text-muted)' }} />
                           )}
@@ -2212,7 +2190,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                           overflowY: 'auto',
                           paddingRight: '4px'
                         }}>
-                          {compensationDetails.breakdown.ticket_details.map((tkt: any, idx: number) => {
+                          {ensureArray(compensationDetails?.breakdown?.ticket_details).map((tkt: any, idx: number) => {
                             const dateStr = new Date(tkt.created_at).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit' });
                             return (
                               <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--color-text-light)', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
@@ -2233,7 +2211,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                     </div>
 
                     {/* Blacklist block */}
-                    <div style={{ padding: '10px 14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ padding: '12px 16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       <div 
                         onClick={() => toggleSection('blacklist')}
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
@@ -2242,10 +2220,10 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                           <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
                             <AlertTriangle size={14} />
                           </span>
-                          <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Bù do blacklist chặn")}</span>
+                          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>{t("Bù do blacklist chặn")}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
-                          <span style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--color-text)' }}>+{compensationDetails.breakdown.blacklist} {t("lead")}</span>
+                          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>+{compensationDetails.breakdown.blacklist} {t("lead")}</span>
                           {compensationDetails.breakdown.blacklist_details && compensationDetails.breakdown.blacklist_details.length > 0 && (
                             expandedSections.blacklist ? <ChevronUp size={14} style={{ color: 'var(--color-text-muted)' }} /> : <ChevronDown size={14} style={{ color: 'var(--color-text-muted)' }} />
                           )}
@@ -2265,7 +2243,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                           overflowY: 'auto',
                           paddingRight: '4px'
                         }}>
-                          {compensationDetails.breakdown.blacklist_details.map((bl: any, idx: number) => {
+                          {ensureArray(compensationDetails?.breakdown?.blacklist_details).map((bl: any, idx: number) => {
                             const dateStr = new Date(bl.created_at).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit' });
                             return (
                               <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--color-text-light)', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
@@ -2286,19 +2264,19 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                     </div>
 
                     {/* Reassignments */}
-                    <div style={{ padding: '10px 14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ padding: '12px 16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       <div 
                         onClick={() => toggleSection('reassign')}
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', background: 'rgba(51, 65, 85, 0.08)', color: '#334155' }}>
                             <Layers size={14} />
                           </span>
-                          <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Bù do thu hồi / chuyển lead")}</span>
+                          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>{t("Bù do thu hồi / chuyển lead")}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
-                          <span style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--color-text)' }}>+{compensationDetails.breakdown.reassign} {t("lead")}</span>
+                          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>+{compensationDetails.breakdown.reassign} {t("lead")}</span>
                           {compensationDetails.breakdown.reassign_details && compensationDetails.breakdown.reassign_details.length > 0 && (
                             expandedSections.reassign ? <ChevronUp size={14} style={{ color: 'var(--color-text-muted)' }} /> : <ChevronDown size={14} style={{ color: 'var(--color-text-muted)' }} />
                           )}
@@ -2318,7 +2296,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                           overflowY: 'auto',
                           paddingRight: '4px'
                         }}>
-                          {compensationDetails.breakdown.reassign_details.map((re: any, idx: number) => {
+                          {ensureArray(compensationDetails?.breakdown?.reassign_details).map((re: any, idx: number) => {
                             const dateStr = new Date(re.created_at).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit' });
                             return (
                               <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--color-text-light)', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
@@ -2339,7 +2317,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                     </div>
 
                     {/* Manual/Active Compensations */}
-                    <div style={{ padding: '10px 14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ padding: '12px 16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       <div 
                         onClick={() => toggleSection('active')}
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
@@ -2348,10 +2326,10 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                           <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', background: 'rgba(189, 29, 45, 0.1)', color: 'var(--color-primary)' }}>
                             <RotateCcw size={14} />
                           </span>
-                          <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Bù chủ động ")}</span>
+                          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>{t("Bù chủ động ")}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
-                          <span style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--color-text)' }}>+{compensationDetails.breakdown.active_total} {t("lead")}</span>
+                          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>+{compensationDetails.breakdown.active_total} {t("lead")}</span>
                           {compensationDetails.breakdown.active_details && compensationDetails.breakdown.active_details.length > 0 && (
                             expandedSections.active ? <ChevronUp size={14} style={{ color: 'var(--color-text-muted)' }} /> : <ChevronDown size={14} style={{ color: 'var(--color-text-muted)' }} />
                           )}
@@ -2372,7 +2350,7 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
                           overflowY: 'auto',
                           paddingRight: '4px'
                         }}>
-                          {compensationDetails.breakdown.active_details.map((act: any, idx: number) => {
+                          {ensureArray(compensationDetails?.breakdown?.active_details).map((act: any, idx: number) => {
                             const dateStr = new Date(act.created_at).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit' });
                             return (
                               <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--color-text-light)', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
@@ -2417,7 +2395,6 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
         }
         .audit-table-row:hover {
           background-color: rgba(189, 29, 45, 0.03) !important;
-          transform: translateX(4px);
         }
         [data-theme="dark"] .audit-table-row:hover {
           background-color: rgba(189, 29, 45, 0.06) !important;
@@ -2426,12 +2403,13 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
         /* Deviation Badges */
         .deviation-badge {
           font-size: 0.75rem;
-          font-weight: 700;
+          font-weight: 600;
           padding: 4px 12px;
-          border-radius: 20px;
+          border-radius: 6px;
           display: inline-flex;
           align-items: center;
           gap: 4px;
+          font-variant-numeric: tabular-nums;
         }
         .deviation-balanced {
           background: rgba(16, 185, 129, 0.08);
@@ -2439,14 +2417,14 @@ const FairShareAuditInner = ({ forceActive = false, isActive: propActive, search
           border: 1px solid rgba(16, 185, 129, 0.2);
         }
         .deviation-surplus {
-          background: rgba(59, 130, 246, 0.08);
-          color: #3b82f6;
-          border: 1px solid rgba(59, 130, 246, 0.2);
+          background: rgba(51, 65, 85, 0.08);
+          color: #334155;
+          border: 1px solid rgba(51, 65, 85, 0.2);
         }
         .deviation-deficit {
-          background: rgba(244, 63, 94, 0.08);
-          color: #f43f5e;
-          border: 1px solid rgba(244, 63, 94, 0.2);
+          background: rgba(189, 29, 45, 0.08);
+          color: #BD1D2D;
+          border: 1px solid rgba(189, 29, 45, 0.2);
         }
         
         /* Source Bar Container and Tooltip for clutter-free table */

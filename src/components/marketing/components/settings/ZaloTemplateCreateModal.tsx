@@ -795,18 +795,18 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                                 <div className="grid grid-cols-2 gap-3">
                                     <div
                                         onClick={() => setBuilder(prev => ({ ...prev, header: { ...prev.header, type: 'LOGO' } }))}
-                                        className={`cursor-pointer p-3 rounded-xl border flex flex-col items-center justify-center text-center gap-2 transition-all ${builder.header.type === 'LOGO' ? 'bg-purple-50 border-purple-500 ring-1 ring-purple-500' : 'hover:bg-slate-50 border-slate-200'}`}
+                                        className={`cursor-pointer p-3 rounded-xl border flex flex-col items-center justify-center text-center gap-2 transition-colors ${builder.header.type === 'LOGO' ? 'bg-rose-50/60 border-[#BD1D2D] ring-1 ring-[#BD1D2D]' : 'hover:bg-slate-50 border-slate-200'}`}
                                     >
-                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${builder.header.type === 'LOGO' ? 'bg-purple-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${builder.header.type === 'LOGO' ? 'bg-[#BD1D2D] text-white' : 'bg-slate-100 text-slate-400'}`}>
                                             <ImageIcon className="w-5 h-5" />
                                         </div>
                                         <span className="text-xs font-bold text-slate-700">Logo Doanh Nghiệp</span>
                                     </div>
                                     <div
                                         onClick={() => setBuilder(prev => ({ ...prev, header: { ...prev.header, type: 'IMAGE' } }))}
-                                        className={`cursor-pointer p-3 rounded-xl border flex flex-col items-center justify-center text-center gap-2 transition-all ${builder.header.type === 'IMAGE' ? 'bg-purple-50 border-purple-500 ring-1 ring-purple-500' : 'hover:bg-slate-50 border-slate-200'}`}
+                                        className={`cursor-pointer p-3 rounded-xl border flex flex-col items-center justify-center text-center gap-2 transition-colors ${builder.header.type === 'IMAGE' ? 'bg-rose-50/60 border-[#BD1D2D] ring-1 ring-[#BD1D2D]' : 'hover:bg-slate-50 border-slate-200'}`}
                                     >
-                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${builder.header.type === 'IMAGE' ? 'bg-purple-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${builder.header.type === 'IMAGE' ? 'bg-[#BD1D2D] text-white' : 'bg-slate-100 text-slate-400'}`}>
                                             <ImageIcon className="w-5 h-5" />
                                         </div>
                                         <span className="text-xs font-bold text-slate-700">Banner Ảnh Bìa</span>
@@ -859,7 +859,7 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
 
                                     <div className="flex gap-2 items-start">
                                         <div className="flex-1">
-                                            <div className="relative border border-slate-200 rounded-xl overflow-hidden bg-slate-50 focus-within:ring-2 focus-within:ring-purple-500/20 focus-within:border-purple-500 transition-all">
+                                            <div className="relative border border-slate-200 rounded-xl overflow-hidden bg-slate-50 focus-within:ring-2 focus-within:ring-[#BD1D2D]/15 focus-within:border-[#BD1D2D] transition-colors">
                                                 <input
                                                     type="text"
                                                     className="w-full text-xs font-mono p-3 outline-none bg-transparent text-slate-600"
@@ -869,7 +869,7 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                                                 />
                                                 {isUploading && (
                                                     <div className="absolute inset-0 bg-white/90 flex items-center justify-center backdrop-blur-sm z-10">
-                                                        <Loader2 className="w-5 h-5 animate-spin text-purple-500" />
+                                                        <Loader2 className="w-5 h-5 animate-spin text-[#BD1D2D]" />
                                                     </div>
                                                 )}
                                             </div>
@@ -884,10 +884,10 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                                                 disabled={isUploading}
                                             />
                                             <div className={`
-                                                h-[42px] px-4 rounded-xl border flex items-center gap-2 text-xs font-bold transition-all
+                                                h-[42px] px-4 rounded-xl border flex items-center gap-2 text-xs font-bold transition-colors
                                                 ${isUploading
                                                     ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                                                    : 'bg-white text-slate-600 border-slate-200 group-hover:border-purple-500 group-hover:text-purple-500 shadow-sm group-hover:shadow-md'
+                                                    : 'bg-white text-slate-700 border-slate-200 group-hover:border-[#BD1D2D] group-hover:text-[#BD1D2D] shadow-xs'
                                                 }
                                             `}>
                                                 <ImageIcon className="w-4 h-4" />
@@ -962,19 +962,19 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                                 )}
 
                                 {type === '4' && builder.body.voucher && (
-                                    <div className="p-4 bg-pink-50 rounded-xl border border-pink-100 space-y-3">
-                                        <h4 className="text-xs font-bold text-pink-700 uppercase">Thông tin Voucher</h4>
+                                    <div className="p-4 bg-rose-50/60 rounded-xl border border-rose-200 space-y-3">
+                                        <h4 className="text-xs font-bold text-[#BD1D2D] uppercase">Thông tin Voucher</h4>
                                         <div className="space-y-3">
-                                            <input type="text" className="w-full px-3 py-2 rounded-lg border border-pink-200 text-xs outline-none" placeholder="Tên Voucher (VD: Giảm 20%)"
+                                            <input type="text" className="w-full px-3 py-2 rounded-lg border border-rose-200 bg-white text-xs outline-none focus:border-[#BD1D2D]" placeholder="Tên Voucher (VD: Giảm 20%)"
                                                 value={builder.body.voucher.name} onChange={e => updateBody('voucher', { ...builder.body.voucher, name: e.target.value })} />
-                                            <input type="text" className="w-full px-3 py-2 rounded-lg border border-pink-200 text-xs outline-none" placeholder="Điều kiện (VD: Đơn > 200k)"
+                                            <input type="text" className="w-full px-3 py-2 rounded-lg border border-rose-200 bg-white text-xs outline-none focus:border-[#BD1D2D]" placeholder="Điều kiện (VD: Đơn > 200k)"
                                                 value={builder.body.voucher.condition} onChange={e => updateBody('voucher', { ...builder.body.voucher, condition: e.target.value })} />
                                             <div className="flex gap-2">
-                                                <input type="text" className="w-1/3 px-3 py-2 rounded-lg border border-pink-200 text-xs outline-none font-mono text-pink-600" placeholder="Biến Code (VD: <code>)"
+                                                <input type="text" className="w-1/3 px-3 py-2 rounded-lg border border-rose-200 bg-white text-xs outline-none font-mono text-[#BD1D2D] focus:border-[#BD1D2D]" placeholder="Biến Code (VD: <code>)"
                                                     value={builder.body.voucher.voucher_code} onChange={e => updateBody('voucher', { ...builder.body.voucher, voucher_code: e.target.value })} />
-                                                <input type="text" className="w-1/3 px-3 py-2 rounded-lg border border-pink-200 text-xs outline-none font-mono text-pink-600" placeholder="Ngày BD (VD: <start>)"
+                                                <input type="text" className="w-1/3 px-3 py-2 rounded-lg border border-rose-200 bg-white text-xs outline-none font-mono text-[#BD1D2D] focus:border-[#BD1D2D]" placeholder="Ngày BD (VD: <start>)"
                                                     value={builder.body.voucher.start_date} onChange={e => updateBody('voucher', { ...builder.body.voucher, start_date: e.target.value })} />
-                                                <input type="text" className="w-1/3 px-3 py-2 rounded-lg border border-pink-200 text-xs outline-none font-mono text-pink-600" placeholder="Ngày KT (VD: <end>)"
+                                                <input type="text" className="w-1/3 px-3 py-2 rounded-lg border border-rose-200 bg-white text-xs outline-none font-mono text-[#BD1D2D] focus:border-[#BD1D2D]" placeholder="Ngày KT (VD: <end>)"
                                                     value={builder.body.voucher.end_date} onChange={e => updateBody('voucher', { ...builder.body.voucher, end_date: e.target.value })} />
                                             </div>
                                         </div>
@@ -1070,17 +1070,17 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                         {/* SECTION 5: DETECTED PARAMS */}
                         {detectedParams.length > 0 && (
                             <div className="space-y-4">
-                                <h3 className="text-sm font-black text-indigo-400 uppercase tracking-wider flex items-center gap-2">
-                                    <Type className="w-4 h-4" />
+                                <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                                    <Type className="w-4 h-4 text-[#BD1D2D]" />
                                     Cấu hình tham số
                                 </h3>
 
-                                <div className="bg-white p-5 rounded-[14px] border-l-4 border-l-indigo-500 shadow-sm space-y-4">
-                                    <p className="text-xs text-slate-500">
+                                <div className="bg-white p-5 rounded-xl border border-slate-200 border-l-4 border-l-[#BD1D2D] shadow-xs space-y-4">
+                                    <p className="text-xs text-slate-600">
                                         Hệ thống tự động phát hiện <b>{detectedParams.length} biến</b> trong nội dung.
                                         Vui lòng định nghĩa loại dữ liệu và giá trị mẫu để Zalo duyệt nhanh hơn.
                                         {detectedParams.some(p => p.name.length < 3) && (
-                                            <span className="block mt-2 font-bold text-rose-500 flex items-center gap-1.5 animate-pulse">
+                                            <span className="block mt-2 font-bold text-[#BD1D2D] flex items-center gap-1.5">
                                                 <AlertCircle className="w-3.5 h-3.5" />
                                                 Lưu ý: Tên biến (VD: {detectedParams.find(p => p.name.length < 3)?.name}) phải từ 3 ký tự trở lên.
                                             </span>
@@ -1088,8 +1088,8 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                                     </p>
                                     <div className="space-y-3">
                                         {detectedParams.map((p, idx) => (
-                                            <div key={idx} className="flex gap-3 items-center p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
-                                                <div className={`w-32 shrink-0 font-mono text-xs font-bold px-3 py-1.5 rounded-lg text-center truncate ${p.name.length < 3 ? 'bg-rose-100 text-rose-600 ring-2 ring-rose-500' : 'bg-indigo-100 text-indigo-600'}`} title={p.name}>
+                                            <div key={idx} className="flex gap-3 items-center p-3 bg-slate-50 rounded-xl border border-slate-200">
+                                                <div className={`w-32 shrink-0 font-mono text-xs font-bold px-3 py-1.5 rounded-lg text-center truncate ${p.name.length < 3 ? 'bg-rose-100 text-[#BD1D2D] ring-2 ring-[#BD1D2D]' : 'bg-slate-200/80 text-slate-800'}`} title={p.name}>
                                                     {p.name}
                                                 </div>
                                                 <div className="w-[180px] shrink-0">
@@ -1107,7 +1107,7 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
                                                 </div>
                                                 <input
                                                     type="text"
-                                                    className="flex-1 px-3 py-1.5 rounded-lg border border-indigo-200 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                                                    className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs focus:border-[#BD1D2D] outline-none"
                                                     placeholder="Giá trị mẫu..."
                                                     value={p.sample_value}
                                                     onChange={(e) => {
@@ -1128,8 +1128,8 @@ const ZaloTemplateCreateModal: React.FC<ZaloTemplateCreateModalProps> = ({ isOpe
 
                 {/* --- RIGHT: REALTIME PREVIEW --- */}
                 <div className="w-1/2 lg:w-5/12 bg-slate-100 flex items-center justify-center p-6 relative">
-                    <div className="absolute top-6 right-6 bg-white/80 backdrop-blur px-4 py-2 rounded-full text-[10px] text-slate-500 font-bold border border-slate-200 shadow-sm flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" />
+                    <div className="absolute top-6 right-6 bg-white/90 backdrop-blur px-4 py-2 rounded-full text-[10px] text-slate-600 font-bold border border-slate-200 shadow-xs flex items-center gap-2">
+                        <div className="w-2 h-2 bg-emerald-500 rounded-full" />
                         LIVE PREVIEW
                     </div>
 

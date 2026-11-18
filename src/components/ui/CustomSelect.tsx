@@ -87,8 +87,7 @@ export const getAvatarRingStyle = (border?: string): React.CSSProperties | undef
     justifyContent: 'center',
     flexShrink: 0,
     boxShadow: `0 0 0 2px ${ringColor}`,
-    transition: 'all 0.2s ease-in-out',
-    animation: isPending ? 'avatar-pending-glow 2.2s ease-in-out infinite' : undefined
+    transition: 'border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1)',
   };
 };
 

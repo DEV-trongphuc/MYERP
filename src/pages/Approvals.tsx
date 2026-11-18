@@ -11,7 +11,7 @@ import {
   HelpCircle, HardDrive, FileSignature, Receipt, Package, Briefcase, ChevronRight, CheckSquare, Server, Home,
   FileCheck, Settings, ArrowLeft, X, Save, GitBranch, Clock3, Copy, Bell, Edit, Pencil, RefreshCw, Eye, MessageSquare, Info, Loader2,
   UserPlus, Check, MoreHorizontal, Filter, Zap, Download, Upload, Image as ImageIcon, Building2, Truck,
-  GraduationCap, Utensils, Phone, Mail, MapPin, Sparkles, AlertCircle, Bookmark, Edit3,
+  GraduationCap, Utensils, Phone, Mail, MapPin, AlertCircle, Bookmark, Edit3,
   Landmark, Wallet, BarChart2, Palmtree, QrCode, Coffee, Tag, Globe, ExternalLink, Layers
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -42,6 +42,7 @@ import { ExpenseCreateDrawer, parseMoneyVn } from '../components/ExpenseCreateDr
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { getSystemTitle } from '../config/env';
 import { pushOverlay } from '../utils/overlayStack';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 function resolveLateEarlySubType(obj: any, fallbackReason?: string): 'early' | 'late' {
   const explicit = String(obj?.late_early_type || obj?.ot_type || '').toLowerCase().trim();
@@ -155,23 +156,23 @@ const workflowList = [
   { id: 'payment', name: 'Đề nghị thanh toán', description: 'Đề xuất thanh toán nhà cung cấp, chi phí vận hành, đối tác.', category: 'finance', icon: FileSignature, bg: 'rgba(16, 185, 129, 0.08)', color: '#10b981' },
   { id: 'advance_money', name: 'Đề nghị tạm ứng', description: 'Đề xuất tạm ứng chi phí công tác, mua hàng hoặc ứng lương.', category: 'finance', icon: DollarSign, bg: 'rgba(59, 130, 246, 0.08)', color: '#3b82f6' },
   { id: 'expense_claim', name: 'Đề xuất chi phí', description: 'Yêu cầu hoàn trả chi phí tiếp khách, đi lại, văn phòng phẩm.', category: 'finance', icon: Receipt, bg: 'rgba(6, 182, 212, 0.08)', color: '#06b6d4' },
-  { id: 'client_meeting', name: 'Đề xuất tiếp khách', description: 'Chi phí tiếp đãi khách hàng, đối tác quan trọng.', category: 'finance', icon: Briefcase, bg: 'rgba(236, 72, 153, 0.08)', color: '#ec4899' },
-  { id: 'phased_payment', name: 'Thanh toán theo đợt', description: 'Đề xuất thanh toán chia nhiều đợt theo tiến độ hợp đồng.', category: 'finance', icon: GitBranch, bg: 'rgba(139, 92, 246, 0.08)', color: '#8b5cf6' },
-  { id: 'recurring_payment', name: 'Thanh toán định kỳ', description: 'Đề xuất thanh toán định kỳ hàng tháng/quý (tiền nhà, internet, phí dịch vụ).', category: 'finance', icon: Clock3, bg: 'rgba(217, 70, 239, 0.08)', color: '#d946ef' },
+  { id: 'client_meeting', name: 'Đề xuất tiếp khách', description: 'Chi phí tiếp đãi khách hàng, đối tác quan trọng.', category: 'finance', icon: Briefcase, bg: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D' },
+  { id: 'phased_payment', name: 'Thanh toán theo đợt', description: 'Đề xuất thanh toán chia nhiều đợt theo tiến độ hợp đồng.', category: 'finance', icon: GitBranch, bg: 'rgba(2, 132, 199, 0.08)', color: '#0284c7' },
+  { id: 'recurring_payment', name: 'Thanh toán định kỳ', description: 'Đề xuất thanh toán định kỳ hàng tháng/quý (tiền nhà, internet, phí dịch vụ).', category: 'finance', icon: Clock3, bg: 'rgba(51, 65, 85, 0.08)', color: '#334155' },
   { id: 'commission_payout', name: 'Đề xuất chi trả hoa hồng', description: 'Chi trả hoa hồng nhiều nhân sự, tự động trích xuất STK và xác nhận UNC theo từng người.', category: 'finance', icon: Award, bg: 'rgba(245, 158, 11, 0.08)', color: '#f59e0b' },
 
   { id: 'leave_late', name: 'Đơn xin nghỉ', description: 'Đề xuất nghỉ phép năm, nghỉ việc riêng, nghỉ thai sản, nghỉ ốm.', category: 'hr', icon: Calendar, bg: 'rgba(239, 68, 68, 0.08)', color: '#ef4444' },
   { id: 'late_early', name: 'Đăng ký đi muộn, về sớm', description: 'Đăng ký đi muộn hoặc về sớm vì việc cá nhân lý do chính đáng.', category: 'hr', icon: Clock, bg: 'rgba(234, 179, 8, 0.08)', color: '#eab308' },
   { id: 'overtime', name: 'Đăng ký làm thêm', description: 'Đề xuất làm thêm giờ (OT), tăng ca ngoài giờ làm việc hành chính.', category: 'hr', icon: Plus, bg: 'rgba(20, 184, 166, 0.08)', color: '#14b8a6' },
   { id: 'remote_work', name: 'Đăng ký làm việc từ xa', description: 'Đề xuất làm việc tại nhà (WFH) hoặc làm việc từ xa.', category: 'hr', icon: Home, bg: 'rgba(14, 165, 233, 0.08)', color: '#0ea5e9' },
-  { id: 'attendance_bulk', name: 'Đề nghị cập nhật công', description: 'Giải trình và cập nhật bổ sung công bị thiếu do quên chấm công.', category: 'hr', icon: CheckSquare, bg: 'rgba(99, 102, 241, 0.08)', color: '#6366f1' },
-  { id: 'recruitment', name: 'Đề xuất tuyển dụng', description: 'Đề xuất tuyển dụng nhân sự mới, tuyển thay thế hoặc mở rộng quy mô bộ phận/chi nhánh.', category: 'hr', icon: UserPlus, bg: 'rgba(99, 102, 241, 0.08)', color: '#6366f1' },
+  { id: 'attendance_bulk', name: 'Đề nghị cập nhật công', description: 'Giải trình và cập nhật bổ sung công bị thiếu do quên chấm công.', category: 'hr', icon: CheckSquare, bg: 'rgba(37, 99, 235, 0.08)', color: '#2563eb' },
+  { id: 'recruitment', name: 'Đề xuất tuyển dụng', description: 'Đề xuất tuyển dụng nhân sự mới, tuyển thay thế hoặc mở rộng quy mô bộ phận/chi nhánh.', category: 'hr', icon: UserPlus, bg: 'rgba(15, 118, 110, 0.08)', color: '#0f766e' },
 
-  { id: 'purchase_request', name: 'Mua sắm trang thiết bị', description: 'Đề xuất mua sắm công cụ dụng cụ, thiết bị văn phòng.', category: 'admin', icon: ShoppingCart, bg: 'rgba(168, 85, 247, 0.08)', color: '#a855f7' },
+  { id: 'purchase_request', name: 'Mua sắm trang thiết bị', description: 'Đề xuất mua sắm công cụ dụng cụ, thiết bị văn phòng.', category: 'admin', icon: ShoppingCart, bg: 'rgba(71, 85, 105, 0.08)', color: '#475569' },
   { id: 'it_request', name: 'Cấp thiết bị IT', description: 'Yêu cầu cấp phát laptop, màn hình, tài khoản phần mềm.', category: 'admin', icon: Server, bg: 'rgba(6, 182, 212, 0.08)', color: '#06b6d4' },
   { id: 'meeting_room', name: 'Sử dụng phòng họp', description: 'Đăng ký phòng họp lớn, họp trực tuyến.', category: 'admin', icon: Users, bg: 'rgba(16, 185, 129, 0.08)', color: '#10b981' },
   { id: 'stationery', name: 'Đề xuất văn phòng phẩm', description: 'Yêu cầu cung cấp giấy in, bút, tài liệu văn phòng.', category: 'admin', icon: FileText, bg: 'rgba(245, 158, 11, 0.08)', color: '#f59e0b' },
-  { id: 'document_approval', name: 'Phê duyệt văn bản', description: 'Đề xuất duyệt hợp đồng, quy chế, quyết định hoặc tài liệu nội bộ.', category: 'admin', icon: FileCheck, bg: 'rgba(99, 102, 241, 0.08)', color: '#6366f1' },
+  { id: 'document_approval', name: 'Phê duyệt văn bản', description: 'Đề xuất duyệt hợp đồng, quy chế, quyết định hoặc tài liệu nội bộ.', category: 'admin', icon: FileCheck, bg: 'rgba(15, 23, 42, 0.08)', color: '#0f172a' },
   { id: 'print_stamp_send', name: 'In, đóng dấu và gửi hồ sơ', description: 'Quy trình in, đóng dấu tài liệu và gửi đi cho đối tác/khách hàng.', category: 'admin', icon: FileText, bg: 'rgba(245, 158, 11, 0.08)', color: '#f59e0b' }
 ];
 
@@ -202,12 +203,12 @@ const getWorkflowColor = (colorHex: string) => {
       hoverBg: 'rgba(8, 145, 178, 0.08)'
     };
   }
-  if (lowercase === '#ec4899') {
+  if (lowercase === '#bd1d2d') {
     return {
-      bg: 'linear-gradient(135deg, #f472b6, #db2777)',
+      bg: '#BD1D2D',
       color: '#ffffff',
-      shadow: '0 4px 12px rgba(219, 39, 119, 0.3)',
-      hoverBg: 'rgba(219, 39, 119, 0.08)'
+      shadow: '0 2px 6px rgba(189, 29, 45, 0.2)',
+      hoverBg: 'rgba(189, 29, 45, 0.08)'
     };
   }
   if (lowercase === '#f59e0b') {
@@ -218,20 +219,20 @@ const getWorkflowColor = (colorHex: string) => {
       hoverBg: 'rgba(217, 119, 6, 0.08)'
     };
   }
-  if (lowercase === '#8b5cf6') {
+  if (lowercase === '#334155' || lowercase === '#475569' || lowercase === '#0f172a') {
     return {
-      bg: 'linear-gradient(135deg, #a78bfa, #6d28d9)',
+      bg: lowercase === '#0f172a' ? '#0f172a' : '#334155',
       color: '#ffffff',
-      shadow: '0 4px 12px rgba(109, 40, 217, 0.3)',
-      hoverBg: 'rgba(109, 40, 217, 0.08)'
+      shadow: '0 2px 6px rgba(15, 23, 42, 0.2)',
+      hoverBg: 'rgba(51, 65, 85, 0.08)'
     };
   }
-  if (lowercase === '#d946ef') {
+  if (lowercase === '#0f766e') {
     return {
-      bg: 'linear-gradient(135deg, #f0abfc, #a21caf)',
+      bg: '#0f766e',
       color: '#ffffff',
-      shadow: '0 4px 12px rgba(162, 28, 175, 0.3)',
-      hoverBg: 'rgba(162, 28, 175, 0.08)'
+      shadow: '0 2px 6px rgba(15, 118, 110, 0.2)',
+      hoverBg: 'rgba(15, 118, 110, 0.08)'
     };
   }
   if (lowercase === '#ef4444') {
@@ -266,20 +267,20 @@ const getWorkflowColor = (colorHex: string) => {
       hoverBg: 'rgba(2, 132, 199, 0.08)'
     };
   }
-  if (lowercase === '#6366f1') {
+  if (lowercase === '#2563eb') {
     return {
-      bg: 'linear-gradient(135deg, #818cf8, #4f46e5)',
+      bg: '#2563eb',
       color: '#ffffff',
-      shadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
-      hoverBg: 'rgba(79, 70, 229, 0.08)'
+      shadow: '0 2px 6px rgba(37, 99, 235, 0.2)',
+      hoverBg: 'rgba(37, 99, 235, 0.08)'
     };
   }
-  if (lowercase === '#a855f7') {
+  if (lowercase === '#0284c7') {
     return {
-      bg: 'linear-gradient(135deg, #c084fc, #7c3aed)',
+      bg: '#0284c7',
       color: '#ffffff',
-      shadow: '0 4px 12px rgba(124, 58, 237, 0.3)',
-      hoverBg: 'rgba(124, 58, 237, 0.08)'
+      shadow: '0 2px 6px rgba(2, 132, 199, 0.2)',
+      hoverBg: 'rgba(2, 132, 199, 0.08)'
     };
   }
 
@@ -1431,8 +1432,7 @@ export default function Approvals() {
   useEffect(() => {
     if (selectedWorkflowDef?.id === 'commission_payout' && purchaseOrdersList.length === 0) {
       api.get('/purchase-orders').then(res => {
-        const d = res.data?.data || res.data || [];
-        setPurchaseOrdersList(Array.isArray(d) ? d : []);
+        setPurchaseOrdersList(extractArray(res?.data));
       }).catch(() => setPurchaseOrdersList([]));
     }
   }, [selectedWorkflowDef?.id, purchaseOrdersList.length]);
@@ -5722,14 +5722,14 @@ export default function Approvals() {
 
   const getTypeIcon = (type: string, itemTitle?: string) => {
     if (type === 'recruitment' || (itemTitle && itemTitle.toLowerCase().includes('tuyển dụng'))) {
-      return <UserPlus size={16} style={{ color: '#6366f1' }} />;
+      return <UserPlus size={16} style={{ color: '#0f766e' }} />;
     }
     switch (type) {
       case 'leave': return <Calendar size={16} style={{ color: '#ef4444' }} />;
       case 'advance': return <DollarSign size={16} style={{ color: '#3b82f6' }} />;
       case 'expense': return <Receipt size={16} style={{ color: '#06b6d4' }} />;
       case 'checkin': return <Clock size={16} style={{ color: '#eab308' }} />;
-      case 'attendance_bulk': return <CheckSquare size={16} style={{ color: '#6366f1' }} />;
+      case 'attendance_bulk': return <CheckSquare size={16} style={{ color: '#2563eb' }} />;
       default: return <Clipboard size={16} style={{ color: 'var(--color-primary)' }} />;
     }
   };
@@ -6963,7 +6963,7 @@ export default function Approvals() {
         {[
           { id: 'all', label: t('Tất cả phân loại'), count: categoryCounts.all, icon: Layers, activeColor: 'var(--color-primary, #3b82f6)', activeBg: 'rgba(59, 130, 246, 0.1)' },
           { id: 'po_financial', label: t('PO / Quy trình có tiền'), count: categoryCounts.po_financial, icon: DollarSign, activeColor: '#059669', activeBg: 'rgba(16, 185, 129, 0.12)' },
-          { id: 'workflow_non_financial', label: t('Quy trình hành chính & Nhân sự (0đ)'), count: categoryCounts.workflow_non_financial, icon: Clipboard, activeColor: '#6366f1', activeBg: 'rgba(99, 102, 241, 0.12)' }
+          { id: 'workflow_non_financial', label: t('Quy trình hành chính & Nhân sự (0đ)'), count: categoryCounts.workflow_non_financial, icon: Clipboard, activeColor: '#334155', activeBg: 'rgba(51, 65, 85, 0.1)' }
         ].map(cat => {
           const isSelected = listCategoryFilter === cat.id;
           const CatIcon = cat.icon;
@@ -7699,8 +7699,8 @@ export default function Approvals() {
                       gap: '4px',
                       padding: '4px 10px',
                       borderRadius: '8px',
-                      background: 'rgba(139, 92, 246, 0.08)',
-                      color: '#8b5cf6',
+                      background: 'rgba(2, 132, 199, 0.1)',
+                      color: '#0284c7',
                       fontWeight: 700,
                       fontSize: '0.78rem'
                     }}>
@@ -8828,7 +8828,7 @@ export default function Approvals() {
                                   onClick={() => handleScanMissingDays(bulkMonth)}
                                   disabled={suggestedLoading}
                                   className="btn outline"
-                                  style={{ height: '36px', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', color: '#7c3aed', borderColor: 'rgba(124, 58, 237, 0.4)', background: 'rgba(124, 58, 237, 0.05)' }}
+                                  style={{ height: '36px', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', color: '#2563eb', borderColor: 'rgba(37, 99, 235, 0.4)', background: 'rgba(37, 99, 235, 0.06)' }}
                                   title={t('Tự động quét và liệt kê toàn bộ các ngày thiếu công trong tháng đã chọn')}
                                 >
                                   <RefreshCw size={14} className={suggestedLoading ? 'spin' : ''} />
@@ -8922,7 +8922,7 @@ export default function Approvals() {
                                                 padding: '2px 6px',
                                                 borderRadius: '4px'
                                               }}>
-                                                🏖️ {day.leave_type || t('Đã có đơn nghỉ')}
+                                                <Calendar size={10} /> {day.leave_type || t('Đã có đơn nghỉ')}
                                               </span>
                                             )}
                                           </td>
@@ -8965,7 +8965,7 @@ export default function Approvals() {
                                           </td>
                                           <td style={{ padding: '4px 8px' }}>
                                             {day.is_on_leave ? (
-                                              <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
+                                              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                                                 {day.leave_reason || t('Nghỉ theo đơn xin phép (Không áp dụng bù công)')}
                                               </span>
                                             ) : (
@@ -9467,7 +9467,7 @@ export default function Approvals() {
                                           />
                                           {lateEarlyMinutes > 180 && (
                                             <span style={{ fontSize: '0.7rem', color: 'var(--color-danger, #ef4444)', fontWeight: 600, marginTop: '2px' }}>
-                                              ⚠️ {t('Không được đi muộn/về sớm quá 3 tiếng (180 phút). Vui lòng đăng ký nghỉ phép 1 buổi.')}
+                                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={12} strokeWidth={1.75} style={{ flexShrink: 0 }} /> {t('Không được đi muộn/về sớm quá 3 tiếng (180 phút). Vui lòng đăng ký nghỉ phép 1 buổi.')}</span>
                                             </span>
                                           )}
                                         </div>
@@ -9625,11 +9625,11 @@ export default function Approvals() {
                                   options={[
                                     { 
                                       value: 'compensatory', 
-                                      label: t('🏖️ Lấy OT bù (Nghỉ bù) - Quy đổi thành ngày nghỉ bù') 
+                                      label: t('Lấy OT bù (Nghỉ bù) - Quy đổi thành ngày nghỉ bù') 
                                     },
                                     { 
                                       value: 'salary', 
-                                      label: t('💵 Lấy lương OT (Tính vào lương) - Chi trả tiền tăng ca') 
+                                      label: t('Lấy lương OT (Tính vào lương) - Chi trả tiền tăng ca') 
                                     }
                                   ]}
                                   width="100%"
@@ -9723,7 +9723,7 @@ export default function Approvals() {
                               color: 'var(--color-text)'
                             }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '1.2rem' }}>{otType === 'compensatory' ? '🏖️' : '💵'}</span>
+                                {otType === 'compensatory' ? <Calendar size={18} strokeWidth={1.75} style={{ color: '#0284c7', flexShrink: 0 }} /> : <Zap size={18} strokeWidth={1.75} style={{ color: '#059669', flexShrink: 0 }} />}
                                 <div>
                                   <div style={{ fontWeight: 700 }}>
                                     {otType === 'compensatory' ? t('Quy đổi sang Ngày nghỉ bù:') : t('Quy đổi sang Tiền tăng ca:')}
@@ -9930,7 +9930,7 @@ export default function Approvals() {
 
                               {Number(wfhSalaryRate) > 100 && (
                                 <div style={{ fontSize: '0.72rem', color: 'var(--color-danger)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <span>⚠️</span> {t('Tỷ lệ hưởng lương không được vượt quá 100%')}
+                                  <AlertTriangle size={13} strokeWidth={1.75} style={{ flexShrink: 0 }} /> {t('Tỷ lệ hưởng lương không được vượt quá 100%')}
                                 </div>
                               )}
                             </div>
@@ -10075,7 +10075,7 @@ export default function Approvals() {
                                   required
                                 />
                                 {paymentDetails && Number(paymentDetails) > 0 && (
-                                  <div style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 600, marginTop: '4px', fontStyle: 'italic' }}>
+                                  <div style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 600, marginTop: '4px' }}>
                                     {docSoTiengViet(Number(paymentDetails))}
                                   </div>
                                 )}
@@ -10135,25 +10135,25 @@ export default function Approvals() {
                               gap: '12px',
                               padding: '12px 16px',
                               borderRadius: '12px',
-                              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(79, 70, 229, 0.04) 100%)',
-                              border: '1px solid rgba(99, 102, 241, 0.25)'
+                              background: 'rgba(15, 118, 110, 0.05)',
+                              border: '1px solid rgba(15, 118, 110, 0.2)'
                             }}>
                               <div style={{
                                 width: '36px',
                                 height: '36px',
                                 borderRadius: '10px',
-                                background: 'linear-gradient(135deg, #818cf8, #4f46e5)',
+                                background: '#0f766e',
                                 color: '#ffffff',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                boxShadow: '0 4px 12px rgba(79, 70, 229, 0.25)',
+                                boxShadow: '0 2px 6px rgba(15, 118, 110, 0.2)',
                                 flexShrink: 0
                               }}>
                                 <UserPlus size={18} />
                               </div>
                               <div>
-                                <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#4338ca' }}>
+                                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f766e' }}>
                                   {t('TỜ TRÌNH ĐỀ XUẤT TUYỂN DỤNG NHÂN SỰ')}
                                 </div>
                                 <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
@@ -10172,7 +10172,7 @@ export default function Approvals() {
                               flexDirection: 'column',
                               gap: '14px'
                             }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#4f46e5' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0f766e' }}>
                                 <Briefcase size={16} />
                                 <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                                   {t('1. Thông tin vị trí & nhu cầu nhân sự')}
@@ -10206,9 +10206,9 @@ export default function Approvals() {
                                       style={{
                                         padding: '4px 10px',
                                         borderRadius: 'var(--radius-full, 9999px)',
-                                        border: recruitmentJobTitle === title ? '1.5px solid #4f46e5' : '1px solid var(--color-border)',
-                                        background: recruitmentJobTitle === title ? 'rgba(99, 102, 241, 0.12)' : 'var(--color-bg-secondary, #f8fafc)',
-                                        color: recruitmentJobTitle === title ? '#4338ca' : 'var(--color-text)',
+                                        border: recruitmentJobTitle === title ? '1.5px solid #0f766e' : '1px solid var(--color-border)',
+                                        background: recruitmentJobTitle === title ? 'rgba(15, 118, 110, 0.1)' : 'var(--color-bg-secondary, #f8fafc)',
+                                        color: recruitmentJobTitle === title ? '#0f766e' : 'var(--color-text)',
                                         fontSize: '0.75rem',
                                         fontWeight: recruitmentJobTitle === title ? 750 : 550,
                                         cursor: 'pointer',
@@ -10253,7 +10253,7 @@ export default function Approvals() {
                                     step="1"
                                     value={recruitmentHeadcount}
                                     onChange={e => setRecruitmentHeadcount(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1))}
-                                    style={{ height: '38px', fontSize: '0.9rem', fontWeight: 800, color: '#4f46e5' }}
+                                    style={{ height: '38px', fontSize: '0.9rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#0f766e' }}
                                     required
                                   />
                                 </div>
@@ -11178,7 +11178,7 @@ export default function Approvals() {
                                           {statGrandTotal > 0 ? (
                                             <>
                                               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#2563eb', fontWeight: 800, fontSize: '0.8rem' }}>
-                                                <span>⚡ {t('Đề xuất có kinh phí')}</span>
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Zap size={13} strokeWidth={2} /> {t('Đề xuất có kinh phí')}</span>
                                                 <span>•</span>
                                                 <span style={{ background: '#2563eb', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem' }}>
                                                   {t('Tự động cấu thành PO (Purchase Order)')}
@@ -11189,8 +11189,8 @@ export default function Approvals() {
                                               </div>
                                             </>
                                           ) : (
-                                            <div style={{ fontSize: '0.75rem', color: '#059669', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                              <span>💡</span>
+                                            <div style={{ fontSize: '0.75rem', color: '#059669', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                              <Info size={14} strokeWidth={1.75} style={{ flexShrink: 0 }} />
                                               <span><strong>{t('Đề xuất phi tài chính (0 đ)')}</strong>: {t('Chỉ duyệt quy trình hành chính nội bộ, không tạo Purchase Order.')}</span>
                                             </div>
                                           )}
@@ -11220,9 +11220,9 @@ export default function Approvals() {
                                             </div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--color-border)', paddingTop: '8px', marginTop: '2px' }}>
                                               <span style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '0.875rem' }}>{t('Tổng thanh toán (có VAT):')}</span>
-                                              <strong style={{ fontWeight: 900, color: 'var(--color-primary)', fontSize: '1.05rem' }}>{formatApprovalCurrency(statGrandTotal, currencyType)}</strong>
+                                              <strong style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--color-primary)', fontSize: '1.05rem' }}>{formatApprovalCurrency(statGrandTotal, currencyType)}</strong>
                                             </div>
-                                            <div style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 650, fontStyle: 'italic', textAlign: 'right', marginTop: '2px' }}>
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 600, textAlign: 'right', marginTop: '2px' }}>
                                               ({docSoTiengViet(statGrandTotal)})
                                             </div>
                                           </div>
@@ -11431,7 +11431,7 @@ export default function Approvals() {
                             {selectedWorkflowDef?.id === 'client_meeting' && (
                               <div style={{
                                 background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.05), rgba(219, 39, 119, 0.02))',
-                                border: '1px solid rgba(236, 72, 153, 0.25)',
+                                border: '1px solid var(--color-border-light)',
                                 borderRadius: '14px',
                                 padding: '1.25rem',
                                 display: 'flex',
@@ -11439,13 +11439,13 @@ export default function Approvals() {
                                 gap: '14px'
                               }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#db2777' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#BD1D2D' }}>
                                     <Utensils size={18} />
                                     <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                                       {t('Thông tin buổi tiếp đãi khách hàng & đối tác VIP')}
                                     </span>
                                   </div>
-                                  <span style={{ fontSize: '0.72rem', color: '#db2777', fontWeight: 650 }}>
+                                  <span style={{ fontSize: '0.72rem', color: '#BD1D2D', fontWeight: 600 }}>
                                     {t('Chuẩn hóa quy trình ngoại giao doanh nghiệp')}
                                   </span>
                                 </div>
@@ -11708,8 +11708,8 @@ export default function Approvals() {
                                               gap: '4px',
                                               padding: '2px 8px',
                                               borderRadius: '6px',
-                                              background: 'rgba(236, 72, 153, 0.12)',
-                                              color: '#db2777',
+                                              background: 'rgba(189, 29, 45, 0.08)',
+                                              color: '#BD1D2D',
                                               fontSize: '0.72rem',
                                               fontWeight: 650
                                             }}>
@@ -11791,7 +11791,7 @@ export default function Approvals() {
                             {(selectedWorkflowDef?.id === 'recurring_payment' || isRecurring) && (
                               <div style={{
                                 background: 'linear-gradient(135deg, rgba(217, 70, 239, 0.05), rgba(192, 38, 211, 0.02))',
-                                border: '1px solid rgba(217, 70, 239, 0.25)',
+                                border: '1px solid var(--color-border-light)',
                                 borderRadius: '14px',
                                 padding: '1.25rem',
                                 display: 'flex',
@@ -11799,13 +11799,13 @@ export default function Approvals() {
                                 gap: '12px'
                               }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#c026d3' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#334155' }}>
                                     <Clock3 size={18} />
                                     <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                                       {t('Thiết lập chu kỳ & lịch giải ngân thanh toán tự động')}
                                     </span>
                                   </div>
-                                  <span style={{ fontSize: '0.72rem', color: '#c026d3', fontWeight: 650 }}>
+                                  <span style={{ fontSize: '0.72rem', color: '#334155', fontWeight: 600 }}>
                                     {t('Tự động sinh đề xuất theo kỳ')}
                                   </span>
                                 </div>
@@ -11924,7 +11924,7 @@ export default function Approvals() {
                             {(selectedWorkflowDef?.id === 'phased_payment' || isPhasedPayment) && (
                               <div style={{
                                 background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.05), rgba(124, 58, 237, 0.02))',
-                                border: '1px solid rgba(139, 92, 246, 0.25)',
+                                border: '1px solid var(--color-border-light)',
                                 borderRadius: '14px',
                                 padding: '1.25rem',
                                 display: 'flex',
@@ -11932,7 +11932,7 @@ export default function Approvals() {
                                 gap: '12px'
                               }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#7c3aed' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0284c7' }}>
                                     <GitBranch size={18} />
                                     <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                                       {t('Kế hoạch thanh toán theo các đợt (Installments / Milestones)')}
@@ -11942,7 +11942,7 @@ export default function Approvals() {
                                     type="button"
                                     onClick={() => setInstallments([...installments, { id: Date.now(), title: `Đợt ${installments.length + 1}`, amount: 0, dueDate: '' }])}
                                     className="btn secondary"
-                                    style={{ height: '28px', padding: '0 10px', fontSize: '0.72rem', color: '#7c3aed', borderColor: '#7c3aed' }}
+                                    style={{ height: '28px', padding: '0 10px', fontSize: '0.72rem', color: '#0284c7', borderColor: '#0284c7' }}
                                   >
                                     + {t('Thêm đợt thanh toán')}
                                   </button>
@@ -11978,7 +11978,7 @@ export default function Approvals() {
                                           style={{ height: '34px', fontSize: '0.78rem', fontWeight: 700 }}
                                         />
                                         {inst.amount > 0 && (
-                                          <div style={{ fontSize: '0.675rem', color: '#7c3aed', fontWeight: 600, marginTop: '2px', fontStyle: 'italic' }}>
+                                          <div style={{ fontSize: '0.675rem', color: '#0284c7', fontWeight: 600, marginTop: '2px' }}>
                                             {docSoTiengViet(inst.amount)}
                                           </div>
                                         )}
@@ -12012,10 +12012,10 @@ export default function Approvals() {
                                   alignItems: 'center',
                                   padding: '8px 12px',
                                   borderRadius: '8px',
-                                  background: 'rgba(139, 92, 246, 0.08)',
+                                  background: 'rgba(2, 132, 199, 0.1)',
                                   fontSize: '0.75rem'
                                 }}>
-                                  <span style={{ color: '#6d28d9', fontWeight: 700 }}>
+                                  <span style={{ color: '#0284c7', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                                     {t('Tổng cộng các đợt')}: {formatApprovalCurrency(installments.reduce((sum, i) => sum + (Number(i.amount) || 0), 0), currencyType)}
                                   </span>
                                   <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>
@@ -12333,7 +12333,7 @@ export default function Approvals() {
                                       if (emp.bank_account) {
                                         toast.success(t(`Đã trích xuất STK ngân hàng của ${empName}`));
                                       } else {
-                                        toast(t(`Nhân viên ${empName} chưa lưu STK trong hồ sơ. Vui lòng nhập STK bên dưới.`), { icon: 'ℹ️' });
+                                        toast(t(`Nhân viên ${empName} chưa lưu STK trong hồ sơ. Vui lòng nhập STK bên dưới.`), { icon: <Info size={16} color="#0284c7" /> });
                                       }
                                     }
                                   }}
@@ -12359,7 +12359,7 @@ export default function Approvals() {
                                       <span style={{ color: emp.bank_account ? '#059669' : '#d97706', fontWeight: 650 }}>
                                         {emp.bank_account 
                                           ? `✓ ${t('Số tài khoản đồng bộ')} ${getSystemTitle()}: ${emp.bank_name || 'Ngân hàng'} - ${emp.bank_account} (Chủ TK: ${(emp.full_name || emp.name || '').toUpperCase()})` 
-                                          : t('⚠️ Nhân viên chưa cập nhật STK trong hồ sơ cá nhân. Vui lòng nhập STK bên dưới.')}
+                                          : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={12} strokeWidth={1.75} style={{ flexShrink: 0 }} /> {t('Nhân viên chưa cập nhật STK trong hồ sơ cá nhân. Vui lòng nhập STK bên dưới.')}</span>}
                                       </span>
                                       <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', fontWeight: 600 }}>
                                         {emp.role || t('Nhân viên')}
@@ -12396,7 +12396,7 @@ export default function Approvals() {
                                           if (lec.bank_account) {
                                             toast.success(t(`Đã trích xuất STK của giảng viên: ${lec.label}`));
                                           } else {
-                                            toast(t(`Giảng viên ${lec.label} chưa lưu STK. Vui lòng nhập thông tin bên dưới.`), { icon: 'ℹ️' });
+                                            toast(t(`Giảng viên ${lec.label} chưa lưu STK. Vui lòng nhập thông tin bên dưới.`), { icon: <Info size={16} color="#0284c7" /> });
                                           }
                                         }
                                       }}
@@ -12436,7 +12436,7 @@ export default function Approvals() {
                                     <span style={{ color: paymentBankAccount ? '#059669' : '#d97706', fontWeight: 650 }}>
                                       {paymentBankAccount 
                                         ? `✓ STK Giảng viên: ${paymentBankName || 'Ngân hàng'} - ${paymentBankAccount} (Chủ TK: ${paymentAccountName})` 
-                                        : t('ℹ️ Giảng viên chưa có STK trong hệ thống. Vui lòng nhập số tài khoản ở bên dưới.')}
+                                        : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Info size={12} strokeWidth={1.75} style={{ flexShrink: 0 }} /> {t('Giảng viên chưa có STK trong hệ thống. Vui lòng nhập số tài khoản ở bên dưới.')}</span>}
                                     </span>
                                     <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', fontWeight: 600 }}>
                                       {t('Giảng viên / Chuyên gia')}
@@ -12473,7 +12473,7 @@ export default function Approvals() {
                                           if (sup.bank_account) {
                                             toast.success(t(`Đã trích xuất STK của đối tác: ${sup.label}`));
                                           } else {
-                                            toast(t(`Đối tác ${sup.label} chưa lưu STK. Vui lòng điền thông tin bên dưới.`), { icon: 'ℹ️' });
+                                            toast(t(`Đối tác ${sup.label} chưa lưu STK. Vui lòng điền thông tin bên dưới.`), { icon: <Info size={16} color="#0284c7" /> });
                                           }
                                         }
                                       }}
@@ -12526,7 +12526,7 @@ export default function Approvals() {
                                     <span style={{ color: paymentBankAccount ? '#059669' : '#d97706', fontWeight: 650 }}>
                                       {paymentBankAccount 
                                         ? `✓ STK Đối tác: ${paymentBankName || 'Ngân hàng'} - ${paymentBankAccount} (Chủ TK: ${paymentAccountName})` 
-                                        : t('ℹ️ Đối tác chưa lưu STK trong danh bạ. Vui lòng nhập số tài khoản ở ô bên dưới.')}
+                                        : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Info size={12} strokeWidth={1.75} style={{ flexShrink: 0 }} /> {t('Đối tác chưa lưu STK trong danh bạ. Vui lòng nhập số tài khoản ở ô bên dưới.')}</span>}
                                     </span>
                                     <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', fontWeight: 600 }}>
                                       {paymentTaxCode ? `MST: ${paymentTaxCode}` : t('Đối tác / Vendor')}
@@ -13058,7 +13058,7 @@ export default function Approvals() {
                                 flexDirection: 'column',
                                 gap: '8px'
                               }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#a21caf', fontWeight: 750, fontSize: '0.8rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#BD1D2D', fontWeight: 700, fontSize: '0.8rem' }}>
                                   <Wallet size={16} />
                                   <span>{t('Hình thức nhận: Ví điện tử di động')}</span>
                                 </div>
@@ -13409,7 +13409,7 @@ export default function Approvals() {
                                           />
                                           {cItem.user_id && !cItem.bank_account && (
                                             <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px', fontWeight: 500 }}>
-                                              ⚠️ {t('Nhân viên này chưa cập nhật STK trong hồ sơ. Vui lòng nhập STK ở Hàng 2 bên dưới.')}
+                                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={12} strokeWidth={1.75} style={{ flexShrink: 0, color: '#d97706' }} /> {t('Nhân viên này chưa cập nhật STK trong hồ sơ. Vui lòng nhập STK ở Hàng 2 bên dưới.')}</span>
                                             </div>
                                           )}
                                           {cItem.user_id && cItem.bank_account && (
@@ -13462,7 +13462,7 @@ export default function Approvals() {
                                           />
                                           {cItem.other_id && !cItem.bank_account && (
                                             <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px', fontWeight: 500 }}>
-                                              ⚠️ {t('Đối tượng này chưa lưu STK trong danh bạ. Vui lòng nhập thông tin ngân hàng ở Hàng 2 bên dưới.')}
+                                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={12} strokeWidth={1.75} style={{ flexShrink: 0, color: '#d97706' }} /> {t('Đối tượng này chưa lưu STK trong danh bạ. Vui lòng nhập thông tin ngân hàng ở Hàng 2 bên dưới.')}</span>
                                             </div>
                                           )}
                                           {cItem.other_id && cItem.bank_account && (
@@ -13523,8 +13523,8 @@ export default function Approvals() {
                                             <Check size={11} /> {t('PO liên kết:')} <strong>{cItem.po_number}</strong>
                                           </div>
                                         ) : (
-                                          <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-                                            ℹ️ {t('Vui lòng ghi nhận mã PO thụ hưởng của đối tác')}
+                                          <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                                            {t('Vui lòng ghi nhận mã PO thụ hưởng của đối tác')}
                                           </div>
                                         )}
                                       </div>
@@ -13551,7 +13551,7 @@ export default function Approvals() {
                                         style={{ height: '38px', fontSize: '0.95rem', fontWeight: 800, color: '#059669', textAlign: 'right' }}
                                       />
                                       {cItem.amount > 0 && (
-                                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontStyle: 'italic', textAlign: 'right', fontWeight: 500, wordBreak: 'break-word' }}>
+                                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', textAlign: 'right', fontWeight: 500, wordBreak: 'break-word' }}>
                                           {docSoTiengViet(cItem.amount)}
                                         </div>
                                       )}
@@ -13744,7 +13744,7 @@ export default function Approvals() {
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('TỔNG TIỀN HOA HỒNG')}:</span>
-                              <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#059669', fontFamily: 'monospace' }}>
+                              <span style={{ fontSize: '1.15rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#059669', fontFamily: 'monospace' }}>
                                 {formatApprovalCurrency(commissionItems.reduce((s, c) => s + (Number(c.amount) || 0), 0), currencyType)}
                               </span>
                             </div>
@@ -13856,7 +13856,6 @@ export default function Approvals() {
                                               color: 'var(--color-primary)', 
                                               fontWeight: 600, 
                                               marginTop: '4px', 
-                                              fontStyle: 'italic', 
                                               whiteSpace: 'normal', 
                                               wordBreak: 'break-word', 
                                               lineHeight: 1.25 
@@ -13931,7 +13930,7 @@ export default function Approvals() {
                               <strong style={{ color: 'var(--color-primary)' }}>{formatApprovalCurrency(itemsGrandTotal, currencyType)}</strong>
                             </div>
                             {itemsGrandTotal > 0 && (
-                              <div style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 600, fontStyle: 'italic', textAlign: 'right', marginTop: '2px', lineHeight: 1.35 }}>
+                              <div style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 600, textAlign: 'right', marginTop: '2px', lineHeight: 1.35 }}>
                                 ({docSoTiengViet(itemsGrandTotal)})
                               </div>
                             )}
@@ -14126,7 +14125,7 @@ export default function Approvals() {
                             className="custom-scrollbar"
                           >
                             {createComments.length === 0 ? (
-                              <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                              <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
                                 {t('Chưa có bình luận nào.')}
                               </span>
                             ) : (
@@ -14722,7 +14721,7 @@ export default function Approvals() {
                               padding: 0,
                               transition: 'all 0.15s ease'
                             }}
-                            className="hover-scale"
+                            className="hover-btn-subtle"
                             title={t('Thêm người liên quan')}
                           >
                             <UserPlus size={14} color="var(--color-primary)" />
@@ -17187,7 +17186,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       fontSize: isMobile ? '0.8125rem' : '0.875rem'
                     }}>
                       <span>
-                        {(detail?.ot_type === 'compensatory' || rawDesc.includes('Lấy OT bù')) ? '🏖️ ' + t('Lấy OT bù (Nghỉ bù)') : '💵 ' + t('Lấy lương OT (Tính lương)')}
+                        {(detail?.ot_type === 'compensatory' || rawDesc.includes('Lấy OT bù')) ? t('Lấy OT bù (Nghỉ bù)') : t('Lấy lương OT (Tính lương)')}
                         {' • '}
                         <strong>{t('Hệ số')} {detail?.ot_rate ? `${Number(detail.ot_rate)}x` : (rawDesc.includes('1.0x') ? '1.0x (1:1)' : '1.5x')}</strong>
                       </span>
@@ -17284,7 +17283,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   {advAmount > 0 && (
                     <div style={{ 
                       fontSize: isMobile ? '0.75rem' : '0.825rem', 
-                      fontStyle: 'italic', 
+                      lineHeight: 1.35,
                       color: 'var(--color-primary, #2563eb)', 
                       fontWeight: 650, 
                       marginTop: '4px',
@@ -17419,7 +17418,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     {expAmount > 0 && (
                       <div style={{ 
                         fontSize: isMobile ? '0.75rem' : '0.825rem', 
-                        fontStyle: 'italic', 
+                        lineHeight: 1.35,
                         color: 'var(--color-primary, #2563eb)', 
                         fontWeight: 650, 
                         marginTop: '4px',
@@ -17652,7 +17651,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     </div>
                     <div style={{ textAlign: 'right', paddingLeft: '12px', borderLeft: '1px solid var(--color-border-light)' }}>
                       <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Tổng tiền hoa hồng')}</div>
-                      <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#059669', fontFamily: 'monospace' }}>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#059669', fontFamily: 'monospace' }}>
                         {formatApprovalCurrency(totalCommission, curr)}
                       </div>
                     </div>
@@ -17839,7 +17838,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                                     </button>
                                   </div>
                                 ) : (
-                                  <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
                                     {t('Chưa có STK')}
                                   </span>
                                 )}
@@ -17854,7 +17853,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
                             {/* Amount */}
                             <td style={{ padding: '12px', textAlign: 'right' }}>
-                              <div style={{ fontWeight: 900, color: '#059669', fontSize: '0.9rem', fontFamily: 'monospace' }}>
+                              <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#059669', fontSize: '0.9rem', fontFamily: 'monospace' }}>
                                 {formatApprovalCurrency(rowAmt, curr)}
                               </div>
                             </td>
@@ -17936,7 +17935,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                                   </button>
                                 ) : (
                                   isRowPaid && (
-                                    <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                                    <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
                                       {t('Chưa đính kèm UNC')}
                                     </span>
                                   )
@@ -18196,7 +18195,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                         <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#d97706', fontFamily: 'monospace' }}>
                           {formatApprovalCurrency(totalVat, curr)}
                         </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: '#059669', fontSize: '0.85rem', fontFamily: 'monospace' }}>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#059669', fontSize: '0.85rem', fontFamily: 'monospace' }}>
                           {formatApprovalCurrency(totalPostTax, curr)}
                         </td>
                       </tr>
@@ -18598,11 +18597,11 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '14px',
-                background: 'linear-gradient(145deg, var(--color-surface) 0%, rgba(253, 242, 248, 0.5) 100%)',
-                border: '1px solid rgba(236, 72, 153, 0.25)',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border-light)',
                 borderRadius: '16px',
                 padding: isMobile ? '1.1rem' : '1.5rem',
-                boxShadow: '0 4px 20px rgba(236, 72, 153, 0.04)'
+                boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -18610,8 +18609,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       width: '34px',
                       height: '34px',
                       borderRadius: '10px',
-                      background: 'rgba(236, 72, 153, 0.12)',
-                      color: '#ec4899',
+                      background: 'rgba(189, 29, 45, 0.08)',
+                      color: '#BD1D2D',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center'
@@ -18619,7 +18618,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       <Briefcase size={18} />
                     </div>
                     <div>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#db2777', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#BD1D2D', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         {t('Kế hoạch tiếp đón đối tác & khách mời')}
                       </span>
                       {meetingData.targetType && (
@@ -18634,11 +18633,11 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       fontSize: '0.75rem',
                       padding: '4px 10px',
                       borderRadius: '8px',
-                      background: 'rgba(236, 72, 153, 0.1)',
-                      color: '#be185d',
+                      background: 'rgba(189, 29, 45, 0.08)',
+                      color: '#BD1D2D',
                       fontWeight: 700
                     }}>
-                      👥 {meetingData.headcount}
+                      <Users size={12} strokeWidth={1.75} style={{ marginRight: 4, verticalAlign: '-1px' }} />{meetingData.headcount}
                     </span>
                   )}
                 </div>
@@ -18658,7 +18657,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       {t('Đơn vị / Khách mời tiếp đón')}
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Building2 size={15} style={{ color: '#ec4899', flexShrink: 0 }} />
+                      <Building2 size={15} style={{ color: '#BD1D2D', flexShrink: 0 }} />
                       <strong style={{ fontSize: '0.85rem', color: 'var(--color-text)' }}>
                         {meetingData.clientName || '—'}
                       </strong>
@@ -18733,14 +18732,14 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 {meetingData.purpose && (
                   <div style={{
                     padding: '12px 14px',
-                    background: 'rgba(236, 72, 153, 0.04)',
+                    background: 'rgba(189, 29, 45, 0.04)',
                     borderRadius: '10px',
-                    border: '1px solid rgba(236, 72, 153, 0.15)',
+                    border: '1px solid rgba(189, 29, 45, 0.15)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '4px'
                   }}>
-                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#be185d', textTransform: 'uppercase' }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#BD1D2D', textTransform: 'uppercase' }}>
                       {t('Mục đích & Nội dung tiếp đón')}
                     </span>
                     <div style={{ fontSize: '0.85rem', color: 'var(--color-text)', lineHeight: 1.45, fontWeight: 500 }}>
@@ -18782,11 +18781,11 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '14px',
-                background: 'linear-gradient(145deg, var(--color-surface) 0%, rgba(250, 232, 255, 0.5) 100%)',
-                border: '1px solid rgba(217, 70, 239, 0.25)',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border-light)',
                 borderRadius: '16px',
                 padding: isMobile ? '1.1rem' : '1.5rem',
-                boxShadow: '0 4px 20px rgba(217, 70, 239, 0.04)'
+                boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -18794,8 +18793,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       width: '34px',
                       height: '34px',
                       borderRadius: '10px',
-                      background: 'rgba(217, 70, 239, 0.12)',
-                      color: '#d946ef',
+                      background: 'rgba(51, 65, 85, 0.08)',
+                      color: '#334155',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center'
@@ -18803,7 +18802,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       <Clock3 size={18} />
                     </div>
                     <div>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#c026d3', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         {t('Thiết lập lịch thanh toán định kỳ')}
                       </span>
                       <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
@@ -18816,11 +18815,11 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       fontSize: '0.75rem',
                       padding: '4px 10px',
                       borderRadius: '8px',
-                      background: 'rgba(217, 70, 239, 0.1)',
-                      color: '#a21caf',
+                      background: 'rgba(51, 65, 85, 0.08)',
+                      color: '#334155',
                       fontWeight: 700
                     }}>
-                      🔄 {recurringData.frequency}
+                      <RefreshCw size={12} strokeWidth={1.75} style={{ marginRight: 4, verticalAlign: '-1px' }} />{recurringData.frequency}
                     </span>
                   )}
                 </div>
@@ -18839,7 +18838,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       {t('Ngày giải ngân cố định')}
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Calendar size={15} style={{ color: '#d946ef', flexShrink: 0 }} />
+                      <Calendar size={15} style={{ color: '#334155', flexShrink: 0 }} />
                       <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>
                         {recurringData.payDay || '—'}
                       </span>
@@ -18893,11 +18892,11 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '14px',
-                background: 'linear-gradient(145deg, var(--color-surface) 0%, rgba(243, 232, 255, 0.5) 100%)',
-                border: '1px solid rgba(139, 92, 246, 0.25)',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border-light)',
                 borderRadius: '16px',
                 padding: isMobile ? '1.1rem' : '1.5rem',
-                boxShadow: '0 4px 20px rgba(139, 92, 246, 0.04)'
+                boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -18905,8 +18904,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       width: '34px',
                       height: '34px',
                       borderRadius: '10px',
-                      background: 'rgba(139, 92, 246, 0.12)',
-                      color: '#8b5cf6',
+                      background: 'rgba(2, 132, 199, 0.1)',
+                      color: '#0284c7',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center'
@@ -18914,7 +18913,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       <GitBranch size={18} />
                     </div>
                     <div>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         {t('Kế hoạch thanh toán theo các đợt')}
                       </span>
                       <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
@@ -18926,8 +18925,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     fontSize: '0.75rem',
                     padding: '4px 10px',
                     borderRadius: '8px',
-                    background: 'rgba(139, 92, 246, 0.1)',
-                    color: '#6d28d9',
+                    background: 'rgba(2, 132, 199, 0.08)',
+                    color: '#0284c7',
                     fontWeight: 700
                   }}>
                     {phasedData.length} {t('đợt thanh toán')}
@@ -18952,8 +18951,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                         width: '24px',
                         height: '24px',
                         borderRadius: '50%',
-                        background: 'rgba(139, 92, 246, 0.15)',
-                        color: '#7c3aed',
+                        background: 'rgba(2, 132, 199, 0.12)',
+                        color: '#0284c7',
                         fontWeight: 800,
                         fontSize: '0.75rem',
                         display: 'flex',
@@ -18978,11 +18977,11 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '14px',
-                background: 'linear-gradient(145deg, var(--color-surface) 0%, rgba(238, 242, 255, 0.6) 100%)',
-                border: '1px solid rgba(99, 102, 241, 0.25)',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border-light)',
                 borderRadius: '16px',
                 padding: isMobile ? '1.1rem' : '1.5rem',
-                boxShadow: '0 4px 20px rgba(99, 102, 241, 0.05)'
+                boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -18990,8 +18989,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       width: '36px',
                       height: '36px',
                       borderRadius: '10px',
-                      background: 'rgba(99, 102, 241, 0.12)',
-                      color: '#4f46e5',
+                      background: 'rgba(15, 118, 110, 0.1)',
+                      color: '#0f766e',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -19000,7 +18999,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       <UserPlus size={18} />
                     </div>
                     <div>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4338ca', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0f766e', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         {t('Hồ sơ đề xuất tuyển dụng nhân sự')}
                       </span>
                       <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
@@ -19013,12 +19012,12 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       fontSize: '0.75rem',
                       padding: '4px 12px',
                       borderRadius: '8px',
-                      background: 'rgba(99, 102, 241, 0.12)',
-                      color: '#4338ca',
+                      background: 'rgba(15, 118, 110, 0.1)',
+                      color: '#0f766e',
                       fontWeight: 800,
-                      border: '1px solid rgba(99, 102, 241, 0.25)'
+                      border: '1px solid rgba(15, 118, 110, 0.25)'
                     }}>
-                      👥 {t('Số lượng:')} {recruitmentData.headcount}
+                      <Users size={12} strokeWidth={1.75} style={{ marginRight: 4, verticalAlign: '-1px' }} />{t('Số lượng:')} {recruitmentData.headcount}
                     </span>
                   )}
                 </div>
@@ -19053,7 +19052,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                       {t('Hình thức làm việc')}
                     </span>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#4f46e5' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f766e' }}>
                       {recruitmentData.jobType || '—'}
                     </span>
                   </div>
@@ -19122,7 +19121,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       {t('Ngày dự kiến nhận việc')}
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Calendar size={14} style={{ color: '#4f46e5' }} />
+                      <Calendar size={14} style={{ color: '#0f766e' }} />
                       <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>
                         {(() => {
                           const rawD = recruitmentData.expectedDate;
@@ -19623,9 +19622,9 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     {paymentData.otherMethodInfo.type === 'wallet' && (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Wallet size={16} style={{ color: '#ec4899', flexShrink: 0 }} />
+                          <Wallet size={16} style={{ color: '#BD1D2D', flexShrink: 0 }} />
                           <div>
-                            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#ec4899' }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#BD1D2D' }}>
                               {t('Ví điện tử')} {paymentData.otherMethodInfo.walletType}
                             </div>
                             <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
@@ -19658,9 +19657,9 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     )}
                     {paymentData.otherMethodInfo.type === 'card' && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <CreditCard size={16} style={{ color: '#8b5cf6', flexShrink: 0 }} />
+                        <CreditCard size={16} style={{ color: '#0284c7', flexShrink: 0 }} />
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#8b5cf6' }}>
+                          <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0284c7' }}>
                             {t('Thẻ tín dụng doanh nghiệp')}
                           </div>
                           <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
@@ -19707,7 +19706,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   {t('Nội dung đề xuất')}
                 </div>
-                <div style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '10px 12px', background: 'var(--color-bg-secondary)', borderRadius: '8px' }}>
+                <div style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', padding: '10px 12px', background: 'var(--color-bg-secondary)', borderRadius: '8px' }}>
                   {t('Không có mô tả chi tiết')}
                 </div>
               </div>
@@ -20628,7 +20627,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                         </div>
                       ))}
                       {relUsers.length === 0 && (
-                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                           {t('Chưa có người theo dõi nào. Gắn tag @tên trong bình luận hoặc bấm "+ Thêm" để thêm.')}
                         </div>
                       )}

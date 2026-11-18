@@ -126,7 +126,7 @@ const ApiTriggers: React.FC = () => {
             {/* Main Panel with Approvals Toolbar & Subtabs */}
             <MktPanel>
                 <div className="px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] flex flex-wrap items-center justify-between gap-3">
-                    <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-[14px] bg-[var(--color-bg)] border border-[var(--color-border)]">
+                    <div className="inline-flex flex-wrap items-center gap-0.5 p-[3px] rounded-[10px] bg-[var(--color-bg)] border border-[var(--color-border)]">
                         {subTabs.map((item) => {
                             const isActive = activeTab === item.id;
                             return (
@@ -134,16 +134,16 @@ const ApiTriggers: React.FC = () => {
                                     key={item.id}
                                     type="button"
                                     onClick={() => setActiveTab(item.id)}
-                                    className={`px-3.5 py-2 rounded-[10px] text-xs font-semibold transition-all inline-flex items-center gap-2 ${
+                                    className={`px-3.5 py-1.5 rounded-[7px] text-xs font-semibold transition-colors duration-150 inline-flex items-center gap-2 ${
                                         isActive
-                                            ? 'bg-[var(--color-surface)] text-[var(--color-text)] shadow-xs border border-[var(--color-border)]'
+                                            ? 'bg-[var(--color-surface)] text-[var(--color-primary)] shadow-xs'
                                             : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
                                     }`}
                                 >
                                     <AppIcon name={item.iconName} size={18} />
                                     <span>{item.label}</span>
                                     {item.count !== null && (
-                                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold tabular-nums ${
                                             isActive
                                                 ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)]'
                                                 : 'bg-slate-200/70 dark:bg-white/[0.06] text-[var(--color-text-muted)]'
@@ -173,12 +173,12 @@ const ApiTriggers: React.FC = () => {
             {/* GLOBAL DATABASE REFERENCE MODAL */}
             <Modal isOpen={showDocs} onClose={() => setShowDocs(false)} title="Cấu trúc Dữ liệu Khách hàng (Database)" size="lg">
                 <div className="space-y-6 pb-6">
-                    <div className="p-5 bg-blue-50 border border-blue-100 rounded-[18px] flex gap-4">
-                        <div className="p-3 bg-white rounded-xl text-blue-600 shadow-sm h-fit"><Database className="w-6 h-6" /></div>
+                    <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl flex gap-4">
+                        <div className="p-3 bg-white rounded-xl text-[#BD1D2D] border border-slate-200 shadow-xs h-fit"><Database className="w-6 h-6" /></div>
                         <div>
-                            <h4 className="text-sm font-bold text-blue-900 uppercase tracking-tight">Quy chuẩn trường dữ liệu</h4>
-                            <p className="text-xs text-blue-700 mt-1 leading-relaxed">
-                                Khi gọi API (Purchase, Custom Event hoặc Form), bạn có thể gửi kèm các thông tin dưới đây để hệ thống tự động cập nhật vào hồ sơ Khách hàng (Subscriber Profile).
+                            <h4 className="text-sm font-bold text-slate-900 uppercase tracking-tight">Quy chuẩn trường dữ liệu</h4>
+                            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                                Khi gọi API (Purchase, Custom Event hoặc Form), bạn có thể gửi kèm các thông tin dưới đây để hệ thống tự động cập nhật vào hồ sơ Khách hàng (Subscriber Profile)
                             </p>
                         </div>
                     </div>

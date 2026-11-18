@@ -28,6 +28,7 @@ import {
   PieChart, Pie, Cell, LabelList
 } from 'recharts';
 import { QRCodeCanvas } from 'qrcode.react';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 interface User {
   id: number;
@@ -460,8 +461,8 @@ const ConsultantsInner = () => {
     setLoadingTeamComments(true);
     try {
       const res = await api.get(`/teams/${teamId}/comments`);
-      const list = res.data?.data || res.data || [];
-      setTeamComments(Array.isArray(list) ? list : []);
+      const list = extractArray(res?.data);
+      setTeamComments(list);
     } catch (e: any) {
       console.error('Failed to fetch team comments:', e);
       toast.error(t('Không thể tải bình luận nhóm'));
@@ -1751,7 +1752,7 @@ const ConsultantsInner = () => {
 
                           if (!isSaleMember) {
                             return (
-                              <span style={{ color: 'var(--color-text-light, #94a3b8)', fontSize: '0.75rem', fontStyle: 'italic' }}>
+                              <span style={{ color: 'var(--color-text-light, #94a3b8)', fontSize: '0.75rem' }}>
                                 {t('Không bắt buộc')}
                               </span>
                             );
@@ -1823,7 +1824,7 @@ const ConsultantsInner = () => {
 
                           if (!isSaleMember) {
                             return (
-                              <span style={{ color: 'var(--color-text-light, #94a3b8)', fontSize: '0.75rem', fontStyle: 'italic' }}>
+                              <span style={{ color: 'var(--color-text-light, #94a3b8)', fontSize: '0.75rem' }}>
                                 {t('Không bắt buộc')}
                               </span>
                             );
@@ -2101,7 +2102,7 @@ const ConsultantsInner = () => {
                               </span>
                             </div>
                           ) : (
-                            <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{t('Chưa gán')}</span>
+                            <span style={{ color: 'var(--color-text-muted)' }}>{t('Chưa gán')}</span>
                           )}
                         </div>
                       </div>
@@ -2136,7 +2137,7 @@ const ConsultantsInner = () => {
                                     +{members.length - 5}
                                   </span>
                                 ) : (
-                                  members.length === 0 && <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{t('Trống')}</span>
+                                  members.length === 0 && <span style={{ color: 'var(--color-text-muted)' }}>{t('Trống')}</span>
                                 )}
                               </>
                             );
@@ -2646,18 +2647,12 @@ const ConsultantsInner = () => {
                       <div style={{ height: 180, width: '100%' }}>
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={statsData.by_date} margin={{ left: -10, right: 5, top: 20, bottom: 0 }}>
-                            <defs>
-                              <linearGradient id="statsDateGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#e63946" stopOpacity={1} />
-                                <stop offset="100%" stopColor="#a31422" stopOpacity={0.8} />
-                              </linearGradient>
-                            </defs>
                             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
-                            <XAxis dataKey="date" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                            <YAxis domain={[0, (max: number) => (max < 5 ? 5 : Math.ceil(max * 1.15))]} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
-                            <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8 }} />
-                            <Bar dataKey="count" fill="url(#statsDateGradient)" radius={[4, 4, 0, 0]} maxBarSize={30} name={t("Data thành công")}>
-                              <LabelList dataKey="count" position="top" style={{ fill: 'var(--color-text)', fontSize: 10, fontWeight: 700 }} offset={6} />
+                            <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
+                            <YAxis domain={[0, (max: number) => (max < 5 ? 5 : Math.ceil(max * 1.15))]} tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} width={34} />
+                            <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8, fontVariantNumeric: 'tabular-nums' }} />
+                            <Bar dataKey="count" fill="#C6333D" radius={[4, 4, 0, 0]} maxBarSize={30} name={t("Data thành công")}>
+                              <LabelList dataKey="count" position="top" style={{ fill: 'var(--color-text)', fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }} offset={6} />
                             </Bar>
                           </BarChart>
                         </ResponsiveContainer>
@@ -2676,9 +2671,9 @@ const ConsultantsInner = () => {
                       <h4 style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--color-text)' }}>{t('Tỷ lệ Trạng thái Data')}</h4>
                       {(() => {
                         const statusChartData = [
-                          { name: t('Thành công'), value: statsData.summary.successful, color: '#a31422' },
+                          { name: t('Thành công'), value: statsData.summary.successful, color: '#C6333D' },
                           { name: t('Nhắc lại'), value: statsData.summary.reminder, color: '#f59e0b' },
-                          { name: t('Lỗi'), value: statsData.summary.error, color: '#ef4444' }
+                          { name: t('Lỗi'), value: statsData.summary.error, color: '#334155' }
                         ].filter(item => item.value > 0);
 
                         return statsData.summary.total > 0 && statusChartData.length > 0 ? (
@@ -2699,7 +2694,7 @@ const ConsultantsInner = () => {
                                       <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
                                   </Pie>
-                                  <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8 }} />
+                                  <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8, fontVariantNumeric: 'tabular-nums' }} />
                                 </PieChart>
                               </ResponsiveContainer>
                             </div>
@@ -2707,7 +2702,7 @@ const ConsultantsInner = () => {
                               {statusChartData.map((item, idx) => (
                                 <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: item.color }} />
-                                  <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
+                                  <span style={{ fontWeight: 600, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                                     {item.name}: <strong style={{ fontSize: '0.8125rem' }}>{item.value}</strong> ({Math.round(item.value / statsData.summary.total * 100)}%)
                                   </span>
                                 </div>
@@ -2730,12 +2725,12 @@ const ConsultantsInner = () => {
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={statsData.rounds} layout="vertical" margin={{ left: -10, right: 10, top: 0, bottom: 0 }}>
                               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border-light)" />
-                              <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                              <YAxis dataKey="round_name" type="category" width={90} tick={{ fontSize: 9, fontWeight: 600 }} axisLine={false} tickLine={false} />
-                              <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8 }} />
-                              <Bar dataKey="successful_count" stackId="a" fill="#a31422" radius={[0, 0, 0, 0]} barSize={12} name={t("Thành công")} />
+                              <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
+                              <YAxis dataKey="round_name" type="category" width={92} tick={{ fontSize: 11, fontWeight: 600, fill: 'var(--color-text)' }} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', fontSize: '0.75rem', borderRadius: 8, fontVariantNumeric: 'tabular-nums' }} />
+                              <Bar dataKey="successful_count" stackId="a" fill="#C6333D" radius={[0, 0, 0, 0]} barSize={12} name={t("Thành công")} />
                               <Bar dataKey="reminder_count" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} barSize={12} name={t("Nhắc lại")} />
-                              <Bar dataKey="error_count" stackId="a" fill="#ef4444" radius={[0, 4, 4, 0]} barSize={12} name={t("Lỗi")} />
+                              <Bar dataKey="error_count" stackId="a" fill="#334155" radius={[0, 4, 4, 0]} barSize={12} name={t("Lỗi")} />
                             </BarChart>
                           </ResponsiveContainer>
                         </div>
@@ -3959,8 +3954,8 @@ const ConsultantsInner = () => {
                                   <RefreshCw className="spin" size={18} color="var(--color-text-muted)" />
                                 </div>
                               ) : teamComments.length === 0 ? (
-                                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>
-                                  {t('Chưa có bình luận nào. Phòng ban hãy bình luận trao đổi thông tin tại đây!')}
+                                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
+                                  {t('Chưa có bình luận nào. Phòng ban hãy bình luận trao đổi thông tin tại đây.')}
                                 </div>
                               ) : (
                                 rootComments.map((rootComment: any) => {
@@ -4270,8 +4265,8 @@ const ConsultantsInner = () => {
 
             </div>
 
-            <div style={{ fontSize: '0.75rem', color: '#64748b', fontStyle: 'italic', textAlign: 'center', marginTop: 2 }}>
-              ✨ Ngay khi nhắn mã thành công, Zalo Bot sẽ tự động phản hồi xác nhận liên kết tài khoản của bạn!
+            <div style={{ fontSize: '0.75rem', color: '#64748b', textAlign: 'center', marginTop: 4 }}>
+              Ngay khi nhắn mã thành công, Zalo Bot sẽ tự động phản hồi xác nhận liên kết tài khoản của bạn.
             </div>
           </div>
         </CustomModal>

@@ -39,7 +39,7 @@ $worker = new WorkerInvoker();
 // Ensure isolated server on port 8855
 $port = 8855;
 $rootDir = dirname(__DIR__, 2);
-$phpBin = 'C:\\Users\\LENOVO\\AppData\\Local\\Microsoft\\WinGet\\Packages\\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\\php.exe';
+$phpBin = getenv('PHP_BIN') ?: PHP_BINARY;
 $descriptors = [
     0 => ['pipe', 'r'],
     1 => ['pipe', 'w'],

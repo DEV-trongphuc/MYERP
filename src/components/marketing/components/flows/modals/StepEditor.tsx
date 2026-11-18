@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2, Save, Sparkles, Beaker, AlertCircle } from 'lucide-react';
+import { Trash2, Save, Beaker, AlertCircle } from 'lucide-react';
 import { FlowStep, Flow } from '../../../types';
 import Modal from '../../common/Modal';
 import Button from '../../common/Button';
@@ -36,28 +36,28 @@ const SplitTestConfig = ({ config, onChange, disabled }: any) => {
 
   return (
     <div className="space-y-6">
-      <div className="p-5 bg-blue-50 text-blue-700 rounded-[14px] border border-blue-100 flex gap-4">
-        <Beaker className="w-6 h-6 shrink-0" />
-        <p className="text-xs font-bold leading-relaxed">Phân chia lưu lượng Khách hàng ngẫu nhiên để thử nghiệm 2 kịch bản khác nhau.</p>
+      <div className="p-5 bg-blue-50 text-blue-700 rounded-xl border border-blue-200 flex gap-4">
+        <Beaker className="w-5 h-5 shrink-0" strokeWidth={1.75} />
+        <p className="text-xs font-semibold leading-relaxed">Phân chia lưu lượng Khách hàng ngẫu nhiên để thử nghiệm 2 kịch bản khác nhau.</p>
       </div>
       <div className="grid grid-cols-2 gap-8">
         <div className="space-y-2">
-          <label className="text-[10px] font-black uppercase text-slate-400">Tỷ lệ nhánh A (%)</label>
+          <label className="text-[10px] font-bold uppercase text-slate-400">Tỷ lệ nhánh A (%)</label>
           <input
             type="number"
             value={config.ratioA === '' ? '' : (config.ratioA ?? 50)}
             onChange={(e) => handleRatioChange(e.target.value, true)}
-            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-[14px] font-black text-xl text-blue-600 outline-none focus:ring-2 focus:ring-blue-200 transition-all"
+            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xl tabular-nums text-blue-600 outline-none focus:ring-2 focus:ring-blue-200 transition-colors"
             disabled={disabled}
           />
         </div>
         <div className="space-y-2">
-          <label className="text-[10px] font-black uppercase text-slate-400">Tỷ lệ nhánh B (%)</label>
+          <label className="text-[10px] font-bold uppercase text-slate-400">Tỷ lệ nhánh B (%)</label>
           <input
             type="number"
             value={config.ratioB === '' ? '' : (config.ratioB ?? 50)}
             onChange={(e) => handleRatioChange(e.target.value, false)}
-            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-[14px] font-black text-xl text-slate-400 outline-none focus:ring-2 focus:ring-blue-200 transition-all"
+            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xl tabular-nums text-slate-500 outline-none focus:ring-2 focus:ring-blue-200 transition-colors"
             disabled={disabled}
           />
         </div>
@@ -127,20 +127,20 @@ const StepEditor: React.FC<StepEditorProps> = ({
   const isTrigger = localStep.type === 'trigger';
 
   const getHeaderStyle = () => {
-    if (localStep.type === 'action') return 'from-blue-600 to-indigo-700';
+    if (localStep.type === 'action') return 'bg-blue-600';
     switch (localStep.type as string) {
-      case 'trigger': return 'from-slate-800 to-slate-950';
-      case 'update_tag': return 'from-emerald-500 to-emerald-700';
-      case 'list_action': return 'from-orange-500 to-orange-700';
-      case 'wait': return 'from-amber-400 to-amber-600';
-      case 'condition': return 'from-indigo-500 to-indigo-700';
-      case 'split_test': return 'from-blue-500 to-blue-700';
-      case 'link_flow': return 'from-slate-700 to-slate-900';
-      case 'remove_action': return 'from-rose-500 to-rose-700';
-      case 'advanced_condition': return 'from-blue-600 to-fuchsia-600';
-      case 'zalo_zns': return 'from-blue-500 to-blue-700';
-      case 'crm_action': return 'from-indigo-600 to-slate-900';
-      default: return 'from-slate-800 to-slate-950';
+      case 'trigger': return 'bg-[#0F172A]';
+      case 'update_tag': return 'bg-emerald-600';
+      case 'list_action': return 'bg-amber-600';
+      case 'wait': return 'bg-amber-500';
+      case 'condition': return 'bg-[#0F172A]';
+      case 'split_test': return 'bg-blue-600';
+      case 'link_flow': return 'bg-[#0F172A]';
+      case 'remove_action': return 'bg-rose-600';
+      case 'advanced_condition': return 'bg-[#0F172A]';
+      case 'zalo_zns': return 'bg-blue-600';
+      case 'crm_action': return 'bg-[#0F172A]';
+      default: return 'bg-[#0F172A]';
     }
   };
 
@@ -185,10 +185,10 @@ const StepEditor: React.FC<StepEditorProps> = ({
                 icon={Save} 
                 onClick={() => onSave(localStep)} 
                 disabled={isDisabledForEditing}
-                className={`flex items-center justify-center font-bold tracking-tight select-none rounded-[var(--radius-md)] px-5 py-2.5 text-xs md:text-sm gap-2 transition-all active:scale-[0.95] ${
+                className={`flex items-center justify-center font-bold select-none rounded-[var(--radius-md)] px-5 py-2.5 text-xs md:text-sm gap-2 transition-opacity ${
                   isDisabledForEditing
                     ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none border-none'
-                    : 'bg-[var(--color-primary)] hover:opacity-95 text-white shadow-md border-none'
+                    : 'bg-[var(--color-primary)] hover:opacity-95 text-white shadow-sm border-none'
                 }`}
               >
                 Lưu thay đổi
@@ -198,25 +198,24 @@ const StepEditor: React.FC<StepEditorProps> = ({
         }
       >
         <div className="space-y-6">
-          <div className={`relative p-8 rounded-xl text-white shadow-xl overflow-hidden bg-gradient-to-br ${getHeaderStyle()}`}>
-            <div className="absolute -top-10 -right-10 opacity-10 rotate-12"><Sparkles className="w-40 h-40" /></div>
+          <div className={`relative p-8 rounded-xl text-white shadow-md border border-white/10 overflow-hidden ${getHeaderStyle()}`}>
             <div className="relative z-10">
               <input
-                className="text-2xl font-black bg-transparent border-none outline-none w-full placeholder:text-white/20 focus:ring-0 p-0 tracking-tight"
+                className="text-2xl font-bold bg-transparent border-none outline-none w-full placeholder:text-white/25 focus:ring-0 p-0"
                 placeholder="Tên gợi nhớ..."
                 value={localStep.label}
                 onChange={(e) => setLocalStep({ ...localStep, label: e.target.value })}
                 disabled={isDisabledForEditing}
               />
-              <p className="text-[10px] font-black uppercase text-white/40 mt-3 tracking-[0.3em]">{localStep.type.replace('_', ' ')}</p>
+              <p className="text-[10px] font-bold uppercase text-white/50 mt-3 tracking-[0.2em]">{localStep.type.replace('_', ' ')}</p>
             </div>
           </div>
 
           {isDisabledForEditing && (
-            <div className="p-4 bg-amber-50 border border-amber-100 rounded-[14px] flex gap-3 animate-in fade-in slide-in-from-top-2">
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex gap-3">
               <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
               <div className="space-y-1">
-                <p className="text-xs font-black text-amber-800 uppercase tracking-wider">Chế độ xem chi tiết</p>
+                <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">Chế độ xem chi tiết</p>
                 <p className="text-[11px] font-medium text-amber-700 leading-relaxed">
                   {isFlowArchived 
                     ? "Flow này đã được lưu trữ (Archived) nên không thể thay đổi cấu hình." 
@@ -227,7 +226,7 @@ const StepEditor: React.FC<StepEditorProps> = ({
           )}
 
           {stepErrors.length > 0 && (
-            <div className="p-4 bg-rose-50 border border-rose-100 rounded-[14px] flex gap-3 animate-in fade-in zoom-in-95">
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex gap-3">
               <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
               <div className="space-y-1">
                 {stepErrors.map((e, i) => <p key={i} className="text-xs font-bold text-rose-700">{e.msg}</p>)}
@@ -252,7 +251,7 @@ const StepEditor: React.FC<StepEditorProps> = ({
               variant="custom"
               size="md"
               onClick={() => setShowActiveWarning(false)}
-              className="bg-[var(--color-primary)] hover:opacity-95 text-white shadow-md border-none transition-all active:scale-[0.95] rounded-[var(--radius-md)] px-5 py-2.5 text-xs md:text-sm font-bold"
+              className="bg-[var(--color-primary)] hover:opacity-95 text-white shadow-sm border-none transition-opacity rounded-[var(--radius-md)] px-5 py-2.5 text-xs md:text-sm font-bold"
             >
               Đã hiểu
             </Button>

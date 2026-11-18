@@ -5,7 +5,7 @@ import api from '../../api/axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { Avatar } from './Avatar';
 import { toast } from 'react-hot-toast';
-import { Bold, Italic, Underline as UnderlineIcon, Link2, ImageIcon, Paperclip, List, ListOrdered, Trash2, Smile, Search, X, User as UserIcon, CheckSquare, FileText, Building2, ShoppingCart, Tag, Sparkles, Loader2 } from 'lucide-react';
+import { Bold, Italic, Underline as UnderlineIcon, Link2, ImageIcon, Paperclip, List, ListOrdered, Trash2, Smile, Search, X, User as UserIcon, CheckSquare, FileText, Building2, ShoppingCart, Tag, Loader2 } from 'lucide-react';
 import { StickerPickerModal } from './StickerPickerModal';
 import { isExcludedSystemEmail } from '../../contexts/TenantConfigContext';
 
@@ -410,10 +410,10 @@ export const MentionInput: React.FC<MentionInputProps> = ({
         return { label: 'Đề xuất', bg: 'rgba(245, 158, 11, 0.1)', color: '#d97706', border: 'rgba(245, 158, 11, 0.25)' };
       case 'po':
       case 'po_order':
-        return { label: 'Đơn PO', bg: 'rgba(147, 51, 234, 0.1)', color: '#7c3aed', border: 'rgba(147, 51, 234, 0.25)' };
+        return { label: 'Đơn PO', bg: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', border: 'rgba(189, 29, 45, 0.25)' };
       case 'so':
       case 'so_order':
-        return { label: 'Đơn SO', bg: 'rgba(99, 102, 241, 0.1)', color: '#4f46e5', border: 'rgba(99, 102, 241, 0.25)' };
+        return { label: 'Đơn SO', bg: 'rgba(15, 23, 42, 0.06)', color: '#334155', border: 'rgba(15, 23, 42, 0.2)' };
       case 'company':
         return { label: 'Công ty', bg: 'rgba(14, 165, 233, 0.1)', color: '#0284c7', border: 'rgba(14, 165, 233, 0.25)' };
       case 'deal':
@@ -1337,7 +1337,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
                             {(item.type === 'so' || item.type === 'so_order') && <ShoppingCart size={15} />}
                             {item.type === 'company' && <Building2 size={15} />}
                             {item.type === 'deal' && <Tag size={15} />}
-                            {!['task', 'approval', 'contact', 'student', 'po', 'po_order', 'so', 'so_order', 'company', 'deal'].includes(item.type) && <Sparkles size={15} />}
+                            {!['task', 'approval', 'contact', 'student', 'po', 'po_order', 'so', 'so_order', 'company', 'deal'].includes(item.type) && <Tag size={15} strokeWidth={1.75} />}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: '0.82rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

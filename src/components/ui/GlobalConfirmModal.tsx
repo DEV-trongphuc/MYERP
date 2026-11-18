@@ -314,11 +314,11 @@ export const GlobalConfirmModal: React.FC = () => {
                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600 }}>Quy đổi thành tiền:</span>
-                          <span style={{ fontWeight: 800, color: '#059669', fontSize: '0.9375rem' }}>
+                          <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#059669', fontSize: '0.9375rem' }}>
                             {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(numericPromptVal)}
                           </span>
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                           ({numberToVietnameseText(numericPromptVal)})
                         </div>
                       </div>

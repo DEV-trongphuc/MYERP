@@ -27,7 +27,7 @@ use MYERP\Tests\E2E\Helpers\Assertions;
 
 $pdo = TestDatabase::pdo();
 $wsId = TestDatabase::TEST_WORKSPACE_ID; // 99999
-$phpBin = 'C:\\Users\\LENOVO\\AppData\\Local\\Microsoft\\WinGet\\Packages\\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\\php.exe';
+$phpBin = getenv('PHP_BIN') ?: PHP_BINARY;
 
 echo "====================================================================\n";
 echo "   CHALLENGER 2: EMPIRICAL ADVERSARIAL STRESS & VERIFICATION SUITE  \n";

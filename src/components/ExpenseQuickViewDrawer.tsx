@@ -17,6 +17,7 @@ import { CustomSelect } from './ui/CustomSelect';
 import { formatWaitDuration } from '../pages/Approvals';
 import { DrawerSkeleton } from './ui/Skeleton';
 import { pushOverlay } from '../utils/overlayStack';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 const FMT = (n: number, currency: string = 'VND') => {
   const rawCurr = (currency || 'VND').toUpperCase().trim();
@@ -67,8 +68,7 @@ const getAvatarStatusRingStyle = (border?: string): React.CSSProperties => {
     justifyContent: 'center',
     flexShrink: 0,
     boxShadow: `0 0 0 2px ${ringColor}`,
-    transition: 'all 0.2s ease-in-out',
-    animation: isPending ? 'avatar-pending-glow 2.2s ease-in-out infinite' : undefined
+    transition: 'border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1)',
   };
 };
 
@@ -385,7 +385,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
       fetchComments(expenseId);
       fetchHistory(expenseId);
       api.get('/users').then(res => {
-        setUsers(res.data.data?.users || res.data.data || []);
+        setUsers(extractArray(res?.data));
       }).catch(err => {
         console.error("Error loading users for PO quick view drawer:", err);
       });
@@ -994,7 +994,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   </span>
                 )}
                 {st.notes && (
-                  <div style={{ marginTop: '6px', padding: '6px 10px', background: 'var(--color-bg-secondary)', borderRadius: '6px', fontSize: '0.75rem', color: 'var(--color-text)', borderLeft: '3px solid var(--color-primary)', fontStyle: 'italic' }}>
+                  <div style={{ marginTop: '6px', padding: '6px 10px', background: 'var(--color-bg-secondary)', borderRadius: '6px', fontSize: '0.75rem', color: 'var(--color-text)', borderLeft: '3px solid var(--color-primary)' }}>
                     "{st.notes}"
                   </div>
                 )}
@@ -1366,18 +1366,18 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
               {isMyTurnToApprove(viewItem) && (
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button 
-                    className="btn danger sm hover-lift" 
+                    className="btn danger sm" 
                     disabled={isProcessingApproval !== null}
-                    style={{ background: 'var(--color-danger)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, height: '32px', fontSize: '0.8rem', padding: '0 12px', borderRadius: '6px', cursor: isProcessingApproval !== null ? 'not-allowed' : 'pointer', opacity: isProcessingApproval !== null ? 0.6 : 1 }} 
+                    style={{ background: 'var(--color-danger)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, height: '32px', fontSize: '0.8rem', padding: '0 12px', borderRadius: '8px', cursor: isProcessingApproval !== null ? 'not-allowed' : 'pointer', opacity: isProcessingApproval !== null ? 0.6 : 1, transition: 'opacity 0.16s cubic-bezier(0.22, 1, 0.36, 1)' }} 
                     onClick={handleReject}
                   >
                     {isProcessingApproval === 'reject' ? <Loader2 size={14} className="spin" /> : <XCircle size={14} />}
                     <span>{isProcessingApproval === 'reject' ? 'Đang từ chối...' : 'Từ chối'}</span>
                   </button>
                   <button 
-                    className="btn success sm hover-lift" 
+                    className="btn success sm" 
                     disabled={isProcessingApproval !== null}
-                    style={{ background: 'var(--color-success)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, height: '32px', fontSize: '0.8rem', padding: '0 12px', borderRadius: '6px', cursor: isProcessingApproval !== null ? 'not-allowed' : 'pointer', opacity: isProcessingApproval !== null ? 0.6 : 1 }} 
+                    style={{ background: 'var(--color-success)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, height: '32px', fontSize: '0.8rem', padding: '0 12px', borderRadius: '8px', cursor: isProcessingApproval !== null ? 'not-allowed' : 'pointer', opacity: isProcessingApproval !== null ? 0.6 : 1, transition: 'opacity 0.16s cubic-bezier(0.22, 1, 0.36, 1)' }} 
                     onClick={handleApprove}
                   >
                     {isProcessingApproval === 'approve' ? <Loader2 size={14} className="spin" /> : <CheckCircle2 size={14} />}
@@ -1574,33 +1574,33 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 if (isZeroCost) {
                   return (
                     <div style={{ 
-                      padding: '1.25rem 1.5rem', 
-                      background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.06) 0%, rgba(255, 255, 255, 0.9) 100%)', 
+                      padding: '20px 24px', 
+                      background: '#f8fafc', 
                       borderRadius: '16px', 
-                      border: '1px solid rgba(59, 130, 246, 0.15)',
-                      boxShadow: '0 4px 15px rgba(59, 130, 246, 0.03)',
+                      border: '1px solid #e2e8f0',
+                      boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      gap: '1rem',
+                      gap: '16px',
                       flexShrink: 0
                     }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                           Quy trình đề xuất hành chính
                         </span>
-                        <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-text)', margin: 0 }}>
+                        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
                           {viewItem.title}
                         </h3>
-                        <p style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', margin: 0, marginTop: '2px' }}>
+                        <p style={{ fontSize: '0.75rem', fontWeight: 500, color: '#64748b', margin: 0, marginTop: '2px' }}>
                           Đề xuất trang thiết bị / vật phẩm (không giải ngân tiền mặt trực tiếp)
                         </p>
                       </div>
                       <div style={{
-                        background: 'rgba(59, 130, 246, 0.1)',
+                        background: 'rgba(15, 23, 42, 0.06)',
                         padding: '12px',
-                        borderRadius: '12px',
-                        color: '#2563eb'
+                        borderRadius: '8px',
+                        color: '#334155'
                       }}>
                         <Package size={24} />
                       </div>
@@ -1676,15 +1676,15 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                             </span>
                           )}
                         </div>
-                        <h1 style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--color-text)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--color-text)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontVariantNumeric: 'tabular-nums' }}>
                           {FMT(viewItem.amount, viewItem.currency)}
                           {viewItem.currency && viewItem.currency !== 'VND' && (
-                            <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', border: '1px solid #e2e8f0' }}>
                               {viewItem.currency}
                             </span>
                           )}
                         </h1>
-                        <p style={{ fontSize: '0.75rem', fontWeight: 600, fontStyle: 'italic', color: 'var(--color-text-muted)', margin: 0, marginTop: '2px' }}>
+                        <p style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-text-muted)', margin: 0, marginTop: '4px' }}>
                           Bằng chữ: {numberToVietnameseText(Number(viewItem.amount), viewItem.currency)}
                           {viewItem.currency === 'CHF' && (
                             <span style={{ marginLeft: '8px', fontStyle: 'normal', color: 'var(--color-primary)', fontWeight: 700 }}>
@@ -1906,14 +1906,14 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                                     <td colSpan={4} style={{ padding: '8px 10px', fontWeight: 700, textAlign: 'right', color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>
                                       Tổng trước thuế:
                                     </td>
-                                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text)', fontFamily: 'monospace' }}>
+                                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                                       {FMT(totalPreTax, curr)}
                                     </td>
                                     <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>—</td>
-                                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#d97706', fontFamily: 'monospace' }}>
+                                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, color: '#d97706', fontVariantNumeric: 'tabular-nums' }}>
                                       {FMT(totalVat, curr)}
                                     </td>
-                                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#059669', fontFamily: 'monospace' }}>
+                                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#059669', fontVariantNumeric: 'tabular-nums' }}>
                                       {FMT(totalPostTax, curr)}
                                     </td>
                                   </tr>
@@ -1932,18 +1932,18 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
               {isMyTurnToApprove(viewItem) ? (
                 <div style={{ display: 'flex', gap: '12px', width: '100%', flexShrink: 0 }}>
                   <button 
-                    className="btn danger hover-lift" 
+                    className="btn danger" 
                     disabled={isProcessingApproval !== null}
-                    style={{ flex: 1, background: '#ef4444', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 800, height: '42px', fontSize: '0.875rem', borderRadius: '12px', cursor: isProcessingApproval !== null ? 'not-allowed' : 'pointer', opacity: isProcessingApproval !== null ? 0.6 : 1, boxShadow: 'var(--shadow-sm)', transition: 'all 0.2s' }} 
+                    style={{ flex: 1, background: '#ef4444', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 600, height: '40px', fontSize: '0.875rem', borderRadius: '8px', cursor: isProcessingApproval !== null ? 'not-allowed' : 'pointer', opacity: isProcessingApproval !== null ? 0.6 : 1, transition: 'opacity 0.16s cubic-bezier(0.22, 1, 0.36, 1)' }} 
                     onClick={handleReject}
                   >
                     {isProcessingApproval === 'reject' ? <Loader2 size={16} className="spin" /> : <XCircle size={16} />}
                     <span>{isProcessingApproval === 'reject' ? 'Đang từ chối...' : 'Từ chối'}</span>
                   </button>
                   <button 
-                    className="btn success hover-lift" 
+                    className="btn success" 
                     disabled={isProcessingApproval !== null}
-                    style={{ flex: 1, background: '#10b981', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 800, height: '42px', fontSize: '0.875rem', borderRadius: '12px', cursor: isProcessingApproval !== null ? 'not-allowed' : 'pointer', opacity: isProcessingApproval !== null ? 0.6 : 1, boxShadow: 'var(--shadow-sm)', transition: 'all 0.2s' }} 
+                    style={{ flex: 1, background: '#10b981', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 600, height: '40px', fontSize: '0.875rem', borderRadius: '8px', cursor: isProcessingApproval !== null ? 'not-allowed' : 'pointer', opacity: isProcessingApproval !== null ? 0.6 : 1, transition: 'opacity 0.16s cubic-bezier(0.22, 1, 0.36, 1)' }} 
                     onClick={handleApprove}
                   >
                     {isProcessingApproval === 'approve' ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />}
@@ -2112,7 +2112,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                             }}
                             title={`Khớp với deadline ${detectedDeadline.displayStr} trong ghi chú`}
                           >
-                            <span>💡 Khớp deadline: {detectedDeadline.displayStr}</span>
+                            <span>Khớp deadline: {detectedDeadline.displayStr}</span>
                             <span style={{ textDecoration: 'underline' }}>[Áp dụng]</span>
                           </button>
                         )}
@@ -2234,7 +2234,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                       }
 
                       return (
-                        <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa phân công</span>
+                        <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>Chưa phân công</span>
                       );
                     })()}
                   </div>
@@ -2325,7 +2325,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                       }
 
                       return (
-                        <span style={{ fontStyle: 'italic', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Chưa có chi tiết đề xuất</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Chưa có chi tiết đề xuất</span>
                       );
                     })()}
                   </div>
@@ -2673,22 +2673,21 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                             type="button"
                             onClick={() => {
                               navigator.clipboard.writeText(bankNum);
-                              addToast('Đã sao chép số tài khoản!', 'success');
+                              addToast('Đã sao chép số tài khoản.', 'success');
                             }}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
                               gap: '4px',
-                              padding: '5px 9px',
+                              padding: '4px 8px',
                               borderRadius: '6px',
-                              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                              background: '#BD1D2D',
                               color: '#ffffff',
                               border: 'none',
                               cursor: 'pointer',
-                              fontWeight: 700,
+                              fontWeight: 600,
                               fontSize: '0.7rem',
-                              boxShadow: '0 2px 6px rgba(220, 38, 38, 0.25)',
-                              transition: 'all 0.2s ease',
+                              transition: 'background-color 0.16s cubic-bezier(0.22, 1, 0.36, 1)',
                               flexShrink: 0
                             }}
                           >
@@ -2989,13 +2988,13 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                                     {it.quantity}
                                   </span>
                                 </td>
-                                <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--color-text)' }}>
+                                <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                                   {Number(it.price).toLocaleString('vi-VN')} {viewItem.currency || 'VND'}
                                 </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
                                   {it.vat}%
                                 </td>
-                                <td style={{ padding: '10px 12px', fontWeight: 750, color: 'var(--color-primary)' }}>
+                                <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--color-primary)', fontVariantNumeric: 'tabular-nums' }}>
                                   {Number(it.subtotal).toLocaleString('vi-VN')} {viewItem.currency || 'VND'}
                                 </td>
                               </tr>
@@ -3768,7 +3767,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                             </div>
                           ))}
                           {relUsers.length === 0 && (
-                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                               Chưa có người theo dõi nào. Tag @tên trong bình luận hoặc bấm "+ Thêm" để thêm.
                             </div>
                           )}
@@ -3810,7 +3809,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
             boxShadow: 'var(--shadow-lg)'
           }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.875rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text)' }}>
+              <span style={{ fontSize: '0.875rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-text)' }}>
                 Gửi nhắc nhở phê duyệt
               </span>
               <button 
@@ -3835,7 +3834,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 style={{ width: '100%', minHeight: '80px', borderRadius: '8px', border: '1px solid var(--color-border)', padding: '8px', fontSize: '0.8rem', outline: 'none', background: 'transparent', color: 'var(--color-text)', boxSizing: 'border-box' }}
                 value={reminderMessage}
                 onChange={e => setReminderMessage(e.target.value)}
-                placeholder="Nhập lời nhắn nhắc nhở người duyệt... Ví dụ: Đề xuất này đang cần gấp, duyệt hộ mình với nhé!"
+                placeholder="Nhập lời nhắn nhắc nhở người duyệt. Ví dụ: Đề xuất này đang cần gấp, vui lòng xem xét duyệt."
               />
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
@@ -3860,7 +3859,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                       message: reminderMessage,
                       workflow_id: viewItem.id
                     });
-                    addToast(`Đã gửi nhắc nhở thành công đến ${targetName}!`, 'success');
+                    addToast(`Đã gửi nhắc nhở thành công đến ${targetName}.`, 'success');
                     setReminderTargetUser(null);
                     setReminderMessage('');
                   } catch (err: any) {

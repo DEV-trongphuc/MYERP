@@ -18,6 +18,7 @@ import { CardSkeleton } from '../components/ui/Skeleton';
 import { getModulePermissionScope } from '../store/authStore';
 import { compressToWebP } from '../utils/imageCompress';
 import { CurrencyInput } from '../components/ui/CurrencyInput';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 interface CooperationSlip {
   id: number;
@@ -381,7 +382,7 @@ export default function CooperationSlipsPage() {
 
       // 2. Filter by Sale
       if (filterSale !== 'all') {
-        const matchSale = slip.shareholders.some(sh => String(sh.user_id) === filterSale) || String(slip.created_by) === filterSale;
+        const matchSale = ensureArray(slip?.shareholders).some(sh => String(sh.user_id) === filterSale) || String(slip.created_by) === filterSale;
         if (!matchSale) return false;
       }
 
@@ -393,9 +394,10 @@ export default function CooperationSlipsPage() {
 
       // 4. Filter by Status
       if (statusFilter !== 'all') {
-        const hasSigned = slip.shareholders.find(s => String(s.user_id) === String(user?.id))?.signed;
-        const isShareholder = slip.shareholders.some(s => String(s.user_id) === String(user?.id));
-        const allSigned = slip.shareholders.every(s => s.signed);
+        const shareholders = ensureArray(slip?.shareholders);
+        const hasSigned = shareholders.find(s => String(s.user_id) === String(user?.id))?.signed;
+        const isShareholder = shareholders.some(s => String(s.user_id) === String(user?.id));
+        const allSigned = shareholders.every(s => s.signed);
         const isPendingSignatures = (slip.status === 'pending_signatures' || slip.status === 'approved_pending_signatures') && !allSigned;
 
         if (statusFilter === 'pending_me') {
@@ -445,7 +447,7 @@ export default function CooperationSlipsPage() {
 
       // 2. Filter by Sale
       if (filterSale !== 'all') {
-        const matchSale = slip.shareholders.some(sh => String(sh.user_id) === filterSale) || String(slip.created_by) === filterSale;
+        const matchSale = ensureArray(slip?.shareholders).some(sh => String(sh.user_id) === filterSale) || String(slip.created_by) === filterSale;
         if (!matchSale) return;
       }
 
@@ -454,9 +456,10 @@ export default function CooperationSlipsPage() {
       if (slipDateStr < dateRange.from || slipDateStr > dateRange.to) return;
 
       // 4. Calculate statuses
-      const hasSigned = slip.shareholders.find(s => String(s.user_id) === String(user?.id))?.signed;
-      const isShareholder = slip.shareholders.some(s => String(s.user_id) === String(user?.id));
-      const allSigned = slip.shareholders.every(s => s.signed);
+      const shareholders = ensureArray(slip?.shareholders);
+      const hasSigned = shareholders.find(s => String(s.user_id) === String(user?.id))?.signed;
+      const isShareholder = shareholders.some(s => String(s.user_id) === String(user?.id));
+      const allSigned = shareholders.every(s => s.signed);
       const isPendingSignatures = (slip.status === 'pending_signatures' || slip.status === 'approved_pending_signatures') && !allSigned;
 
       const needsMySignature = isShareholder && isPendingSignatures && !hasSigned;
@@ -1241,7 +1244,6 @@ export default function CooperationSlipsPage() {
                               e.stopPropagation();
                               handleOpenHandleRequestModal(slip);
                             }}
-                            className="animate-pulse"
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
@@ -1250,11 +1252,11 @@ export default function CooperationSlipsPage() {
                               color: '#d97706',
                               border: '1px solid rgba(245, 158, 11, 0.3)',
                               padding: '4px 10px',
-                              borderRadius: '30px',
+                              borderRadius: '8px',
                               fontSize: '0.725rem',
                               fontWeight: 700,
                               cursor: 'pointer',
-                              transition: 'all 0.2s',
+                              transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1)',
                             }}
                             title="Click để xem chi tiết và xử lý yêu cầu chỉnh sửa"
                             onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(245, 158, 11, 0.15)'; }}
@@ -1929,12 +1931,12 @@ export default function CooperationSlipsPage() {
                       <Avatar src={(sh as any).avatar} name={sh.name} size="md" />
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)' }}>{sh.name}</span>
-                        <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontStyle: 'italic', marginTop: '2px' }}>
+                        <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
                           {numberToVietnameseWords(sh.percentage)}
                         </span>
                       </div>
                     </div>
-                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-primary)' }}>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--color-primary)', fontVariantNumeric: 'tabular-nums' }}>
                       {sh.percentage}%
                     </div>
                   </div>
@@ -2169,13 +2171,12 @@ export default function CooperationSlipsPage() {
       {/* Approval Details Modal */}
       {approvalSlip && createPortal(
         <div className="overlay-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 2000000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', padding: '1.5rem' }}>
-          <div className="card animate-fade" style={{ maxWidth: '640px', width: '100%', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', maxHeight: '90vh', overflowY: 'auto', borderRadius: '24px', border: '1px solid rgba(255, 255, 255, 0.5)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15)', background: 'var(--color-surface)', position: 'relative' }}>
+          <div className="card animate-fade" style={{ maxWidth: '640px', width: '100%', padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '20px', border: '1px solid var(--color-border)', boxShadow: '0 24px 48px -12px rgba(0, 0, 0, 0.15)', background: 'var(--color-surface)', position: 'relative' }}>
             
             {/* Close Button Top Right */}
             <button 
               onClick={() => setApprovalSlip(null)} 
-              style={{ position: 'absolute', top: '20px', right: '20px', background: 'var(--color-bg-light)', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
-              className="hover-lift"
+              style={{ position: 'absolute', top: '20px', right: '20px', background: 'var(--color-bg-light)', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1)' }}
             >
               <X size={16} />
             </button>
@@ -2230,13 +2231,13 @@ export default function CooperationSlipsPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', background: 'var(--color-bg-light)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '16px 20px' }}>
                     <div>
                       <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', display: 'block', fontWeight: 700, marginBottom: '4px' }}>H.HỒNG DỰ KIẾN ({approvalSlip.total_percentage ?? 100}%)</span>
-                      <span style={{ fontSize: '1.2rem', fontWeight: 900, color: 'var(--color-text)' }}>
+                      <span style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                         {((Number(approvalSlip.expected_commission || approvalSlip.expected_revenue || 0) * (approvalSlip.total_percentage ?? 100)) / 100).toLocaleString()} <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>VND</span>
                       </span>
                     </div>
                     <div style={{ borderLeft: '1px solid var(--color-border-light)', paddingLeft: '16px' }}>
                       <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', display: 'block', fontWeight: 700, marginBottom: '4px' }}>THỰC THU ({approvalSlip.total_percentage ?? 100}%)</span>
-                      <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#10b981' }}>
+                      <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#10b981', fontVariantNumeric: 'tabular-nums' }}>
                         {((Number(approvalSlip.actual_revenue || 0) * (approvalSlip.total_percentage ?? 100)) / 100).toLocaleString()} <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#10b981' }}>VND</span>
                       </span>
                     </div>

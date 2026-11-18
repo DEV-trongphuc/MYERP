@@ -18,6 +18,7 @@ export const NAV_ICON_MAP: Record<string, string> = {
   social_bot: '/marketing/social-bot',
   ai_training: '/marketing/ai-training',
   web_tracking: '/marketing/web-tracking',
+  meta_capi: '/marketing/capi',
   api_triggers: '/marketing/api-triggers'
 };
 
@@ -196,8 +197,8 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
           <linearGradient id="ai_mkt_web_bg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#2563eb" />
-            <stop offset="100%" stopColor="#0891b2" />
+            <stop offset="0%" stopColor="#06b6d4" />
+            <stop offset="100%" stopColor="#0f766e" />
           </linearGradient>
           {filterDef('ai_mkt_web_sh')}
         </defs>
@@ -239,19 +240,19 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
           <linearGradient id="ai_mkt_api_bg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#8b5cf6" />
-            <stop offset="100%" stopColor="#6366f1" />
+            <stop offset="0%" stopColor="#f97316" />
+            <stop offset="100%" stopColor="#c2410c" />
           </linearGradient>
           {filterDef('ai_mkt_api_sh')}
         </defs>
         <rect width="56" height="56" rx="16" fill="url(#ai_mkt_api_bg)" />
         <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
         <circle cx="28" cy="28" r="14" fill="#ffffff" filter="url(#ai_mkt_api_sh)" />
-        <circle cx="23" cy="28" r="3" stroke="#6366f1" strokeWidth="1.8" />
-        <circle cx="33" cy="22" r="3" stroke="#6366f1" strokeWidth="1.8" />
-        <circle cx="33" cy="34" r="3" stroke="#6366f1" strokeWidth="1.8" />
-        <path d="M26 28H28C29.5 28 30.5 24 30.5 23" stroke="#6366f1" strokeWidth="1.5" />
-        <path d="M26 28H28C29.5 28 30.5 32 30.5 33" stroke="#6366f1" strokeWidth="1.5" />
+        <circle cx="23" cy="28" r="3" stroke="#ea580c" strokeWidth="1.8" />
+        <circle cx="33" cy="22" r="3" stroke="#ea580c" strokeWidth="1.8" />
+        <circle cx="33" cy="34" r="3" stroke="#ea580c" strokeWidth="1.8" />
+        <path d="M26 28H28C29.5 28 30.5 24 30.5 23" stroke="#ea580c" strokeWidth="1.5" />
+        <path d="M26 28H28C29.5 28 30.5 32 30.5 33" stroke="#ea580c" strokeWidth="1.5" />
       </svg>
     );
   }
@@ -367,14 +368,14 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
           <linearGradient id="ai_wf_bg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#ef4444" />
-            <stop offset="100%" stopColor="#991b1b" />
+            <stop offset="0%" stopColor="#f97316" />
+            <stop offset="100%" stopColor="#c2410c" />
           </linearGradient>
           {filterDef('ai_wf_sh')}
         </defs>
         <rect width="56" height="56" rx="16" fill="url(#ai_wf_bg)" />
         <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
-        <rect x="15" y="14" width="26" height="30" rx="4" fill="#7f1d1d" />
+        <rect x="15" y="14" width="26" height="30" rx="4" fill="#9a3412" />
         <rect x="17" y="16" width="22" height="26" rx="2.5" fill="#ffffff" filter="url(#ai_wf_sh)" />
         <rect x="23" y="12" width="10" height="5" rx="1.5" fill="#f1f5f9" stroke="#94a3b8" strokeWidth="0.8" />
         <circle cx="28" cy="14.5" r="1.2" fill="#64748b" />
@@ -534,16 +535,16 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
           <linearGradient id="ai_cont_bg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#f43f5e" />
-            <stop offset="100%" stopColor="#be123c" />
+            <stop offset="0%" stopColor="#2563eb" />
+            <stop offset="100%" stopColor="#1d4ed8" />
           </linearGradient>
           {filterDef('ai_cont_sh')}
         </defs>
         <rect width="56" height="56" rx="16" fill="url(#ai_cont_bg)" />
         <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
         <rect x="14" y="16" width="28" height="24" rx="4.5" fill="#ffffff" filter="url(#ai_cont_sh)" />
-        <circle cx="21.5" cy="24" r="3.5" fill="#f43f5e" />
-        <path d="M17 32C17 29.5 19 28.5 21.5 28.5C24 28.5 26 29.5 26 32" stroke="#f43f5e" strokeWidth="1.6" strokeLinecap="round" />
+        <circle cx="21.5" cy="24" r="3.5" fill="#2563eb" />
+        <path d="M17 32C17 29.5 19 28.5 21.5 28.5C24 28.5 26 29.5 26 32" stroke="#2563eb" strokeWidth="1.6" strokeLinecap="round" />
         <rect x="28" y="22" width="10" height="2" rx="1" fill="#94a3b8" />
         <rect x="28" y="26" width="8" height="1.8" rx="0.9" fill="#cbd5e1" />
         <rect x="28" y="30" width="11" height="1.8" rx="0.9" fill="#cbd5e1" />
@@ -557,16 +558,16 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
           <linearGradient id="ai_pipe_bg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#0284c7" />
-            <stop offset="100%" stopColor="#0f766e" />
+            <stop offset="0%" stopColor="#16a34a" />
+            <stop offset="100%" stopColor="#15803d" />
           </linearGradient>
           {filterDef('ai_pipe_sh')}
         </defs>
         <rect width="56" height="56" rx="16" fill="url(#ai_pipe_bg)" />
         <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
         <path d="M15 17H41L36 24H20L15 17Z" fill="#ffffff" filter="url(#ai_pipe_sh)" />
-        <path d="M21 26H35L32 32H24L21 26Z" fill="#a5f3fc" />
-        <path d="M25 34H31L29 40H27L25 34Z" fill="#38bdf8" />
+        <path d="M21 26H35L32 32H24L21 26Z" fill="#bbf7d0" />
+        <path d="M25 34H31L29 40H27L25 34Z" fill="#4ade80" />
       </svg>
     );
   }
@@ -689,19 +690,19 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
           <linearGradient id="ai_help_bg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#0284c7" />
-            <stop offset="100%" stopColor="#1e3a8a" />
+            <stop offset="0%" stopColor="#9333ea" />
+            <stop offset="100%" stopColor="#6b21a8" />
           </linearGradient>
           {filterDef('ai_help_sh')}
         </defs>
         <rect width="56" height="56" rx="16" fill="url(#ai_help_bg)" />
         <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
         <circle cx="28" cy="28" r="14" fill="#ffffff" filter="url(#ai_help_sh)" />
-        <circle cx="28" cy="28" r="6" fill="#1e3a8a" />
-        <path d="M28 14V22" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" />
-        <path d="M28 34V42" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" />
-        <path d="M14 28H22" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" />
-        <path d="M34 28H42" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" />
+        <circle cx="28" cy="28" r="6" fill="#6b21a8" />
+        <path d="M28 14V22" stroke="#f43f5e" strokeWidth="3" strokeLinecap="round" />
+        <path d="M28 34V42" stroke="#f43f5e" strokeWidth="3" strokeLinecap="round" />
+        <path d="M14 28H22" stroke="#f43f5e" strokeWidth="3" strokeLinecap="round" />
+        <path d="M34 28H42" stroke="#f43f5e" strokeWidth="3" strokeLinecap="round" />
       </svg>
     );
   }
@@ -821,18 +822,18 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
           <linearGradient id="ai_sch_bg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#4f46e5" />
-            <stop offset="100%" stopColor="#3730a3" />
+            <stop offset="0%" stopColor="#7c3aed" />
+            <stop offset="100%" stopColor="#4c1d95" />
           </linearGradient>
           {filterDef('ai_sch_sh')}
         </defs>
         <rect width="56" height="56" rx="16" fill="url(#ai_sch_bg)" />
         <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
         <rect x="14" y="16" width="28" height="26" rx="5" fill="#ffffff" filter="url(#ai_sch_sh)" />
-        <path d="M14 21C14 18.2386 16.2386 16 19 16H37C39.7614 16 42 18.2386 42 21V23H14V21Z" fill="#3730a3" />
-        <circle cx="28" cy="31" r="6" fill="#e0e7ff" />
-        <path d="M28 31L28 28" stroke="#3730a3" strokeWidth="1.5" strokeLinecap="round" />
-        <path d="M28 31L31 31" stroke="#3730a3" strokeWidth="1.5" strokeLinecap="round" />
+        <path d="M14 21C14 18.2386 16.2386 16 19 16H37C39.7614 16 42 18.2386 42 21V23H14V21Z" fill="#5b21b6" />
+        <circle cx="28" cy="31" r="6" fill="#ede9fe" />
+        <path d="M28 31L28 28" stroke="#5b21b6" strokeWidth="1.5" strokeLinecap="round" />
+        <path d="M28 31L31 31" stroke="#5b21b6" strokeWidth="1.5" strokeLinecap="round" />
       </svg>
     );
   }
@@ -843,18 +844,18 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
           <linearGradient id="ai_comp_bg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#3b82f6" />
-            <stop offset="100%" stopColor="#1e3a8a" />
+            <stop offset="0%" stopColor="#0d9488" />
+            <stop offset="100%" stopColor="#115e59" />
           </linearGradient>
           {filterDef('ai_comp_sh')}
         </defs>
         <rect width="56" height="56" rx="16" fill="url(#ai_comp_bg)" />
         <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
-        <path d="M14 26L22 18L28 24L24 28L14 26Z" fill="#dbeafe" />
-        <path d="M42 26L34 18L28 24L32 28L42 26Z" fill="#dbeafe" />
+        <path d="M14 26L22 18L28 24L24 28L14 26Z" fill="#ccfbf1" />
+        <path d="M42 26L34 18L28 24L32 28L42 26Z" fill="#ccfbf1" />
         <rect x="23" y="24" width="10" height="10" rx="3" fill="#ffffff" filter="url(#ai_comp_sh)" />
-        <path d="M25 27H31" stroke="#1e3a8a" strokeWidth="1.8" strokeLinecap="round" />
-        <path d="M25 31H29" stroke="#1e3a8a" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M25 27H31" stroke="#0f766e" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M25 31H29" stroke="#0f766e" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
     );
   }
@@ -1002,16 +1003,16 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
           <linearGradient id="ai_hrmfull_bg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#6d28d9" />
-            <stop offset="100%" stopColor="#4c1d95" />
+            <stop offset="0%" stopColor="#10b981" />
+            <stop offset="100%" stopColor="#047857" />
           </linearGradient>
           {filterDef('ai_hrmfull_sh')}
         </defs>
         <rect width="56" height="56" rx="16" fill="url(#ai_hrmfull_bg)" />
         <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
         <path d="M28 14L39 18V26C39 33 34 38 28 41C22 38 17 33 17 26V18L28 14Z" fill="#ffffff" filter="url(#ai_hrmfull_sh)" />
-        <circle cx="28" cy="23" r="3.2" fill="#4c1d95" />
-        <path d="M22 32C22 28.5 25 27 28 27C31 27 34 28.5 34 32" stroke="#4c1d95" strokeWidth="1.8" strokeLinecap="round" />
+        <circle cx="28" cy="23" r="3.2" fill="#047857" />
+        <path d="M22 32C22 28.5 25 27 28 27C31 27 34 28.5 34 32" stroke="#047857" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
     );
   }
@@ -1124,6 +1125,26 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
         <circle cx="39" cy="37" r="4" fill="#ffffff" />
         <path d="M23 28H29C32 28 32 19 35 19H39" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" fill="none" />
         <path d="M29 28C32 28 32 37 35 37H39" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" fill="none" />
+      </svg>
+    );
+  }
+
+  // 34A. META CAPI & TỆP ADS (Electric Indigo - Tín hiệu Conversion API)
+  if (normName === 'meta_capi' || normName.includes('meta capi') || normName.includes('tệp ads') || normName === '/marketing/capi') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_capi_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#4f46e5" />
+            <stop offset="100%" stopColor="#312e81" />
+          </linearGradient>
+          {filterDef('ai_capi_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_capi_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+        <circle cx="28" cy="28" r="14" fill="#ffffff" filter="url(#ai_capi_sh)" />
+        <path d="M20 31C20 25.5 23 22 26 22C28 22 29 24.5 28 28C27 31.5 28 34 30 34C33 34 36 30.5 36 25" stroke="#4f46e5" strokeWidth="2.4" strokeLinecap="round" />
+        <circle cx="36" cy="22" r="3" fill="#10b981" stroke="#ffffff" strokeWidth="1.2" />
       </svg>
     );
   }
@@ -1796,22 +1817,22 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
     return (
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
-          <linearGradient id="ai_acc_bg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#10b981" />
-            <stop offset="100%" stopColor="#065f46" />
+          <linearGradient id="ai_acctaz_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#2563eb" />
+            <stop offset="100%" stopColor="#1e3a8a" />
           </linearGradient>
-          {filterDef('ai_acc_sh')}
+          {filterDef('ai_acctaz_sh')}
         </defs>
-        <rect width="56" height="56" rx="16" fill="url(#ai_acc_bg)" />
+        <rect width="56" height="56" rx="16" fill="url(#ai_acctaz_bg)" />
         <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
-        <rect x="14" y="12" width="28" height="32" rx="5" fill="#ffffff" filter="url(#ai_acc_sh)" />
-        <rect x="18" y="16" width="20" height="7" rx="2.5" fill="#d1fae5" />
-        <text x="28" y="21.5" textAnchor="middle" fill="#047857" fontSize="6.5" fontWeight="900">A-Z</text>
-        <rect x="18" y="27" width="5" height="4" rx="1" fill="#34d399" />
-        <rect x="25.5" y="27" width="5" height="4" rx="1" fill="#34d399" />
+        <rect x="14" y="12" width="28" height="32" rx="5" fill="#ffffff" filter="url(#ai_acctaz_sh)" />
+        <rect x="18" y="16" width="20" height="7" rx="2.5" fill="#dbeafe" />
+        <text x="28" y="21.5" textAnchor="middle" fill="#1d4ed8" fontSize="6.5" fontWeight="900">A-Z</text>
+        <rect x="18" y="27" width="5" height="4" rx="1" fill="#60a5fa" />
+        <rect x="25.5" y="27" width="5" height="4" rx="1" fill="#60a5fa" />
         <rect x="33" y="27" width="5" height="10" rx="1.2" fill="#f59e0b" />
-        <rect x="18" y="33" width="5" height="4" rx="1" fill="#a7f3d0" />
-        <rect x="25.5" y="33" width="5" height="4" rx="1" fill="#a7f3d0" />
+        <rect x="18" y="33" width="5" height="4" rx="1" fill="#bfdbfe" />
+        <rect x="25.5" y="33" width="5" height="4" rx="1" fill="#bfdbfe" />
       </svg>
     );
   }

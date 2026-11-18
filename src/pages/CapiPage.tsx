@@ -3,10 +3,7 @@ import * as XLSX from 'xlsx';
 import { fetchAPI } from '../utils/api';
 import {
   Activity,
-  AlertCircle,
-  ArrowRight,
   Calendar,
-  Check,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
@@ -15,7 +12,6 @@ import {
   Eye,
   FileText,
   Info,
-  Layers,
   Link2,
   MessageCircle,
   Play,
@@ -23,9 +19,7 @@ import {
   Save,
   Search,
   Send,
-  ShieldAlert,
   ShieldCheck,
-  Sparkles,
   Target,
   Upload,
   Users,
@@ -37,6 +31,7 @@ import { CustomModal } from '../components/ui/CustomModal';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { Skeleton } from '../components/ui/Skeleton';
 import { useUIStore } from '../store/uiStore';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 interface CapiLog {
   id: number;
@@ -317,7 +312,7 @@ export default function CapiPage() {
       }
       const res = await fetchAPI('capi/settings', { method: 'POST', body: JSON.stringify(payload) });
       if (res.success) {
-        addToast('Đã lưu cấu hình Meta CAPI & Quality Gate!', 'success');
+        addToast('Đã lưu cấu hình Meta CAPI & Quality Gate', 'success');
         setCustomTokenInput('');
         await loadCoreData();
       } else {
@@ -341,7 +336,7 @@ export default function CapiPage() {
         body: JSON.stringify({ capi_access_token: '' }),
       });
       if (res.success) {
-        addToast('Đã chuyển sang Token Dashboard Meta Ads tự động!', 'success');
+        addToast('Đã chuyển sang Token Dashboard Meta Ads tự động', 'success');
         await loadCoreData();
       }
     } finally {
@@ -389,7 +384,7 @@ export default function CapiPage() {
         body: JSON.stringify({ days: 7, limit: 150 }),
       });
       if (res.success) {
-        addToast(res.message || 'Đã chạy Backfill 7 ngày thành công!', 'success');
+        addToast(res.message || 'Đã chạy Backfill 7 ngày thành công', 'success');
         await Promise.all([loadGrowthData(), loadCoreData()]);
       } else {
         addToast(res.message || 'Backfill thất bại', 'error');
@@ -412,7 +407,7 @@ export default function CapiPage() {
         body: JSON.stringify({ page_id: '860714080649450' }),
       });
       if (res.success) {
-        addToast('Đồng bộ Custom Audiences & Lookalike lên Meta thành công!', 'success');
+        addToast('Đồng bộ Custom Audiences & Lookalike lên Meta thành công', 'success');
         await loadGrowthData();
       } else {
         addToast(res.message || 'Lỗi đồng bộ Audience', 'error');
@@ -435,7 +430,7 @@ export default function CapiPage() {
         body: JSON.stringify({ sync_audiences_first: false }),
       });
       if (res.success) {
-        addToast(res.message || `Đã tối ưu AdSet ${adsetId} theo Playbook!`, 'success');
+        addToast(res.message || `Đã tối ưu AdSet ${adsetId} theo Playbook`, 'success');
         await loadGrowthData();
       } else {
         addToast(res.message || 'Lỗi tối ưu AdSet', 'error');
@@ -530,7 +525,7 @@ export default function CapiPage() {
         throw new Error(syncRes.message || 'Nạp DB thành công nhưng đồng bộ Meta thất bại');
       }
 
-      addToast(`Đã chặn ${phoneList.length.toLocaleString('vi-VN')} SĐT Phone Farm trên CAPI & MBA ${adAccountId}!`, 'success');
+      addToast(`Đã chặn ${phoneList.length.toLocaleString('vi-VN')} SĐT Phone Farm trên CAPI & MBA ${adAccountId}`, 'success');
       await loadGrowthData();
     } catch (err: any) {
       addToast(err.message || 'Lỗi xử lý tệp Phone Farm', 'error');
@@ -554,7 +549,7 @@ export default function CapiPage() {
         body: JSON.stringify({ force_reupload: false, apply_to_active_adsets: true }),
       });
       if (res.success) {
-        addToast(res.message || 'Đã đồng bộ tệp Phone Farm & gắn khiên chặn lên AdSet Active!', 'success');
+        addToast(res.message || 'Đã đồng bộ tệp Phone Farm & gắn khiên chặn lên AdSet Active', 'success');
         await loadGrowthData();
       } else {
         addToast(res.message || 'Lỗi đồng bộ Phone Farm lên Meta', 'error');
@@ -574,7 +569,7 @@ export default function CapiPage() {
     try {
       const res = await fetchAPI(`capi/adsets/${adsetId}/exclude-phone-farm`, { method: 'POST' });
       if (res.success) {
-        addToast(res.message || `Đã gắn khiên chặn Phone Farm cho AdSet ${adsetId}!`, 'success');
+        addToast(res.message || `Đã gắn khiên chặn Phone Farm cho AdSet ${adsetId}`, 'success');
         await loadGrowthData();
       } else {
         addToast(res.message || 'Không thể gắn khiên chặn Phone Farm', 'error');
@@ -593,7 +588,7 @@ export default function CapiPage() {
     try {
       const res = await fetchAPI(`capi/retry/${logId}`, { method: 'POST' });
       if (res.success) {
-        addToast('Gửi lại sự kiện CAPI thành công!', 'success');
+        addToast('Gửi lại sự kiện CAPI thành công', 'success');
         loadCoreData();
       } else {
         addToast(res.message || 'Retry thất bại', 'error');
@@ -642,9 +637,9 @@ export default function CapiPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Meta Conversions API (CAPI) & Tối Ưu Tệp Học Ads
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>
+              Meta Conversions API (CAPI) & Tối ưu tệp học Ads
             </h1>
             <button
               type="button"
@@ -652,14 +647,14 @@ export default function CapiPage() {
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '5px',
-                padding: '4px 10px',
+                gap: '4px',
+                padding: '4px 12px',
                 borderRadius: '8px',
                 border: '1px solid #E2E8F0',
                 background: '#FFFFFF',
                 color: '#334155',
                 fontSize: '0.75rem',
-                fontWeight: 700,
+                fontWeight: 600,
                 cursor: 'pointer',
               }}
             >
@@ -675,7 +670,7 @@ export default function CapiPage() {
         <div
           style={{
             display: 'inline-flex',
-            padding: '3px',
+            padding: '4px',
             borderRadius: '10px',
             background: '#F1F5F9',
             border: '1px solid #E2E8F0',
@@ -696,15 +691,16 @@ export default function CapiPage() {
                 style={{
                   height: '32px',
                   padding: '0 14px',
-                  borderRadius: '7px',
+                  borderRadius: '6px',
                   border: 'none',
                   background: active ? '#FFFFFF' : 'transparent',
                   color: active ? '#BD1D2D' : '#64748B',
                   fontWeight: active ? 700 : 600,
                   fontSize: '0.8125rem',
+                  fontVariantNumeric: 'tabular-nums',
                   boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                   cursor: 'pointer',
-                  transition: 'all 0.15s ease',
+                  transition: 'background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease',
                 }}
               >
                 {tab.label}
@@ -719,7 +715,7 @@ export default function CapiPage() {
         className="dashboard-kpi-grid"
         style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}
       >
-        <div className="stat-card" style={{ ...CARD_STYLE, padding: '18px 20px' }}>
+        <div className="stat-card" style={{ ...CARD_STYLE, padding: '16px 20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="stat-label" style={{ textTransform: 'uppercase', fontSize: '0.73rem', fontWeight: 700, letterSpacing: '0.04em', color: '#64748b' }}>
               TỔNG SỰ KIỆN ĐÃ BẮN
@@ -728,16 +724,16 @@ export default function CapiPage() {
               <Activity size={17} />
             </div>
           </div>
-          <div className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums', margin: '8px 0' }}>
+          <div className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums', margin: '8px 0' }}>
             {summary.total_events.toLocaleString('vi-VN')}
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5 }}>
+          <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5, fontVariantNumeric: 'tabular-nums' }}>
             <div>• Thành công: <strong style={{ color: '#0f172a' }}>{summary.success_events}</strong></div>
             <div>• Thất bại: <strong style={{ color: '#0f172a' }}>{summary.failed_events}</strong></div>
           </div>
         </div>
 
-        <div className="stat-card" style={{ ...CARD_STYLE, padding: '18px 20px' }}>
+        <div className="stat-card" style={{ ...CARD_STYLE, padding: '16px 20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="stat-label" style={{ textTransform: 'uppercase', fontSize: '0.73rem', fontWeight: 700, letterSpacing: '0.04em', color: '#64748b' }}>
               TỶ LỆ ĐỒNG BỘ 2XX
@@ -746,7 +742,7 @@ export default function CapiPage() {
               <ShieldCheck size={17} />
             </div>
           </div>
-          <div className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums', margin: '8px 0' }}>
+          <div className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 700, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums', margin: '8px 0' }}>
             {successRate}%
           </div>
           <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5 }}>
@@ -755,7 +751,7 @@ export default function CapiPage() {
           </div>
         </div>
 
-        <div className="stat-card" style={{ ...CARD_STYLE, padding: '18px 20px' }}>
+        <div className="stat-card" style={{ ...CARD_STYLE, padding: '16px 20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="stat-label" style={{ textTransform: 'uppercase', fontSize: '0.73rem', fontWeight: 700, letterSpacing: '0.04em', color: '#64748b' }}>
               TÍN HIỆU KHỚP (EMQ)
@@ -764,16 +760,16 @@ export default function CapiPage() {
               <Target size={17} />
             </div>
           </div>
-          <div className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums', margin: '8px 0' }}>
+          <div className="stat-value" style={{ fontSize: '1.85rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums', margin: '8px 0' }}>
             {summary.avg_emq_signals} tín hiệu
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5 }}>
+          <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5, fontVariantNumeric: 'tabular-nums' }}>
             <div>• CRM Pixel: <strong style={{ color: '#0f172a' }}>{pixelId}</strong></div>
             <div>• Web Pixel: <strong style={{ color: '#0f172a' }}>{webPixelId}</strong></div>
           </div>
         </div>
 
-        <div className="stat-card" style={{ ...CARD_STYLE, padding: '18px 20px' }}>
+        <div className="stat-card" style={{ ...CARD_STYLE, padding: '16px 20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="stat-label" style={{ textTransform: 'uppercase', fontSize: '0.73rem', fontWeight: 700, letterSpacing: '0.04em', color: '#64748b' }}>
               DOANH THU PURCHASE CAPI
@@ -782,7 +778,7 @@ export default function CapiPage() {
               <Zap size={17} />
             </div>
           </div>
-          <div className="stat-value" style={{ fontSize: '1.65rem', fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums', margin: '8px 0' }}>
+          <div className="stat-value" style={{ fontSize: '1.65rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums', margin: '8px 0' }}>
             {formatVnd(summary.purchase_value_vnd)}
           </div>
           <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5 }}>
@@ -795,13 +791,13 @@ export default function CapiPage() {
       {/* TAB 1: CONFIG & 14-STAGE QUALITY MATRIX */}
       {activeTab === 'config' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '20px', alignItems: 'start' }}>
-          <form onSubmit={handleSaveSettings} style={{ ...CARD_STYLE, padding: '22px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
+          <form onSubmit={handleSaveSettings} style={{ ...CARD_STYLE, padding: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
               <div>
-                <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  1. Dual-Pixel, Token & Ngưỡng Lọc Chất Lượng
+                <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>
+                  1. Dual-Pixel, Token & Ngưỡng lọc chất lượng
                 </h2>
-                <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '2px 0 0' }}>
+                <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '4px 0 0' }}>
                   Mặc định dùng Token Dashboard Meta Ads đang hoạt động ổn định.
                 </p>
               </div>
@@ -812,12 +808,12 @@ export default function CapiPage() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  padding: '9px 16px',
+                  padding: '8px 16px',
                   borderRadius: '10px',
                   border: 'none',
                   background: '#BD1D2D',
                   color: '#FFFFFF',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   fontSize: '0.84rem',
                   cursor: saving ? 'not-allowed' : 'pointer',
                   opacity: saving ? 0.7 : 1,
@@ -828,10 +824,10 @@ export default function CapiPage() {
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
                     CRM Pixel ID (Chính)
                   </label>
                   <input
@@ -842,7 +838,7 @@ export default function CapiPage() {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
                     Web Landing Pixel ID
                   </label>
                   <input
@@ -856,7 +852,7 @@ export default function CapiPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
                     Ad Account ID (MBA 577)
                   </label>
                   <input
@@ -867,7 +863,7 @@ export default function CapiPage() {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
                     Test Event Code (tuỳ chọn)
                   </label>
                   <input
@@ -880,16 +876,16 @@ export default function CapiPage() {
               </div>
 
               {/* Token Status & Optional Override */}
-              <div style={{ padding: '12px 14px', borderRadius: '12px', background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0F172A' }}>
+              <div style={{ padding: '12px 16px', borderRadius: '12px', background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0F172A' }}>
                     Access Token đang dùng: <span style={{ color: '#BD1D2D' }}>{tokenSource === 'dashboard_meta_ads' ? 'Dashboard Meta Ads (Tự động)' : 'Token ghi đè riêng'}</span>
                   </span>
                   {tokenSource !== 'dashboard_meta_ads' && (
                     <button
                       type="button"
                       onClick={handleClearCustomToken}
-                      style={{ fontSize: '0.75rem', fontWeight: 700, color: '#BD1D2D', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                      style={{ fontSize: '0.75rem', fontWeight: 600, color: '#BD1D2D', background: 'transparent', border: 'none', cursor: 'pointer' }}
                     >
                       Dùng lại Token Dashboard
                     </button>
@@ -910,8 +906,8 @@ export default function CapiPage() {
               {/* Quality Gates */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
-                    Ngưỡng Stage Tối Thiểu Được Bắn CAPI
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                    Ngưỡng stage tối thiểu được bắn CAPI
                   </label>
                   <CustomSelect
                     options={minStageOptions}
@@ -921,8 +917,8 @@ export default function CapiPage() {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
-                    Phạm vi Nguồn Lead
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                    Phạm vi nguồn Lead
                   </label>
                   <CustomSelect
                     options={[
@@ -946,7 +942,7 @@ export default function CapiPage() {
               </label>
 
               {/* Quick Live Test Buttons */}
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', borderTop: '1px solid #F1F5F9', paddingTop: '14px' }}>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', borderTop: '1px solid #F1F5F9', paddingTop: '16px' }}>
                 <button
                   type="button"
                   disabled={testingPixel !== null}
@@ -955,12 +951,12 @@ export default function CapiPage() {
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    padding: '8px 14px',
+                    padding: '8px 16px',
                     borderRadius: '10px',
                     border: '1px solid #E2E8F0',
                     background: '#F8FAFC',
                     color: '#0F172A',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     fontSize: '0.8rem',
                     cursor: 'pointer',
                   }}
@@ -976,12 +972,12 @@ export default function CapiPage() {
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    padding: '8px 14px',
+                    padding: '8px 16px',
                     borderRadius: '10px',
                     border: '1px solid #E2E8F0',
                     background: '#F8FAFC',
                     color: '#0F172A',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     fontSize: '0.8rem',
                     cursor: 'pointer',
                   }}
@@ -992,11 +988,11 @@ export default function CapiPage() {
               </div>
 
               {lastTestResult && (
-                <div style={{ padding: '10px 12px', borderRadius: '10px', background: '#F8FAFC', border: '1px solid #E2E8F0', fontSize: '0.78rem' }}>
-                  <div style={{ fontWeight: 700, color: lastTestResult.success ? '#10b981' : '#BD1D2D' }}>
+                <div style={{ padding: '12px', borderRadius: '10px', background: '#F8FAFC', border: '1px solid #E2E8F0', fontSize: '0.78rem' }}>
+                  <div style={{ fontWeight: 600, color: lastTestResult.success ? '#10b981' : '#BD1D2D' }}>
                     {lastTestResult.message}
                   </div>
-                  <pre style={{ margin: '6px 0 0', fontSize: '0.72rem', color: '#475569', overflowX: 'auto' }}>
+                  <pre style={{ margin: '8px 0 0', fontSize: '0.72rem', color: '#475569', overflowX: 'auto' }}>
                     {JSON.stringify(lastTestResult.data, null, 2)}
                   </pre>
                 </div>
@@ -1005,12 +1001,12 @@ export default function CapiPage() {
           </form>
 
           {/* 14-Stage Pipeline Trigger Matrix */}
-          <div style={{ ...CARD_STYLE, padding: '22px' }}>
+          <div style={{ ...CARD_STYLE, padding: '20px' }}>
             <div style={{ marginBottom: '16px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
-              <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                2. Ma trận Chuyển đổi 14 Giai đoạn Tuyển sinh
+              <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>
+                2. Ma trận chuyển đổi 14 giai đoạn tuyển sinh
               </h2>
-              <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '3px 0 0' }}>
+              <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '4px 0 0' }}>
                 Các giai đoạn dưới <strong>{minStageSlug}</strong> hoặc Lost/Junk tự động bị khoá <code>Skip</code> để thuật toán Meta chỉ học tệp chất lượng.
               </p>
             </div>
@@ -1037,15 +1033,15 @@ export default function CapiPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                       <span
                         style={{
-                          width: 9,
-                          height: 9,
+                          width: 8,
+                          height: 8,
                           borderRadius: '999px',
                           background: belowGate ? '#CBD5E1' : st.color || '#BD1D2D',
                           flexShrink: 0,
                         }}
                       />
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {st.name}
                         </div>
                         <div style={{ fontSize: '0.7rem', color: '#64748B', fontFamily: 'monospace' }}>
@@ -1055,7 +1051,7 @@ export default function CapiPage() {
                     </div>
 
                     {belowGate ? (
-                      <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B', padding: '4px 10px', borderRadius: '6px', background: '#F1F5F9' }}>
+                      <span style={{ fontSize: '0.74rem', fontWeight: 600, color: '#64748B', padding: '4px 8px', borderRadius: '6px', background: '#F1F5F9' }}>
                         Khóa Skip (Dưới ngưỡng)
                       </span>
                     ) : (
@@ -1079,13 +1075,13 @@ export default function CapiPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '20px' }}>
             {/* Card 1: 7-Day CAPI Backfill */}
-            <div style={{ ...CARD_STYLE, padding: '22px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div style={{ ...CARD_STYLE, padding: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div>
-                  <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                    Bắn Bù CAPI (Cửa sổ 7 Ngày Meta)
+                  <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>
+                    Bắn bù CAPI (Cửa sổ 7 ngày Meta)
                   </h2>
-                  <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '3px 0 0' }}>
+                  <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '4px 0 0' }}>
                     Meta chỉ chấp nhận `event_time` ≤ 7 ngày qua CAPI; Lead chất lượng &gt; 7 ngày được nạp qua Custom Audience bên cạnh.
                   </p>
                 </div>
@@ -1097,12 +1093,12 @@ export default function CapiPage() {
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    padding: '8px 14px',
+                    padding: '8px 16px',
                     borderRadius: '10px',
                     border: 'none',
                     background: '#BD1D2D',
                     color: '#FFFFFF',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     fontSize: '0.8rem',
                     cursor: runningBackfill ? 'not-allowed' : 'pointer',
                   }}
@@ -1116,20 +1112,20 @@ export default function CapiPage() {
                 <Skeleton style={{ height: '160px', borderRadius: '12px' }} />
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div style={{ padding: '12px', borderRadius: '10px', background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
                         Đủ điều kiện bắn CAPI (≤ 7 ngày)
                       </div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#BD1D2D', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#BD1D2D', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
                         {backfillPreview?.eligible_7d_count ?? 0}
                       </div>
                     </div>
                     <div style={{ padding: '12px', borderRadius: '10px', background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-                        Lead Lịch sử (&gt; 7 ngày → Audience)
+                      <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
+                        Lead lịch sử (&gt; 7 ngày → Audience)
                       </div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0F172A', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0F172A', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
                         {(backfillPreview?.older_than_7d_count ?? 0).toLocaleString('vi-VN')}
                       </div>
                     </div>
@@ -1140,17 +1136,17 @@ export default function CapiPage() {
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
                         <thead>
                           <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', textAlign: 'left', color: '#475569' }}>
-                            <th style={{ padding: '8px 10px' }}>Khách hàng</th>
-                            <th style={{ padding: '8px 10px' }}>Stage</th>
-                            <th style={{ padding: '8px 10px' }}>Sự kiện</th>
+                            <th style={{ padding: '8px 12px' }}>Khách hàng</th>
+                            <th style={{ padding: '8px 12px' }}>Stage</th>
+                            <th style={{ padding: '8px 12px' }}>Sự kiện</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {backfillPreview.candidates.slice(0, 20).map(c => (
+                          {ensureArray(backfillPreview?.candidates).slice(0, 20).map(c => (
                             <tr key={c.contact_id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                              <td style={{ padding: '7px 10px', fontWeight: 600, color: '#0F172A' }}>{c.full_name}</td>
-                              <td style={{ padding: '7px 10px', color: '#475569' }}>{c.stage_name}</td>
-                              <td style={{ padding: '7px 10px', fontWeight: 700, color: '#BD1D2D' }}>
+                              <td style={{ padding: '8px 12px', fontWeight: 600, color: '#0F172A' }}>{c.full_name}</td>
+                              <td style={{ padding: '8px 12px', color: '#475569' }}>{c.stage_name}</td>
+                              <td style={{ padding: '8px 12px', fontWeight: 600, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums' }}>
                                 {c.target_event} {c.event_value > 0 ? `(${formatVnd(c.event_value)})` : ''}
                               </td>
                             </tr>
@@ -1164,13 +1160,13 @@ export default function CapiPage() {
             </div>
 
             {/* Card 2: Playbook Custom Audiences & Lookalike */}
-            <div style={{ ...CARD_STYLE, padding: '22px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div style={{ ...CARD_STYLE, padding: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div>
-                  <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                    Đồng bộ Tệp VIP & Lookalike (`act_{adAccountId}`)
+                  <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>
+                    Đồng bộ tệp VIP & Lookalike (`act_{adAccountId}`)
                   </h2>
-                  <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '3px 0 0' }}>
+                  <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '4px 0 0' }}>
                     Đẩy toàn bộ Lead FB chất lượng & Học viên đóng phí (VNĐ Value-Based) lên làm Seed & Exclusion chuẩn Playbook.
                   </p>
                 </div>
@@ -1182,18 +1178,18 @@ export default function CapiPage() {
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    padding: '8px 14px',
+                    padding: '8px 16px',
                     borderRadius: '10px',
                     border: 'none',
                     background: '#0F172A',
                     color: '#FFFFFF',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     fontSize: '0.8rem',
                     cursor: syncingAudiences ? 'not-allowed' : 'pointer',
                   }}
                 >
                   <Database size={14} />
-                  {syncingAudiences ? 'Đang đồng bộ...' : 'Đồng bộ Lên Meta'}
+                  {syncingAudiences ? 'Đang đồng bộ...' : 'Đồng bộ lên Meta'}
                 </button>
               </div>
 
@@ -1237,7 +1233,7 @@ export default function CapiPage() {
                       }}
                     >
                       <span style={{ fontWeight: 600, color: '#0F172A' }}>{item.label}</span>
-                      <span style={{ fontWeight: 800, color: idx === 0 ? '#BD1D2D' : '#334155', fontVariantNumeric: 'tabular-nums' }}>
+                      <span style={{ fontWeight: 700, color: idx === 0 ? '#BD1D2D' : '#334155', fontVariantNumeric: 'tabular-nums' }}>
                         {item.count.toLocaleString('vi-VN')} {item.extra ? `• ${item.extra}` : ''}
                       </span>
                     </div>
@@ -1251,13 +1247,13 @@ export default function CapiPage() {
           </div>
 
           {/* Card 2b: Phone Farm Blacklist Shield */}
-          <div style={{ ...CARD_STYLE, padding: '22px' }}>
+          <div style={{ ...CARD_STYLE, padding: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
               <div>
-                <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  Khiên Chặn Phone Farm & Click Ảo Phá Quảng Cáo (`act_{adAccountId}`)
+                <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>
+                  Khiên chặn Phone Farm & Click ảo phá quảng cáo (`act_{adAccountId}`)
                 </h2>
-                <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '3px 0 0' }}>
+                <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '4px 0 0' }}>
                   Chặn kép 2 lớp: (1) Loại trừ trực tiếp khỏi tất cả AdSet đang chạy trên Meta Ads và (2) Chặn bắn CAPI ở tầng Quality Gate để không làm nhiễm Pixel.
                 </p>
               </div>
@@ -1277,12 +1273,12 @@ export default function CapiPage() {
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    padding: '8px 14px',
+                    padding: '8px 16px',
                     borderRadius: '10px',
                     border: '1px solid #E2E8F0',
                     background: '#FFFFFF',
                     color: '#0F172A',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     fontSize: '0.8rem',
                     cursor: importingPhoneFarm ? 'not-allowed' : 'pointer',
                   }}
@@ -1298,12 +1294,12 @@ export default function CapiPage() {
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    padding: '8px 14px',
+                    padding: '8px 16px',
                     borderRadius: '10px',
                     border: 'none',
                     background: '#BD1D2D',
                     color: '#FFFFFF',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     fontSize: '0.8rem',
                     cursor: syncingPhoneFarm || !(phoneFarmStats?.total_blocked) ? 'not-allowed' : 'pointer',
                     opacity: !(phoneFarmStats?.total_blocked) ? 0.6 : 1,
@@ -1315,33 +1311,33 @@ export default function CapiPage() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '14px' }}>
-              <div style={{ padding: '12px 14px', borderRadius: '10px', background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-                  SĐT Phone Farm Đã Chặn
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '16px' }}>
+              <div style={{ padding: '12px 16px', borderRadius: '10px', background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
+                  SĐT Phone Farm đã chặn
                 </div>
-                <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#BD1D2D', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
+                <div style={{ fontSize: '1.45rem', fontWeight: 700, color: '#BD1D2D', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
                   {(phoneFarmStats?.total_blocked ?? audiencePreview?.crm_pools?.phone_farm?.count ?? 0).toLocaleString('vi-VN')}
                 </div>
               </div>
-              <div style={{ padding: '12px 14px', borderRadius: '10px', background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
+              <div style={{ padding: '12px 16px', borderRadius: '10px', background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
                   Meta Exclusion Audience ID
                 </div>
-                <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0F172A', marginTop: '6px', fontFamily: 'monospace' }}>
+                <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0F172A', marginTop: '8px', fontFamily: 'monospace', fontVariantNumeric: 'tabular-nums' }}>
                   {phoneFarmStats?.meta_audience_id || audiencePreview?.crm_pools?.phone_farm?.meta_audience_id || 'Chưa đồng bộ'}
                 </div>
                 {(phoneFarmStats?.last_synced_at || audiencePreview?.crm_pools?.phone_farm?.last_synced_at) && (
-                  <div style={{ fontSize: '0.71rem', color: '#64748B', marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.71rem', color: '#64748B', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
                     Cập nhật: {phoneFarmStats?.last_synced_at || audiencePreview?.crm_pools?.phone_farm?.last_synced_at}
                   </div>
                 )}
               </div>
-              <div style={{ padding: '12px 14px', borderRadius: '10px', background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-                  Nguồn Blacklist Đã Nạp
+              <div style={{ padding: '12px 16px', borderRadius: '10px', background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
+                  Nguồn Blacklist đã nạp
                 </div>
-                <div style={{ fontSize: '0.78rem', color: '#334155', marginTop: '6px' }}>
+                <div style={{ fontSize: '0.78rem', color: '#334155', marginTop: '8px', fontVariantNumeric: 'tabular-nums' }}>
                   {Array.isArray(phoneFarmStats?.by_source) && phoneFarmStats.by_source.length > 0
                     ? phoneFarmStats.by_source.slice(0, 3).map(s => `${s.source_label}: ${s.count.toLocaleString('vi-VN')}`).join(' • ')
                     : 'Chưa có tệp nào được nạp'}
@@ -1351,13 +1347,13 @@ export default function CapiPage() {
           </div>
 
           {/* Card 3: Live AdSets Playbook 02B Readiness Table */}
-          <div style={{ ...CARD_STYLE, padding: '22px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+          <div style={{ ...CARD_STYLE, padding: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div>
-                <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  Tối Ưu Target 2 Tầng (`AND`) & Loại Trừ Trên MBA 577 (`act_{adAccountId}`)
+                <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>
+                  Tối ưu Target 2 tầng (`AND`) & Loại trừ trên MBA 577 (`act_{adAccountId}`)
                 </h2>
-                <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '3px 0 0' }}>
+                <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '4px 0 0' }}>
                   Áp dụng công thức Master Playbook Ngành 02B (MBA / DBA / CEO 26-50, lọc clone tuổi đời thiết bị 19-25M+, loại trừ Lưu bài viết 365d, Rác/Học viên & Phone Farm).
                 </p>
               </div>
@@ -1368,12 +1364,12 @@ export default function CapiPage() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  padding: '7px 12px',
-                  borderRadius: '9px',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
                   border: '1px solid #E2E8F0',
                   background: '#FFFFFF',
                   color: '#334155',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   fontSize: '0.78rem',
                   cursor: 'pointer',
                 }}
@@ -1497,8 +1493,8 @@ export default function CapiPage() {
         return (
         <div style={{ ...CARD_STYLE, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', background: '#FFFFFF' }}>
-            <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Nhật ký Sự kiện Meta CAPI (Realtime / Backfill / Test)
+            <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>
+              Nhật ký sự kiện Meta CAPI (Realtime / Backfill / Test)
             </h2>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <div style={{ position: 'relative' }}>
@@ -1512,8 +1508,8 @@ export default function CapiPage() {
                   }}
                   placeholder="Tìm tên KH, nguồn, sự kiện..."
                   style={{
-                    height: '34px',
-                    padding: '0 10px 0 30px',
+                    height: '32px',
+                    padding: '0 12px 0 32px',
                     borderRadius: '8px',
                     border: '1px solid #E2E8F0',
                     background: '#FFFFFF',
@@ -1524,7 +1520,7 @@ export default function CapiPage() {
                   }}
                 />
               </div>
-              <div style={{ display: 'inline-flex', padding: '3px', borderRadius: '9px', background: '#F1F5F9', border: '1px solid #E2E8F0', gap: '2px' }}>
+              <div style={{ display: 'inline-flex', padding: '4px', borderRadius: '10px', background: '#F1F5F9', border: '1px solid #E2E8F0', gap: '2px' }}>
                 {(['all', 'success', 'failed'] as const).map(st => {
                   const isActive = logStatusFilter === st;
                   return (
@@ -1554,7 +1550,7 @@ export default function CapiPage() {
                   );
                 })}
               </div>
-              <div style={{ height: '34px', padding: '0 12px', display: 'inline-flex', alignItems: 'center', gap: '5px', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#F8FAFC', fontSize: '0.78rem', color: '#64748B', fontWeight: 500 }}>
+              <div style={{ height: '32px', padding: '0 12px', display: 'inline-flex', alignItems: 'center', gap: '4px', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#F8FAFC', fontSize: '0.78rem', color: '#64748B', fontWeight: 500 }}>
                 Tổng cộng: <strong style={{ color: '#0F172A', fontVariantNumeric: 'tabular-nums' }}>{totalLogCount}</strong> sự kiện
               </div>
             </div>
@@ -1579,7 +1575,7 @@ export default function CapiPage() {
                   return (
                     <tr
                       key={log.id}
-                      style={{ borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s ease' }}
+                      style={{ borderBottom: '1px solid #F1F5F9', transition: 'background-color 0.15s ease' }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = '#fff9fa'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                     >
@@ -1587,7 +1583,7 @@ export default function CapiPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <Avatar name={log.contact_name || 'Khách hàng'} size={34} style={{ flexShrink: 0 }} />
                           <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '0.84rem', lineHeight: 1.3 }}>
+                            <div style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.84rem', lineHeight: 1.3 }}>
                               {log.contact_name || 'N/A'}
                             </div>
                             <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '2px' }}>
@@ -1597,31 +1593,32 @@ export default function CapiPage() {
                         </div>
                       </td>
                       <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
-                        <div style={{ fontWeight: 800, color: log.event_name === 'Purchase' ? '#BD1D2D' : '#0F172A' }}>
+                        <div style={{ fontWeight: 700, color: log.event_name === 'Purchase' ? '#BD1D2D' : '#0F172A' }}>
                           {log.event_name}
                         </div>
                         {log.event_value && Number(log.event_value) > 0 ? (
-                          <div style={{ fontSize: '0.74rem', color: '#10b981', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                          <div style={{ fontSize: '0.74rem', color: '#10b981', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                             {formatVnd(Number(log.event_value))}
                           </div>
                         ) : null}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: '0.74rem', color: '#334155', whiteSpace: 'nowrap' }}>
-                        <div style={{ fontFamily: 'monospace', fontWeight: 700 }}>{log.pixel_id || pixelId}</div>
+                        <div style={{ fontFamily: 'monospace', fontWeight: 600 }}>{log.pixel_id || pixelId}</div>
                         <div style={{ color: '#64748B' }}>{log.action_source || 'system_generated'}</div>
                       </td>
                       <td style={{ padding: '12px 16px', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-                        <span style={{ fontWeight: 700, color: '#0F172A' }}>{log.emq_signals || 0}</span>{' '}
+                        <span style={{ fontWeight: 600, color: '#0F172A' }}>{log.emq_signals || 0}</span>{' '}
                         <span style={{ fontSize: '0.73rem', color: '#64748B' }}>tín hiệu</span>
                       </td>
                       <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                         <span
                           style={{
                             display: 'inline-block',
-                            padding: '4px 9px',
+                            padding: '4px 8px',
                             borderRadius: '999px',
                             fontSize: '0.72rem',
-                            fontWeight: 700,
+                            fontWeight: 600,
+                            fontVariantNumeric: 'tabular-nums',
                             background: ok ? 'rgba(16, 185, 129, 0.12)' : 'rgba(189, 29, 45, 0.1)',
                             color: ok ? '#047857' : '#BD1D2D',
                           }}
@@ -1639,14 +1636,14 @@ export default function CapiPage() {
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '5px',
-                            padding: '5px 10px',
-                            borderRadius: '7px',
+                            gap: '4px',
+                            padding: '4px 10px',
+                            borderRadius: '8px',
                             border: '1px solid #E2E8F0',
                             background: '#FFFFFF',
                             color: '#334155',
                             fontSize: '0.74rem',
-                            fontWeight: 700,
+                            fontWeight: 600,
                             cursor: 'pointer',
                             marginRight: !ok ? '6px' : 0,
                           }}
@@ -1660,13 +1657,13 @@ export default function CapiPage() {
                             disabled={Boolean(retryingIds[log.id])}
                             onClick={() => handleRetryLog(log.id)}
                             style={{
-                              padding: '5px 10px',
-                              borderRadius: '7px',
+                              padding: '4px 10px',
+                              borderRadius: '8px',
                               border: 'none',
                               background: '#BD1D2D',
                               color: '#FFFFFF',
                               fontSize: '0.74rem',
-                              fontWeight: 700,
+                              fontWeight: 600,
                               cursor: 'pointer',
                             }}
                           >
@@ -1792,7 +1789,7 @@ export default function CapiPage() {
       <CustomModal
         isOpen={showInfoModal}
         onClose={() => setShowInfoModal(false)}
-        title="Kiến trúc Meta CAPI Chất Lượng Cao — Viện IDEAS (MBA 577)"
+        title="Kiến trúc Meta CAPI chất lượng cao — Viện IDEAS (MBA 577)"
         width="720px"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.84rem', color: '#334155', lineHeight: 1.6 }}>

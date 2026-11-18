@@ -594,7 +594,7 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                                     label="Tỷ lệ nhận"
                                     value={selectedCampaign.stats_sent > 0 ? ((selectedCampaign.stats_delivered / selectedCampaign.stats_sent) * 100).toFixed(1) + '%' : '0%'}
                                     subLabel={`${selectedCampaign.stats_delivered}/${selectedCampaign.stats_sent} Thành công`}
-                                    color="indigo"
+                                    color="slate"
                                     icon={CheckCircle}
                                 />
                                 <DetailBox
@@ -615,8 +615,8 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
 
                             {/* MESSAGE PREVIEW */}
                             <div className="space-y-4">
-                                <h4 className="font-black text-slate-800 uppercase tracking-widest text-[10px] flex items-center gap-2">
-                                    <MessageSquare className="w-4 h-4 text-indigo-500" /> Xem lại nội dung đã gửi
+                                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] flex items-center gap-2">
+                                    <MessageSquare className="w-4 h-4 text-[#BD1D2D]" /> Xem lại nội dung đã gửi
                                 </h4>
                                 <div className="bg-slate-50 p-1.5 rounded-[18px] border border-slate-100 shadow-inner max-w-[340px] mx-auto">
                                     <div className="bg-white rounded-[14px] shadow-sm overflow-hidden border border-slate-100">
@@ -719,7 +719,7 @@ const ZaloBroadcastTab: React.FC<ZaloBroadcastTabProps> = ({ initialSelectedIds,
                                             ))}
                                             {filteredTracking.length === 0 && (
                                                 <tr>
-                                                    <td colSpan={3} className="p-20 text-center text-[10px] font-black text-slate-300 uppercase tracking-widest italic">Không có dữ liệu</td>
+                                                    <td colSpan={3} className="p-20 text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Không có dữ liệu</td>
                                                 </tr>
                                             )}
                                         </tbody>
@@ -778,10 +778,10 @@ const HeroStatCard = ({ label, value, icon: Icon, color, decor }: any) => {
 const ListStatItem = ({ label, value, icon: Icon }: any) => (
     <div className="flex flex-col items-center">
         <div className="flex items-center gap-1.5 mb-1">
-            <Icon className="w-3 h-3 text-slate-300" />
-            <span className="text-[13px] font-black text-slate-800 tracking-tighter">{value.toLocaleString()}</span>
+            <Icon className="w-3 h-3 text-slate-400" />
+            <span className="text-[13px] font-bold text-slate-800 tabular-nums">{value.toLocaleString()}</span>
         </div>
-        <span className="text-[8px] text-slate-400 uppercase font-black tracking-widest">{label}</span>
+        <span className="text-[9px] text-slate-400 uppercase font-semibold tracking-wider">{label}</span>
     </div>
 );
 
@@ -789,31 +789,38 @@ const DetailBox = ({ label, value, subLabel, color, icon: Icon }: any) => {
     const themes: any = {
         blue: {
             bg: 'bg-white',
-            text: 'text-slate-800',
-            label: 'text-slate-400',
+            text: 'text-slate-900',
+            label: 'text-slate-500',
+            iconColor: 'text-slate-700',
+            iconBg: 'bg-slate-100 border border-slate-200'
+        },
+        slate: {
+            bg: 'bg-white',
+            text: 'text-slate-900',
+            label: 'text-slate-500',
             iconColor: 'text-white',
-            iconBg: 'bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-500/20'
+            iconBg: 'bg-slate-900'
         },
         indigo: {
             bg: 'bg-white',
-            text: 'text-slate-800',
-            label: 'text-slate-400',
+            text: 'text-slate-900',
+            label: 'text-slate-500',
             iconColor: 'text-white',
-            iconBg: 'bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-indigo-500/20'
+            iconBg: 'bg-slate-900'
         },
         green: {
             bg: 'bg-white',
-            text: 'text-slate-800',
-            label: 'text-slate-400',
-            iconColor: 'text-white',
-            iconBg: 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-500/20'
+            text: 'text-slate-900',
+            label: 'text-slate-500',
+            iconColor: 'text-emerald-700',
+            iconBg: 'bg-emerald-50 border border-emerald-200'
         },
         orange: {
             bg: 'bg-white',
-            text: 'text-slate-800',
-            label: 'text-slate-400',
+            text: 'text-slate-900',
+            label: 'text-slate-500',
             iconColor: 'text-white',
-            iconBg: 'bg-[var(--color-primary)] shadow-[var(--color-primary)]/20'
+            iconBg: 'bg-[#BD1D2D]'
         }
     };
 

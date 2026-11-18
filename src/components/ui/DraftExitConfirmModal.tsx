@@ -181,10 +181,9 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
                   type="button"
                   onClick={onDiscard}
                   disabled={isSaving}
-                  className="hover-lift"
                   style={{
-                    padding: '10px 16px',
-                    borderRadius: '9px',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
                     fontSize: '0.85rem',
                     fontWeight: 600,
                     background: 'rgba(239, 68, 68, 0.08)',
@@ -197,6 +196,7 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
                     gap: '6px',
                     whiteSpace: 'nowrap',
                     flexShrink: 0,
+                    transition: 'background-color 0.16s cubic-bezier(0.22, 1, 0.36, 1)',
                     order: isMobile ? 3 : 1
                   }}
                 >
@@ -209,7 +209,7 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
                   style={{
                     display: 'flex',
                     flexDirection: isMobile ? 'column' : 'row',
-                    gap: '10px',
+                    gap: '8px',
                     alignItems: isMobile ? 'stretch' : 'center',
                     justifyContent: 'flex-end',
                     order: isMobile ? 1 : 2
@@ -220,10 +220,9 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
                     type="button"
                     onClick={handleSaveDraftClick}
                     disabled={isSaving}
-                    className="hover-lift"
                     style={{
-                      padding: '10px 16px',
-                      borderRadius: '9px',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
                       fontSize: '0.85rem',
                       fontWeight: 600,
                       background: 'var(--color-bg, #f8fafc)',
@@ -236,7 +235,7 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
                       gap: '6px',
                       whiteSpace: 'nowrap',
                       flexShrink: 0,
-                      boxShadow: 'var(--shadow-sm)',
+                      transition: 'background-color 0.16s cubic-bezier(0.22, 1, 0.36, 1)',
                       order: isMobile ? 2 : 1
                     }}
                   >
@@ -249,10 +248,10 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
                     type="button"
                     onClick={onContinue}
                     disabled={isSaving}
-                    className="hover-lift btn primary"
+                    className="btn primary"
                     style={{
-                      padding: '10px 20px',
-                      borderRadius: '9px',
+                      padding: '8px 20px',
+                      borderRadius: '8px',
                       fontSize: '0.85rem',
                       fontWeight: 700,
                       background: 'var(--color-primary)',

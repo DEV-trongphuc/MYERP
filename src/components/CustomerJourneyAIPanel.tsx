@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 interface Props {
   contactId: number | string;
@@ -262,7 +263,7 @@ export const CustomerJourneyAIPanel: React.FC<Props> = ({
               color: '#BD1D2D'
             }}
           >
-            <Sparkles size={14} className="animate-spin" />
+            <RefreshCw size={14} className="animate-spin" />
             <span style={{ fontWeight: 600 }}>AI đang đọc & tổng hợp toàn bộ lịch sử tương tác, cuộc gọi, ghi chú và bình luận...</span>
           </div>
 
@@ -555,7 +556,7 @@ export const CustomerJourneyAIPanel: React.FC<Props> = ({
               </div>
               {data.key_needs && data.key_needs.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {data.key_needs.map((need, idx) => (
+                  {ensureArray(data?.key_needs).map((need, idx) => (
                     <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '0.82rem', color: '#334155', lineHeight: '1.45' }}>
                       <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#BD1D2D', marginTop: '6px', flexShrink: 0 }} />
                       <span>{need}</span>
@@ -611,7 +612,7 @@ export const CustomerJourneyAIPanel: React.FC<Props> = ({
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {data.next_best_actions.map((action, idx) => (
+                {ensureArray(data?.next_best_actions).map((action, idx) => (
                   <div
                     key={idx}
                     style={{

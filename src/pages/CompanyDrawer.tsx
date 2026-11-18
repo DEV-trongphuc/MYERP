@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Building2, FileText, FileBadge, Tag as TagIcon, Phone, Mail, MapPin, Search, Calendar, Users, Briefcase, Plus, HelpCircle, Globe, Settings, Download, Trash2, Edit, Pencil, Loader2, History, ChevronLeft, ChevronRight, ChevronDown, Camera, Save, TrendingUp, DollarSign, BookOpen, List, GitBranch, CheckCircle2, Clock, RefreshCw, XCircle, Filter, ArrowRight, User, UserPlus, CreditCard } from 'lucide-react';
+import { X, Building2, FileText, FileBadge, Phone, Mail, MapPin, Calendar, Users, Briefcase, Plus, HelpCircle, Globe, Settings, Download, Trash2, Pencil, Loader2, History, ChevronLeft, ChevronRight, ChevronDown, Camera, Save, TrendingUp, DollarSign, BookOpen, List, GitBranch, CheckCircle2, Clock, RefreshCw, XCircle, Filter, User, UserPlus, CreditCard } from 'lucide-react';
 import { CustomerProfileDrawer } from './CustomerProfileDrawer';
 import { Avatar } from '../components/ui/Avatar';
 import { CustomSelect } from '../components/ui/CustomSelect';
@@ -22,6 +22,7 @@ import { CopyButton } from '../components/ui/CopyButton';
 import { canEditPartnerOrSupplier, isSales } from '../utils/roleUtils';
 import { pushOverlay } from '../utils/overlayStack';
 import { LecturerInvitationAnd1on1Modal } from '../components/academic/LecturerInvitationAnd1on1Modal';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 interface CompanyDrawerProps {
   isOpen: boolean;
@@ -154,7 +155,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     setLoadingUsers(true);
     try {
       const res = await api.get('/users');
-      setUsers(res.data.data?.items || res.data.data || []);
+      setUsers(extractArray(res?.data));
     } catch {
       setUsers([]);
     } finally {
@@ -169,7 +170,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     setLoadingAllCompanies(true);
     try {
       const res = await api.get('/companies', { params: { limit: 1000 } });
-      setAllCompanies(res.data.data?.items || res.data.data || []);
+      setAllCompanies(extractArray(res?.data));
     } catch {
       setAllCompanies([]);
     } finally {
@@ -184,7 +185,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     setLoadingCampaigns(true);
     try {
       const res = await api.get('/marketing-campaigns');
-      setCampaigns(res.data.data?.items || res.data.data || []);
+      setCampaigns(extractArray(res?.data));
     } catch {
       setCampaigns([]);
     } finally {
@@ -394,7 +395,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     try {
       const r = await api.get('/activities', { params: { related_type: 'company', related_id: entity.id }, signal: abortController.signal });
       if (abortController.signal.aborted) return;
-      setActivities(r.data.data?.items || r.data.data || []);
+      setActivities(extractArray(r?.data));
     } catch (e: any) {
       if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       setActivities([]);
@@ -417,7 +418,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     try {
       const r = await api.get('/invoices', { params: { company_id: entity.id, limit: 100 }, signal: abortController.signal });
       if (abortController.signal.aborted) return;
-      setInvoices(r.data.data?.items || r.data.data || []);
+      setInvoices(extractArray(r?.data));
     } catch (e: any) {
       if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       setInvoices([]);
@@ -435,7 +436,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     try {
       const r = await api.get('/expenses', { params: { company_id: entity.id, limit: 100 }, signal: abortController.signal });
       if (abortController.signal.aborted) return;
-      setExpenses(r.data.data?.items || r.data.data || []);
+      setExpenses(extractArray(r?.data));
     } catch (e: any) {
       if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       setExpenses([]);
@@ -458,7 +459,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     try {
       const r = await api.get('/sales-orders', { params: { company_id: entity.id, limit: 100 }, signal: abortController.signal });
       if (abortController.signal.aborted) return;
-      setSalesOrders(r.data.data?.orders || r.data.data || []);
+      setSalesOrders(extractArray(r?.data, 'orders'));
     } catch (e: any) {
       if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       setSalesOrders([]);
@@ -476,7 +477,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     try {
       const r = await api.get('/purchase-orders', { params: { supplier_id: entity.id, limit: 100 }, signal: abortController.signal });
       if (abortController.signal.aborted) return;
-      setPurchaseOrders(r.data.data?.orders || r.data.data || []);
+      setPurchaseOrders(extractArray(r?.data, 'orders'));
     } catch (e: any) {
       if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       setPurchaseOrders([]);
@@ -506,7 +507,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
       dealsAbortRef.current = abortController;
       setDealsLoading(true);
       api.get('/deals', { params: { company_id: entity.id }, signal: abortController.signal })
-        .then(r => { if (!abortController.signal.aborted) setDeals(r.data.data?.items || r.data.data || []); })
+        .then(r => { if (!abortController.signal.aborted) setDeals(extractArray(r?.data)); })
         .catch((err: any) => { if (err?.name !== 'AbortError' && err?.name !== 'CanceledError' && err?.code !== 'ERR_CANCELED') setDeals([]); })
         .finally(() => { if (!abortController.signal.aborted) setDealsLoading(false); });
 
@@ -558,7 +559,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     api.get('/contacts', { params: { company_id: entity.id, limit: 500 }, signal: abortController.signal })
       .then(r => {
         if (abortController.signal.aborted) return;
-        setSubContacts((r.data.data?.items || r.data.data || []).map((c: any) => ({
+        setSubContacts(extractArray(r?.data).map((c: any) => ({
           id: c.id,
           name: (c.full_name || '').trim() || 'Chưa có tên',
           role: c.job_title || '',
@@ -612,7 +613,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
       dealsAbortRef.current = dealsAbort;
       setDealsLoading(true);
       api.get('/deals', { params: { company_id: entity.id }, signal: dealsAbort.signal })
-        .then(r => { if (!dealsAbort.signal.aborted) setDeals(r.data.data?.items || r.data.data || []); })
+        .then(r => { if (!dealsAbort.signal.aborted) setDeals(extractArray(r?.data)); })
         .catch((err: any) => { if (err?.name !== 'AbortError' && err?.name !== 'CanceledError' && err?.code !== 'ERR_CANCELED') setDeals([]); })
         .finally(() => { if (!dealsAbort.signal.aborted) setDealsLoading(false); });
 
@@ -748,11 +749,11 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                   <ChevronLeft size={20} />
                 </button>
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', margin: '0 0.5rem', overflow: 'hidden' }}>
-                  <h3 style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--color-text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {activeTab ? (visibleTabs.find(t => t.id === activeTab)?.label || 'Chi tiết') : (formData?.name || 'Tên Giảng viên')}
                   </h3>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                   {isLecturer && formData?.id && (
                     <button
                       type="button"
@@ -768,9 +769,9 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        border: '1px solid #fed7aa',
-                        background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)',
-                        color: '#ea580c',
+                        border: '1px solid #cbd5e1',
+                        background: '#f8fafc',
+                        color: '#334155',
                         cursor: 'pointer'
                       }}
                       title="Xem lịch giảng công khai"
@@ -807,11 +808,11 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                   <div 
                     className={styles.avatarContainer}
                     style={{ 
-                      background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', 
+                      background: '#0f172a', 
                       fontSize: '1.25rem', 
                       width: 56, 
                       height: 56, 
-                      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+                      border: '1px solid var(--color-border)',
                       cursor: disableEdit ? 'default' : 'pointer',
                       color: 'white',
                       fontWeight: 700
@@ -890,7 +891,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                     <>
                       <button
                         type="button"
-                        className="btn outline hover-lift"
+                        className="btn outline"
                         style={{
                           borderColor: '#BD1D2D',
                           color: '#BD1D2D',
@@ -898,13 +899,12 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                           border: '1px solid #fecaca',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '6px',
-                          padding: '8px 14px',
+                          gap: '8px',
+                          padding: '8px 16px',
                           fontSize: '0.82rem',
-                          fontWeight: 750,
+                          fontWeight: 600,
                           height: '38px',
                           borderRadius: '10px',
-                          boxShadow: 'var(--shadow-sm)',
                           cursor: 'pointer'
                         }}
                         onClick={() => setLecturerModalState({ isOpen: true, tab: 'invitation' })}
@@ -914,7 +914,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                       </button>
                       <button
                         type="button"
-                        className="btn outline hover-lift"
+                        className="btn outline"
                         style={{
                           borderColor: '#0f172a',
                           color: '#0f172a',
@@ -922,13 +922,12 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                           border: '1px solid #cbd5e1',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '6px',
-                          padding: '8px 14px',
+                          gap: '8px',
+                          padding: '8px 16px',
                           fontSize: '0.82rem',
-                          fontWeight: 750,
+                          fontWeight: 600,
                           height: '38px',
                           borderRadius: '10px',
-                          boxShadow: 'var(--shadow-sm)',
                           cursor: 'pointer'
                         }}
                         onClick={() => setLecturerModalState({ isOpen: true, tab: '1on1' })}
@@ -938,21 +937,20 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                       </button>
                       <button
                         type="button"
-                        className="btn outline hover-lift"
+                        className="btn outline"
                         style={{
-                          borderColor: '#ea580c',
-                          color: '#ea580c',
-                          background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)',
-                          border: '1px solid #fed7aa',
+                          borderColor: '#cbd5e1',
+                          color: '#334155',
+                          background: 'var(--color-surface)',
+                          border: '1px solid #cbd5e1',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '6px',
-                          padding: '8px 14px',
+                          gap: '8px',
+                          padding: '8px 16px',
                           fontSize: '0.82rem',
-                          fontWeight: 750,
+                          fontWeight: 600,
                           height: '38px',
                           borderRadius: '10px',
-                          boxShadow: 'var(--shadow-sm)',
                           cursor: 'pointer'
                         }}
                         onClick={() => {
@@ -1052,13 +1050,13 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                   <div 
                     className={styles.avatarContainer}
                     style={{ 
-                      background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', 
+                      background: '#0f172a', 
                       fontSize: '1.25rem', 
                       width: 60, 
                       height: 60, 
                       borderRadius: '50%',
                       position: 'relative',
-                      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)',
+                      border: '1px solid var(--color-border)',
                       cursor: disableEdit ? 'default' : 'pointer',
                       color: 'white',
                       fontWeight: 700,
@@ -1092,10 +1090,10 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                   
                   {/* Right: Basic Info */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
-                    <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)', margin: '0 0 2px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)', margin: '0 0 2px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {formData?.name || 'Tên Giảng viên'}
                     </h2>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '6px', fontVariantNumeric: 'tabular-nums' }}>
                       <Phone size={12} style={{ color: 'var(--color-primary)', flexShrink: 0 }} /> {formData?.phone || 'Chưa có SĐT'}
                     </span>
                     <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
@@ -1299,53 +1297,38 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                           padding: '1.35rem',
                           display: 'flex',
                           flexDirection: 'column',
-                          minHeight: '130px',
+                          minHeight: '128px',
                           position: 'relative',
                           overflow: 'hidden',
-                          borderRadius: '18px',
-                          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(240, 246, 255, 0.8) 100%)',
-                          border: '1px solid rgba(59, 130, 246, 0.22)',
-                          boxShadow: '0 10px 25px -5px rgba(59, 130, 246, 0.09), 0 4px 10px -2px rgba(0, 0, 0, 0.02)',
-                          backdropFilter: 'blur(10px)',
-                          WebkitBackdropFilter: 'blur(10px)',
-                          transition: 'all 0.25s ease'
+                          borderRadius: '16px',
+                          background: 'var(--color-surface)',
+                          border: '1px solid var(--color-border)',
+                          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
                         }}>
-                          {/* Decorative Background SVG */}
-                          <div style={{ color: '#3b82f6', opacity: 0.06, position: 'absolute', right: '-12px', bottom: '-12px', width: '95px', height: '95px', pointerEvents: 'none', zIndex: 1 }}>
-                            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                              <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
-                              <circle cx="35" cy="45" r="15" fill="currentColor" fillOpacity="0.25" />
-                              <circle cx="65" cy="45" r="15" fill="currentColor" fillOpacity="0.45" />
-                              <circle cx="50" cy="70" r="18" fill="currentColor" fillOpacity="0.65" />
-                            </svg>
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', position: 'relative', zIndex: 2 }}>
-                            <span style={{ textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 800, fontSize: '0.7rem', color: '#1e40af' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                            <span style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.73rem', color: 'var(--color-text-muted)' }}>
                               Khách hàng giới thiệu
                             </span>
                             <div style={{
-                              color: '#2563eb',
-                              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.18) 0%, rgba(37, 99, 235, 0.08) 100%)',
-                              border: '1px solid rgba(59, 130, 246, 0.25)',
-                              width: '38px',
-                              height: '38px',
-                              borderRadius: '12px',
+                              color: '#BD1D2D',
+                              background: 'rgba(189, 29, 45, 0.08)',
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              flexShrink: 0,
-                              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.15)'
+                              flexShrink: 0
                             }}>
-                              <Users size={19} />
+                              <Users size={16} strokeWidth={1.75} />
                             </div>
                           </div>
-                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', position: 'relative', zIndex: 2 }}>
-                            <div style={{ fontWeight: 850, color: '#0f172a', fontSize: '1.9rem', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                            <div style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '1.85rem', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
                               {pipelineStats?.summary?.total ?? subContacts.length}
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '6px', fontWeight: 650, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#2563eb', display: 'inline-block', boxShadow: '0 0 6px #2563eb' }} />
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '8px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#64748b', display: 'inline-block' }} />
                               <span>{isPartner ? 'Hồ sơ giới thiệu' : 'Liên hệ phụ thuộc'}</span>
                             </div>
                           </div>
@@ -1353,61 +1336,45 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
 
                         {/* Card 2: Doanh thu mang lại */}
                         <div style={{
-                          padding: '1.35rem',
+                          padding: '20px',
                           display: 'flex',
                           flexDirection: 'column',
-                          minHeight: '130px',
+                          minHeight: '128px',
                           position: 'relative',
                           overflow: 'hidden',
-                          borderRadius: '18px',
-                          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(236, 253, 245, 0.8) 100%)',
-                          border: '1px solid rgba(16, 185, 129, 0.22)',
-                          boxShadow: '0 10px 25px -5px rgba(16, 185, 129, 0.09), 0 4px 10px -2px rgba(0, 0, 0, 0.02)',
-                          backdropFilter: 'blur(10px)',
-                          WebkitBackdropFilter: 'blur(10px)',
-                          transition: 'all 0.25s ease'
+                          borderRadius: '16px',
+                          background: 'var(--color-surface)',
+                          border: '1px solid var(--color-border)',
+                          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
                         }}>
-                          {/* Decorative Background SVG */}
-                          <div style={{ color: '#10b981', opacity: 0.06, position: 'absolute', right: '-12px', bottom: '-12px', width: '95px', height: '95px', pointerEvents: 'none', zIndex: 1 }}>
-                            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                              <path d="M10 50 Q 50 10 90 50 T 90 90" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
-                              <circle cx="10" cy="50" r="6" fill="currentColor" />
-                              <circle cx="50" cy="10" r="6" fill="currentColor" />
-                              <circle cx="90" cy="50" r="6" fill="currentColor" />
-                              <path d="M50 10 L 90 50" stroke="currentColor" strokeWidth="1.5" />
-                            </svg>
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', position: 'relative', zIndex: 2 }}>
-                            <span style={{ textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 800, fontSize: '0.7rem', color: '#065f46' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                            <span style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.73rem', color: 'var(--color-text-muted)' }}>
                               Doanh thu mang lại
                             </span>
                             <div style={{
-                              color: '#059669',
-                              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(5, 150, 105, 0.08) 100%)',
-                              border: '1px solid rgba(16, 185, 129, 0.25)',
-                              width: '38px',
-                              height: '38px',
-                              borderRadius: '12px',
+                              color: '#BD1D2D',
+                              background: 'rgba(189, 29, 45, 0.08)',
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              flexShrink: 0,
-                              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)'
+                              flexShrink: 0
                             }}>
-                              <TrendingUp size={19} />
+                              <TrendingUp size={16} strokeWidth={1.75} />
                             </div>
                           </div>
-                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', position: 'relative', zIndex: 2 }}>
-                            <div style={{ fontWeight: 850, color: '#065f46', fontSize: '1.75rem', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                            <div style={{ fontWeight: 700, color: '#BD1D2D', fontSize: '1.75rem', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
                               {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(
                                 salesOrders.length > 0 
                                   ? salesOrders.reduce((acc: number, curr: any) => acc + (Number(curr.total) || 0), 0) 
                                   : invoices.reduce((acc: number, curr: any) => acc + (Number(curr.total) || 0), 0)
                               )}
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '6px', fontWeight: 650, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 6px #10b981' }} />
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '8px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#BD1D2D', display: 'inline-block' }} />
                               <span>{salesOrders.length > 0 ? 'Tổng đơn hàng SO' : 'Hóa đơn ghi nhận'}</span>
                             </div>
                           </div>
@@ -1415,58 +1382,45 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
 
                         {/* Card 3: Hoa hồng phát sinh */}
                         <div style={{
-                          padding: '1.35rem',
+                          padding: '20px',
                           display: 'flex',
                           flexDirection: 'column',
-                          minHeight: '130px',
+                          minHeight: '128px',
                           position: 'relative',
                           overflow: 'hidden',
-                          borderRadius: '18px',
-                          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(254, 242, 242, 0.8) 100%)',
-                          border: '1px solid rgba(239, 68, 68, 0.22)',
-                          boxShadow: '0 10px 25px -5px rgba(239, 68, 68, 0.09), 0 4px 10px -2px rgba(0, 0, 0, 0.02)',
-                          backdropFilter: 'blur(10px)',
-                          WebkitBackdropFilter: 'blur(10px)',
-                          transition: 'all 0.25s ease'
+                          borderRadius: '16px',
+                          background: 'var(--color-surface)',
+                          border: '1px solid var(--color-border)',
+                          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
                         }}>
-                          {/* Decorative Background SVG */}
-                          <div style={{ color: '#ef4444', opacity: 0.06, position: 'absolute', right: '-12px', bottom: '-12px', width: '95px', height: '95px', pointerEvents: 'none', zIndex: 1 }}>
-                            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                              <circle cx="50" cy="50" r="30" stroke="currentColor" strokeWidth="2" />
-                              <path d="M50 35 V 65 M35 50 H 65" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                            </svg>
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', position: 'relative', zIndex: 2 }}>
-                            <span style={{ textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 800, fontSize: '0.7rem', color: '#991b1b' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                            <span style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, fontSize: '0.73rem', color: 'var(--color-text-muted)' }}>
                               Hoa hồng phát sinh
                             </span>
                             <div style={{
-                              color: '#dc2626',
-                              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.18) 0%, rgba(220, 38, 38, 0.08) 100%)',
-                              border: '1px solid rgba(239, 68, 68, 0.25)',
-                              width: '38px',
-                              height: '38px',
-                              borderRadius: '12px',
+                              color: '#334155',
+                              background: 'rgba(15, 23, 42, 0.06)',
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              flexShrink: 0,
-                              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.15)'
+                              flexShrink: 0
                             }}>
-                              <DollarSign size={19} />
+                              <DollarSign size={16} strokeWidth={1.75} />
                             </div>
                           </div>
-                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', position: 'relative', zIndex: 2 }}>
-                            <div style={{ fontWeight: 850, color: '#991b1b', fontSize: '1.75rem', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                            <div style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '1.75rem', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
                               {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(
                                 purchaseOrders.length > 0 
                                   ? purchaseOrders.reduce((acc: number, curr: any) => acc + (Number(curr.total) || 0), 0) 
                                   : expenses.reduce((acc: number, curr: any) => acc + (Number(curr.amount) || 0), 0)
                               )}
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '6px', fontWeight: 650, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#ef4444', display: 'inline-block', boxShadow: '0 0 6px #ef4444' }} />
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '8px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#64748b', display: 'inline-block' }} />
                               <span>{purchaseOrders.length > 0 ? 'Tổng đơn mua PO' : 'Lịch sử chi trả'}</span>
                             </div>
                           </div>
@@ -1478,34 +1432,32 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                     {isPartner && (
                       <div style={{
                         background: 'var(--color-surface)',
-                        border: '1px solid var(--color-border-light)',
-                        borderRadius: '20px',
-                        padding: isMobileOrTablet ? '1.15rem' : '1.5rem',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: '16px',
+                        padding: isMobileOrTablet ? '16px' : '24px',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '1.35rem',
-                        boxShadow: '0 10px 30px rgba(0,0,0,0.03)'
+                        gap: '20px',
+                        boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
                       }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <div style={{
-                              width: '40px',
-                              height: '40px',
-                              borderRadius: '12px',
-                              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.06) 100%)',
-                              border: '1px solid rgba(59, 130, 246, 0.25)',
-                              color: '#2563eb',
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '8px',
+                              background: 'rgba(15, 23, 42, 0.06)',
+                              color: '#334155',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              flexShrink: 0,
-                              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.12)'
+                              flexShrink: 0
                             }}>
-                              <GitBranch size={22} strokeWidth={2.2} />
+                              <GitBranch size={18} strokeWidth={1.75} />
                             </div>
                             <div>
-                              <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text)', letterSpacing: '0.01em' }}>
-                                Thống kê Data theo Trạng thái Pipeline
+                              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                Thống kê Data theo trạng thái Pipeline
                               </h4>
                               <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
                                 Tiến trình chuyển đổi & trạng thái các data do đối tác này giới thiệu
@@ -1514,12 +1466,12 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                           </div>
                           <button 
                             type="button"
-                            className="btn secondary sm hover-lift"
+                            className="btn secondary sm"
                             onClick={() => {
                               setSelectedStageFilter('all');
                               setActiveTab('contacts');
                             }}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', padding: '7px 14px', borderRadius: '10px' }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', padding: '8px 12px', borderRadius: '8px', fontVariantNumeric: 'tabular-nums' }}
                           >
                             <Users size={14} />
                             <span>Xem danh sách ({pipelineStats?.summary?.total ?? subContacts.length})</span>
@@ -1527,7 +1479,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                           </button>
                         </div>
 
-                        {/* Mini KPI Chips Row - iOS Rounded Card Style */}
+                        {/* Mini KPI Chips Row */}
                         <div style={{
                           display: 'grid',
                           gridTemplateColumns: isMobileOrTablet ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)',
@@ -1535,129 +1487,117 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                         }}>
                           {/* 1. Tổng nhận */}
                           <div style={{
-                            padding: '14px 16px',
-                            borderRadius: '14px',
-                            background: 'linear-gradient(145deg, rgba(59, 130, 246, 0.08) 0%, rgba(37, 99, 235, 0.03) 100%)',
-                            border: '1px solid rgba(59, 130, 246, 0.25)',
-                            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.04)',
+                            padding: '12px 16px',
+                            borderRadius: '12px',
+                            background: 'var(--color-surface)',
+                            border: '1px solid var(--color-border)',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '6px',
-                            transition: 'all 0.2s ease'
+                            gap: '4px'
                           }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#1d4ed8', fontWeight: 700 }}>
-                              <Users size={15} color="#2563eb" /> Tổng nhận
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                              <Users size={14} color="#475569" /> Tổng nhận
                             </div>
-                            <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#1d4ed8', letterSpacing: '-0.02em' }}>
+                            <span style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                               {pipelineStats?.summary?.total ?? subContacts.length}
                             </span>
                           </div>
 
                           {/* 2. Đang tư vấn */}
                           <div style={{
-                            padding: '14px 16px',
-                            borderRadius: '14px',
-                            background: 'linear-gradient(145deg, rgba(14, 165, 233, 0.08) 0%, rgba(2, 132, 199, 0.03) 100%)',
-                            border: '1px solid rgba(14, 165, 233, 0.25)',
-                            boxShadow: '0 4px 12px rgba(14, 165, 233, 0.04)',
+                            padding: '12px 16px',
+                            borderRadius: '12px',
+                            background: 'var(--color-surface)',
+                            border: '1px solid var(--color-border)',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '6px',
-                            transition: 'all 0.2s ease'
+                            gap: '4px'
                           }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#0284c7', fontWeight: 700 }}>
-                              <Clock size={15} color="#0ea5e9" /> Đang tư vấn
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                              <Clock size={14} color="#475569" /> Đang tư vấn
                             </div>
-                            <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#0284c7', letterSpacing: '-0.02em' }}>
+                            <span style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                               {pipelineStats?.summary?.active ?? 0}
                             </span>
                           </div>
 
                           {/* 3. Nhập học / Đậu */}
                           <div style={{
-                            padding: '14px 16px',
-                            borderRadius: '14px',
-                            background: 'linear-gradient(145deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.04) 100%)',
-                            border: '1px solid rgba(16, 185, 129, 0.3)',
-                            boxShadow: '0 4px 14px rgba(16, 185, 129, 0.08)',
+                            padding: '12px 16px',
+                            borderRadius: '12px',
+                            background: 'var(--color-surface)',
+                            border: '1px solid var(--color-border)',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '6px',
-                            transition: 'all 0.2s ease'
+                            gap: '4px'
                           }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#059669', fontWeight: 800 }}>
-                              <CheckCircle2 size={15} color="#10b981" /> Nhập học / Đậu
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#059669', fontWeight: 600 }}>
+                              <CheckCircle2 size={14} color="#10b981" /> Nhập học / Đậu
                             </div>
-                            <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#059669', letterSpacing: '-0.02em' }}>
+                            <span style={{ fontSize: '1.4rem', fontWeight: 700, color: '#059669', fontVariantNumeric: 'tabular-nums' }}>
                               {pipelineStats?.summary?.won ?? 0}
                             </span>
                           </div>
 
                           {/* 4. Tỷ lệ chốt */}
                           <div style={{
-                            padding: '14px 16px',
-                            borderRadius: '14px',
-                            background: 'linear-gradient(145deg, rgba(139, 92, 246, 0.1) 0%, rgba(109, 40, 217, 0.04) 100%)',
-                            border: '1px solid rgba(139, 92, 246, 0.3)',
-                            boxShadow: '0 4px 14px rgba(139, 92, 246, 0.08)',
+                            padding: '12px 16px',
+                            borderRadius: '12px',
+                            background: 'var(--color-surface)',
+                            border: '1px solid var(--color-border)',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '6px',
-                            transition: 'all 0.2s ease'
+                            gap: '4px'
                           }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#7c3aed', fontWeight: 800 }}>
-                              <TrendingUp size={15} color="#8b5cf6" /> Tỷ lệ chốt
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#BD1D2D', fontWeight: 600 }}>
+                              <TrendingUp size={14} color="#BD1D2D" /> Tỷ lệ chốt
                             </div>
-                            <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#7c3aed', letterSpacing: '-0.02em' }}>
+                            <span style={{ fontSize: '1.4rem', fontWeight: 700, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums' }}>
                               {pipelineStats?.summary?.conversion_rate ?? 0}%
                             </span>
                           </div>
 
                           {/* 5. Nuôi dưỡng */}
                           <div style={{
-                            padding: '14px 16px',
-                            borderRadius: '14px',
-                            background: 'linear-gradient(145deg, rgba(245, 158, 11, 0.08) 0%, rgba(217, 119, 6, 0.03) 100%)',
-                            border: '1px solid rgba(245, 158, 11, 0.25)',
-                            boxShadow: '0 4px 12px rgba(245, 158, 11, 0.04)',
+                            padding: '12px 16px',
+                            borderRadius: '12px',
+                            background: 'var(--color-surface)',
+                            border: '1px solid var(--color-border)',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '6px',
-                            transition: 'all 0.2s ease'
+                            gap: '4px'
                           }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#b45309', fontWeight: 700 }}>
-                              <RefreshCw size={15} color="#f59e0b" /> Nuôi dưỡng
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#b45309', fontWeight: 600 }}>
+                              <RefreshCw size={14} color="#d97706" /> Nuôi dưỡng
                             </div>
-                            <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#b45309', letterSpacing: '-0.02em' }}>
+                            <span style={{ fontSize: '1.4rem', fontWeight: 700, color: '#b45309', fontVariantNumeric: 'tabular-nums' }}>
                               {pipelineStats?.summary?.nurture ?? 0}
                             </span>
                           </div>
 
                           {/* 6. Thất bại / Hủy */}
                           <div style={{
-                            padding: '14px 16px',
-                            borderRadius: '14px',
-                            background: 'linear-gradient(145deg, rgba(239, 68, 68, 0.08) 0%, rgba(225, 29, 72, 0.03) 100%)',
-                            border: '1px solid rgba(239, 68, 68, 0.25)',
-                            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.04)',
+                            padding: '12px 16px',
+                            borderRadius: '12px',
+                            background: 'var(--color-surface)',
+                            border: '1px solid var(--color-border)',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '6px',
-                            transition: 'all 0.2s ease'
+                            gap: '4px'
                           }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#e11d48', fontWeight: 700 }}>
-                              <XCircle size={15} color="#ef4444" /> Thất bại / Hủy
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                              <XCircle size={14} color="#64748b" /> Thất bại / Hủy
                             </div>
-                            <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#e11d48', letterSpacing: '-0.02em' }}>
+                            <span style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
                               {pipelineStats?.summary?.lost ?? 0}
                             </span>
                           </div>
                         </div>
 
                         {/* Stage Breakdown Funnel Bars */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '6px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                            <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                               Phân bổ theo giai đoạn Pipeline:
                             </span>
                             <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
@@ -1768,51 +1708,44 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                           setActiveTab('contacts');
                                         }}
                                         style={{
-                                          padding: '14px 16px',
-                                          borderRadius: '14px',
+                                          padding: '12px 16px',
+                                          borderRadius: '12px',
                                           background: 'var(--color-surface)',
-                                          border: `1.5px solid ${st.color ? st.color + '40' : 'var(--color-border)'}`,
-                                          boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                                          border: `1px solid ${st.color ? st.color + '40' : 'var(--color-border)'}`,
+                                          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                                           cursor: 'pointer',
-                                          transition: 'all 0.2s ease',
+                                          transition: 'border-color 0.15s ease, background-color 0.15s ease',
                                           display: 'flex',
                                           flexDirection: 'column',
-                                          gap: '10px'
-                                        }}
-                                        onMouseEnter={e => {
-                                          e.currentTarget.style.transform = 'translateY(-2px)';
-                                          e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.06)';
-                                        }}
-                                        onMouseLeave={e => {
-                                          e.currentTarget.style.transform = 'translateY(0)';
-                                          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)';
+                                          gap: '8px'
                                         }}
                                         title={`Bấm xem ${st.count} data ở giai đoạn ${st.name}`}
                                       >
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                                            <span style={{ width: 10, height: 10, borderRadius: '50%', background: st.color || '#3b82f6', flexShrink: 0, boxShadow: `0 0 6px ${st.color || '#3b82f6'}` }} />
-                                            <span style={{ fontSize: '0.875rem', fontWeight: 750, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: st.color || '#334155', flexShrink: 0 }} />
+                                            <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                               {st.name}
                                             </span>
                                             {st.is_won && (
-                                              <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 800 }}>
+                                              <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 700 }}>
                                                 WON
                                               </span>
                                             )}
                                           </div>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                                             <span style={{
-                                              fontSize: '0.85rem',
-                                              fontWeight: 900,
+                                              fontSize: '0.8rem',
+                                              fontWeight: 700,
+                                              fontVariantNumeric: 'tabular-nums',
                                               color: st.color || 'var(--color-primary)',
-                                              background: st.color ? st.color + '15' : 'rgba(59,130,246,0.1)',
-                                              padding: '3px 10px',
-                                              borderRadius: '12px'
+                                              background: st.color ? st.color + '15' : 'rgba(15, 23, 42, 0.06)',
+                                              padding: '2px 8px',
+                                              borderRadius: '8px'
                                             }}>
                                               {st.count} data
                                             </span>
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 700 }}>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                                               {st.percentage}%
                                             </span>
                                           </div>
@@ -1822,7 +1755,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                           <div style={{
                                             height: '100%',
                                             width: `${Math.max(2, st.percentage)}%`,
-                                            background: st.color || '#3b82f6',
+                                            background: st.color || '#334155',
                                             borderRadius: '3px',
                                             transition: 'width 0.4s ease'
                                           }} />
@@ -1844,13 +1777,13 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                         borderRadius: '8px',
                                         padding: '8px 12px',
                                         fontSize: '0.75rem',
-                                        fontWeight: 650,
+                                        fontWeight: 600,
                                         color: 'var(--color-text-muted)',
                                         cursor: 'pointer',
                                         display: 'inline-flex',
                                         alignItems: 'center',
                                         gap: '6px',
-                                        transition: 'all 0.15s'
+                                        transition: 'border-color 0.15s ease, color 0.15s ease'
                                       }}
                                     >
                                       <ChevronDown size={14} style={{ transform: showZeroStages ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
@@ -2197,9 +2130,9 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                     {/* Quick Academic Coordination Bar for Lecturer */}
                     <div style={{
                       padding: '14px 18px',
-                      borderRadius: '14px',
-                      background: '#ffffff',
-                      border: '1px solid #e2e8f0',
+                      borderRadius: '16px',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
                       boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
                       display: 'flex',
                       flexWrap: 'wrap',
@@ -2208,8 +2141,8 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                       gap: '12px'
                     }}>
                       <div>
-                        <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
-                          Điều phối Hợp đồng Giảng dạy & Lịch Hướng dẫn 1:1
+                        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                          Điều phối hợp đồng giảng dạy & lịch hướng dẫn 1:1
                         </div>
                         <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
                           Gửi Email Hợp đồng mời giảng kèm lịch dạy hoặc tạo Form đăng ký Hướng dẫn 1:1 (Khung 30 phút tự động đồng bộ Calendar).
@@ -2404,30 +2337,30 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                       return (
                         <>
                           {/* Grid Thống kê nhanh */}
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-                            <div style={{ padding: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', boxShadow: 'var(--shadow-sm)', textAlign: 'center' }}>
-                              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Khóa học giảng dạy</div>
-                              <div style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--color-primary)' }}>{totalCourses}</div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+                            <div style={{ padding: '20px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '16px', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)', textAlign: 'center' }}>
+                              <div style={{ fontSize: '0.73rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>Khóa học giảng dạy</div>
+                              <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums' }}>{totalCourses}</div>
                             </div>
-                            <div style={{ padding: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', boxShadow: 'var(--shadow-sm)', textAlign: 'center' }}>
-                              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Số môn phụ trách</div>
-                              <div style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--color-success)' }}>{totalSubjects}</div>
+                            <div style={{ padding: '20px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '16px', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)', textAlign: 'center' }}>
+                              <div style={{ fontSize: '0.73rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>Số môn phụ trách</div>
+                              <div style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>{totalSubjects}</div>
                             </div>
-                            <div style={{ padding: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', boxShadow: 'var(--shadow-sm)', textAlign: 'center' }}>
-                              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Tổng số buổi dạy</div>
-                              <div style={{ fontSize: '1.75rem', fontWeight: 900, color: '#8b5cf6' }}>{totalSessions}</div>
+                            <div style={{ padding: '20px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '16px', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)', textAlign: 'center' }}>
+                              <div style={{ fontSize: '0.73rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>Tổng số buổi dạy</div>
+                              <div style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>{totalSessions}</div>
                             </div>
                           </div>
 
                           {/* Bảng Danh sách Khóa học & Môn học */}
-                          <div className="card-panel" style={{ padding: '1.5rem', borderRadius: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', boxShadow: 'var(--shadow-sm)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
+                          <div className="card-panel" style={{ padding: '24px', borderRadius: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '12px', marginBottom: '16px' }}>
                               <List size={18} style={{ color: 'var(--color-primary)' }} />
-                              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Danh sách Lớp học đang giảng dạy</h4>
+                              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)' }}>Danh sách lớp học đang giảng dạy</h4>
                             </div>
 
                             {courseStatsList.length === 0 ? (
-                              <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>Chưa có thông tin giảng dạy cho giảng viên này.</div>
+                              <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Chưa có thông tin giảng dạy cho giảng viên này.</div>
                             ) : (
                               <div className="table-responsive" style={{ overflowX: 'auto' }}>
                                 <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -2442,10 +2375,10 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                   <tbody>
                                     {courseStatsList.map((stat, idx) => (
                                       <tr key={stat.campaignId || idx} style={{ borderBottom: '1px solid var(--color-border-light)' }}>
-                                        <td style={{ padding: '12px 8px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>{stat.campaignName}</td>
+                                        <td style={{ padding: '12px 8px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text)' }}>{stat.campaignName}</td>
                                         <td style={{ padding: '12px 8px', fontSize: '0.8rem', color: 'var(--color-text)' }}>{stat.subjectListStr}</td>
-                                        <td style={{ padding: '12px 8px', fontSize: '0.85rem', fontWeight: 700, textAlign: 'center', color: 'var(--color-success)' }}>{stat.subjects.size}</td>
-                                        <td style={{ padding: '12px 8px', fontSize: '0.85rem', fontWeight: 700, textAlign: 'center', color: '#8b5cf6' }}>{stat.sessionCount}</td>
+                                        <td style={{ padding: '12px 8px', fontSize: '0.85rem', fontWeight: 700, textAlign: 'center', color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>{stat.subjects.size}</td>
+                                        <td style={{ padding: '12px 8px', fontSize: '0.85rem', fontWeight: 700, textAlign: 'center', color: '#BD1D2D', fontVariantNumeric: 'tabular-nums' }}>{stat.sessionCount}</td>
                                       </tr>
                                     ))}
                                   </tbody>
@@ -2455,14 +2388,14 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                           </div>
 
                           {/* Lịch dạy sắp tới */}
-                          <div className="card-panel" style={{ padding: '1.5rem', borderRadius: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', boxShadow: 'var(--shadow-sm)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
+                          <div className="card-panel" style={{ padding: '24px', borderRadius: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '12px', marginBottom: '16px' }}>
                               <Calendar size={18} style={{ color: 'var(--color-primary)' }} />
-                              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lịch dạy sắp tới ({upcoming.length})</h4>
+                              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>Lịch dạy sắp tới ({upcoming.length})</h4>
                             </div>
 
                             {upcoming.length === 0 ? (
-                              <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>Chưa có lịch dạy sắp tới.</div>
+                              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Chưa có lịch dạy sắp tới.</div>
                             ) : (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                 {upcoming.map((sch, idx) => (
@@ -2596,10 +2529,11 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                             <span>Tất cả</span>
                             <span style={{
                               background: selectedStageFilter === 'all' ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)',
-                              borderRadius: '10px',
+                              borderRadius: '8px',
                               padding: '1px 6px',
                               fontSize: '0.68rem',
-                              fontWeight: 800
+                              fontWeight: 700,
+                              fontVariantNumeric: 'tabular-nums'
                             }}>
                               {pipelineStats?.summary?.total ?? subContacts.length}
                             </span>
@@ -2613,29 +2547,30 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                 key={st.id}
                                 onClick={() => setSelectedStageFilter(isSelected ? 'all' : String(st.id))}
                                 style={{
-                                  borderRadius: '20px',
+                                  borderRadius: '8px',
                                   fontSize: '0.75rem',
-                                  padding: '5px 12px',
+                                  padding: '4px 12px',
                                   whiteSpace: 'nowrap',
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: '6px',
-                                  background: isSelected ? (st.color || 'var(--color-primary)') : (st.count > 0 ? `${st.color || '#3b82f6'}12` : 'var(--color-surface)'),
+                                  background: isSelected ? (st.color || 'var(--color-primary)') : (st.count > 0 ? `${st.color || '#334155'}12` : 'var(--color-surface)'),
                                   color: isSelected ? '#ffffff' : (st.count > 0 ? (st.color || 'var(--color-text)') : 'var(--color-text-muted)'),
-                                  border: `1px solid ${isSelected ? (st.color || 'var(--color-primary)') : (st.count > 0 ? `${st.color || '#3b82f6'}40` : 'var(--color-border-light)')}`,
-                                  fontWeight: isSelected || st.count > 0 ? 700 : 500,
+                                  border: `1px solid ${isSelected ? (st.color || 'var(--color-primary)') : (st.count > 0 ? `${st.color || '#334155'}40` : 'var(--color-border-light)')}`,
+                                  fontWeight: isSelected || st.count > 0 ? 600 : 500,
                                   cursor: 'pointer',
-                                  transition: 'all 0.2s ease'
+                                  transition: 'background-color 0.15s ease, border-color 0.15s ease'
                                 }}
                               >
-                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: isSelected ? '#ffffff' : (st.color || '#3b82f6') }} />
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: isSelected ? '#ffffff' : (st.color || '#334155') }} />
                                 <span>{st.name}</span>
                                 <span style={{
-                                  background: isSelected ? 'rgba(255,255,255,0.25)' : (st.count > 0 ? `${st.color || '#3b82f6'}25` : 'rgba(0,0,0,0.05)'),
-                                  borderRadius: '10px',
+                                  background: isSelected ? 'rgba(255,255,255,0.25)' : (st.count > 0 ? `${st.color || '#334155'}25` : 'rgba(0,0,0,0.05)'),
+                                  borderRadius: '6px',
                                   padding: '1px 6px',
                                   fontSize: '0.68rem',
-                                  fontWeight: 800
+                                  fontWeight: 700,
+                                  fontVariantNumeric: 'tabular-nums'
                                 }}>
                                   {st.count}
                                 </span>
@@ -2648,14 +2583,14 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                               type="button"
                               onClick={() => setSelectedStageFilter(selectedStageFilter === 'nurture' ? 'all' : 'nurture')}
                               style={{
-                                borderRadius: '20px',
+                                borderRadius: '8px',
                                 fontSize: '0.75rem',
-                                padding: '5px 12px',
+                                padding: '4px 12px',
                                 whiteSpace: 'nowrap',
-                                background: selectedStageFilter === 'nurture' ? '#f59e0b' : 'rgba(245, 158, 11, 0.1)',
-                                color: selectedStageFilter === 'nurture' ? '#ffffff' : '#d97706',
+                                background: selectedStageFilter === 'nurture' ? '#d97706' : 'rgba(245, 158, 11, 0.1)',
+                                color: selectedStageFilter === 'nurture' ? '#ffffff' : '#b45309',
                                 border: '1px solid #f59e0b',
-                                fontWeight: 700,
+                                fontWeight: 600,
                                 cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
@@ -2665,10 +2600,11 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                               <span>Nuôi dưỡng</span>
                               <span style={{
                                 background: selectedStageFilter === 'nurture' ? 'rgba(255,255,255,0.25)' : 'rgba(245, 158, 11, 0.2)',
-                                borderRadius: '10px',
+                                borderRadius: '6px',
                                 padding: '1px 6px',
                                 fontSize: '0.68rem',
-                                fontWeight: 800
+                                fontWeight: 700,
+                                fontVariantNumeric: 'tabular-nums'
                               }}>
                                 {pipelineStats.summary.nurture}
                               </span>
@@ -2680,14 +2616,14 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                               type="button"
                               onClick={() => setSelectedStageFilter(selectedStageFilter === 'lost' ? 'all' : 'lost')}
                               style={{
-                                borderRadius: '20px',
+                                borderRadius: '8px',
                                 fontSize: '0.75rem',
-                                padding: '5px 12px',
+                                padding: '4px 12px',
                                 whiteSpace: 'nowrap',
-                                background: selectedStageFilter === 'lost' ? '#ef4444' : 'rgba(239, 68, 68, 0.1)',
-                                color: selectedStageFilter === 'lost' ? '#ffffff' : '#ef4444',
+                                background: selectedStageFilter === 'lost' ? '#dc2626' : 'rgba(239, 68, 68, 0.1)',
+                                color: selectedStageFilter === 'lost' ? '#ffffff' : '#dc2626',
                                 border: '1px solid #ef4444',
-                                fontWeight: 700,
+                                fontWeight: 600,
                                 cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
@@ -2697,10 +2633,11 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                               <span>Thất bại</span>
                               <span style={{
                                 background: selectedStageFilter === 'lost' ? 'rgba(255,255,255,0.25)' : 'rgba(239, 68, 68, 0.2)',
-                                borderRadius: '10px',
+                                borderRadius: '6px',
                                 padding: '1px 6px',
                                 fontSize: '0.68rem',
-                                fontWeight: 800
+                                fontWeight: 700,
+                                fontVariantNumeric: 'tabular-nums'
                               }}>
                                 {pipelineStats.summary.lost}
                               </span>
@@ -2709,10 +2646,10 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                         </div>
                       )}
 
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         {(isPartner ? filteredSubContacts : subContacts).length === 0 ? (
-                          <div className="card-panel" style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
-                            <Users size={32} style={{ margin: '0 auto 1rem', opacity: 0.4 }} />
+                          <div className="card-panel" style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
+                            <Users size={32} style={{ margin: '0 auto 16px', opacity: 0.4 }} />
                             <p style={{ fontWeight: 600 }}>
                               {isPartner 
                                 ? (selectedStageFilter !== 'all' ? 'Không có khách hàng nào ở giai đoạn này' : 'Chưa có khách hàng giới thiệu nào')
@@ -2722,16 +2659,16 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                         ) : isPartner ? (
                           filteredSubContacts.map(sc => (
                             <div key={sc.id} className="card-panel" style={{ 
-                              padding: '1rem 1.25rem',
+                              padding: '16px 20px',
                               background: 'var(--color-surface)',
                               border: '1px solid var(--color-border-light)',
                               borderRadius: '12px',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'space-between',
-                              gap: '1rem',
+                              gap: '16px',
                               flexWrap: isMobileOrTablet ? 'wrap' : 'nowrap',
-                              transition: 'all 0.2s ease'
+                              transition: 'border-color 0.15s ease'
                             }}>
                               <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', minWidth: 0, flex: 1 }}>
                                 <div style={{ 
@@ -2794,14 +2731,14 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                         display: 'inline-flex', 
                                         alignItems: 'center', 
                                         gap: '6px',
-                                        background: 'rgba(139, 92, 246, 0.08)',
-                                        borderRadius: '14px',
+                                        background: 'rgba(15, 23, 42, 0.06)',
+                                        borderRadius: '6px',
                                         padding: '2px 8px',
                                         fontSize: '0.75rem'
                                       }} title={`Được giới thiệu bởi ${entity?.name || 'Đối tác'}`}>
                                         <Avatar name={entity?.name || 'Ref'} src={entity?.avatar_url} size={16} />
                                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                          <span style={{ color: '#7c3aed', fontWeight: 700 }}>Ref:</span>
+                                          <span style={{ color: '#334155', fontWeight: 700 }}>Ref:</span>
                                           <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{entity?.name || 'Đối tác'}</span>
                                         </span>
                                       </span>
@@ -2812,7 +2749,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                       </span>
                                     )}
                                     {sc.created_at && (
-                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontVariantNumeric: 'tabular-nums' }}>
                                         <Calendar size={12} style={{ opacity: 0.6 }} /> Ngày nhận: {new Date(sc.created_at).toLocaleDateString('vi-VN')}
                                       </span>
                                     )}
@@ -2847,7 +2784,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                         ) : (
                           subContacts.map(sc => (
                             <div key={sc.id} className="card-panel" style={{ 
-                              padding: '1.25rem',
+                              padding: '20px',
                               background: 'var(--color-surface)',
                               border: sc.isPrimary ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
                               borderRadius: '12px',
@@ -2856,7 +2793,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                               gap: '12px',
                               position: 'relative',
                               boxShadow: sc.isPrimary ? '0 4px 12px rgba(189, 29, 45, 0.05)' : 'none',
-                              transition: 'all 0.2s ease'
+                              transition: 'border-color 0.15s ease'
                             }}>
                               {sc.isPrimary && (
                                 <span style={{ 
@@ -3044,11 +2981,11 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                         {salesOrders.map((so: any) => (
                           <div key={so.id} className="card-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem' }}>
                             <div>
-                              <h4 style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--color-primary)' }}>{so.so_number || `SO-${so.id}`}</h4>
-                              <p className="text-xs text-light mt-1">
+                              <h4 style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--color-primary)', fontVariantNumeric: 'tabular-nums' }}>{so.so_number || `SO-${so.id}`}</h4>
+                              <p className="text-xs text-light mt-1" style={{ fontVariantNumeric: 'tabular-nums' }}>
                                 Ngày đặt: {so.order_date || 'Chưa rõ'} • Tổng tiền: <strong style={{ color: 'var(--color-text)' }}>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(so.total || 0)}</strong>
                               </p>
-                              {so.notes && <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px', fontStyle: 'italic' }}>{so.notes}</p>}
+                              {so.notes && <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>{so.notes}</p>}
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
                               <span className={`badge ${so.status === 'approved' || so.status === 'completed' ? 'success' : so.status === 'draft' ? 'info' : 'warning'}`}>
@@ -3105,11 +3042,11 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                         {purchaseOrders.map((po: any) => (
                           <div key={po.id} className="card-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem' }}>
                             <div>
-                              <h4 style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--color-danger)' }}>{po.po_number || `PO-${po.id}`}</h4>
-                              <p className="text-xs text-light mt-1">
+                              <h4 style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--color-danger)', fontVariantNumeric: 'tabular-nums' }}>{po.po_number || `PO-${po.id}`}</h4>
+                              <p className="text-xs text-light mt-1" style={{ fontVariantNumeric: 'tabular-nums' }}>
                                 Ngày lập: {po.order_date || 'Chưa rõ'} • Tổng tiền: <strong style={{ color: 'var(--color-text)' }}>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(po.total || 0)}</strong>
                               </p>
-                              {po.notes && <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px', fontStyle: 'italic' }}>{po.notes}</p>}
+                              {po.notes && <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>{po.notes}</p>}
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
                               <span className={`badge ${po.status === 'received' || po.status === 'approved' ? 'success' : po.status === 'rejected' ? 'danger' : 'warning'}`}>
@@ -3261,18 +3198,18 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                           return (
                             <div key={doc.id} className="card-panel" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem' }}>
                               {isPdf ? (
-                                <div style={{ width: 42, height: 42, background: 'linear-gradient(135deg, #fff1f2 0%, #fee2e2 100%)', border: '1px solid #fca5a5', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', boxShadow: '0 2px 6px rgba(225, 29, 72, 0.1)' }} title="Tài liệu PDF">
-                                  <FileText size={20} style={{ color: '#e11d48' }} />
-                                  <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 900, color: '#ffffff', background: '#e11d48', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, letterSpacing: '-0.3px', boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>PDF</span>
+                                <div style={{ width: 40, height: 40, background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }} title="Tài liệu PDF">
+                                  <FileText size={18} style={{ color: '#e11d48' }} />
+                                  <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '8px', fontWeight: 700, color: '#ffffff', background: '#e11d48', padding: '1px 4px', borderRadius: '4px', lineHeight: 1 }}>PDF</span>
                                 </div>
                               ) : isDoc ? (
-                                <div style={{ width: 42, height: 42, background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', border: '1px solid #bfdbfe', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', boxShadow: '0 2px 6px rgba(37, 99, 235, 0.1)' }} title="Tài liệu Word (DOC/DOCX)">
-                                  <FileText size={20} style={{ color: '#2563eb' }} />
-                                  <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 900, color: '#ffffff', background: '#2563eb', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, letterSpacing: '-0.3px', boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>DOC</span>
+                                <div style={{ width: 40, height: 40, background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }} title="Tài liệu Word (DOC/DOCX)">
+                                  <FileText size={18} style={{ color: '#334155' }} />
+                                  <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '8px', fontWeight: 700, color: '#ffffff', background: '#334155', padding: '1px 4px', borderRadius: '4px', lineHeight: 1 }}>DOC</span>
                                 </div>
                               ) : (
-                                <div style={{ width: 42, height: 42, background: 'var(--color-info-light)', color: 'var(--color-info)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  <FileText size={20} />
+                                <div style={{ width: 40, height: 40, background: 'var(--color-bg)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  <FileText size={18} />
                                 </div>
                               )}
                             <div style={{ flex: 1, minWidth: 0 }}>
@@ -3424,7 +3361,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                     overflow: 'hidden'
                   }}
                 >
-                  <div style={{ background: 'linear-gradient(135deg, var(--color-primary) 0%, #BD1D2D 100%)', padding: '1rem 1.25rem', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ background: '#BD1D2D', padding: '16px 20px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3 style={{ fontSize: '1.05rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}><HelpCircle size={18} /> {helpModal.title}</h3>
                     <button onClick={() => setHelpModal(null)} style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '50%', padding: '4px', color: 'white' }}><X size={16} /></button>
                   </div>
@@ -3495,8 +3432,8 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                     </div>
                   </div>
                   <div className="modal-footer">
-                    <button className="btn outline hover-lift" onClick={() => setShowDealModal(false)} disabled={isSaving}>Hủy</button>
-                    <button className="btn primary hover-lift" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={handleCreateDeal} disabled={isSaving}>
+                    <button className="btn outline" onClick={() => setShowDealModal(false)} disabled={isSaving}>Hủy</button>
+                    <button className="btn primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={handleCreateDeal} disabled={isSaving}>
                       {isSaving && <Loader2 size={16} className="spin" />}
                       <span>{isSaving ? 'Đang tạo...' : 'Tạo Deal'}</span>
                     </button>

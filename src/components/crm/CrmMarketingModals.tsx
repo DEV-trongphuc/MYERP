@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
-  X, Send, Mail, Sparkles, Eye, Edit3, Search, Tag, CheckCircle2,
+  X, Send, Mail, Eye, Edit3, Search, Tag, CheckCircle2,
   AlertCircle, Loader2, FolderOpen, Globe, User, Users, Plus,
   GitBranch, List, ExternalLink, ChevronDown, Check
 } from 'lucide-react';
@@ -584,7 +584,7 @@ export const CrmSendTemplateEmailModal: React.FC<CrmSendTemplateEmailModalProps>
                     >
                       <div className="w-8 h-8 rounded-[var(--radius-md)] bg-[var(--color-bg)] border border-[var(--color-border-light)] flex items-center justify-center shrink-0 mt-0.5">
                         {tpl.id.startsWith('sys_') ? (
-                          <Sparkles className="w-4 h-4 text-[var(--color-primary)]" />
+                          <Mail className="w-4 h-4 text-[var(--color-primary)]" />
                         ) : vis === 'personal' ? (
                           <User className="w-4 h-4 text-amber-600" />
                         ) : (
@@ -1442,8 +1442,8 @@ export const CrmFilterToStaticListModal: React.FC<CrmFilterToStaticListModalProp
             {/* Active Filter Badges */}
             {activeFilterSummary.length > 0 && (
               <div className="p-3.5 rounded-2xl bg-[var(--color-bg)] border border-[var(--color-border)] space-y-2">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)] flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5 text-emerald-600" />
                   Điều kiện lọc đang áp dụng trên trang Liên hệ
                 </div>
                 <div className="flex flex-wrap gap-1.5">

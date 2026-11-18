@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'rea
 import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { Pagination } from '../components/ui/Pagination';
-import { Plus, GripVertical, Pencil, Trash2, Calendar, Target, DollarSign, MessageSquare, Building2, Briefcase, BarChart3, Loader2, Search, Filter, Users, User, CheckCircle2, Phone, Mail, LayoutGrid, List, Clock, Download, Upload, RefreshCw, X, AlertCircle, AlertTriangle, ShieldAlert, ChevronRight, ChevronLeft, ChevronDown, MoreHorizontal, Columns, ArrowDownUp, GraduationCap, Tag as TagIcon, SlidersHorizontal, ArrowRight, Flag, Layers, RotateCcw, Globe, GitBranch, Ticket, ClipboardList, Flame, Sparkles } from 'lucide-react';
+import { Plus, GripVertical, Pencil, Trash2, Calendar, Target, DollarSign, MessageSquare, Building2, Briefcase, BarChart3, Loader2, Search, Filter, Users, User, CheckCircle2, Phone, Mail, LayoutGrid, List, Clock, Download, Upload, RefreshCw, X, AlertCircle, AlertTriangle, ShieldAlert, ChevronRight, ChevronLeft, ChevronDown, MoreHorizontal, Columns, ArrowDownUp, GraduationCap, Tag as TagIcon, SlidersHorizontal, ArrowRight, Flag, Layers, RotateCcw, Globe, GitBranch, Ticket, ClipboardList, Flame } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
 import { triggerFullConfetti } from '../utils/confettiHelper';
@@ -24,6 +24,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { isAcademic } from '../utils/roleUtils';
 import { getDynamicNonSalesTeamIds } from '../contexts/TenantConfigContext';
+import { ensureArray, extractArray } from '../utils/safeArray';
 const LEAD_SOURCES = [
   { value: 'facebook', label: 'Facebook' },
   { value: 'google', label: 'Google Ads' },
@@ -471,18 +472,18 @@ const DealsFloatingTooltip = React.memo<{
 const DEFAULT_PIPELINE_STAGES = [
   { id: 31, name: '01 – New Lead', system_slug: 'new_lead', color: '#f97316', order_index: 1 },
   { id: 32, name: '02 – Contact Attempted', system_slug: 'contact_attempted', color: '#eab308', order_index: 2 },
-  { id: 33, name: '03 – Connected', system_slug: 'connected', color: '#8b5cf6', order_index: 3 },
+  { id: 33, name: '03 – Connected', system_slug: 'connected', color: '#0ea5e9', order_index: 3 },
   { id: 34, name: '04 – Needed', system_slug: 'needed', color: '#ef4444', order_index: 4 },
   { id: 35, name: '05 – Discovery Completed', system_slug: 'discovery_completed', color: '#0d9488', order_index: 5 },
   { id: 36, name: '06 – Program Matched', system_slug: 'program_matched', color: '#0284c7', order_index: 6 },
   { id: 37, name: '07 – Proposal Sent', system_slug: 'proposal_sent', color: '#d97706', order_index: 7 },
   { id: 38, name: '08 – Evaluation / Objection', system_slug: 'evaluation_objection', color: '#ea580c', order_index: 8 },
   { id: 39, name: '09 – Application Started', system_slug: 'application_started', color: '#f59e0b', order_index: 9 },
-  { id: 40, name: '10 – Application Completed', system_slug: 'application_completed', color: '#4338ca', order_index: 10 },
+  { id: 40, name: '10 – Application Completed', system_slug: 'application_completed', color: '#2563eb', order_index: 10 },
   { id: 41, name: '11 – Admission Approved', system_slug: 'admission_approved', color: '#65a30d', order_index: 11 },
   { id: 42, name: '12 – Offer / Scholarship Accepted', system_slug: 'offer_accepted', color: '#16a34a', order_index: 12 },
   { id: 43, name: '13 – Deposit / Tuition Payment', system_slug: 'deposit_tuition_payment', color: '#059669', order_index: 13 },
-  { id: 44, name: '14 – Enrolled', system_slug: 'enrolled', color: '#db2777', order_index: 14 }
+  { id: 44, name: '14 – Enrolled', system_slug: 'enrolled', color: '#BD1D2D', order_index: 14 }
 ];
 
 export const DealsPage: React.FC = () => {
@@ -1079,7 +1080,7 @@ export const DealsPage: React.FC = () => {
   const fetchStages = async () => {
     try {
       const r = await api.get('/pipeline-stages');
-      const stagesData = r.data.data || [];
+      const stagesData = extractArray(r?.data);
       const sorted = [...stagesData].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
       setStages(sorted);
     } catch (e: any) {
@@ -1093,7 +1094,7 @@ export const DealsPage: React.FC = () => {
       const isRosterRestricted = ['sale', 'sales', 'manager', 'director'].includes(currentUser?.role || '');
       const bypassProj = isRosterRestricted ? '' : '?bypass_roster=1';
       const r = await api.get(`/projects${bypassProj}`);
-      setProjects(r.data.data || []);
+      setProjects(extractArray(r?.data));
     } catch (e) {
       console.error("Failed to fetch projects", e);
     }
@@ -1102,7 +1103,7 @@ export const DealsPage: React.FC = () => {
   const fetchCampaigns = async () => {
     try {
       const r = await api.get('/marketing-campaigns');
-      setCampaigns(r.data.data?.items || r.data.data || []);
+      setCampaigns(extractArray(r?.data));
     } catch (e) {
       console.error("Failed to fetch campaigns", e);
     }
@@ -1112,7 +1113,7 @@ export const DealsPage: React.FC = () => {
     try {
       const r = await api.get('api.php?action=get_unique_sources');
       if (r.data?.success) {
-        setSources(r.data.data || []);
+        setSources(extractArray(r?.data));
       }
     } catch (e) {
       console.error("Failed to fetch sources", e);
@@ -1183,7 +1184,7 @@ export const DealsPage: React.FC = () => {
               skip_counts: 1
             };
             const res = await api.get(endpoint, { params: stageParams, signal });
-            const stageItems = res.data?.data?.items || res.data?.data || [];
+            const stageItems = extractArray(res?.data);
             const stageTotal = res.data?.data?.total !== undefined ? Number(res.data.data.total) : stageItems.length;
             const stageRev = stageItems.reduce((s: number, d: any) => s + (Number(d.expected_revenue) || Number(d.value) || 0), 0);
             return { stageId: stage.id, items: stageItems, total: stageTotal, revenue: stageRev };
@@ -1306,7 +1307,7 @@ export const DealsPage: React.FC = () => {
               skip_counts: 1
             }
           });
-          const newCards: any[] = res.data?.data?.items || res.data?.data || [];
+          const newCards: any[] = extractArray(res?.data);
           if (newCards.length > 0) {
             setItems(prev => {
               const existing = prev[stageId] || [];
@@ -1367,18 +1368,18 @@ export const DealsPage: React.FC = () => {
 
         let loadedTeams = teams;
         if (teamsResult.status === 'fulfilled' && teamsResult.value) {
-          loadedTeams = teamsResult.value.data?.data || teamsResult.value.data || [];
+          loadedTeams = extractArray(teamsResult.value?.data);
           setTeams(loadedTeams);
         }
 
         if (projResult.status === 'fulfilled' && projResult.value) {
-          setProjects(projResult.value.data?.data || []);
+          setProjects(extractArray(projResult.value?.data));
         }
         if (campResult.status === 'fulfilled' && campResult.value) {
-          setCampaigns(campResult.value.data?.data?.items || campResult.value.data?.data || []);
+          setCampaigns(extractArray(campResult.value?.data));
         }
         if (srcResult.status === 'fulfilled' && srcResult.value?.data?.success) {
-          setSources(srcResult.value.data.data || []);
+          setSources(extractArray(srcResult.value?.data));
         }
         if (stageResult.status === 'fulfilled' && stageResult.value) {
           const stagesData = stageResult.value.data?.data || [];
@@ -1388,7 +1389,7 @@ export const DealsPage: React.FC = () => {
           }
         }
         if (userResult.status === 'fulfilled' && userResult.value) {
-          let list = userResult.value.data?.data || [];
+          let list = extractArray(userResult.value?.data);
           const teamId = getEffectiveTeamId(loadedTeams);
           if (currentUser?.role === 'manager' && teamId) {
             list = list.filter((u: any) => String(u.team_id) === String(teamId));
@@ -2167,7 +2168,7 @@ export const DealsPage: React.FC = () => {
                   <Mail size={14} /> Gửi Email
                 </button>
                 <button className="btn outline sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={() => setCrmBulkMarketingModal({ isOpen: true, mode: 'list' })}>
-                  <Sparkles size={14} /> Thêm vào List / Flow
+                  <Layers size={14} /> Thêm vào List / Flow
                 </button>
                 <button className="btn primary sm" onClick={() => setShowBulkMove(true)}>
                   <RefreshCw size={14} /> Chuyển Giai đoạn
@@ -2598,7 +2599,7 @@ export const DealsPage: React.FC = () => {
                     </span>
                   )}
                   {filterStage && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.1)', color: '#7c3aed', fontWeight: 600, fontSize: '0.74rem' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', fontWeight: 600, fontSize: '0.74rem' }}>
                       <span>
                         Giai đoạn{filterStageOp === 'not_in' ? ' (Loại trừ)' : ''}:{' '}
                         {csvToMulti(filterStage).map(id => stages.find(s => String(s.id) === String(id))?.name || id).join(', ')}
@@ -2615,7 +2616,7 @@ export const DealsPage: React.FC = () => {
                     </span>
                   )}
                   {filterCampaign && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(236, 72, 153, 0.1)', color: '#db2777', fontWeight: 600, fontSize: '0.74rem' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: '#BD1D2D', fontWeight: 600, fontSize: '0.74rem' }}>
                       <span>
                         Chiến dịch: {csvToMulti(filterCampaign).map(id => campaigns.find(c => String(c.id) === String(id))?.name || id).join(', ')}
                       </span>
@@ -2732,7 +2733,7 @@ export const DealsPage: React.FC = () => {
                     </span>
                   )}
                   {validCustomRules.length > 0 && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.12)', color: '#7c3aed', fontWeight: 600, fontSize: '0.74rem' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.06)', color: '#334155', fontWeight: 600, fontSize: '0.74rem' }}>
                       <span>Điều kiện nâng cao ({validCustomRules.length} quy tắc {customRulesLogic})</span>
                       <button type="button" onClick={() => setCustomRules([])} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}><X size={12} /></button>
                     </span>
@@ -3777,7 +3778,7 @@ export const DealsPage: React.FC = () => {
                     boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.875rem' }}>
-                      <Sparkles size={15} color="#2563eb" /> Hành trình số & Automation 360°
+                      <GitBranch size={15} color="#2563eb" /> Hành trình số & Automation 360°
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '0.75rem' }}>
@@ -4989,7 +4990,7 @@ export const DealsPage: React.FC = () => {
                             }}>
                               {noteStr}
                             </div>
-                          ) : <span style={{ color: 'var(--color-text-muted)', fontSize: '0.76rem', fontStyle: 'italic' }}>Chưa có tương tác</span>}
+                          ) : <span style={{ color: 'var(--color-text-muted)', fontSize: '0.76rem' }}>Chưa có tương tác</span>}
                         </td>
                       )}
                       {visibleColsMap['tags'] && (

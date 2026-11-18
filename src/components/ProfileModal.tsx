@@ -8,6 +8,7 @@ import { CustomModal } from './ui/CustomModal';
 import { Avatar } from './ui/Avatar';
 import toast from 'react-hot-toast';
 import { StatRowSkeleton } from './ui/Skeleton';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 export const ProfileModal = () => {
   const { t } = useLanguage();
@@ -77,7 +78,7 @@ export const ProfileModal = () => {
         try {
           const res = await fetchAPI('get_my_activity_logs');
           if (res.success) {
-            setActivityLogs(res.data || []);
+            setActivityLogs(extractArray(res));
           }
         } catch (err) {
           console.error(t('Lỗi khi tải lịch sử hoạt động:'), err);

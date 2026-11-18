@@ -3,7 +3,7 @@ import { api } from '../../components/marketing/services/storageAdapter';
 import { Campaign, CampaignStatus, Segment, Template, Flow } from '../../components/marketing/types';
 import {
     Plus, MousePointerClick, CheckCircle2, GitMerge, FileText, CalendarClock, PieChart, Send, MailOpen,
-    Lightbulb, ShieldCheck, Zap, Target, Sparkles, Clock
+    Lightbulb, ShieldCheck, Zap, Target, Clock
 } from 'lucide-react';
 import Select from '../../components/marketing/components/common/Select';
 import SearchBox from '../../components/marketing/components/common/SearchBox';
@@ -859,7 +859,7 @@ const Campaigns: React.FC = () => {
                         accentColor="blue"
                         tips={[
                             { icon: Clock, title: 'Khung giờ vàng', description: 'Gửi vào 8h–9h sáng thường đạt tỷ lệ mở cao nhất trong ngày.', colorClass: 'bg-[var(--color-primary)]', highlight: 'Hiệu quả' },
-                            { icon: Sparkles, title: 'Cá nhân hóa nội dung', description: 'Dùng biến {first_name} trong tiêu đề để tăng tỷ lệ click.', colorClass: 'bg-[var(--color-primary)]', highlight: 'Mẹo hay' },
+                            { icon: MailOpen, title: 'Cá nhân hóa nội dung', description: 'Dùng biến {first_name} trong tiêu đề để tăng tỷ lệ click', colorClass: 'bg-[var(--color-primary)]', highlight: 'Mẹo hay' },
                             { icon: Target, title: 'Theo dõi click', description: 'Luôn bật theo dõi click để biết chính xác ai quan tâm đến sản phẩm.', colorClass: 'bg-[var(--color-primary)]' },
                             { icon: Zap, title: 'Follow-up tự động', description: 'Kết nối Flow chăm sóc ngay sau khi gửi để tối đa điểm chạm khách hàng.', colorClass: 'bg-emerald-500', highlight: 'Nâng cao' },
                             { icon: ShieldCheck, title: 'Vệ sinh tệp gửi', description: 'Ưu tiên gửi tới liên hệ hoạt động trong 30 ngày qua để bảo vệ uy tín tên miền gửi.', colorClass: 'bg-rose-500' }

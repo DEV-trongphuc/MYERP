@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { isMarketing } from '../utils/roleUtils';
 import { useUIStore } from '../store/uiStore';
 import { withRouterFreezer } from '../components/RouterFreezer';
-import { Mail, Settings2, Save, Send, Server, Database, Activity, ChevronDown, ChevronUp, Zap, Shield, MessageCircle, RefreshCw, Settings as SettingsIcon, BarChart2, Clock, Calendar, Users, CheckCircle, Plus, Trash2, Edit2, FileSpreadsheet, Upload, Download, X, Search, UserCheck, FileText, Tag, Scale, Layers, HelpCircle, Filter, Briefcase, GripVertical, Info, ChevronRight, ArrowLeft, ChevronLeft, CheckSquare, DollarSign, LifeBuoy, Eye, Globe, Copy, ArrowUpRight, Sparkles } from 'lucide-react';
+import { Mail, Settings2, Save, Send, Server, Database, Activity, ChevronDown, ChevronUp, Zap, Shield, MessageCircle, RefreshCw, Settings as SettingsIcon, BarChart2, Clock, Calendar, Users, CheckCircle, Plus, Trash2, Edit2, FileSpreadsheet, Upload, Download, X, Search, UserCheck, FileText, Tag, Scale, Layers, HelpCircle, Filter, Briefcase, GripVertical, Info, ChevronRight, ArrowLeft, ChevronLeft, CheckSquare, DollarSign, LifeBuoy, Eye, Globe, Copy, ArrowUpRight } from 'lucide-react';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { CustomModal } from '../components/ui/CustomModal';
@@ -21,6 +21,7 @@ import { AITrainingPanel } from '../components/ui/AITrainingPanel';
 import { EnterpriseSaaSSettingsPanels, type EnterpriseSaaSPanelType } from '../components/Settings/EnterpriseSaaSSettingsPanels';
 import { Bell, GraduationCap, Building2 } from 'lucide-react';
 import { getTenantFrontendUrl, getTenantOrganizationName, getTenantInternalDomain } from '../contexts/TenantConfigContext';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 
 const thStyle: React.CSSProperties = {
@@ -701,9 +702,9 @@ const SettingsInner = () => {
     { value: 'Lead', label: t('Lead (Khách tiềm năng)'), icon: <Search size={14} style={{ color: '#3b82f6' }} /> },
     { value: 'Schedule', label: t('Schedule (Hẹn gặp)'), icon: <Calendar size={14} style={{ color: '#10b981' }} /> },
     { value: 'CompleteRegistration', label: 'CompleteRegistration', icon: <CheckCircle size={14} style={{ color: '#f59e0b' }} /> },
-    { value: 'SubmitApplication', label: 'SubmitApplication', icon: <FileText size={14} style={{ color: '#6366f1' }} /> },
-    { value: 'Contact', label: t('Contact (Liên hệ)'), icon: <MessageCircle size={14} style={{ color: '#ec4899' }} /> },
-    { value: 'ViewContent', label: t('ViewContent (Xem hàng)'), icon: <Eye size={14} style={{ color: '#8b5cf6' }} /> },
+    { value: 'SubmitApplication', label: 'SubmitApplication', icon: <FileText size={14} style={{ color: '#0284c7' }} /> },
+    { value: 'Contact', label: t('Contact (Liên hệ)'), icon: <MessageCircle size={14} style={{ color: '#0d9488' }} /> },
+    { value: 'ViewContent', label: t('ViewContent (Xem hàng)'), icon: <Eye size={14} style={{ color: '#334155' }} /> },
     { value: 'Purchase', label: t('Purchase (Đặt cọc)'), icon: <Zap size={14} style={{ color: 'var(--color-primary)' }} /> }
   ];
 
@@ -814,8 +815,9 @@ const SettingsInner = () => {
       const query = `get_import_history&page=${page}&pageSize=50&search=${encodeURIComponent(searchVal)}`;
       const json = await fetchAPI(query);
       if (json.success) {
-        setImportHistory(json.data || []);
-        setTotalHistoryCount(json.total_count ?? (json.data || []).length);
+        const histList = extractArray(json);
+        setImportHistory(histList);
+        setTotalHistoryCount(json.total_count ?? histList.length);
       }
     } catch (err) {
       console.error("Error fetching import history:", err);
@@ -1380,7 +1382,7 @@ const SettingsInner = () => {
   const [editingTag, setEditingTag] = useState<any>(null);
   const [tagForm, setTagForm] = useState({
     name: '',
-    color: '#6366f1',
+    color: '#2563eb',
     entity_type: 'all'
   });
 
@@ -1389,7 +1391,7 @@ const SettingsInner = () => {
     try {
       const res = await fetchAPI('tags');
       if (res.success) {
-        setTags(res.data || []);
+        setTags(extractArray(res));
       }
     } catch (err) {
       console.error("Error fetching tags data:", err);
@@ -1455,7 +1457,7 @@ const SettingsInner = () => {
     setEditingTag(null);
     setTagForm({
       name: '',
-      color: '#6366f1',
+      color: '#2563eb',
       entity_type: 'all'
     });
     setShowTagModal(true);
@@ -1465,7 +1467,7 @@ const SettingsInner = () => {
     setEditingTag(tag);
     setTagForm({
       name: tag.name,
-      color: tag.color || '#6366f1',
+      color: tag.color || '#2563eb',
       entity_type: tag.entity_type || 'all'
     });
     setShowTagModal(true);
@@ -1843,7 +1845,7 @@ const SettingsInner = () => {
     ...tags.map(tag => ({
       value: tag.name,
       label: `${t('Thẻ')}: ${tag.name}`,
-      icon: <Tag size={14} style={{ color: tag.color || '#6366f1' }} />
+      icon: <Tag size={14} style={{ color: tag.color || '#2563eb' }} />
     }))
   ];
 
@@ -2272,15 +2274,13 @@ const SettingsInner = () => {
     cursor: 'pointer',
     transition: 'all 0.15s ease',
     border: 'none',
-    borderLeft: activeTab === tab ? '3px solid var(--color-primary)' : '3px solid transparent',
     flexShrink: 0,
     position: 'relative' as const,
     outline: 'none',
     boxShadow: 'none',
     userSelect: 'none' as const,
     width: '100%',
-    textAlign: 'left' as const,
-    paddingLeft: '11px'
+    textAlign: 'left' as const
   });
 
   const saasManagedTabs = ["roles_permissions", "departments_hierarchy", "approval_workflows_saas", "notification_routing", "pipeline_builder", "academic_and_templates", "organization_branding"];
@@ -2289,36 +2289,36 @@ const SettingsInner = () => {
  
   const getTabIconBg = (tab: string) => {
     const colors: Record<string, string> = {
-      roles_permissions: '#dc2626',
+      roles_permissions: '#e11d48',
       departments_hierarchy: '#2563eb',
       approval_workflows_saas: '#059669',
-      notification_routing: '#d97706',
-      pipeline_builder: '#7c3aed',
-      academic_and_templates: '#0891b2',
-      organization_branding: '#0f172a',
+      notification_routing: '#f59e0b',
+      pipeline_builder: '#0d9488',
+      academic_and_templates: '#7c3aed',
+      organization_branding: '#4f46e5',
       business_limits: '#3b82f6',
-      time_schedule: '#ec4899',
+      time_schedule: '#0284c7',
       approval_rules: '#be123c',
-      fallback: '#f59e0b',
+      fallback: '#f97316',
       starvation_prevention: '#ef4444',
-      pipeline_stages: '#8b5cf6',
+      pipeline_stages: '#65a30d',
       duplicate_filter: '#10b981',
-      blacklist: '#06b6d4',
-      tag_management: '#6366f1',
+      blacklist: '#334155',
+      tag_management: '#ec4899',
       legacy_mapping: '#14b8a6',
       lead_scoring: '#ca8a04',
       error_reasons: '#f43f5e',
-      auto_approve_ticket: '#10b981',
+      auto_approve_ticket: '#16a34a',
       email_config: '#0ea5e9',
-      marketing_automation: '#2563eb',
-      zalo_bot: '#2563eb',
-      telegram_bot: '#0088cc',
-      automated_reports: '#f97316',
-      ai_assistant: '#a855f7',
-      workflow_templates: '#64748b',
-      company_info: '#4f46e5',
-      database_maintenance: '#475569',
-      database_erd: '#0d9488',
+      marketing_automation: '#9333ea',
+      zalo_bot: '#0068ff',
+      telegram_bot: '#0891b2',
+      automated_reports: '#ea580c',
+      ai_assistant: '#BD1D2D',
+      workflow_templates: '#6366f1',
+      company_info: '#475569',
+      database_maintenance: '#d97706',
+      database_erd: '#0f766e',
     };
     return colors[tab] || 'var(--color-primary)';
   };
@@ -2686,8 +2686,8 @@ const SettingsInner = () => {
               }}
             >
               <h4 style={{ 
-                fontSize: '0.58rem', 
-                fontWeight: 900, 
+                fontSize: '0.625rem', 
+                fontWeight: 700, 
                 color: 'var(--color-text-muted)', 
                 textTransform: 'uppercase', 
                 letterSpacing: '0.08em', 
@@ -3278,23 +3278,23 @@ const SettingsInner = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
                   <div className="card-panel" style={{ padding: '1.25rem', background: 'var(--color-bg-light)', border: '1px solid var(--color-border)', borderRadius: 12 }}>
                     <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{t('Tổng số bảng')}</span>
-                    <h2 style={{ fontSize: '1.75rem', fontWeight: 900, margin: '6px 0 0', color: 'var(--color-text)' }}>{dbTables.length} {t('Bảng')}</h2>
+                    <h2 style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', margin: '6px 0 0', color: 'var(--color-text)' }}>{dbTables.length} {t('Bảng')}</h2>
                   </div>
                   <div className="card-panel" style={{ padding: '1.25rem', background: 'var(--color-bg-light)', border: '1px solid var(--color-border)', borderRadius: 12 }}>
                     <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{t('Tổng số dòng')}</span>
-                    <h2 style={{ fontSize: '1.75rem', fontWeight: 900, margin: '6px 0 0', color: 'var(--color-text)' }}>
+                    <h2 style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', margin: '6px 0 0', color: 'var(--color-text)' }}>
                       {dbTables.reduce((acc, t) => acc + t.rows, 0).toLocaleString()}
                     </h2>
                   </div>
                   <div className="card-panel" style={{ padding: '1.25rem', background: 'var(--color-bg-light)', border: '1px solid var(--color-border)', borderRadius: 12 }}>
                     <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{t('Tổng dung lượng')}</span>
-                    <h2 style={{ fontSize: '1.75rem', fontWeight: 900, margin: '6px 0 0', color: 'var(--color-text)' }}>
+                    <h2 style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', margin: '6px 0 0', color: 'var(--color-text)' }}>
                       {(dbTables.reduce((acc, t) => acc + t.data_size + t.index_size, 0) / 1024 / 1024).toFixed(2)} MB
                     </h2>
                   </div>
                   <div className="card-panel" style={{ padding: '1.25rem', background: 'var(--color-bg-light)', border: '1px solid var(--color-border)', borderRadius: 12 }}>
                     <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{t('Dung lượng phân mảnh')}</span>
-                    <h2 style={{ fontSize: '1.75rem', fontWeight: 900, margin: '6px 0 0', color: dbTables.reduce((acc, t) => acc + t.overhead, 0) > 0 ? 'var(--color-primary)' : '#059669' }}>
+                    <h2 style={{ fontSize: '1.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', margin: '6px 0 0', color: dbTables.reduce((acc, t) => acc + t.overhead, 0) > 0 ? 'var(--color-primary)' : '#059669' }}>
                       {(dbTables.reduce((acc, t) => acc + t.overhead, 0) / 1024 / 1024).toFixed(2)} MB
                     </h2>
                   </div>
@@ -3302,7 +3302,7 @@ const SettingsInner = () => {
 
                 {/* 2. Action Toolbar */}
                 <div className="card-panel" style={{ padding: '1.5rem', background: 'var(--color-bg-light)', border: '1px solid var(--color-border)', borderRadius: 16, display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                  <h4 style={{ fontSize: '0.9rem', fontWeight: 800, margin: 0, textTransform: 'uppercase', color: 'var(--color-text-light)' }}>{t('Bộ công cụ Bảo trì')}</h4>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 700, margin: 0, textTransform: 'uppercase', color: 'var(--color-text-light)' }}>{t('Bộ công cụ Bảo trì')}</h4>
                   <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                     <button
                       type="button"
@@ -3657,7 +3657,6 @@ const SettingsInner = () => {
                               border: '1px solid #e2e8f0',
                               borderRadius: 10,
                               background: '#f8fafc',
-                              borderLeft: '4px solid #C6333D',
                               width: '100%'
                             }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -3906,7 +3905,7 @@ const SettingsInner = () => {
                       gap: 8,
                       alignItems: 'flex-start'
                     }}>
-                      <span style={{ fontSize: '1rem' }}>💡</span>
+                      <Info size={16} strokeWidth={1.75} style={{ color: '#0284c7', flexShrink: 0, marginTop: '2px' }} />
                       <div>
                         <strong>{t('Cơ chế khớp trùng CRM:')}</strong> {t('Công cụ đối chiếu thời gian thực bằng cách sử dụng chung một hàm nghiệp vụ với luồng xử lý Webhook và Google Sheets. Hệ thống chỉ đánh dấu Trùng lặp đối với Sale đang')} <strong>{t('Hoạt động')}</strong>{t('. Nếu Sale sở hữu đang')} <strong>{t('Nghỉ phép')}</strong> {t('hoặc')} <strong>{t('Nghỉ việc')}</strong>{t(', hệ thống tự động đánh dấu là lead được phép chia mới cho Sale khác.')}
                       </div>
@@ -4453,19 +4452,19 @@ function doPost(e) {
                     }}>
                       <div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Subscribers đã khớp CRM')}</div>
-                        <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#2563eb' }}>{lastSyncResult.matched_subscribers ?? 0}</div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#2563eb' }}>{lastSyncResult.matched_subscribers ?? 0}</div>
                       </div>
                       <div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Tương tác Email/Zalo khớp')}</div>
-                        <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#059669' }}>{lastSyncResult.matched_activities ?? 0}</div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#059669' }}>{lastSyncResult.matched_activities ?? 0}</div>
                       </div>
                       <div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Luồng Automation khớp')}</div>
-                        <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#7c3aed' }}>{lastSyncResult.matched_flows ?? 0}</div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#BD1D2D' }}>{lastSyncResult.matched_flows ?? 0}</div>
                       </div>
                       <div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Phiên Web / UTM khớp')}</div>
-                        <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#d97706' }}>{lastSyncResult.matched_visitors ?? 0}</div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#d97706' }}>{lastSyncResult.matched_visitors ?? 0}</div>
                       </div>
                       <div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Cập nhật lúc')}</div>
@@ -4764,7 +4763,7 @@ function doPost(e) {
                       }}
                     >
                       <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span>💡</span> {t('Hướng dẫn lấy Chat ID:')}
+                        <Info size={14} strokeWidth={1.75} style={{ color: '#0284c7' }} /> {t('Hướng dẫn lấy Chat ID:')}
                       </span>
                       {showChatIdGuide ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                     </div>
@@ -4871,7 +4870,7 @@ function doPost(e) {
                       }}
                     >
                       <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span>💡</span> {t('Hướng dẫn lấy Chat ID:')}
+                        <Info size={14} strokeWidth={1.75} style={{ color: '#0284c7' }} /> {t('Hướng dẫn lấy Chat ID:')}
                       </span>
                       {showChatIdGuide ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                     </div>
@@ -5004,7 +5003,7 @@ function doPost(e) {
                 {/* Báo cáo Tháng */}
                 <div className="card" style={{ padding: '1.5rem' }}>
                   <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1.25rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ display: 'inline-flex', background: '#ec4899', color: 'white', padding: 4, borderRadius: 6 }}><Calendar size={16} /></span>
+                    <span style={{ display: 'inline-flex', background: '#BD1D2D', color: 'white', padding: 4, borderRadius: 6 }}><Calendar size={16} /></span>
                     {t('Lịch gửi Báo cáo Tháng (cho Sale)')}
                   </h3>
                   <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
@@ -6432,7 +6431,7 @@ function doPost(e) {
                       <h5 style={{ fontSize: '0.85rem', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>{t('Danh sách ngày nghỉ lễ')}</h5>
                       
                       {holidaySchedules.length === 0 ? (
-                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                           {t('Chưa có lịch nghỉ lễ nào được thiết lập.')}
                         </div>
                       ) : (
@@ -6585,7 +6584,7 @@ function doPost(e) {
                     // Rich Role Badges Mapping
                     const roleBadges: Record<string, { bg: string; text: string }> = {
                       role_manager: { bg: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', text: 'QL' },
-                      role_director: { bg: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', text: 'GĐ' },
+                      role_director: { bg: '#0f172a', text: 'GĐ' },
                       role_assistant: { bg: 'linear-gradient(135deg, #10b981, #047857)', text: 'TL' },
                       role_accountant: { bg: 'linear-gradient(135deg, #f59e0b, #b45309)', text: 'KT' },
                       role_superadmin: { bg: 'linear-gradient(135deg, #ef4444, #b91c1c)', text: 'AD' }
@@ -7854,7 +7853,7 @@ function doPost(e) {
 
                     <div>
                       <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-                        <UserCheck size={16} style={{ color: '#8b5cf6' }} />
+                        <UserCheck size={16} style={{ color: '#334155' }} />
                         {t('Mốc hiển thị Tiềm năng của Kế toán')}
                       </label>
                       <CustomSelect
@@ -8131,7 +8130,7 @@ function doPost(e) {
                   {/* Category 4: Omnichannel Engagement & Automation 360 */}
                   <div className="card" style={{ padding: '1.25rem', marginTop: 0, background: 'var(--color-surface)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--color-border)' }}>
-                      <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'rgba(139, 92, 246, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8b5cf6' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'rgba(189, 29, 45, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#BD1D2D' }}>
                         <Zap size={16} />
                       </div>
                       <div style={{ flex: 1 }}>
@@ -8151,7 +8150,7 @@ function doPost(e) {
                         { key: 'form_submit', label: 'Điền Form / Đăng ký (Form Submit)', icon: FileText, desc: 'Chuyển đổi qua biểu mẫu (+25đ mặc định)' },
                         { key: 'survey_complete', label: 'Hoàn thành Khảo sát / Quiz', icon: CheckSquare, desc: 'Trả lời đầy đủ bài khảo sát (+30đ mặc định)' },
                         { key: 'page_view', label: 'Truy cập trang Web (Page View)', icon: Globe, desc: 'Xem trang đích qua Pixel (+3đ mặc định)' },
-                        { key: 'voucher_claim', label: 'Nhận mã Voucher ưu đãi', icon: Sparkles, desc: 'Sở hữu mã khuyến mãi (+20đ mặc định)' },
+                        { key: 'voucher_claim', label: 'Nhận mã Voucher ưu đãi', icon: Tag, desc: 'Sở hữu mã khuyến mãi (+20đ mặc định)' },
                         { key: 'qr_scan', label: 'Quét mã QR / Check-in sự kiện', icon: Activity, desc: 'Quét QR tại quầy hoặc ấn phẩm (+15đ mặc định)' }
                       ].map(item => (
                         <div key={item.key} style={{ 
@@ -8163,11 +8162,11 @@ function doPost(e) {
                           flexDirection: 'column',
                           justifyContent: 'space-between',
                           gap: '0.75rem',
-                          transition: 'all 0.2s ease'
+                          transition: 'border-color 0.2s ease, background-color 0.2s ease'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
                             <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)', lineHeight: 1.3 }}>{t(item.label)}</div>
-                            <item.icon size={13} style={{ color: '#8b5cf6', flexShrink: 0, marginTop: '2px' }} />
+                            <item.icon size={13} style={{ color: '#BD1D2D', flexShrink: 0, marginTop: '2px' }} />
                           </div>
                           
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: '0.375rem', borderTop: '1px dashed var(--color-border)' }}>
@@ -8175,7 +8174,7 @@ function doPost(e) {
                             <input
                               type="number"
                               className="input"
-                              style={{ width: '54px', textAlign: 'center', fontWeight: 700, padding: '2px 4px', height: '26px', fontSize: '0.8rem', background: 'var(--color-surface)', color: '#8b5cf6' }}
+                              style={{ width: '54px', textAlign: 'center', fontWeight: 700, fontVariantNumeric: 'tabular-nums', padding: '2px 4px', height: '26px', fontSize: '0.8rem', background: 'var(--color-surface)', color: '#BD1D2D' }}
                               value={leadScoringRules[item.key] ?? 0}
                               onChange={e => setLeadScoringRules(prev => ({ ...prev, [item.key]: Number(e.target.value) }))}
                             />
@@ -8260,10 +8259,10 @@ function doPost(e) {
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>
                               <span>{t('Đa kênh (Omnichannel)')}</span>
-                              <span style={{ fontWeight: 600, color: '#8b5cf6' }}>{omnichannelPositive} pts</span>
+                              <span style={{ fontWeight: 600, color: '#BD1D2D', fontVariantNumeric: 'tabular-nums' }}>{omnichannelPositive} pts</span>
                             </div>
                             <div style={{ height: '4px', background: 'var(--color-bg-secondary)', borderRadius: '2px', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', background: '#8b5cf6', width: `${totalPositive ? (omnichannelPositive / totalPositive) * 100 : 0}%` }} />
+                              <div style={{ height: '100%', background: '#BD1D2D', width: `${totalPositive ? (omnichannelPositive / totalPositive) * 100 : 0}%` }} />
                             </div>
                           </div>
                         </div>
@@ -8379,7 +8378,7 @@ function doPost(e) {
                       {(() => {
                         const keys = exclusionKeys ? exclusionKeys.split(',').map(k => k.trim()).filter(Boolean) : [];
                         if (keys.length === 0) {
-                          return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '4px' }}>{t('Chưa có từ khóa loại trừ nào.')}</span>;
+                          return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', padding: '4px' }}>{t('Chưa có từ khóa loại trừ nào.')}</span>;
                         }
                         return keys.map((key, idx) => (
                           <span
@@ -8600,7 +8599,7 @@ function doPost(e) {
                       {(() => {
                         const contacts = exclusionContacts ? exclusionContacts.split(',').map(c => c.trim()).filter(Boolean) : [];
                         if (contacts.length === 0) {
-                          return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{t('Chưa có liên hệ loại trừ nào.')}</span>;
+                          return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>{t('Chưa có liên hệ loại trừ nào.')}</span>;
                         }
                         
                         const phones = contacts.filter(c => !c.includes('@'));
@@ -8612,7 +8611,7 @@ function doPost(e) {
                         );
 
                         if (filtered.length === 0) {
-                          return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                          return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
                             {blacklistSearchQuery ? t('Không tìm thấy liên hệ khớp với tìm kiếm.') : (blacklistContactTab === 'phone' ? t('Chưa có số điện thoại nào trong danh sách.') : t('Chưa có email nào trong danh sách.'))}
                           </span>;
                         }
@@ -8659,7 +8658,6 @@ function doPost(e) {
                                 marginTop: '6px',
                                 fontSize: '0.75rem',
                                 color: 'var(--color-text-muted)',
-                                fontStyle: 'italic',
                                 padding: '4px 0'
                               }}>
                                 {t('... và {count} liên hệ khác. Sử dụng ô tìm kiếm để lọc thêm.').replace('{count}', String(filtered.length - maxDisplay))}
@@ -9034,7 +9032,7 @@ function doPost(e) {
                                     <td style={{ padding: '10px 16px', textAlign: 'center', color: col.null === 'YES' ? '#10B981' : 'var(--color-text-muted)' }}>{col.null}</td>
                                     <td style={{ padding: '10px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-primary)' }}>{col.key}</td>
                                     <td style={{ padding: '10px 16px', color: 'var(--color-text-muted)' }}>{col.default === null ? 'NULL' : col.default}</td>
-                                    <td style={{ padding: '10px 16px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{col.extra}</td>
+                                    <td style={{ padding: '10px 16px', color: 'var(--color-text-muted)' }}>{col.extra}</td>
                                   </tr>
                                 );
                               })}
@@ -9492,7 +9490,7 @@ function doPost(e) {
                   className="form-input"
                   value={tagForm.color}
                   onChange={e => setTagForm({ ...tagForm, color: e.target.value })}
-                  placeholder="#6366f1"
+                  placeholder="#2563eb"
                   style={{ fontFamily: 'monospace', flex: 1 }}
                 />
               </div>
@@ -9573,17 +9571,17 @@ function doPost(e) {
                         <td style={{ padding: '10px 16px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <Avatar name={name || t('Không có tên')} src={phone ? (consultants.find(c => c.phone === phone)?.avatar || consultants.find(c => c.phone === phone)?.avatar_url) : undefined} size={32} />
-                            <span style={{ fontWeight: 600 }}>{name || <em style={{ color: '#cbd5e1', fontWeight: 400 }}>{t('Chưa cập nhật')}</em>}</span>
+                            <span style={{ fontWeight: 600 }}>{name || <span style={{ color: '#cbd5e1', fontWeight: 400 }}>{t('Chưa cập nhật')}</span>}</span>
                           </div>
                         </td>
                         <td style={{ padding: '10px 16px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{phone ? maskPhone(phone) : <em style={{ color: '#cbd5e1', fontWeight: 400 }}>{t('Trống')}</em>}</span>
-                            <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>{email ? maskEmail(email) : <em style={{ color: '#cbd5e1', fontWeight: 400 }}>{t('Trống')}</em>}</span>
+                            <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{phone ? maskPhone(phone) : <span style={{ color: '#cbd5e1', fontWeight: 400 }}>{t('Trống')}</span>}</span>
+                            <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>{email ? maskEmail(email) : <span style={{ color: '#cbd5e1', fontWeight: 400 }}>{t('Trống')}</span>}</span>
                           </div>
                         </td>
                         <td style={{ padding: '10px 16px', color: 'var(--color-text-muted)' }}>
-                          {date ? formatExcelDate(date) : <span style={{ color: '#cbd5e1', fontStyle: 'italic' }}>-</span>}
+                          {date ? formatExcelDate(date) : <span style={{ color: '#cbd5e1' }}>—</span>}
                         </td>
                         <td style={{ padding: '10px 16px' }}>
                           {saleDisplayName ? (

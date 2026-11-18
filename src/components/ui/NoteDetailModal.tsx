@@ -64,7 +64,7 @@ export const NoteCell: React.FC<{
   onOpenModal: (noteData: { notes: string; itemName?: string }) => void;
 }> = ({ notes, itemName, onOpenModal }) => {
   if (!notes) {
-    return <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>;
+    return <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
   }
 
   const urls = extractUrls(notes);

@@ -37,7 +37,7 @@ const VoucherApiEmbedModal: React.FC<VoucherApiEmbedModalProps> = ({ isOpen, onC
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
-        toast.success('Đã Copy thành công!');
+        toast.success('Đã sao chép');
     };
 
     return (
@@ -46,8 +46,8 @@ const VoucherApiEmbedModal: React.FC<VoucherApiEmbedModalProps> = ({ isOpen, onC
             onClose={onClose}
             title={
                 <div className="flex items-center gap-2 text-slate-800">
-                    <Code className="w-5 h-5 text-indigo-600" />
-                    Bí kíp Tích hợp: {campaign.name}
+                    <Code className="w-5 h-5 text-[#BD1D2D]" />
+                    Tích hợp API: {campaign.name}
                 </div>
             }
             size="lg"

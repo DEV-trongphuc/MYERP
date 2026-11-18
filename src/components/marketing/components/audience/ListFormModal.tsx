@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-    Save, List, Trash2, Plus, Loader2, Filter, Layers, Sparkles,
+    Save, List, Trash2, Plus, Loader2, Filter, Layers,
     Users, CheckCircle2, Flame, DollarSign, UserX, Mail, Globe,
     Calendar, RefreshCw, X, Search, Phone, Building2
 } from 'lucide-react';
@@ -133,7 +133,7 @@ const QUICK_PRESETS = [
         id: 'graduated_certified',
         label: 'Học viên đã tốt nghiệp / Cấp chứng chỉ',
         icon: CheckCircle2,
-        color: 'text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100',
+        color: 'text-[#BD1D2D] bg-rose-50 border-rose-200 hover:bg-rose-100',
         condition: { field: 'erp_has_certificate', operator: 'is', value: 'yes' }
     },
     {
@@ -161,21 +161,21 @@ const QUICK_PRESETS = [
         id: 'valid_email',
         label: 'Có Email hợp lệ',
         icon: Mail,
-        color: 'text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100',
+        color: 'text-slate-700 bg-slate-100 border-slate-200 hover:bg-slate-200',
         condition: { field: 'has_email', operator: 'is_not_empty', value: '1' }
     },
     {
         id: 'fb_leads',
         label: 'Lead Facebook Ads',
         icon: Globe,
-        color: 'text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100',
+        color: 'text-[#BD1D2D] bg-rose-50 border-rose-200 hover:bg-rose-100',
         condition: { field: 'source', operator: 'contains', value: 'Facebook' }
     },
     {
         id: 'recent_30d',
         label: 'Tạo trong 30 ngày qua',
         icon: Calendar,
-        color: 'text-purple-600 bg-purple-50 border-purple-200 hover:bg-purple-100',
+        color: 'text-slate-700 bg-slate-100 border-slate-200 hover:bg-slate-200',
         condition: { field: 'crm_created_at', operator: 'within_days', value: '30' }
     }
 ];
@@ -742,9 +742,9 @@ const ListFormModal: React.FC<ListFormModalProps> = ({
                         onChange={e => handleUpdateCondition(groupId, cond.id, { value: e.target.value })}
                     >
                         <option value="">-- Chọn độ nóng --</option>
-                        <option value="hot">🔥 Nóng (Hot Lead)</option>
-                        <option value="warm">☀️ Ấm (Warm Lead)</option>
-                        <option value="cold">❄️ Lạnh (Cold Lead)</option>
+                        <option value="hot">Nóng (Hot Lead)</option>
+                        <option value="warm">Ấm (Warm Lead)</option>
+                        <option value="cold">Lạnh (Cold Lead)</option>
                     </select>
                 );
 
@@ -1056,11 +1056,11 @@ const ListFormModal: React.FC<ListFormModalProps> = ({
                             {/* Left 7 Cols: Preset Chips + Multi-group Condition Builder */}
                             <div className="lg:col-span-7 space-y-4">
                                 {/* Quick Preset Chips */}
-                                <div className="bg-slate-50/90 border border-slate-200/80 rounded-[20px] p-4 space-y-2.5">
+                                <div className="bg-slate-50/90 border border-slate-200/80 rounded-2xl p-4 space-y-2.5">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                                            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                                            Gợi ý bộ lọc nhanh (1-Click Preset)
+                                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                                            <Filter className="w-3.5 h-3.5 text-[#BD1D2D]" />
+                                            Gợi ý bộ lọc nhanh
                                         </span>
                                         {metaLoading && (
                                             <span className="text-[11px] text-slate-400 flex items-center gap-1">
@@ -1076,7 +1076,7 @@ const ListFormModal: React.FC<ListFormModalProps> = ({
                                                     key={preset.id}
                                                     type="button"
                                                     onClick={() => applyPresetChip(preset)}
-                                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${preset.color}`}
+                                                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors flex items-center gap-1.5 cursor-pointer ${preset.color}`}
                                                 >
                                                     <Icon className="w-3.5 h-3.5" />
                                                     + {preset.label}
@@ -1296,7 +1296,7 @@ const ListFormModal: React.FC<ListFormModalProps> = ({
                                                 Kết quả khớp toàn hệ thống MYERP
                                             </p>
                                             <div className="flex items-baseline gap-2 mt-0.5">
-                                                <span className="text-2xl font-black text-emerald-400">
+                                                <span className="text-2xl font-bold text-emerald-400 tabular-nums">
                                                     {isPreviewLoading ? '...' : previewCount.toLocaleString('vi-VN')}
                                                 </span>
                                                 <span className="text-xs font-semibold text-slate-300">

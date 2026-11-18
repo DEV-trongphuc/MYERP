@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import { X, Send, Search, Layout, AlertTriangle, CheckCircle, RefreshCw, FileText, Download, Upload, Info, Phone, User as UserIcon, Settings2, Eye, ReceiptText, BadgeCheck, Globe, Sparkles, Smartphone, Monitor, FileSpreadsheet, Zap, ChevronDown, Check, Braces, Clock, ShieldAlert, UserPlus, Heart, ExternalLink, Star, Globe as Facebook, MessageCircle, List, Plus, Trash2, ArrowRight, MoreHorizontal, ChevronLeft, ChevronRight, User } from 'lucide-react';
+import { X, Send, Search, Layout, AlertTriangle, CheckCircle, RefreshCw, FileText, Download, Upload, Info, Phone, User as UserIcon, Settings2, Eye, ReceiptText, BadgeCheck, Globe, Smartphone, Monitor, FileSpreadsheet, Zap, ChevronDown, Check, Braces, Clock, ShieldAlert, UserPlus, Heart, ExternalLink, Star, Globe as Facebook, MessageCircle, List, Plus, Trash2, ArrowRight, MoreHorizontal, ChevronLeft, ChevronRight, User } from 'lucide-react';
 import { api } from '../../services/storageAdapter';
 import Button from '../common/Button';
 import Input from '../common/Input';
@@ -54,18 +54,18 @@ const MERGE_TAGS = [
 ];
 
 const UIDTip = () => (
-    <div className="bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/20 p-5 rounded-[18px] space-y-3 animate-in slide-in-from-left-4 duration-500 delay-300">
-        <div className="flex items-center gap-2 text-[var(--color-primary)]">
-            <Sparkles className="w-4 h-4 fill-amber-600" />
-            <h5 className="text-[10px] font-bold uppercase tracking-widest">Smart Tip: Ưu tiên gửi qua UID</h5>
+    <div className="bg-rose-50/60 border border-rose-200/80 p-5 rounded-2xl space-y-3 animate-in slide-in-from-left-4 duration-300">
+        <div className="flex items-center gap-2 text-[#BD1D2D]">
+            <Info className="w-4 h-4" />
+            <h5 className="text-[11px] font-bold uppercase tracking-wider">Lưu ý: Ưu tiên gửi qua UID</h5>
         </div>
         <div className="space-y-2">
-            <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
-                Gửi ZNS qua <span className="text-[var(--color-primary)] font-bold">UID</span> (Subscriber) giúp bạn <span className="text-[var(--color-primary)] font-bold">tiết kiệm chi phí</span> hơn so với gửi qua SĐT và tăng khả năng phản hồi trực tiếp ngay trong khung chat OA.
+            <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                Gửi ZNS qua <span className="text-[#BD1D2D] font-semibold">UID</span> (Subscriber) giúp bạn <span className="text-[#BD1D2D] font-semibold">tiết kiệm chi phí</span> hơn so với gửi qua SĐT và tăng khả năng phản hồi trực tiếp ngay trong khung chat OA.
             </p>
-            <div className="flex items-start gap-2 bg-white/60 p-2.5 rounded-xl border border-amber-100">
-                <ReceiptText className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0 mt-0.5" />
-                <p className="text-[9px] text-slate-500 font-medium leading-tight italic">
+            <div className="flex items-start gap-2 bg-white p-2.5 rounded-xl border border-slate-200">
+                <ReceiptText className="w-3.5 h-3.5 text-[#BD1D2D] shrink-0 mt-0.5" />
+                <p className="text-[11px] text-slate-500 font-medium leading-snug">
                     Hệ thống tự động tracking tỷ lệ Click & Phản hồi trong Báo cáo chi tiết của từng chiến dịch.
                 </p>
             </div>
@@ -412,53 +412,52 @@ const ZaloSendZBSModal: React.FC<ZaloSendZBSModalProps> = ({ isOpen, onClose: _o
                         {selectedTemplate && (
                             <>
                                 {/* REACH & COST */}
-                                <div className="bg-[#111827] rounded-[18px] p-6 shadow-xl space-y-4 text-white relative overflow-hidden animate-in slide-in-from-left-4 duration-500">
-                                    <div className="absolute top-0 right-0 w-32 h-32 bg-[var(--color-primary)] opacity-10 rounded-full blur-3xl -mr-10 -mt-10"></div>
-                                    <h5 className="text-[10px] font-bold uppercase text-slate-400 tracking-widest flex items-center gap-2 relative z-10">
-                                        <Sparkles className="w-3.5 h-3.5 text-[#2563eb]" /> Ước tính gửi ZNS
+                                <div className="bg-[#0F172A] rounded-2xl p-6 shadow-sm border border-slate-800 space-y-4 text-white relative overflow-hidden">
+                                    <h5 className="text-[11px] font-bold uppercase text-slate-400 tracking-wider flex items-center gap-2 relative z-10">
+                                        <Zap className="w-3.5 h-3.5 text-[#BD1D2D]" /> Ước tính gửi ZNS
                                     </h5>
                                     <div className="grid grid-cols-2 gap-4 relative z-10">
                                         <div>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mb-1">Liên hệ mục tiêu</p>
-                                            <p className="text-xl font-bold text-white">{activeRecipients.length}</p>
+                                            <p className="text-[11px] text-slate-400 font-semibold uppercase mb-1">Liên hệ mục tiêu</p>
+                                            <p className="text-xl font-bold text-white tabular-nums">{activeRecipients.length.toLocaleString('vi-VN')}</p>
                                         </div>
                                         <div>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mb-1">Tạm tính chi phí</p>
-                                            <p className="text-xl font-bold text-blue-400">~ {znsPrice.toLocaleString()}<span className="text-[10px] ml-0.5 text-amber-300">đ/tin</span></p>
+                                            <p className="text-[11px] text-slate-400 font-semibold uppercase mb-1">Tạm tính chi phí</p>
+                                            <p className="text-xl font-bold text-white tabular-nums">~ {znsPrice.toLocaleString('vi-VN')}<span className="text-[11px] ml-0.5 text-slate-300 font-normal">đ/tin</span></p>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* UID UNSUPPORTED WARNING */}
                                 {znsPrice > 0 && Number(selectedTemplate?.template_data?.detail?.price_uid || 0) === 0 && (
-                                    <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-[18px] flex items-start gap-4 animate-in slide-in-from-left-4 duration-500 delay-50">
+                                    <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-4">
                                         <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                                            <AlertTriangle className="w-4 h-4 text-[var(--color-primary)]" />
+                                            <AlertTriangle className="w-4 h-4 text-[#BD1D2D]" />
                                         </div>
                                         <div>
-                                            <h5 className="text-[11px] font-black text-amber-800 uppercase tracking-widest mb-1">
+                                            <h5 className="text-[11px] font-bold text-amber-900 uppercase tracking-wider mb-1">
                                                 Lưu ý: Template không hỗ trợ UID
                                             </h5>
-                                            <p className="text-[11px] text-[#9A1523] leading-relaxed font-medium">
-                                                Mẫu này sẽ <b>tự động chuyển sang gửi qua SĐT</b> (nếu có) với chi phí ước tính <b>{znsPrice.toLocaleString()} đ/tin</b>.
+                                            <p className="text-xs text-[#9A1523] leading-relaxed font-medium">
+                                                Mẫu này sẽ <b>tự động chuyển sang gửi qua SĐT</b> (nếu có) với chi phí ước tính <b className="tabular-nums">{znsPrice.toLocaleString()} đ/tin</b>.
                                             </p>
                                         </div>
                                     </div>
                                 )}
 
                                 {/* TIME POLICY WARNING */}
-                                <div className="bg-amber-50/50 border border-amber-200 p-5 rounded-[18px] space-y-3 animate-in slide-in-from-left-4 duration-500 delay-75">
-                                    <div className="flex items-center gap-2 text-[var(--color-primary)]">
+                                <div className="bg-amber-50/50 border border-amber-200 p-5 rounded-2xl space-y-3">
+                                    <div className="flex items-center gap-2 text-[#BD1D2D]">
                                         <Clock className="w-4 h-4" />
-                                        <h5 className="text-[10px] font-bold uppercase tracking-widest">Quy định Thời gian gửi</h5>
+                                        <h5 className="text-[11px] font-bold uppercase tracking-wider">Quy định Thời gian gửi</h5>
                                     </div>
                                     <div className="space-y-2">
-                                        <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
-                                            Theo chính sách Zalo, tin nhắn ZNS chỉ được gửi trong khung giờ: <span className="text-[#9A1523] font-bold">06:00 - 22:00</span> hàng ngày.
+                                        <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                                            Theo chính sách Zalo, tin nhắn ZNS chỉ được gửi trong khung giờ: <span className="text-[#9A1523] font-bold tabular-nums">06:00 - 22:00</span> hàng ngày.
                                         </p>
-                                        <div className="flex items-start gap-2 bg-white/60 p-2.5 rounded-xl border border-amber-100">
-                                            <ShieldAlert className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0 mt-0.5" />
-                                            <p className="text-[9px] text-slate-500 font-medium leading-tight italic">
+                                        <div className="flex items-start gap-2 bg-white p-2.5 rounded-xl border border-amber-200/70">
+                                            <ShieldAlert className="w-3.5 h-3.5 text-[#BD1D2D] shrink-0 mt-0.5" />
+                                            <p className="text-[11px] text-slate-600 font-medium leading-snug">
                                                 Các tin nhắn kích hoạt ngoài khung giờ này sẽ được tạm giữ và gửi vào sáng ngày hôm sau.
                                             </p>
                                         </div>
@@ -524,22 +523,19 @@ const ZaloSendZBSModal: React.FC<ZaloSendZBSModalProps> = ({ isOpen, onClose: _o
                     </div>
 
                     {/* RIGHT PANEL: SIMULATOR */}
-                    <div className="flex-1 bg-[#f1f5f9]/50 rounded-tl-[64px] border-l border-t border-slate-200 flex justify-center items-center relative overflow-hidden group p-10">
-
-                        <div className="absolute -top-24 -right-24 w-[500px] h-[500px] bg-amber-100/40 rounded-full blur-[120px] pointer-events-none"></div>
-                        <div className="absolute -bottom-24 -left-24 w-[500px] h-[500px] bg-[#fbbf24]/5 rounded-full blur-[120px] pointer-events-none"></div>
+                    <div className="flex-1 bg-slate-100/70 rounded-tl-3xl border-l border-t border-slate-200 flex justify-center items-center relative overflow-hidden p-10">
 
                         {selectedTemplate ? (
-                            <div className="relative z-10 w-full h-full flex items-center justify-center animate-in zoom-in-95 duration-700">
+                            <div className="relative z-10 w-full h-full flex items-center justify-center animate-in zoom-in-95 duration-300">
                                 {/* Fitted Phone Frame */}
-                                <div className="w-[320px] h-[640px] relative transition-all duration-500 scale-[0.65] md:scale-[0.7] xl:scale-[0.85] 2xl:scale-[0.95] origin-center">
-                                    <div className="absolute inset-x-[-8px] inset-y-[-8px] bg-slate-900 rounded-[18px] shadow-2xl ring-1 ring-white/10"></div>
-                                    <div className="w-full h-full bg-white rounded-[18px] relative overflow-hidden flex flex-col border-[2px] border-slate-800 shadow-inner">
-                                        <div className="absolute top-0 left-1/2 -translate-x-1/2 h-6 w-32 bg-slate-900 rounded-b-[18px] z-50 flex items-center justify-center">
+                                <div className="w-[320px] h-[640px] relative transition-transform duration-300 scale-[0.65] md:scale-[0.7] xl:scale-[0.85] 2xl:scale-[0.95] origin-center">
+                                    <div className="absolute inset-x-[-8px] inset-y-[-8px] bg-slate-900 rounded-2xl shadow-xl ring-1 ring-white/10"></div>
+                                    <div className="w-full h-full bg-white rounded-2xl relative overflow-hidden flex flex-col border-2 border-slate-800 shadow-inner">
+                                        <div className="absolute top-0 left-1/2 -translate-x-1/2 h-6 w-32 bg-slate-900 rounded-b-2xl z-50 flex items-center justify-center">
                                             <div className="w-8 h-1 bg-slate-800 rounded-full"></div>
                                         </div>
                                         <div className="h-10 w-full flex justify-between items-center px-8 text-[11px] font-bold text-slate-800 shrink-0 z-40 bg-white">
-                                            <span>9:41</span>
+                                            <span className="tabular-nums">9:41</span>
                                             <div className="flex gap-1.5 items-center">
                                                 <Zap className="w-3 h-3 text-emerald-500 fill-emerald-500" />
                                                 <div className="w-5 h-2.5 border border-slate-300 rounded-[3px] p-[1px] relative">
@@ -551,8 +547,8 @@ const ZaloSendZBSModal: React.FC<ZaloSendZBSModalProps> = ({ isOpen, onClose: _o
                                         <div className="flex-1 bg-[#f8f9fa] relative flex flex-col">
                                             {isLoadingDetail ? (
                                                 <div className="flex-1 flex flex-col items-center justify-center space-y-4">
-                                                    <div className="w-10 h-10 border-4 border-amber-50 border-t-amber-600 rounded-full animate-spin"></div>
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Rendering Preview...</p>
+                                                    <div className="w-10 h-10 border-4 border-rose-50 border-t-[#BD1D2D] rounded-full animate-spin"></div>
+                                                    <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Đang tạo xem trước...</p>
                                                 </div>
                                             ) : selectedTemplate.template_data?.detail?.previewUrl ? (
                                                 <div className="w-full h-full bg-white overflow-hidden relative">
@@ -570,7 +566,7 @@ const ZaloSendZBSModal: React.FC<ZaloSendZBSModalProps> = ({ isOpen, onClose: _o
                                                     />
                                                     <button
                                                         onClick={() => fetchTemplateDetail(selectedTemplate.id)}
-                                                        className="absolute bottom-4 right-4 p-2 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-full text-slate-400 hover:text-[#9A1523] hover:border-amber-200 transition-all shadow-sm z-50 pointer-events-auto"
+                                                        className="absolute bottom-4 right-4 p-2 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-full text-slate-500 hover:text-[#BD1D2D] hover:border-rose-200 transition-colors shadow-sm z-50 pointer-events-auto"
                                                         title="Tải lại preview"
                                                     >
                                                         <RefreshCw className="w-3.5 h-3.5" />
@@ -578,11 +574,11 @@ const ZaloSendZBSModal: React.FC<ZaloSendZBSModalProps> = ({ isOpen, onClose: _o
                                                 </div>
                                             ) : (
                                                 <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-5">
-                                                    <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-inner border border-slate-50">
-                                                        <Smartphone className="w-8 h-8 text-slate-200" />
+                                                    <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-inner border border-slate-100">
+                                                        <Smartphone className="w-8 h-8 text-slate-300" />
                                                     </div>
-                                                    <h5 className="font-bold text-lg text-slate-800">Preview Unavailable</h5>
-                                                    <p className="text-sm font-medium text-slate-400 tracking-tight">Mẫu này chưa có URL preview từ Zalo.</p>
+                                                    <h5 className="font-bold text-lg text-slate-800">Chưa có bản xem trước</h5>
+                                                    <p className="text-sm font-medium text-slate-400">Mẫu này chưa có URL preview từ Zalo.</p>
                                                 </div>
                                             )}
                                         </div>
@@ -593,11 +589,11 @@ const ZaloSendZBSModal: React.FC<ZaloSendZBSModalProps> = ({ isOpen, onClose: _o
                                 </div>
                             </div>
                         ) : (
-                            <div className="text-center space-y-6 animate-in fade-in zoom-in-95 duration-700">
-                                <div className="w-[100px] h-[100px] bg-white rounded-[18px] shadow-2xl flex items-center justify-center mx-auto ring-1 ring-slate-100"><Zap className="w-12 h-12 text-[var(--color-primary)] animate-pulse" /></div>
+                            <div className="text-center space-y-5 animate-in fade-in duration-300">
+                                <div className="w-20 h-20 bg-white rounded-2xl shadow-md border border-slate-200 flex items-center justify-center mx-auto"><Zap className="w-10 h-10 text-[#BD1D2D]" /></div>
                                 <div>
-                                    <p className="text-slate-800 text-xl font-bold">Chưa chọn mẫu tin</p>
-                                    <p className="text-slate-400 text-sm font-medium mt-2 uppercase tracking-wide">Chọn mẫu ở cột trái để xem trước</p>
+                                    <p className="text-slate-900 text-lg font-bold">Chưa chọn mẫu tin</p>
+                                    <p className="text-slate-500 text-xs font-medium mt-1.5 uppercase tracking-wider">Chọn mẫu ở cột trái để xem trước</p>
                                 </div>
                             </div>
                         )}

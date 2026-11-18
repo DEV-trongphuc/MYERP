@@ -15,7 +15,6 @@ import {
   Clock,
   Users,
   FileText,
-  Sparkles,
   RefreshCw,
 } from 'lucide-react';
 import { API_BASE } from '../../config/env';

@@ -121,7 +121,7 @@ const CustomSelect: React.FC<{
             className="bg-white border border-slate-100 rounded-xl shadow-2xl max-h-60 overflow-auto divide-y divide-slate-50 animate-in fade-in zoom-in-95 duration-100"
         >
             {options.length === 0 ? (
-                <div className="p-4 text-center text-xs text-slate-400 italic">
+                <div className="p-4 text-center text-xs text-slate-400">
                     Không có dữ liệu
                 </div>
             ) : (
@@ -161,7 +161,7 @@ const CustomSelect: React.FC<{
                 type="button"
                 onClick={handleOpen}
                 disabled={disabled}
-                className={`w-full px-4 py-3 flex items-center justify-between bg-white border-2 rounded-xl text-sm font-medium transition-all ${isOpen
+                className={`w-full px-4 py-3 flex items-center justify-between bg-white border-2 rounded-xl text-sm font-medium transition-colors ${isOpen
                     ? 'border-blue-500 ring-4 ring-blue-500/10'
                     : 'border-slate-200 hover:border-blue-300'
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -606,7 +606,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                 <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
                 <p className="text-sm font-bold text-amber-800 mb-2">Chưa kết nối Zalo OA</p>
                 <p className="text-xs text-amber-700 leading-relaxed mb-4 max-w-sm mx-auto">Vui lòng kết nối Zalo Official Account trong phần Cài đặt Hệ thống để bắt đầu thiết lập gửi tin nhắn ZNS.</p>
-                <a href="/marketing/social-bot?channel=zalo&subtab=templates" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-amber-700 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-[0_2px_10px_rgba(245,158,11,0.15)] border border-amber-200 hover:bg-amber-100 hover:-translate-y-0.5 hover:shadow-md transition-all active:scale-95">
+                <a href="/marketing/social-bot?channel=zalo&subtab=templates" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-amber-700 font-bold text-[10px] uppercase tracking-widest rounded-xl shadow-xs border border-amber-200 hover:bg-amber-100 transition-colors">
                     Đến trang Quản lý Kết nối <ArrowRight className="w-3.5 h-3.5" />
                 </a>
             </div>
@@ -651,12 +651,12 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                     </div>
                     <div className="flex-1 space-y-2">
                         <div className="flex items-center justify-between">
-                            <h4 className={`text-[11px] font-black uppercase tracking-widest ${isTimeInsecure ? 'text-orange-900' : 'text-emerald-900'}`}>
+                            <h4 className={`text-[11px] font-bold uppercase tracking-widest ${isTimeInsecure ? 'text-orange-900' : 'text-emerald-900'}`}>
                                 {isTimeInsecure ? 'Cảnh báo khung giờ gửi ZNS' : 'Khung giờ Flow đã an toàn'}
                             </h4>
                             <Clock className={`w-4 h-4 ${isTimeInsecure ? 'text-orange-400' : 'text-emerald-400'}`} />
                         </div>
-                        <p className={`text-[11px] font-bold leading-relaxed ${isTimeInsecure ? 'text-orange-800' : 'text-emerald-800'}`}>
+                        <p className={`text-[11px] font-semibold leading-relaxed ${isTimeInsecure ? 'text-orange-800' : 'text-emerald-800'}`}>
                             {isTimeInsecure
                                 ? `Theo chính sách Zalo, tin ZNS chỉ gửi được từ 06:00 - 22:00. Flow hiện tại (${flow.config.startTime} - ${flow.config.endTime}) có thể khiến tin nhắn bị tạm giữ hoặc thất bại.`
                                 : 'Cấu hình Thời gian của Flow này đã tuân thủ chính sách của Zalo (06:00 - 22:00). Tin nhắn ZNS sẽ được gửi đi ngay lập tức.'
@@ -666,7 +666,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                         {isTimeInsecure && onUpdateFlow && !disabled && (
                             <button
                                 onClick={handleAutoAdjust}
-                                className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-[var(--color-primary-hover)] transition-all shadow-md shadow-[var(--color-primary)]/20 active:scale-95"
+                                className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-[var(--color-primary-hover)] transition-colors shadow-sm"
                             >
                                 <Zap className="w-3.5 h-3.5" />
                                 Tự động điều chỉnh Flow (06:00 - 22:00)
@@ -680,7 +680,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* OA Selection */}
                     <div className="relative z-30">
-                        <label className="block text-xs font-black text-slate-600 uppercase tracking-widest mb-3">
+                        <label className="block text-xs font-bold text-slate-600 uppercase tracking-widest mb-3">
                             <MessageSquare className="w-4 h-4 inline mr-2 text-blue-500" />
                             Gửi từ Zalo OA
                         </label>
@@ -698,8 +698,8 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                 type="button"
                                 onClick={handleSyncTemplates}
                                 disabled={disabled || !config.zalo_oa_id || syncing}
-                                className={`px-4 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all
-                                    ${syncing ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100'}
+                                className={`px-4 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-colors
+                                    ${syncing ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'}
                                 `}
                             >
                                 {syncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : 'Sync'}
@@ -711,12 +711,12 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                     {config.zalo_oa_id && (
                         <div className="relative z-20">
                             <div className="flex justify-between items-center mb-3">
-                                <label className="block text-xs font-black text-slate-600 uppercase tracking-widest">
-                                    <FileText className="w-4 h-4 inline mr-2 text-indigo-500" />
+                                <label className="block text-xs font-bold text-slate-600 uppercase tracking-widest">
+                                    <FileText className="w-4 h-4 inline mr-2 text-blue-600" />
                                     Chọn Mẫu (Template)
                                 </label>
                                 {previewUrl && (
-                                    <a href={previewUrl} target="_blank" rel="noreferrer" className="text-[10px] bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 text-indigo-600 font-bold px-3 py-1.5 rounded-[10px] flex items-center gap-1.5 transition-all shadow-sm active:scale-95">
+                                    <a href={previewUrl} target="_blank" rel="noreferrer" className="text-[10px] bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-xs">
                                         <Eye className="w-3.5 h-3.5" /> Xem trước thiết kế Mẫu
                                     </a>
                                 )}
@@ -731,10 +731,10 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
 
                             {/* [NEW] UID Support Warning */}
                             {selectedTemplate && selectedTemplate.template_data?.support_uid === false && (
-                                <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+                                <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
                                     <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                                     <div>
-                                        <p className="text-[11px] font-black text-amber-800 uppercase tracking-wide mb-1">
+                                        <p className="text-[11px] font-bold text-amber-800 uppercase tracking-wide mb-1">
                                             Lưu ý: Template không hỗ trợ UID
                                         </p>
                                         <p className="text-[11px] text-amber-700 leading-relaxed font-medium">
@@ -751,19 +751,19 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
 
                 {/* Input Mode Toggle & Config Area */}
                 {config.template_id && (
-                    <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div className="space-y-6">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                             <div className="flex p-1 bg-slate-100 rounded-2xl w-fit shadow-inner">
                                 <button
                                     onClick={() => handleInputModeChange('manual')}
-                                    className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${config.input_mode !== 'csv' ? 'bg-white text-blue-600 shadow-md ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+                                    className={`px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-colors ${config.input_mode !== 'csv' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
                                 >
                                     <HelpCircle className="w-3.5 h-3.5 inline mr-1.5" />
                                     Cá nhân hóa
                                 </button>
                                 <button
                                     onClick={() => handleInputModeChange('csv')}
-                                    className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${config.input_mode === 'csv' ? 'bg-white text-blue-600 shadow-md ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+                                    className={`px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-colors ${config.input_mode === 'csv' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
                                 >
                                     <FileSpreadsheet className="w-3.5 h-3.5 inline mr-1.5" />
                                     Gửi theo list CSV
@@ -774,7 +774,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                 <button
                                     type="button"
                                     onClick={handleDownloadTemplate}
-                                    className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 border border-emerald-100 transition-all active:scale-95"
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-100 border border-emerald-200 transition-colors"
                                 >
                                     <Download className="w-3.5 h-3.5" />
                                     Tải file Mẫu .CSV
@@ -782,13 +782,13 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                             )}
                         </div>
 
-                        <div className="p-8 bg-white rounded-2xl border-2 border-slate-100 shadow-xl shadow-slate-200/20">
+                        <div className="p-8 bg-white rounded-2xl border border-slate-200 shadow-sm">
                             <div className="flex items-center justify-between mb-8">
-                                <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                                <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.15em]">
                                     Cấu hình Tham số (Parameters)
                                 </h4>
                                 {config.input_mode === 'manual' && (
-                                    <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[9px] font-black uppercase tracking-widest">
+                                    <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[9px] font-bold uppercase tracking-widest">
                                         Manual Mode
                                     </span>
                                 )}
@@ -805,12 +805,12 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                             disabled={disabled}
                                         />
-                                        <div className={`py-12 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center gap-4 transition-all ${csvFile ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-100 bg-slate-50/50 group-hover:border-blue-300 group-hover:bg-blue-50/30'}`}>
-                                            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 ${csvFile ? 'bg-emerald-500 text-white' : 'bg-white text-slate-300'}`}>
+                                        <div className={`py-12 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center gap-4 transition-colors ${csvFile ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200 bg-slate-50/50 group-hover:border-blue-300 group-hover:bg-blue-50/30'}`}>
+                                            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-sm ${csvFile ? 'bg-emerald-500 text-white' : 'bg-white border border-slate-200 text-slate-400'}`}>
                                                 <UploadCloud className="w-8 h-8" />
                                             </div>
                                             <div className="text-center px-6">
-                                                <p className="text-sm font-black text-slate-800 uppercase tracking-tight">
+                                                <p className="text-sm font-bold text-slate-800 uppercase">
                                                     {csvFile ? csvFile.name : 'Chọn danh sách người nhận (.CSV)'}
                                                 </p>
                                                 <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-widest leading-relaxed">
@@ -822,35 +822,35 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
 
                                     {/* CSV Mapping Info */}
                                     {csvHeaders.length > 0 && (
-                                        <div className="space-y-6 animate-in slide-in-from-bottom-4">
+                                        <div className="space-y-6">
                                             <div className="flex items-center gap-3 px-2">
-                                                <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50"></div>
-                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Kết quả Mapping dữ liệu:</p>
+                                                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.15em]">Kết quả Mapping dữ liệu:</p>
                                             </div>
                                             {csvStats && (
                                                 <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 space-y-4">
                                                     <div className="flex items-center justify-between">
-                                                        <h5 className="text-[11px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                                                        <h5 className="text-[11px] font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2">
                                                             <FileText className="w-4 h-4 text-blue-500" />
                                                             Báo cáo kiểm tra File
                                                         </h5>
-                                                        <span className="text-[10px] bg-slate-200 text-slate-600 font-bold px-2 py-1 rounded-lg">
+                                                        <span className="text-[10px] bg-slate-200 text-slate-700 font-bold tabular-nums px-2 py-1 rounded-lg">
                                                             Total: {csvStats.totalRows} hàng
                                                         </span>
                                                     </div>
 
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 tabular-nums">
                                                         {/* Valid Rows */}
-                                                        <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl">
+                                                        <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl">
                                                             <div className="flex justify-between items-center mb-1">
                                                                 <span className="text-[10px] font-bold text-emerald-600 uppercase">Hợp lệ (SĐT OK)</span>
                                                                 <Check className="w-4 h-4 text-emerald-500" />
                                                             </div>
-                                                            <p className="text-2xl font-black text-emerald-700">{csvStats.validRows}</p>
+                                                            <p className="text-2xl font-bold text-emerald-700">{csvStats.validRows}</p>
                                                         </div>
 
                                                         {/* Invalid Rows */}
-                                                        <div className={`border p-3 rounded-xl ${csvStats.totalRows - csvStats.validRows > 0 ? 'bg-orange-50 border-orange-100' : 'bg-slate-50 border-slate-100'}`}>
+                                                        <div className={`border p-3 rounded-xl ${csvStats.totalRows - csvStats.validRows > 0 ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 border-slate-200'}`}>
                                                             <div className="flex justify-between items-center mb-1">
                                                                 <span className={`text-[10px] font-bold uppercase ${csvStats.totalRows - csvStats.validRows > 0 ? 'text-orange-600' : 'text-slate-400'}`}>
                                                                     Lỗi (SĐT sai/trống)
@@ -861,7 +861,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                                                     <Check className="w-4 h-4 text-slate-300" />
                                                                 )}
                                                             </div>
-                                                            <p className={`text-2xl font-black ${csvStats.totalRows - csvStats.validRows > 0 ? 'text-orange-700' : 'text-slate-300'}`}>
+                                                            <p className={`text-2xl font-bold ${csvStats.totalRows - csvStats.validRows > 0 ? 'text-orange-700' : 'text-slate-300'}`}>
                                                                 {csvStats.totalRows - csvStats.validRows}
                                                             </p>
                                                         </div>
@@ -869,10 +869,10 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
 
                                                     {/* Missing Columns Warning */}
                                                     {csvStats.missingRequired.length > 0 && (
-                                                        <div className="flex items-start gap-3 p-3 bg-rose-50 border border-rose-100 rounded-xl">
+                                                        <div className="flex items-start gap-3 p-3 bg-rose-50 border border-rose-200 rounded-xl">
                                                             <X className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
                                                             <div>
-                                                                <p className="text-[11px] font-black text-rose-700 uppercase mb-1">Thiếu cột bắt buộc</p>
+                                                                <p className="text-[11px] font-bold text-rose-700 uppercase mb-1">Thiếu cột bắt buộc</p>
                                                                 <p className="text-[11px] text-rose-600 leading-relaxed">
                                                                     File CSV thiếu các tham số sau: <b>{csvStats.missingRequired.join(', ')}</b>.
                                                                     Tin nhắn có thể bị Zalo từ chối.
@@ -883,13 +883,13 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
 
                                                     {/* Fallback Logic Explanation */}
                                                     {(csvStats.totalRows - csvStats.validRows > 0) && (
-                                                        <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-100 rounded-xl">
+                                                        <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
                                                             <HelpCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                                                             <div>
-                                                                <p className="text-[11px] font-black text-blue-700 uppercase mb-1">Xử lý hàng lỗi</p>
+                                                                <p className="text-[11px] font-bold text-blue-700 uppercase mb-1">Xử lý hàng lỗi</p>
                                                                 <p className="text-[11px] text-blue-600 leading-relaxed">
-                                                                    Có <b>{csvStats.totalRows - csvStats.validRows}</b> hàng chứa SĐT không hợp lệ.
-                                                                    Hệ thống sẽ <span className="font-black px-1.5 py-0.5 bg-white rounded border border-blue-200">
+                                                                    Có <b className="tabular-nums">{csvStats.totalRows - csvStats.validRows}</b> hàng chứa SĐT không hợp lệ.
+                                                                    Hệ thống sẽ <span className="font-bold px-1.5 py-0.5 bg-white rounded border border-blue-200">
                                                                         {config.fallback_behavior === 'mark_failed' ? 'CẮT FLOW & BÁO LỖI' : 'Bỏ qua & TIẾP TỤC'}
                                                                     </span> đối với các liên hệ này.
                                                                 </p>
@@ -919,8 +919,8 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                             return (
                                                 <div key={fieldName} className="space-y-2 group relative">
                                                     <label className="flex justify-between items-center px-1">
-                                                        <span className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{fieldName}</span>
-                                                        <span className="text-[9px] font-bold text-slate-400 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-100">{param.type || 'text'}</span>
+                                                        <span className="text-[11px] font-bold text-slate-700 uppercase tracking-widest">{fieldName}</span>
+                                                        <span className="text-[9px] font-bold text-slate-400 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200">{param.type || 'text'}</span>
                                                     </label>
                                                     <div className="relative">
                                                         <input
@@ -929,14 +929,14 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                                             onChange={(e) => handleTemplateDataChange(fieldName, e.target.value)}
                                                             disabled={disabled}
                                                             placeholder={`Nhập nội dung cho ${fieldName}...`}
-                                                            className="w-full px-5 py-4 pr-12 bg-slate-50 border-2 border-transparent rounded-2xl text-sm font-bold text-slate-700 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all placeholder:font-medium"
+                                                            className="w-full px-5 py-4 pr-12 bg-slate-50 border-2 border-transparent rounded-2xl text-sm font-bold text-slate-700 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-colors placeholder:font-medium"
                                                         />
                                                         {!disabled && (
                                                             <button
                                                                 type="button"
                                                                 onClick={(e) => openPicker(fieldName, e)}
-                                                                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-xl transition-all ${isPickerOpen
-                                                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                                                                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-xl transition-colors ${isPickerOpen
+                                                                    ? 'bg-blue-600 text-white shadow-sm'
                                                                     : 'bg-white text-slate-400 hover:text-blue-600 hover:bg-blue-50 border border-slate-200'
                                                                     }`}
                                                                 title="Chọn biến"
@@ -955,19 +955,19 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                                                 <div
                                                                     ref={varPickerRef}
                                                                     style={getPickerStyle()}
-                                                                    className="bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+                                                                    className="bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden"
                                                                 >
                                                                     {/* Header */}
-                                                                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3">
-                                                                        <p className="text-[11px] font-black text-white uppercase tracking-widest mb-2">Chọn biến cho: <span className="text-blue-200">{fieldName}</span></p>
+                                                                    <div className="bg-[#0F172A] px-4 py-3">
+                                                                        <p className="text-[11px] font-bold text-white uppercase tracking-widest mb-2">Chọn biến cho: <span className="text-slate-300">{fieldName}</span></p>
                                                                         <div className="relative">
-                                                                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-blue-300" />
+                                                                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
                                                                             <input
                                                                                 type="text"
                                                                                 placeholder="Tìm biến..."
                                                                                 value={varPickerSearch}
                                                                                 onChange={e => setVarPickerSearch(e.target.value)}
-                                                                                className="w-full pl-7 pr-3 py-1.5 bg-white/20 text-white placeholder-blue-300 text-xs rounded-lg outline-none focus:bg-white/30"
+                                                                                className="w-full pl-7 pr-3 py-1.5 bg-white/15 text-white placeholder-slate-400 text-xs rounded-lg outline-none focus:bg-white/25"
                                                                                 autoFocus
                                                                             />
                                                                         </div>
@@ -984,7 +984,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                                                             if (filtered.length === 0) return null;
                                                                             return (
                                                                                 <div key={gi} className="border-b border-slate-100 last:border-0">
-                                                                                    <p className="px-3 py-2 text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50">
+                                                                                    <p className="px-3 py-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50">
                                                                                         {group.label}
                                                                                     </p>
                                                                                     {filtered.map((v, vi) => (
@@ -995,7 +995,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                                                                             className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 hover:text-blue-700 transition-colors text-left group/var"
                                                                                         >
                                                                                             <div className="flex-1 min-w-0">
-                                                                                                <p className="text-[11px] font-black text-slate-700 group-hover/var:text-blue-700">{v.label}</p>
+                                                                                                <p className="text-[11px] font-bold text-slate-700 group-hover/var:text-blue-700">{v.label}</p>
                                                                                                 <p className="text-[9px] text-slate-400 font-mono">{v.key}</p>
                                                                                             </div>
                                                                                             <ChevronRight className="w-3 h-3 text-slate-300 group-hover/var:text-blue-500 shrink-0 ml-2" />
@@ -1008,7 +1008,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
 
                                                                     {/* Quick insert shortcuts */}
                                                                     <div className="px-3 py-2 bg-slate-50 border-t border-slate-100">
-                                                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Nhập nhanh</p>
+                                                                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nhập nhanh</p>
                                                                         <div className="flex flex-wrap gap-1">
                                                                             {[{ k: '{{today}}', l: 'Hôm nay' }, { k: '{{first_name}}', l: 'Tên' }, { k: '{{subscriber_id}}', l: 'ID' }].map(q => (
                                                                                 <button
@@ -1026,14 +1026,14 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                                         )}
                                                     </div>
                                                     <div className="flex justify-between items-center px-1">
-                                                        <span className="text-[9px] font-medium text-slate-400 italic">
+                                                        <span className="text-[9px] font-medium text-slate-400">
                                                             {param.require ? '* Bắt buộc nhập' : 'Không bắt buộc'}
                                                         </span>
-                                                        <div className="flex items-center gap-3">
+                                                        <div className="flex items-center gap-3 tabular-nums">
                                                             {param.maxLength && (
-                                                                <span className="text-[9px] font-black text-slate-300 uppercase">Tối đa {param.maxLength} kí tự</span>
+                                                                <span className="text-[9px] font-bold text-slate-400 uppercase">Tối đa {param.maxLength} kí tự</span>
                                                             )}
-                                                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-md ${(config.template_data?.[fieldName] || '').length > (param.maxLength || 1000) ? 'bg-rose-50 text-rose-500 border border-rose-100' : 'bg-slate-50 text-slate-400'}`}>
+                                                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md ${(config.template_data?.[fieldName] || '').length > (param.maxLength || 1000) ? 'bg-rose-50 text-rose-500 border border-rose-200' : 'bg-slate-100 text-slate-500'}`}>
                                                                 {(config.template_data?.[fieldName] || '').length} / {param.maxLength || '∞'}
                                                             </span>
                                                         </div>
@@ -1043,9 +1043,9 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                         })}
                                     </div>
                                     {templateParams.length === 0 && (
-                                        <div className="text-center py-10 opacity-30">
+                                        <div className="text-center py-10 opacity-40">
                                             <RefreshCw className="w-12 h-12 mx-auto mb-4" />
-                                            <p className="text-xs font-black uppercase tracking-widest">Không có tham số</p>
+                                            <p className="text-xs font-bold uppercase tracking-widest">Không có tham số</p>
                                         </div>
                                     )}
                                 </div>
@@ -1059,7 +1059,7 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                     <div className="space-y-6">
                         {/* Fallback Behavior */}
                         <div className="space-y-4">
-                            <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1 px-1">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1 px-1">
                                 Hành động nếu dữ liệu lỗi
                             </label>
                             <div className="grid grid-cols-2 gap-4">
@@ -1067,15 +1067,15 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                     type="button"
                                     onClick={() => handleFallbackChange('skip')}
                                     disabled={disabled}
-                                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all cursor-pointer ${
+                                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-colors cursor-pointer ${
                                         (config.fallback_behavior || 'skip') === 'skip'
-                                            ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200'
-                                            : 'bg-white border-slate-100 text-slate-500 hover:border-blue-200'
+                                            ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                                            : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300'
                                     }`}
                                 >
-                                    <HelpCircle className={`w-6 h-6 ${(config.fallback_behavior || 'skip') === 'skip' ? 'text-blue-100' : 'text-slate-200'}`} />
+                                    <HelpCircle className={`w-6 h-6 ${(config.fallback_behavior || 'skip') === 'skip' ? 'text-blue-100' : 'text-slate-300'}`} />
                                     <div className="text-center">
-                                        <p className="text-[10px] font-black uppercase tracking-tight">Bỏ qua</p>
+                                        <p className="text-[10px] font-bold uppercase">Bỏ qua</p>
                                         <p className={`text-[8px] font-bold ${(config.fallback_behavior || 'skip') === 'skip' ? 'text-blue-200' : 'text-slate-400'}`}>TIẾP TỤC FLOW</p>
                                     </div>
                                 </button>
@@ -1084,15 +1084,15 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                     type="button"
                                     onClick={() => handleFallbackChange('mark_failed')}
                                     disabled={disabled}
-                                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all cursor-pointer ${
+                                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-colors cursor-pointer ${
                                         config.fallback_behavior === 'mark_failed'
-                                            ? 'bg-rose-600 border-rose-600 text-white shadow-lg shadow-rose-200'
-                                            : 'bg-white border-slate-100 text-slate-500 hover:border-rose-200'
+                                            ? 'bg-rose-600 border-rose-600 text-white shadow-sm'
+                                            : 'bg-white border-slate-200 text-slate-500 hover:border-rose-300'
                                     }`}
                                 >
-                                    <X className={`w-6 h-6 ${config.fallback_behavior === 'mark_failed' ? 'text-rose-100' : 'text-slate-200'}`} />
+                                    <X className={`w-6 h-6 ${config.fallback_behavior === 'mark_failed' ? 'text-rose-100' : 'text-slate-300'}`} />
                                     <div className="text-center">
-                                        <p className="text-[10px] font-black uppercase tracking-tight">Cắt flow</p>
+                                        <p className="text-[10px] font-bold uppercase">Cắt flow</p>
                                         <p className={`text-[8px] font-bold ${config.fallback_behavior === 'mark_failed' ? 'text-rose-200' : 'text-slate-400'}`}>ĐÁNH DẤU LỖI</p>
                                     </div>
                                 </button>
@@ -1100,20 +1100,20 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                         </div>
 
                         {/* Info Box */}
-                        <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-6 flex flex-col sm:flex-row items-start gap-4">
-                            <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-indigo-500 shrink-0">
+                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 flex flex-col sm:flex-row items-start gap-4">
+                            <div className="w-12 h-12 bg-white border border-slate-200 rounded-2xl shadow-xs flex items-center justify-center text-slate-600 shrink-0">
                                 <HelpCircle className="w-6 h-6" />
                             </div>
                             <div className="space-y-2 flex-1 min-w-0">
-                                <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest">Mách nhỏ cho bạn</p>
-                                <ul className="space-y-3 text-[11px] text-slate-500 font-bold leading-relaxed">
+                                <p className="text-[11px] font-bold text-slate-700 uppercase tracking-widest">Mách nhỏ cho bạn</p>
+                                <ul className="space-y-3 text-[11px] text-slate-600 font-medium leading-relaxed">
                                     <li className="flex items-start gap-2.5">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0"></div>
-                                        <p className="flex-1">Dùng <b className="text-indigo-600">Cá nhân hóa</b> khi muốn gửi tự động theo sự kiện của khách.</p>
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[#BD1D2D] mt-1.5 shrink-0"></div>
+                                        <p className="flex-1">Dùng <b className="text-slate-900">Cá nhân hóa</b> khi muốn gửi tự động theo sự kiện của khách.</p>
                                     </li>
                                     <li className="flex items-start gap-2.5">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0"></div>
-                                        <p className="flex-1">Dùng <b className="text-indigo-600">CSV</b> khi đã có sẵn danh sách SĐT trong file Excel/CSV.</p>
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[#BD1D2D] mt-1.5 shrink-0"></div>
+                                        <p className="flex-1">Dùng <b className="text-slate-900">CSV</b> khi đã có sẵn danh sách SĐT trong file Excel/CSV.</p>
                                     </li>
                                 </ul>
                             </div>
@@ -1125,39 +1125,35 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
             {/* Bottom Preview Section - Massive and Beautiful */}
             {
                 config.template_id && (
-                    <div className="pt-10 border-t border-slate-100 space-y-8">
+                    <div className="pt-10 border-t border-slate-200 space-y-8">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
+                                <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-sm">
                                     <Eye className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h4 className="text-base font-black text-slate-800 tracking-tight">TRỰC QUAN GIAO DIỆN (PREVIEW)</h4>
+                                    <h4 className="text-base font-bold text-slate-800">TRỰC QUAN GIAO DIỆN (PREVIEW)</h4>
                                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">Xác nhận nội dung sẽ hiển thị trên điện thoại</p>
                                 </div>
                             </div>
                             {previewUrl && (
-                                <a href={previewUrl} target="_blank" rel="noreferrer" className="px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
+                                <a href={previewUrl} target="_blank" rel="noreferrer" className="px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 uppercase tracking-widest hover:bg-slate-50 transition-colors shadow-xs">
                                     Open in Full Tab
                                 </a>
                             )}
                         </div>
 
-                        <div className="bg-slate-50/50 rounded-2xl p-12 border border-slate-100 relative overflow-hidden flex flex-col items-center group">
-                            {/* Background Decor */}
-                            <div className="absolute top-0 right-0 w-64 h-64 bg-blue-100/30 rounded-full blur-3xl -mr-32 -mt-32"></div>
-                            <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-100/30 rounded-full blur-3xl -ml-32 -mb-32"></div>
-
+                        <div className="bg-slate-50 rounded-2xl p-12 border border-slate-200 relative overflow-hidden flex flex-col items-center">
                             {loadingDetail ? (
                                 <div className="h-[600px] flex flex-col items-center justify-center text-slate-400 gap-4">
                                     <RefreshCw className="w-10 h-10 animate-spin text-blue-500" />
-                                    <p className="text-xs font-black uppercase tracking-[0.2em] animate-pulse">Đang nạp bộ xem trước...</p>
+                                    <p className="text-xs font-bold uppercase tracking-[0.2em]">Đang nạp bộ xem trước...</p>
                                 </div>
                             ) : previewUrl ? (
-                                <div className="w-full max-w-[400px] bg-slate-900 rounded-[60px] p-2.5 shadow-2xl relative z-10 scale-100 group-hover:scale-[1.02] transition-transform duration-500">
+                                <div className="w-full max-w-[400px] bg-slate-900 rounded-[48px] p-2.5 shadow-xl relative z-10">
                                     {/* Device Details */}
                                     <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-slate-900 rounded-b-2xl z-30"></div>
-                                    <div className="absolute top-8 left-8 right-8 h-4 flex justify-between items-center text-[10px] text-slate-400 font-bold z-30">
+                                    <div className="absolute top-8 left-8 right-8 h-4 flex justify-between items-center text-[10px] text-slate-400 font-bold tabular-nums z-30">
                                         <span>9:41</span>
                                         <div className="flex gap-1.5 items-center">
                                             <div className="w-3.5 h-2 bg-slate-600 rounded-sm"></div>
@@ -1183,16 +1179,16 @@ const ZaloZNSStepConfig: React.FC<ZaloZNSStepConfigProps> = ({ config, onChange,
                                 </div>
                             ) : (
                                 <div className="h-[500px] flex flex-col items-center justify-center text-center max-w-sm mx-auto relative z-10">
-                                    <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mb-8 shadow-2xl border-4 border-slate-50">
+                                    <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mb-8 shadow-md border-4 border-slate-100">
                                         <AlertCircle className="w-10 h-10 text-amber-600" />
                                     </div>
-                                    <h5 className="text-lg font-black text-slate-800 tracking-tight mb-2">KHÔNG TÌM THẤY PREVIEW</h5>
-                                    <p className="text-sm font-bold text-slate-400 leading-relaxed mb-8 uppercase tracking-wide px-4">
+                                    <h5 className="text-lg font-bold text-slate-800 mb-2">KHÔNG TÌM THẤY PREVIEW</h5>
+                                    <p className="text-sm font-medium text-slate-500 leading-relaxed mb-8 px-4">
                                         Zalo chưa cung cấp bản xem trước cho Template này hoặc bộ nhớ đệm đang gặp lỗi.
                                     </p>
                                     <button
                                         onClick={() => fetchTemplateDetail(selectedTemplate?.id || '')}
-                                        className="px-10 py-3 bg-slate-800 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl active:scale-95"
+                                        className="px-10 py-3 bg-[#0F172A] text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-colors shadow-sm"
                                     >
                                         Thử tải lại ngay
                                     </button>

@@ -61,7 +61,7 @@ const StepUnsubscribeModal: React.FC<StepUnsubscribeModalProps> = ({
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={`Hủy đăng kýtại: ${stepLabel}`} size="lg">
+        <Modal isOpen={isOpen} onClose={onClose} title={`Hủy đăng ký tại: ${stepLabel}`} size="lg">
             <div className="space-y-4">
                 {/* Summary */}
                 <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-4 flex items-start gap-3">
@@ -69,7 +69,7 @@ const StepUnsubscribeModal: React.FC<StepUnsubscribeModalProps> = ({
                     <div className="flex-1">
                         <h4 className="text-sm font-bold text-rose-800 mb-1">Tổng quan Hủy đăng ký</h4>
                         <p className="text-xs text-rose-700">
-                            Có <strong>{users.length} người dùng</strong> đã Hủy đăng ký sau khi nhận email từ bước này.
+                            Có <strong className="tabular-nums">{users.length} người dùng</strong> đã hủy đăng ký sau khi nhận email từ bước này.
                         </p>
                     </div>
                 </div>
@@ -99,8 +99,8 @@ const StepUnsubscribeModal: React.FC<StepUnsubscribeModalProps> = ({
                         <tbody className="divide-y divide-slate-100">
                             {!Array.isArray(users) || users.length === 0 ? (
                                 <tr>
-                                    <td colSpan={4} className="py-8 text-center text-xs text-slate-400 italic">
-                                        Không có người dùng nào Hủy đăng kýtại bước này
+                                    <td colSpan={4} className="py-8 text-center text-xs text-slate-400">
+                                        Không có người dùng nào hủy đăng ký tại bước này
                                     </td>
                                 </tr>
                             ) : (
@@ -127,7 +127,7 @@ const StepUnsubscribeModal: React.FC<StepUnsubscribeModalProps> = ({
                                             </p>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <div className="flex items-center gap-1 text-xs text-slate-500">
+                                            <div className="flex items-center gap-1 text-xs text-slate-500 tabular-nums">
                                                 <Clock className="w-3 h-3" />
                                                 {formatTime(user.unsubscribeDate)}
                                             </div>

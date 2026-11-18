@@ -28,7 +28,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ block, boxStyle, labelS
     return (
         <div style={{ textAlign: 'center', background: 'transparent' }}>
             {!block.style.targetDate && (
-                <div className="flex items-center justify-center gap-1.5 text-xs text-red-500 mb-2 font-bold animate-pulse">
+                <div className="flex items-center justify-center gap-1.5 text-xs text-red-500 mb-2 font-bold">
                     <AlertTriangle className="w-3.5 h-3.5" /> Hãy chọn ngày kết thúc
                 </div>
             )}

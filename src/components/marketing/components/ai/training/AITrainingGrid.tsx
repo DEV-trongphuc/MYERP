@@ -294,9 +294,9 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                 <button
                                     type="button"
                                     onClick={() => props.setActiveTab && props.setActiveTab('logs')}
-                                    className="h-10 md:h-11 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 whitespace-nowrap text-white bg-gradient-to-r from-[var(--color-primary)] to-[#9A1523]"
+                                    className="h-10 md:h-11 px-6 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-2 whitespace-nowrap text-white bg-[#BD1D2D] hover:bg-[#9A1523]"
                                 >
-                                    <Activity size={16} className="text-white animate-pulse" />
+                                    <Activity size={16} className="text-white" strokeWidth={1.75} />
                                     Logs & Stats
                                 </button>
                             )}
@@ -307,7 +307,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                         <div className="space-y-6">
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className={`text-base md:text-lg font-bold ${isDarkTheme ? 'text-slate-200' : 'text-slate-800'}`}>Danh sách Website</h3>
-                                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest tabular-nums">
                                     Tổng cộng: {filteredProperties.length.toLocaleString()}
                                 </div>
                             </div>
@@ -316,7 +316,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                 {loading ? (
                                     [1, 2, 3].map(i => renderCardSkeleton(i))
                                 ) : filteredProperties.map(p => (
-                                    <div key={p.id} className={`group p-6 rounded-[18px] border transition-colors flex flex-col justify-between gap-5 relative overflow-hidden shadow-none ${isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-slate-700' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                                    <div key={p.id} className={`group p-6 rounded-2xl border transition-colors flex flex-col justify-between gap-5 relative overflow-hidden shadow-none ${isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-slate-700' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
                                         <div className="flex justify-between items-start gap-3 relative z-10">
                                             <div className="flex items-center gap-3.5 min-w-0">
                                                 <AppIcon name="ai_training" size={40} className="rounded-[12px] shrink-0" />
@@ -325,21 +325,21 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                     <p className="text-[11px] text-slate-400 font-mono mt-1 pr-2 truncate">{p.domain}</p>
                                                 </div>
                                             </div>
-                                            <div className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tight shrink-0 ${p.ai_enabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : (isDarkTheme ? 'bg-slate-800 text-slate-500 border border-slate-700' : 'bg-slate-50 text-slate-400 border border-slate-200')}`}>
+                                            <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase shrink-0 ${p.ai_enabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : (isDarkTheme ? 'bg-slate-800 text-slate-500 border border-slate-700' : 'bg-slate-50 text-slate-400 border border-slate-200')}`}>
                                                 {p.ai_enabled ? 'Active' : 'OFF'}
                                             </div>
                                         </div>
 
                                         <div className="space-y-4 relative z-10">
-                                            <div className={`flex items-center justify-between p-3 rounded-[14px] border transition-colors ${isDarkTheme ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50/70 border-slate-200'}`}>
+                                            <div className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${isDarkTheme ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50/70 border-slate-200'}`}>
                                                 <div className="flex flex-col">
-                                                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Tài liệu</span>
-                                                    <span className={`text-sm font-black ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>{(p.stats?.docs_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">docs</span></span>
+                                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Tài liệu</span>
+                                                    <span className={`text-sm font-bold tabular-nums ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>{(p.stats?.docs_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">docs</span></span>
                                                 </div>
                                                 <div className={`h-8 w-px ${isDarkTheme ? 'bg-slate-700' : 'bg-slate-200'}`}></div>
                                                 <div className="flex flex-col items-end">
-                                                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Cuộc trò chuyện</span>
-                                                    <span className={`text-sm font-black ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>{(p.stats?.queries_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">convos</span></span>
+                                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Cuộc trò chuyện</span>
+                                                    <span className={`text-sm font-bold tabular-nums ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>{(p.stats?.queries_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">convos</span></span>
                                                 </div>
                                             </div>
 
@@ -361,7 +361,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                         </div>
                     ) : (
                         <div className="space-y-6">
-                            <div className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 lg:p-6 rounded-[18px] border mb-6 gap-6 ${isDarkTheme ? 'bg-slate-800/30 border-slate-800' : 'bg-slate-50/50 border-slate-200'}`}>
+                            <div className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 lg:p-6 rounded-2xl border mb-6 gap-6 ${isDarkTheme ? 'bg-slate-800/30 border-slate-800' : 'bg-slate-50/50 border-slate-200'}`}>
                                 <div className="flex items-center gap-3">
                                     {viewModeChat === 'chatbots' && (
                                         <button
@@ -386,7 +386,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                             <h3 className={`text-base lg:text-lg font-bold ${isDarkTheme ? 'text-slate-200' : 'text-slate-800'}`}>
                                                 {viewModeChat === 'categories' ? 'Danh sách Nhóm' : `Quản lý: ${categories.find(c => String(c.id) === String(selectedCategoryId))?.name || 'Nhóm'}`}
                                             </h3>
-                                            <div className={`hidden sm:flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-lg border ${isDarkTheme ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-white text-slate-500 border-slate-200'}`}>
+                                            <div className={`hidden sm:flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-lg border tabular-nums ${isDarkTheme ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-white text-slate-500 border-slate-200'}`}>
                                                 {viewModeChat === 'categories'
                                                     ? `Tổng cộng: ${categories.length.toLocaleString()}`
                                                     : activeSubTab === 'chatbots'
@@ -394,7 +394,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                         : (activeSubTab || 'chatbots').toUpperCase()}
                                             </div>
                                         </div>
-                                        <p className={`text-[10px] lg:text-xs font-medium tracking-tight ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
+                                        <p className={`text-[11px] lg:text-xs font-medium ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
                                             {viewModeChat === 'categories'
                                                 ? 'Quản lý các nhóm AI và không gian làm việc AI Space.'
                                                 : (activeSubTab === 'chatbots' ? 'Danh sách các chatbot AI thuộc nhóm này.' : activeSubTab === 'users' ? 'Quản lý toàn bộ thành viên trong tổ chức này.' : `Quản lý ${activeSubTab === 'logs' ? 'nhật ký' : 'cài đặt'} của nhóm.`)}
@@ -407,7 +407,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                         <button
                                             type="button"
                                             onClick={() => setIsCreateCategoryModalOpen(true)}
-                                            className={`h-10 px-5 rounded-xl text-[10px] lg:text-xs font-bold transition-all flex items-center gap-2 shadow-none w-full sm:w-auto justify-center border ${isDarkTheme ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:border-slate-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+                                            className={`h-10 px-5 rounded-xl text-[11px] lg:text-xs font-semibold transition-colors flex items-center gap-2 shadow-none w-full sm:w-auto justify-center border ${isDarkTheme ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:border-slate-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
                                         >
                                             <FolderPlus className="w-4 h-4 text-slate-400" />
                                             Tạo Group
@@ -422,7 +422,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                         || { id: selectedCategoryId || '', name: '', description: '', slug: '' };
                                                     handleEditCategory(cat);
                                                 }}
-                                                className={`h-10 px-4 rounded-xl text-[10px] lg:text-xs font-bold transition-all flex items-center justify-center gap-2 border shadow-none ${isDarkTheme ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                                                className={`h-10 px-4 rounded-xl text-[11px] lg:text-xs font-semibold transition-colors flex items-center justify-center gap-2 border shadow-none ${isDarkTheme ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                                             >
                                                 <Settings className="w-4 h-4 text-slate-400" />
                                                 <span>Quản trị Group</span>
@@ -439,7 +439,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                             window.open(`/#/ai-space/${selectedCategoryId}`, '_blank');
                                                         }
                                                     }}
-                                                    className={`h-10 px-4 rounded-xl text-[10px] lg:text-xs font-bold transition-all flex items-center justify-center gap-2 border shadow-none ${isDarkTheme ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/30 hover:bg-indigo-600/30' : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100'}`}
+                                                    className={`h-10 px-4 rounded-xl text-[11px] lg:text-xs font-semibold transition-colors flex items-center justify-center gap-2 border shadow-none ${isDarkTheme ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700' : 'bg-slate-100 text-slate-800 border-slate-200 hover:bg-slate-200'}`}
                                                     title={`Mở AI Space: ${categories.find(c => String(c.id) === String(selectedCategoryId))?.name || ''}`}
                                                 >
                                                     <ExternalLink className="w-3.5 h-3.5" />
@@ -452,7 +452,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                 <button
                                                     type="button"
                                                     onClick={() => setIsCreateBotModalOpen(true)}
-                                                    className={`h-10 px-5 rounded-xl text-[10px] lg:text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-none border ${isDarkTheme ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]/20 hover:bg-[#9A1523]' : 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]/10 hover:brightness-95'}`}
+                                                    className={`h-10 px-5 rounded-xl text-[11px] lg:text-xs font-semibold transition-colors flex items-center justify-center gap-2 shadow-none border ${isDarkTheme ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]/20 hover:bg-[#9A1523]' : 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]/10 hover:brightness-95'}`}
                                                 >
                                                     <Plus className="w-4 h-4" />
                                                     Tạo AI Agent
@@ -466,7 +466,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                         const btn = document.getElementById('org-user-add-btn');
                                                         if (btn) btn.click();
                                                     }}
-                                                    className={`h-10 px-5 rounded-xl text-[10px] lg:text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-none border ${isDarkTheme ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]/20 hover:bg-[#9A1523]' : 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]/10 hover:brightness-95'}`}
+                                                    className={`h-10 px-5 rounded-xl text-[11px] lg:text-xs font-semibold transition-colors flex items-center justify-center gap-2 shadow-none border ${isDarkTheme ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]/20 hover:bg-[#9A1523]' : 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]/10 hover:brightness-95'}`}
                                                 >
                                                     <Plus className="w-4 h-4" />
                                                     Thêm User Tổ chức
@@ -482,7 +482,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                     {loading ? (
                                         [1, 2, 3].map(i => renderCardSkeleton(i))
                                     ) : categories.length === 0 ? (
-                                        <div className={`col-span-full py-20 text-center border-2 border-dashed rounded-[18px] ${isDarkTheme ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-slate-50/50'}`}>
+                                        <div className={`col-span-full py-20 text-center border-2 border-dashed rounded-2xl ${isDarkTheme ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-slate-50/50'}`}>
                                             <Building className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                                             <h3 className={`font-bold text-lg ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>Chưa có nhóm nào</h3>
                                             <p className="text-slate-500 mt-2 text-sm">Vui lòng tạo nhóm để quản lý các chatbot.</p>
@@ -494,7 +494,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                 setSelectedCategoryId(c.id);
                                                 setViewModeChat('chatbots');
                                             }}
-                                            className={`group p-6 rounded-[18px] border transition-colors cursor-pointer flex flex-col justify-between gap-5 relative overflow-hidden shadow-none ${isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-slate-700' : 'bg-white border-slate-200 hover:border-slate-300'}`}
+                                            className={`group p-6 rounded-2xl border transition-colors cursor-pointer flex flex-col justify-between gap-5 relative overflow-hidden shadow-none ${isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-slate-700' : 'bg-white border-slate-200 hover:border-slate-300'}`}
                                         >
                                             <div className="flex justify-between items-start gap-3 relative z-10">
                                                 <div className="flex items-center gap-3.5 min-w-0">
@@ -527,22 +527,22 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                             </button>
                                                         </div>
                                                     )}
-                                                    <div className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tight bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                                    <div className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                                                         Active
                                                     </div>
                                                 </div>
                                             </div>
 
                                             <div className="space-y-4 relative z-10">
-                                                <div className={`flex items-center justify-between p-3 rounded-[14px] border transition-colors ${isDarkTheme ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50/70 border-slate-200'}`}>
+                                                <div className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${isDarkTheme ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50/70 border-slate-200'}`}>
                                                     <div className="flex flex-col">
-                                                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">AI Agents</span>
-                                                        <span className={`text-sm font-black ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>{(c.chatbot_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">bots</span></span>
+                                                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">AI Agents</span>
+                                                        <span className={`text-sm font-bold tabular-nums ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>{(c.chatbot_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">bots</span></span>
                                                     </div>
                                                     <div className={`h-8 w-px ${isDarkTheme ? 'bg-slate-700' : 'bg-slate-200'}`}></div>
                                                     <div className="flex flex-col items-end">
-                                                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Tài liệu</span>
-                                                        <span className={`text-sm font-black ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>{(c.docs_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">docs</span></span>
+                                                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Tài liệu</span>
+                                                        <span className={`text-sm font-bold tabular-nums ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>{(c.docs_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">docs</span></span>
                                                     </div>
                                                 </div>
 
@@ -566,7 +566,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                                 e.stopPropagation();
                                                                 props.onOpenAISpace?.(c.id);
                                                             }}
-                                                            className={`h-10 px-3.5 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5 shrink-0 ${isDarkTheme ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/25' : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100'}`}
+                                                            className={`h-10 px-3.5 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5 shrink-0 ${isDarkTheme ? 'bg-[#BD1D2D]/15 text-rose-300 border-[#BD1D2D]/30 hover:bg-[#BD1D2D]/25' : 'bg-[#BD1D2D]/10 text-[#BD1D2D] border-[#BD1D2D]/20 hover:bg-[#BD1D2D]/15'}`}
                                                             title={`Mở AI Space: ${c.name}`}
                                                         >
                                                             <ExternalLink className="w-3.5 h-3.5" />
@@ -583,13 +583,13 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                     {activeSubTab === 'chatbots' ? (
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                             {filteredChatbots.length === 0 ? (
-                                                <div className={`col-span-full py-20 text-center border-2 border-dashed rounded-[18px] ${isDarkTheme ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-slate-50/50'}`}>
+                                                <div className={`col-span-full py-20 text-center border-2 border-dashed rounded-2xl ${isDarkTheme ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-slate-50/50'}`}>
                                                     <Bot className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                                                     <h3 className={`font-bold text-lg ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>Chưa có AI Chatbot nào</h3>
                                                     <p className="text-slate-500 mt-2 text-sm">Nhấn "Tạo AI Agent" để bắt đầu.</p>
                                                 </div>
                                             ) : filteredChatbots.map(c => (
-                                                <div key={c.id} className={`group p-6 rounded-[18px] border transition-colors flex flex-col justify-between gap-5 relative overflow-hidden shadow-none ${isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-slate-700' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                                                <div key={c.id} className={`group p-6 rounded-2xl border transition-colors flex flex-col justify-between gap-5 relative overflow-hidden shadow-none ${isDarkTheme ? 'bg-slate-900 border-slate-800 hover:border-slate-700' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
                                                     <div className="flex justify-between items-start gap-3 relative z-10">
                                                         <div className="flex items-center gap-3.5 min-w-0">
                                                             <AppIcon name="ai_training" size={40} className="rounded-[12px] shrink-0" />
@@ -619,22 +619,22 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                                     <Trash2 className="w-3.5 h-3.5" />
                                                                 </button>
                                                             </div>
-                                                            <div className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tight ${activePropertyId === c.id || c.ai_enabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : (isDarkTheme ? 'bg-slate-800 text-slate-500 border border-slate-700' : 'bg-slate-50 text-slate-400 border border-slate-200')}`}>
+                                                            <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${activePropertyId === c.id || c.ai_enabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : (isDarkTheme ? 'bg-slate-800 text-slate-500 border border-slate-700' : 'bg-slate-50 text-slate-400 border border-slate-200')}`}>
                                                                 {activePropertyId === c.id || c.ai_enabled ? 'Active' : 'OFF'}
                                                             </div>
                                                         </div>
                                                     </div>
 
                                                     <div className="space-y-4 relative z-10">
-                                                        <div className={`flex items-center justify-between p-3 rounded-[14px] border transition-colors ${isDarkTheme ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50/70 border-slate-200'}`}>
+                                                        <div className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${isDarkTheme ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50/70 border-slate-200'}`}>
                                                             <div className="flex flex-col">
-                                                                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Tài liệu</span>
-                                                                <span className={`text-sm font-black ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>{(c.stats?.docs_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">docs</span></span>
+                                                                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Tài liệu</span>
+                                                                <span className={`text-sm font-bold tabular-nums ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>{(c.stats?.docs_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">docs</span></span>
                                                             </div>
                                                             <div className={`h-8 w-px ${isDarkTheme ? 'bg-slate-700' : 'bg-slate-200'}`}></div>
                                                             <div className="flex flex-col items-end">
-                                                                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Cuộc trò chuyện</span>
-                                                                <span className={`text-sm font-black ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>{(c.stats?.queries_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">convos</span></span>
+                                                                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Cuộc trò chuyện</span>
+                                                                <span className={`text-sm font-bold tabular-nums ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>{(c.stats?.queries_count || 0).toLocaleString()} <span className="text-[10px] font-medium text-slate-500">convos</span></span>
                                                             </div>
                                                         </div>
 
@@ -651,7 +651,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => props.onOpenBotChat?.(c.id, c.category_id || selectedCategoryId || undefined)}
-                                                                    className={`h-10 px-3.5 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5 shrink-0 ${isDarkTheme ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/25' : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100'}`}
+                                                                    className={`h-10 px-3.5 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5 shrink-0 ${isDarkTheme ? 'bg-[#BD1D2D]/15 text-rose-300 border-[#BD1D2D]/30 hover:bg-[#BD1D2D]/25' : 'bg-[#BD1D2D]/10 text-[#BD1D2D] border-[#BD1D2D]/20 hover:bg-[#BD1D2D]/15'}`}
                                                                     title={`Mở Chat: ${c.name}`}
                                                                 >
                                                                     <MessageSquare className="w-3.5 h-3.5" />
@@ -664,7 +664,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                             ))}
                                         </div>
                                     ) : activeSubTab === 'users' ? (
-                                        <div className={`p-4 rounded-[18px] border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200'}`}>
+                                        <div className={`p-4 rounded-2xl border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200'}`}>
                                             <OrgUserManager
                                                 isDarkTheme={isDarkTheme}
                                                 hideHeader={true}
@@ -672,15 +672,15 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                             />
                                         </div>
                                     ) : activeSubTab === 'logs' ? (
-                                        <div className={`p-4 rounded-[18px] border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200'}`}>
+                                        <div className={`p-4 rounded-2xl border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200'}`}>
                                             <AdminLogsTab categoryId={selectedCategoryId} />
                                         </div>
                                     ) : activeSubTab === 'feedback' ? (
-                                        <div className={`p-4 rounded-[18px] border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200'}`}>
+                                        <div className={`p-4 rounded-2xl border ${isDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200'}`}>
                                             <FeedbackAdminPanel />
                                         </div>
                                     ) : (
-                                        <div className={`p-12 text-center border-2 border-dashed rounded-[18px] ${isDarkTheme ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-slate-50/50'}`}>
+                                        <div className={`p-12 text-center border-2 border-dashed rounded-2xl ${isDarkTheme ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-slate-50/50'}`}>
                                             <Shield className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                                             <h3 className={`font-bold text-lg ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>Cài đặt Nhóm</h3>
                                             <p className="text-slate-500 mt-2 mb-6 text-sm">Quản lý thông tin cơ bản và cấu hình của nhóm AI này.</p>
@@ -690,7 +690,7 @@ const AITrainingGrid: React.FC<AITrainingGridProps> = (props) => {
                                                     const cat = categories.find(c => String(c.id) === String(selectedCategoryId));
                                                     if (cat) handleEditCategory(cat);
                                                 }}
-                                                className="px-6 py-3 bg-[var(--color-primary)] text-white rounded-xl font-bold uppercase tracking-widest text-[10px] transition-all"
+                                                className="px-6 py-3 bg-[var(--color-primary)] text-white rounded-xl font-bold uppercase tracking-widest text-[10px] transition-colors"
                                             >
                                                 Mở Cấu hình Nhóm
                                             </button>

@@ -4,6 +4,7 @@ import { Search, X, Users, Building2, Briefcase, ArrowRight, Loader2, Phone, Mai
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
+import { ensureArray, extractArray } from '../../utils/safeArray';
 
 interface SearchResult {
   contacts?: any[];
@@ -139,7 +140,7 @@ export const GlobalSearchModal: React.FC<{ onClose: () => void }> = ({ onClose }
           {/* Results grouped */}
           {results.contacts && results.contacts.length > 0 && (
             <ResultGroup icon={<Users size={14} />} label="Khách hàng" color="#3b82f6">
-              {results.contacts.slice(0, 4).map((c: any) => (
+              {ensureArray(results?.contacts).slice(0, 4).map((c: any) => (
                 <ResultItem 
                   key={c.id} 
                   title={c.full_name || ''} 
@@ -156,7 +157,7 @@ export const GlobalSearchModal: React.FC<{ onClose: () => void }> = ({ onClose }
           )}
           {results.companies && results.companies.length > 0 && (
             <ResultGroup icon={<Building2 size={14} />} label="Công ty" color="#BD1D2D">
-              {results.companies.slice(0, 3).map((c: any) => (
+              {ensureArray(results?.companies).slice(0, 3).map((c: any) => (
                 <ResultItem 
                   key={c.id} 
                   title={c.name} 
@@ -171,7 +172,7 @@ export const GlobalSearchModal: React.FC<{ onClose: () => void }> = ({ onClose }
           )}
           {results.deals && results.deals.length > 0 && (
             <ResultGroup icon={<Briefcase size={14} />} label="Pipeline" color="#10b981">
-              {results.deals.slice(0, 3).map((d: any) => (
+              {ensureArray(results?.deals).slice(0, 3).map((d: any) => (
                 <ResultItem 
                   key={d.id} 
                   title={d.title} 

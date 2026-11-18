@@ -1820,8 +1820,9 @@ switch ($resource) {
     case 'test-benchmark':
         ini_set('display_errors', 1);
         error_reporting(E_ALL);
-        $token = $_GET['token'] ?? '';
-        if ($token !== 'Ideas_Diag_Secure_Token_2026_9e88d6c701fbc6b7') {
+        $token = (string)($_GET['token'] ?? '');
+        $expectedDiagToken = trim((string)($_ENV['DIAG_TOKEN'] ?? (getenv('DIAG_TOKEN') ?: ($_ENV['MYERP_DIAG_TOKEN'] ?? (getenv('MYERP_DIAG_TOKEN') ?: '')))));
+        if ($expectedDiagToken === '' || !hash_equals($expectedDiagToken, $token)) {
             respond(403, null, 'Forbidden: Invalid token', false);
         }
         define('DIAG_TOKEN', true);

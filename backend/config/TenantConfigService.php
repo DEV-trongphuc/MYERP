@@ -1670,9 +1670,212 @@ class TenantConfigService
                     }
                 }
             }
+
+            try {
+                $stmtMigFlag = $db->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'legacy_stage_notify_migrated_v1' LIMIT 1");
+                $stmtMigFlag->execute([$tenantId]);
+                if ((string)$stmtMigFlag->fetchColumn() !== '1') {
+                    self::syncLegacyTenantNotificationSettings($db, $tenantId, false);
+                }
+            } catch (\Throwable $eMig) {
+            }
         } catch (\Throwable $e) {
             error_log('TenantConfigService::seedTenantDefaultsIfNeeded error: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Dynamically migrate notification settings (pipeline stages, notification rules,
+     * deposit approval workflow, HR team approver) to preserve exact legacy per-person
+     * defaults when those users exist in the tenant's active roster.
+     */
+    public static function syncLegacyTenantNotificationSettings(PDO $db, int $tenantId, bool $overwriteSeededDefaults = false): array
+    {
+        $summary = [
+            'tenant_id' => $tenantId,
+            'updated_stages' => 0,
+            'updated_rules' => 0,
+            'updated_workflows' => 0,
+            'updated_teams' => 0,
+            'skipped' => false,
+        ];
+
+        try {
+            $stmtU = $db->prepare("SELECT id, username, email, full_name, role FROM users WHERE tenant_id = ? AND is_active = 1 AND deleted_at IS NULL");
+            $stmtU->execute([$tenantId]);
+            $tenantUsers = $stmtU->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable $e) {
+            $summary['skipped'] = true;
+            return $summary;
+        }
+
+        if (empty($tenantUsers)) {
+            $summary['skipped'] = true;
+            return $summary;
+        }
+
+        $resolveUid = static function (int $legacyId, array $emails, array $usernames) use ($tenantUsers): int {
+            $normEmails = array_map('strtolower', $emails);
+            $normUsers = array_map('strtolower', $usernames);
+            foreach ($tenantUsers as $u) {
+                $uid = (int)($u['id'] ?? 0);
+                $em = strtolower(trim((string)($u['email'] ?? '')));
+                $un = strtolower(trim((string)($u['username'] ?? '')));
+                if (
+                    $uid === $legacyId ||
+                    ($em !== '' && in_array($em, $normEmails, true)) ||
+                    ($un !== '' && in_array($un, $normUsers, true))
+                ) {
+                    return $uid;
+                }
+            }
+            return 0;
+        };
+
+        $saleAdminId = $resolveUid(100066, ['linhdk@ideas.edu.vn'], ['linhdk']);
+        $maiThiNuId  = $resolveUid(100062, ['numt@ideas.edu.vn'], ['numt']);
+        $huyenTramId = $resolveUid(100073, ['tramlth@ideas.edu.vn'], ['tramlth']);
+        $hieuNganId  = $resolveUid(100076, ['nganph@ideas.edu.vn'], ['nganph']);
+        $thuThaoId   = $resolveUid(100064, ['thaont@ideas.edu.vn'], ['thaont']);
+        $duyPhuongId = $resolveUid(100065, ['phuongntd@ideas.edu.vn'], ['phuongntd']);
+
+        if (
+            $saleAdminId === 0 && $maiThiNuId === 0 && $huyenTramId === 0 &&
+            $hieuNganId === 0 && $thuThaoId === 0 && $duyPhuongId === 0
+        ) {
+            $summary['skipped'] = true;
+            return $summary;
+        }
+
+        // 1. Migrate pipeline_stages.notify_config_json
+        $stageTargets = [];
+        if ($saleAdminId > 0) {
+            $cfg09 = ['user_ids' => [$saleAdminId], 'roles' => [], 'departments' => []];
+            $stageTargets['application_started'] = $cfg09;
+            $stageTargets['nop_ho_so'] = $cfg09;
+        }
+        if ($maiThiNuId > 0) {
+            $stageTargets['application_completed'] = ['user_ids' => [$maiThiNuId], 'roles' => [], 'departments' => []];
+        }
+        $s13Ids = array_values(array_unique(array_filter([$maiThiNuId, $saleAdminId])));
+        if (!empty($s13Ids)) {
+            $cfg13 = ['user_ids' => $s13Ids, 'roles' => [], 'departments' => []];
+            $stageTargets['deposit_tuition_payment'] = $cfg13;
+            $stageTargets['dong_le_phi_ho_so'] = $cfg13;
+            $stageTargets['dat_coc'] = $cfg13;
+        }
+        $s14Ids = array_values(array_unique(array_filter([$maiThiNuId, $huyenTramId, $hieuNganId])));
+        if (!empty($s14Ids)) {
+            $cfg14 = ['user_ids' => $s14Ids, 'roles' => [], 'departments' => []];
+            $stageTargets['enrolled'] = $cfg14;
+            $stageTargets['hoc_vien'] = $cfg14;
+        }
+
+        if (!empty($stageTargets)) {
+            $stmtSt = $db->prepare("SELECT id, system_slug, notify_config_json FROM pipeline_stages WHERE tenant_id = ? AND deleted_at IS NULL");
+            $stmtSt->execute([$tenantId]);
+            $updSt = $db->prepare("UPDATE pipeline_stages SET notify_config_json = ? WHERE id = ? AND tenant_id = ?");
+            foreach ($stmtSt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $stRow) {
+                $slug = strtolower(trim((string)($stRow['system_slug'] ?? '')));
+                if (!isset($stageTargets[$slug])) {
+                    continue;
+                }
+                $currDecoded = !empty($stRow['notify_config_json']) ? json_decode((string)$stRow['notify_config_json'], true) : null;
+                $hasCurrUsers = is_array($currDecoded) && !empty($currDecoded['user_ids']);
+                if ($overwriteSeededDefaults || empty($stRow['notify_config_json']) || !$hasCurrUsers) {
+                    $newJson = json_encode($stageTargets[$slug], JSON_UNESCAPED_UNICODE);
+                    if ((string)($stRow['notify_config_json'] ?? '') !== $newJson) {
+                        $updSt->execute([$newJson, (int)$stRow['id'], $tenantId]);
+                        $summary['updated_stages']++;
+                    }
+                }
+            }
+        }
+
+        // 2. Migrate tenant_notification_rules
+        $ruleTargets = [];
+        if ($saleAdminId > 0) {
+            $ruleTargets['PIPELINE_STAGE_APPLICATION_STARTED'] = ['user_ids' => [$saleAdminId], 'include_owner' => 0];
+        }
+        if ($maiThiNuId > 0) {
+            $ruleTargets['PIPELINE_STAGE_APPLICATION_COMPLETED'] = ['user_ids' => [$maiThiNuId], 'include_owner' => 0];
+            $ruleTargets['STUDENT_STUDY_STATUS_CHANGED'] = ['user_ids' => [$maiThiNuId], 'include_owner' => 1];
+        }
+        if (!empty($s13Ids)) {
+            $ruleTargets['PIPELINE_STAGE_DEPOSIT_PAYMENT'] = ['user_ids' => $s13Ids, 'include_owner' => 0];
+        }
+        if (!empty($s14Ids)) {
+            $ruleTargets['PIPELINE_STAGE_ENROLLED'] = ['user_ids' => $s14Ids, 'include_owner' => 0];
+        }
+
+        if (!empty($ruleTargets)) {
+            $stmtNr = $db->prepare("SELECT id, event_key, target_user_ids_json FROM tenant_notification_rules WHERE tenant_id = ? AND deleted_at IS NULL");
+            $stmtNr->execute([$tenantId]);
+            $updNr = $db->prepare("UPDATE tenant_notification_rules SET recipient_strategy = 'users', target_roles_json = '[]', target_departments_json = '[]', target_user_ids_json = ?, include_owner = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?");
+            foreach ($stmtNr->fetchAll(PDO::FETCH_ASSOC) ?: [] as $nrRow) {
+                $eKey = strtoupper(trim((string)($nrRow['event_key'] ?? '')));
+                if (!isset($ruleTargets[$eKey])) {
+                    continue;
+                }
+                $currUids = !empty($nrRow['target_user_ids_json']) ? (json_decode((string)$nrRow['target_user_ids_json'], true) ?: []) : [];
+                if ($overwriteSeededDefaults || empty($currUids)) {
+                    $newUidsJson = json_encode($ruleTargets[$eKey]['user_ids'], JSON_UNESCAPED_UNICODE);
+                    $updNr->execute([$newUidsJson, $ruleTargets[$eKey]['include_owner'], (int)$nrRow['id'], $tenantId]);
+                    $summary['updated_rules']++;
+                }
+            }
+        }
+
+        // 3. Migrate deposit approval workflow defaults (Approver: Thu Thảo, Watcher: Mai Thị Nữ)
+        if ($thuThaoId > 0 || $maiThiNuId > 0) {
+            $stmtWf = $db->prepare("SELECT id, levels_config FROM tenant_approval_workflows WHERE tenant_id = ? AND module_key = 'deposit' AND deleted_at IS NULL LIMIT 1");
+            $stmtWf->execute([$tenantId]);
+            $wfRow = $stmtWf->fetch(PDO::FETCH_ASSOC);
+            if ($wfRow) {
+                $lvlCfg = !empty($wfRow['levels_config']) ? (json_decode((string)$wfRow['levels_config'], true) ?: []) : [];
+                if (!is_array($lvlCfg)) {
+                    $lvlCfg = [];
+                }
+                $changedWf = false;
+                if ($thuThaoId > 0 && ($overwriteSeededDefaults || empty($lvlCfg['level_1']['user_ids']))) {
+                    if (!isset($lvlCfg['level_1']) || !is_array($lvlCfg['level_1'])) {
+                        $lvlCfg['level_1'] = ['type' => 'department_head', 'department' => 'finance', 'roles' => ['accountant']];
+                    }
+                    $lvlCfg['level_1']['user_ids'] = [$thuThaoId];
+                    $changedWf = true;
+                }
+                if ($maiThiNuId > 0 && ($overwriteSeededDefaults || empty($lvlCfg['watcher_user_ids']))) {
+                    $lvlCfg['watcher_user_ids'] = [$maiThiNuId];
+                    $lvlCfg['watcher_roles'] = [];
+                    $changedWf = true;
+                }
+                if ($changedWf) {
+                    $updWf = $db->prepare("UPDATE tenant_approval_workflows SET levels_config = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?");
+                    $updWf->execute([json_encode($lvlCfg, JSON_UNESCAPED_UNICODE), (int)$wfRow['id'], $tenantId]);
+                    $summary['updated_workflows']++;
+                }
+            }
+        }
+
+        // 4. Migrate HR team default_approver_id (Duy Phương) when unset
+        if ($duyPhuongId > 0) {
+            $updTeam = $db->prepare("UPDATE teams SET default_approver_id = ? WHERE tenant_id = ? AND department_code = 'hr' AND deleted_at IS NULL AND (default_approver_id IS NULL OR default_approver_id = 0)");
+            $updTeam->execute([$duyPhuongId, $tenantId]);
+            $summary['updated_teams'] += $updTeam->rowCount();
+        }
+
+        // 5. Mark migration completed for this tenant so future admin edits in UI are never overwritten
+        try {
+            $isSqlite = self::isSqlite($db);
+            $sqlFlag = $isSqlite
+                ? "INSERT INTO system_settings (tenant_id, setting_key, setting_value) VALUES (?, 'legacy_stage_notify_migrated_v1', '1') ON CONFLICT(tenant_id, setting_key) DO UPDATE SET setting_value = '1'"
+                : "INSERT INTO system_settings (tenant_id, setting_key, setting_value) VALUES (?, 'legacy_stage_notify_migrated_v1', '1') ON DUPLICATE KEY UPDATE setting_value = '1'";
+            $db->prepare($sqlFlag)->execute([$tenantId]);
+        } catch (\Throwable $eFlag) {
+        }
+
+        self::invalidateCache($tenantId);
+        return $summary;
     }
 
     public static function getSettings(PDO $db, int $tenantId = 1): array

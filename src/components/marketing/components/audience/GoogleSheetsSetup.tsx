@@ -840,9 +840,8 @@ const GoogleSheetsSetup: React.FC<GoogleSheetsSetupProps> = ({ onBack, onComplet
                                 <p className="text-[10px] text-slate-400 font-medium ml-1">Hệ thống sẽ tự động tạo danh sách này và nạp dữ liệu vào.</p>
                             </div>
 
-                            <div className="p-5 bg-slate-900 rounded-[18px] border border-slate-800 text-white flex gap-4 items-start relative overflow-hidden group">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-[#0f9d58] rounded-full blur-[60px] opacity-10 group-hover:opacity-20 transition-opacity"></div>
-                                <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center backdrop-blur-md shrink-0 border border-white/10">
+                            <div className="p-5 bg-slate-900 rounded-2xl border border-slate-800 text-white flex gap-4 items-start relative overflow-hidden">
+                                <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center shrink-0 border border-white/10">
                                     <Zap className="w-5 h-5 text-[#0f9d58]" />
                                 </div>
                                 <div>

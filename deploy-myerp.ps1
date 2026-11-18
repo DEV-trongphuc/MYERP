@@ -26,10 +26,10 @@ Write-Host "=========================================================" -Foregrou
 Write-Host "   MYERP HIGH-SPEED DEPLOYMENT -> https://myerp.ideas.edu.vn" -ForegroundColor Cyan
 Write-Host "=========================================================" -ForegroundColor Cyan
 
-$sshKey = "C:\Users\LENOVO\.ssh\id_ed25519"
-$sshUser = "vhvxoigh"
-$sshHost = "chiefaiofficer.vn"
-$sshPort = "2210"
+$sshKey = if ($env:SSH_KEY) { $env:SSH_KEY } else { Join-Path $HOME ".ssh\id_ed25519" }
+$sshUser = if ($env:SSH_USER) { $env:SSH_USER } else { "vhvxoigh" }
+$sshHost = if ($env:PROD_SSH_HOST) { $env:PROD_SSH_HOST } else { "chiefaiofficer.vn" }
+$sshPort = if ($env:SSH_PORT) { $env:SSH_PORT } else { "2210" }
 
 # 0. Smart Change Detection if neither BackendOnly nor FrontendOnly specified
 if (-not $BackendOnly -and -not $FrontendOnly) {

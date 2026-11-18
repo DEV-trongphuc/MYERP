@@ -1857,7 +1857,7 @@ const SpaceCanvasBackground: React.FC<{
             p.startX = coreX;
             p.startY = coreY;
             if (p.status === 'assigned') {
-              p.color = '#BD1D2D'; // Purple for APPROVED
+              p.color = '#BD1D2D'; // Brand crimson for APPROVED
             }
 
             gridRipplesRef.current.push({
@@ -2967,7 +2967,7 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
         if (srcName) uniqueSources.add(srcName);
       });
 
-      const colors = ['#3b82f6', '#10b981', '#BD1D2D', '#f59e0b', '#ec4899'];
+      const colors = ['#3b82f6', '#10b981', '#BD1D2D', '#f59e0b', '#64748b'];
       return Array.from(uniqueSources).map((srcName, idx) => {
         const count = simulatedLeadsPerSource[srcName] || 0;
         const isApiOrWebhook = srcName.toLowerCase().includes('api') || srcName.toLowerCase().includes('webhook');
@@ -3234,7 +3234,7 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
       [sourceName]: (prev[sourceName] || 0) + 1
     }));
 
-    // Animate Lõi AI purple glow and float +1
+    // Animate Lõi AI crimson indicator and float +1
     triggerTotalRipple();
 
     // Add to recent feed as 'processing'
@@ -4362,8 +4362,8 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                       borderRadius: '50%'
                     }}
                   />
-                  <Cpu size={isMobile ? 22 : 36} style={{ color: '#fff', filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.85))', zIndex: 1 }} />
-                  <div style={{ fontSize: isMobile ? '0.5rem' : '0.6rem', fontWeight: 900, letterSpacing: '0.12em', marginTop: '6px', opacity: 0.95, color: '#ffffff', textShadow: '0 1px 3px rgba(0,0,0,0.5)', zIndex: 1 }}>IDEAS AI</div>
+                  <Cpu size={isMobile ? 22 : 36} style={{ color: '#fff', zIndex: 1 }} />
+                  <div style={{ fontSize: isMobile ? '0.5rem' : '0.6rem', fontWeight: 700, letterSpacing: '0.12em', marginTop: '6px', opacity: 0.95, color: '#ffffff', zIndex: 1 }}>IDEAS AI</div>
                 </div>
               </div>
 
@@ -4450,11 +4450,10 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                 <div
                   style={{
                     position: 'relative',
-                    transition: 'all 0.3s ease',
-                    background: isTotalGlow ? 'linear-gradient(180deg, rgba(189, 29, 45, 0.12) 0%, rgba(189, 29, 45, 0.02) 100%)' : 'transparent',
+                    transition: 'background-color 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
+                    background: isTotalGlow ? 'rgba(189, 29, 45, 0.12)' : 'transparent',
                     borderRadius: '8px',
-                    padding: '8px 0',
-                    boxShadow: isTotalGlow ? '0 0 15px rgba(189, 29, 45, 0.25)' : 'none'
+                    padding: '8px 0'
                   }}
                 >
                   {/* Floating +1 Total bubble */}
@@ -4466,14 +4465,13 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                         left: '50%',
                         transform: 'translateX(-50%)',
                         top: isMobile ? '-14px' : '-20px',
-                        background: 'linear-gradient(135deg, #BD1D2D 0%, #a31422 100%)',
+                        background: '#BD1D2D',
                         color: '#fff',
                         padding: '2px 8px',
-                        borderRadius: '10px',
+                        borderRadius: '8px',
                         fontSize: '0.65rem',
-                        fontWeight: 850,
-                        boxShadow: '0 0 12px rgba(189, 29, 45, 0.65)',
-                        animation: 'floatUpAndFade 1.6s ease-out forwards',
+                        fontWeight: 700,
+                        animation: 'floatUpAndFade 1.4s ease-out forwards',
                         zIndex: 20
                       }}
                     >
@@ -4481,13 +4479,12 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                     </div>
                   ))}
                   <div style={{ fontSize: isMobile ? '0.6rem' : '0.68rem', color: '#e63946', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>TOTAL INGESTED</div>
-                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.75rem', fontWeight: 800, color: '#e63946', marginTop: 4, letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.75rem', fontWeight: 700, color: '#e63946', marginTop: 4, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', justifyContent: 'center', fontVariantNumeric: 'tabular-nums' }}>
                     <span
                       key={displayTotalCounter}
                       style={{
                         display: 'inline-block',
-                        animation: 'counterPopTotal 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
-                        textShadow: isTotalGlow ? '0 0 14px rgba(189, 29, 45, 0.95)' : '0 0 6px rgba(189, 29, 45, 0.3)'
+                        animation: 'counterPopTotal 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards'
                       }}
                     >
                       {displayTotalCounter}
@@ -4498,11 +4495,10 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                 <div
                   style={{
                     position: 'relative',
-                    transition: 'all 0.3s ease',
-                    background: isSharedGlow ? 'linear-gradient(180deg, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.02) 100%)' : 'transparent',
+                    transition: 'background-color 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
+                    background: isSharedGlow ? 'rgba(16, 185, 129, 0.12)' : 'transparent',
                     borderRadius: '8px',
-                    padding: '8px 0',
-                    boxShadow: isSharedGlow ? '0 0 15px rgba(16, 185, 129, 0.25)' : 'none'
+                    padding: '8px 0'
                   }}
                 >
                   {/* Floating +1 Shared bubble */}
@@ -4514,14 +4510,13 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                         left: '50%',
                         transform: 'translateX(-50%)',
                         top: isMobile ? '-14px' : '-20px',
-                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                        background: '#059669',
                         color: '#fff',
                         padding: '2px 8px',
-                        borderRadius: '10px',
+                        borderRadius: '8px',
                         fontSize: '0.65rem',
-                        fontWeight: 850,
-                        boxShadow: '0 0 12px rgba(16,185,129,0.65)',
-                        animation: 'floatUpAndFade 1.6s ease-out forwards',
+                        fontWeight: 700,
+                        animation: 'floatUpAndFade 1.4s ease-out forwards',
                         zIndex: 20
                       }}
                     >
@@ -4529,13 +4524,12 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                     </div>
                   ))}
                   <div style={{ fontSize: isMobile ? '0.6rem' : '0.68rem', color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>DISTRIBUTED</div>
-                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.75rem', fontWeight: 800, color: '#10b981', marginTop: 4, letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.75rem', fontWeight: 700, color: '#10b981', marginTop: 4, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', justifyContent: 'center', fontVariantNumeric: 'tabular-nums' }}>
                     <span
                       key={displaySharedCounter}
                       style={{
                         display: 'inline-block',
-                        animation: 'counterPopShared 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
-                        textShadow: isSharedGlow ? '0 0 14px rgba(16, 185, 129, 0.95)' : '0 0 6px rgba(16, 185, 129, 0.3)'
+                        animation: 'counterPopShared 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards'
                       }}
                     >
                       {displaySharedCounter}
@@ -4546,11 +4540,10 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                 <div
                   style={{
                     position: 'relative',
-                    transition: 'all 0.3s ease',
-                    background: isRetainedGlow ? 'linear-gradient(180deg, rgba(239, 68, 68, 0.12) 0%, rgba(239, 68, 68, 0.02) 100%)' : 'transparent',
+                    transition: 'background-color 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
+                    background: isRetainedGlow ? 'rgba(239, 68, 68, 0.12)' : 'transparent',
                     borderRadius: '8px',
-                    padding: '8px 0',
-                    boxShadow: isRetainedGlow ? '0 0 15px rgba(239, 68, 68, 0.25)' : 'none'
+                    padding: '8px 0'
                   }}
                 >
                   {/* Floating +1 Retained bubble */}
@@ -4562,14 +4555,13 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                         left: '50%',
                         transform: 'translateX(-50%)',
                         top: isMobile ? '-14px' : '-20px',
-                        background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
+                        background: '#b91c1c',
                         color: '#fff',
                         padding: '2px 8px',
-                        borderRadius: '10px',
+                        borderRadius: '8px',
                         fontSize: '0.65rem',
-                        fontWeight: 850,
-                        boxShadow: '0 0 12px rgba(239,68,68,0.65)',
-                        animation: 'floatUpAndFade 1.6s ease-out forwards',
+                        fontWeight: 700,
+                        animation: 'floatUpAndFade 1.4s ease-out forwards',
                         zIndex: 20
                       }}
                     >
@@ -4577,13 +4569,12 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                     </div>
                   ))}
                   <div style={{ fontSize: isMobile ? '0.6rem' : '0.68rem', color: '#ef4444', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>RETAINED</div>
-                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.75rem', fontWeight: 800, color: '#ef4444', marginTop: 4, letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.75rem', fontWeight: 700, color: '#ef4444', marginTop: 4, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', justifyContent: 'center', fontVariantNumeric: 'tabular-nums' }}>
                     <span
                       key={displayErrorCounter}
                       style={{
                         display: 'inline-block',
-                        animation: 'counterPopError 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
-                        textShadow: isRetainedGlow ? '0 0 14px rgba(239, 68, 68, 0.95)' : '0 0 6px rgba(239, 68, 68, 0.3)'
+                        animation: 'counterPopError 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards'
                       }}
                     >
                       {displayErrorCounter}
@@ -4648,18 +4639,18 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                         borderRadius: isMobile ? '10px' : '16px',
                         padding: isMobile ? '0.5rem 0.75rem' : '0.85rem 1.15rem',
                         boxShadow: isGlow
-                          ? `0 0 25px ${channel.color}c0, inset 0 0 15px ${channel.color}4d`
+                          ? `0 0 16px ${channel.color}80`
                           : isPermanentGlow
-                            ? `0 0 15px ${channel.color}40`
-                            : '0 10px 40px 0 rgba(0, 0, 0, 0.5)',
+                            ? `0 0 8px ${channel.color}30`
+                            : '0 8px 24px 0 rgba(0, 0, 0, 0.4)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         gap: isMobile ? 8 : 12,
                         position: 'relative',
-                        transition: 'all 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+                        transition: 'background-color 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
                         overflow: 'hidden',
-                        ['--hover-glow' as any]: `${channel.color}45`,
+                        ['--hover-glow' as any]: `${channel.color}35`,
                         ['--hover-border' as any]: channel.color,
                         ['--hover-bg' as any]: `${channel.color}15`
                       }}
@@ -4671,14 +4662,13 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                             position: 'absolute',
                             right: '18px',
                             top: '-14px',
-                            background: 'linear-gradient(135deg, #BD1D2D 0%, #a31422 100%)',
+                            background: '#BD1D2D',
                             color: '#fff',
                             padding: '2px 8px',
-                            borderRadius: '10px',
+                            borderRadius: '8px',
                             fontSize: '0.65rem',
-                            fontWeight: 850,
-                            boxShadow: '0 0 12px rgba(189, 29, 45, 0.65)',
-                            animation: 'floatUpAndFade 1.6s ease-out forwards',
+                            fontWeight: 700,
+                            animation: 'floatUpAndFade 1.4s ease-out forwards',
                             zIndex: 20
                           }}
                         >
@@ -4694,7 +4684,7 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                             size={isMobile ? 26 : 34}
                             style={{
                               border: '1.5px solid rgba(255,255,255,0.2)',
-                              transition: 'all 0.35s ease'
+                              transition: 'border-color 0.25s ease'
                             }}
                           />
                           <span
@@ -4706,8 +4696,7 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                               height: 8,
                               borderRadius: '50%',
                               background: statusInfo.dotColor,
-                              border: '1.5px solid #060814',
-                              boxShadow: `0 0 6px ${statusInfo.dotColor}`
+                              border: '1.5px solid #060814'
                             }}
                           />
                         </div>
@@ -4716,10 +4705,8 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                             <div
                               style={{
                                 fontSize: isMobile ? '0.75rem' : '0.82rem',
-                                fontWeight: 800,
+                                fontWeight: 700,
                                 color: '#fff',
-                                textShadow: isGlow ? `0 0 8px #fff, 0 0 16px ${channel.color}` : 'none',
-                                transition: 'text-shadow 0.3s ease',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
@@ -4880,14 +4867,14 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                           background: feed.status === 'processing'
                             ? 'rgba(245, 158, 11, 0.15)'
                             : feed.status === 'reminder'
-                              ? 'rgba(219, 39, 119, 0.15)'
+                              ? 'rgba(14, 165, 233, 0.15)'
                               : isAssigned
                                 ? 'rgba(189, 29, 45, 0.15)'
                                 : 'rgba(239, 68, 68, 0.15)',
                           color: feed.status === 'processing'
                             ? '#fbbf24'
                             : feed.status === 'reminder'
-                              ? '#f472b6'
+                              ? '#38bdf8'
                               : isAssigned
                                 ? '#e63946'
                                 : '#ef4444',
@@ -4895,7 +4882,7 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                           border: `1px solid ${feed.status === 'processing'
                             ? 'rgba(245, 158, 11, 0.25)'
                             : feed.status === 'reminder'
-                              ? 'rgba(219, 39, 119, 0.25)'
+                              ? 'rgba(14, 165, 233, 0.25)'
                               : isAssigned
                                 ? 'rgba(189, 29, 45, 0.25)'
                                 : 'rgba(239, 68, 68, 0.25)'
@@ -4917,7 +4904,7 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                                       : 'DƯỚI CHUẨN'}
                         </span>
                       </div>
-                      <div style={{ color: feed.status === 'processing' ? '#fbbf24' : feed.status === 'reminder' ? '#f472b6' : isAssigned ? '#e63946' : '#ef4444', fontWeight: 700 }}>
+                      <div style={{ color: feed.status === 'processing' ? '#fbbf24' : feed.status === 'reminder' ? '#38bdf8' : isAssigned ? '#e63946' : '#ef4444', fontWeight: 700 }}>
                         {feed.status === 'processing' ? (
                           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             [VETTING] {"=>"} AI đang đánh giá dữ liệu...
@@ -5084,9 +5071,9 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
               {/* Gradients definition */}
               <defs>
                 <linearGradient id="reactorGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#60a5fa" />
+                  <stop offset="0%" stopColor="#94a3b8" />
                   <stop offset="50%" stopColor="#BD1D2D" />
-                  <stop offset="100%" stopColor="#ec4899" />
+                  <stop offset="100%" stopColor="#e11d48" />
                 </linearGradient>
               </defs>
             </svg>
@@ -5128,9 +5115,9 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                 }} />
               </div>
 
-              <Cpu size={36} style={{ color: '#fff', filter: 'drop-shadow(0 0 8px rgba(96, 165, 250, 0.8))', animation: 'pulseGlow 1.8s ease-in-out infinite' }} />
+              <Cpu size={36} style={{ color: '#fff' }} />
               
-              <div style={{ fontSize: '2.1rem', fontWeight: 900, color: '#ffffff', marginTop: 8, fontFamily: 'monospace', textShadow: '0 0 12px rgba(189, 29, 45, 0.9)' }}>
+              <div style={{ fontSize: '2.1rem', fontWeight: 700, color: '#ffffff', marginTop: 8, fontFamily: 'monospace', fontVariantNumeric: 'tabular-nums' }}>
                 {bootPercent}%
               </div>
               <div style={{ fontSize: '0.52rem', letterSpacing: '0.15em', color: '#e63946', textTransform: 'uppercase', marginTop: 2, fontWeight: 700 }}>
@@ -5177,8 +5164,7 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
                   width: 12,
                   height: 6,
                   borderRadius: 1,
-                  background: bootPercent > idx * 16 ? '#ec4899' : 'rgba(255,255,255,0.05)',
-                  boxShadow: bootPercent > idx * 16 ? '0 0 4px #ec4899' : 'none',
+                  background: bootPercent > idx * 16 ? '#BD1D2D' : 'rgba(255,255,255,0.05)',
                   animation: `vuEqualize ${0.7 + (5 - idx) * 0.12}s ease-in-out infinite alternate`
                 }} />
               ))}
@@ -5189,23 +5175,21 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
           <div style={{ textAlign: 'center', marginBottom: 15, zIndex: 2 }}>
             <h1 className="loader-title" style={{
               fontSize: '1.4rem',
-              fontWeight: 900,
-              letterSpacing: '0.25em',
+              fontWeight: 700,
+              letterSpacing: '0.2em',
               color: '#ffffff',
-              textShadow: '0 0 15px rgba(189, 29, 45, 0.8), 0 0 2px rgba(189, 29, 45, 0.4)',
               margin: 0,
-              fontFamily: 'monospace',
-              animation: 'glitchText 3s infinite'
+              fontFamily: 'monospace'
             }}>
               NEURAL AI INFINITY INITIALIZING
             </h1>
-            <div style={{ fontSize: '0.55rem', letterSpacing: '0.4em', color: 'rgba(96, 165, 250, 0.85)', textTransform: 'uppercase', marginTop: 6, fontWeight: 700, fontFamily: 'monospace' }}>
+            <div style={{ fontSize: '0.55rem', letterSpacing: '0.35em', color: '#94a3b8', textTransform: 'uppercase', marginTop: 6, fontWeight: 700, fontFamily: 'monospace' }}>
               COGNITIVE CORE INTEL v4.8.2 // SECURE CONNECTION ESTABLISHED
             </div>
           </div>
 
-          <div className="loader-bar-wrap" style={{ width: 340, height: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 2, overflow: 'hidden', marginBottom: 35, border: '1px solid rgba(189, 29, 45, 0.18)', position: 'relative', zIndex: 2 }}>
-            <div style={{ width: `${bootPercent}%`, height: '100%', background: 'linear-gradient(90deg, #60a5fa, #BD1D2D, #ec4899)', boxShadow: '0 0 12px #e63946', transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)' }} />
+          <div className="loader-bar-wrap" style={{ width: 340, height: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 2, overflow: 'hidden', marginBottom: 35, border: '1px solid rgba(189, 29, 45, 0.25)', position: 'relative', zIndex: 2 }}>
+            <div style={{ width: `${bootPercent}%`, height: '100%', background: 'linear-gradient(90deg, #94a3b8, #BD1D2D, #e11d48)', transition: 'width 0.2s cubic-bezier(0.22, 1, 0.36, 1)' }} />
           </div>
 
           {/* Loading logs console */}
@@ -5298,22 +5282,20 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
       {/* CSS Styles */}
       <style>{`
         .war-room-source-card {
-          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          transition: background-color 0.22s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1) !important;
           cursor: pointer;
         }
         .war-room-source-card:hover {
-          transform: translateY(-2px) scale(1.025);
-          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 20px var(--hover-glow) !important;
+          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55), 0 0 12px var(--hover-glow) !important;
           border-color: var(--hover-border) !important;
           background: var(--hover-bg) !important;
         }
         .war-room-sale-card {
-          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          transition: background-color 0.22s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1) !important;
           cursor: pointer;
         }
         .war-room-sale-card:hover {
-          transform: translateY(-2px) scale(1.025);
-          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 20px var(--hover-glow) !important;
+          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55), 0 0 12px var(--hover-glow) !important;
           border-color: var(--hover-border) !important;
           background: var(--hover-bg) !important;
         }
@@ -5365,56 +5347,8 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
           }
         }
 
-        @keyframes hudGlitch {
-          0%, 100% {
-            transform: translate(0, 0) skew(0deg);
-            opacity: 1;
-            filter: hue-rotate(0deg);
-          }
-          10% {
-            transform: translate(-2px, 1px) skew(-3deg);
-            opacity: 0.85;
-            filter: hue-rotate(90deg);
-          }
-          20% {
-            transform: translate(2px, -1px) skew(4deg);
-            opacity: 0.9;
-          }
-          30% {
-            transform: translate(-1px, -2px) skew(-2deg);
-            opacity: 0.8;
-            filter: hue-rotate(180deg);
-          }
-          40% {
-            transform: translate(2px, 2px) skew(3deg);
-            opacity: 0.95;
-          }
-          50% {
-            transform: translate(-2px, -1px) skew(-4deg);
-            opacity: 0.85;
-            filter: hue-rotate(270deg);
-          }
-          60% {
-            transform: translate(1px, 2px) skew(2deg);
-            opacity: 0.9;
-          }
-          70% {
-            transform: translate(-2px, 1px) skew(-3deg);
-            opacity: 0.75;
-          }
-          80% {
-            transform: translate(2px, -2px) skew(4deg);
-            opacity: 0.95;
-          }
-          90% {
-            transform: translate(-1px, 1px) skew(-1deg);
-            opacity: 0.9;
-          }
-        }
         .telemetry-glitch-active {
-          animation: hudGlitch 0.25s linear infinite;
           color: #f87171 !important;
-          text-shadow: 0 0 8px #ef4444, 0 0 15px #ef4444 !important;
         }
 
         @keyframes spinCore {
@@ -5438,13 +5372,6 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
         @keyframes globalScanLine {
           0% { top: -5%; }
           100% { top: 105%; }
-        }
-        @keyframes glitchText {
-          0%, 95%, 100% { text-shadow: 0 0 15px rgba(189, 29, 45, 0.8); transform: skew(0deg); }
-          96% { text-shadow: -2px 0 red, 2px 0 blue, 0 0 15px rgba(189, 29, 45, 0.8); transform: skew(-1deg); }
-          97% { text-shadow: 2px 0 red, -2px 0 blue, 0 0 15px rgba(189, 29, 45, 0.8); transform: skew(2deg); }
-          98% { text-shadow: -3px 0 green, 3px 0 purple, 0 0 15px rgba(189, 29, 45, 0.8); transform: skew(-2deg); }
-          99% { text-shadow: 0 0 15px rgba(189, 29, 45, 0.8); transform: skew(0deg); }
         }
         .cursor-blink {
           animation: blink 1.2s steps(2, start) infinite;
@@ -5484,19 +5411,19 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
           100% { top: 100%; opacity: 0; }
         }
         @keyframes counterPopTotal {
-          0% { transform: scale(0.8); filter: brightness(2.5); text-shadow: 0 0 16px rgba(189, 29, 45, 0.95); }
-          50% { transform: scale(1.22); filter: brightness(2.5); text-shadow: 0 0 28px rgba(189, 29, 45, 1); }
-          100% { transform: scale(1); filter: brightness(1); text-shadow: 0 0 6px rgba(189, 29, 45, 0.3); }
+          0% { transform: scale(0.92); opacity: 0.7; }
+          50% { transform: scale(1.08); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
         }
         @keyframes counterPopShared {
-          0% { transform: scale(0.8); filter: brightness(2.5); text-shadow: 0 0 16px rgba(16, 185, 129, 0.95); }
-          50% { transform: scale(1.22); filter: brightness(2.5); text-shadow: 0 0 28px rgba(16, 185, 129, 1); }
-          100% { transform: scale(1); filter: brightness(1); text-shadow: 0 0 6px rgba(16, 185, 129, 0.3); }
+          0% { transform: scale(0.92); opacity: 0.7; }
+          50% { transform: scale(1.08); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
         }
         @keyframes counterPopError {
-          0% { transform: scale(0.8); filter: brightness(2.5); text-shadow: 0 0 16px rgba(239, 68, 68, 0.95); }
-          50% { transform: scale(1.22); filter: brightness(2.5); text-shadow: 0 0 28px rgba(239, 68, 68, 1); }
-          100% { transform: scale(1); filter: brightness(1); text-shadow: 0 0 6px rgba(239, 68, 68, 0.3); }
+          0% { transform: scale(0.92); opacity: 0.7; }
+          50% { transform: scale(1.08); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
         }
         @keyframes techHeartbeat {
           0%, 100% { opacity: 0.3; transform: scaleY(0.9); }
@@ -6188,7 +6115,7 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
               <div style={{ fontSize: '0.6rem', color: color, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
                 {hoveredSummary.type === 'source' ? 'INGESTION SOURCE TELEMETRY' : 'CONSULTANT AGENT PREVIEW'}
               </div>
-              <div style={{ fontSize: '0.85rem', fontWeight: 900, color: '#fff', marginTop: '3px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fff', marginTop: '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                 {hoveredSummary.data.name}
               </div>
             </div>

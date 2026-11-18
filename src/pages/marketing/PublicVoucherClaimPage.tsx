@@ -95,94 +95,78 @@ export const PublicClaim: React.FC = () => {
                 <div className="w-20 h-20 bg-slate-200 rounded-full flex items-center justify-center text-slate-400 mb-6">
                     <AlertCircle className="w-10 h-10" />
                 </div>
-                <h1 className="text-xl font-black text-slate-800">Không tìm thấy Ưu đãi</h1>
+                <h1 className="text-xl font-bold text-slate-900">Không tìm thấy Ưu đãi</h1>
                 <p className="text-sm text-slate-500 mt-2">Đường dẫn không hợp lệ hoặc chiến dịch đã tạm dừng.</p>
             </div>
         );
     }
 
     return (
-        <div className="w-full h-dvh flex-1 min-w-0 overflow-y-auto overflow-x-hidden flex items-center justify-center bg-gradient-to-tr from-rose-50/60 to-slate-50 p-4 sm:p-6 relative" style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y pan-x' }}>
-            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-rose-200/30 blur-[120px] rounded-full -mr-64 -mt-64 pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-rose-100/40 blur-[100px] rounded-full -ml-48 -mb-48 pointer-events-none" />
-
-            <div className="max-w-md w-full bg-white/90 backdrop-blur-2xl border border-slate-200/80 rounded-[18px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.08)] p-8 sm:p-10 relative z-10 overflow-hidden">
+        <div className="w-full h-dvh flex-1 min-w-0 overflow-y-auto overflow-x-hidden flex items-center justify-center bg-slate-50 p-4 sm:p-6 relative" style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y pan-x' }}>
+            <div className="max-w-md w-full bg-white border border-slate-200 rounded-2xl shadow-lg p-8 sm:p-10 relative z-10 overflow-hidden">
                 <AnimatePresence mode="wait">
                     {result ? (
                         <motion.div 
                             key="result"
-                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            initial={{ opacity: 0, scale: 0.96, y: 12 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9, y: -20 }}
-                            transition={{ duration: 0.5, type: 'spring', bounce: 0.4 }}
+                            exit={{ opacity: 0, scale: 0.96, y: -12 }}
+                            transition={{ duration: 0.25 }}
                             className="text-center py-8 relative"
                         >
                             {result.status === 'approved' && <CanvasConfetti particleCount={150} />}
                             {result.status === 'pending' ? (
                                 <>
-                                    <motion.div 
-                                        initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: 'spring' }}
-                                        className="w-24 h-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6 relative"
-                                    >
-                                        <ShieldCheck className="w-12 h-12 text-[var(--color-primary)]" />
-                                        <span className="absolute top-0 right-0 w-6 h-6 bg-rose-400 rounded-full animate-ping opacity-20"></span>
-                                    </motion.div>
-                                    <h2 className="text-2xl font-black text-slate-800 mb-3">Đã gửi yêu cầu nhận Mã!</h2>
-                                    <p className="text-sm text-slate-600 mb-6 font-medium">Yêu cầu của bạn đang được duyệt. Mã ưu đãi sẽ được gửi qua Email <strong className="text-slate-800">{formData.email}</strong> nếu đủ điều kiện.</p>
+                                    <div className="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6 border border-rose-100">
+                                        <ShieldCheck className="w-10 h-10 text-[var(--color-primary)]" />
+                                    </div>
+                                    <h2 className="text-2xl font-bold text-slate-900 mb-3">Đã gửi yêu cầu nhận mã</h2>
+                                    <p className="text-sm text-slate-600 mb-6 font-medium">Yêu cầu của bạn đang được duyệt. Mã ưu đãi sẽ được gửi qua Email <strong className="text-slate-900">{formData.email}</strong> nếu đủ điều kiện.</p>
                                 </>
                             ) : (
                                 <>
-                                    <motion.div 
-                                        initial={{ scale: 0, rotate: -180 }} animate={{ scale: 1, rotate: 0 }} transition={{ delay: 0.1, type: 'spring', stiffness: 200 }}
-                                        className="w-24 h-24 bg-gradient-to-tr from-emerald-100 to-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner shadow-emerald-200/50"
-                                    >
-                                        <CheckCircle2 className="w-12 h-12 text-emerald-500 drop-shadow-md" />
-                                    </motion.div>
-                                    <h2 className="text-2xl font-black text-slate-800 mb-2">Chúc mừng bạn!</h2>
-                                    <p className="text-sm text-slate-500 mb-6 font-medium">Bạn đã nhận ưu đãi thành công. Đây là mã của bạn:</p>
+                                    <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-200">
+                                        <CheckCircle2 className="w-10 h-10 text-emerald-600" />
+                                    </div>
+                                    <h2 className="text-2xl font-bold text-slate-900 mb-2">Nhận mã thành công</h2>
+                                    <p className="text-sm text-slate-500 mb-6 font-medium">Đây là mã ưu đãi của bạn:</p>
 
-                                    <motion.div 
-                                        initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}
-                                        className="relative bg-gradient-to-r from-rose-50 via-white to-rose-50 border border-rose-200 rounded-[18px] p-6 mb-8 overflow-hidden group cursor-pointer shadow-sm hover:shadow-md transition-all"
-                                        onClick={() => { navigator.clipboard.writeText(result.code); toast.success('Đã sao chép mã!'); }}
+                                    <div 
+                                        className="relative bg-rose-50/50 border border-rose-200 rounded-2xl p-6 mb-8 overflow-hidden group cursor-pointer shadow-xs hover:border-[#BD1D2D] transition-colors duration-150"
+                                        onClick={() => { navigator.clipboard.writeText(result.code); toast.success('Đã sao chép mã'); }}
                                     >
-                                        <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/80 to-transparent group-hover:animate-shimmer" />
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-[var(--color-primary)]/70 absolute top-2 left-1/2 transform -translate-x-1/2 bg-rose-50/50 backdrop-blur-sm px-3 rounded-full">Mã giảm giá</span>
-                                        <p className="text-3xl font-black text-[var(--color-primary)] tracking-wider mt-2 font-mono select-all drop-shadow-sm">
+                                        <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-primary)]/80 absolute top-2 left-1/2 transform -translate-x-1/2 bg-white px-3 rounded-full border border-rose-100">Mã giảm giá</span>
+                                        <p className="text-3xl font-bold text-[var(--color-primary)] tracking-wider mt-2 font-mono select-all tabular-nums">
                                             {result.code}
                                         </p>
-                                        <div className="absolute inset-0 bg-[var(--color-primary)] text-white font-bold text-xs flex items-center justify-center rounded-[18px] opacity-0 group-hover:opacity-100 transition-all duration-300">Bấm để sao chép</div>
-                                    </motion.div>
+                                        <div className="absolute inset-0 bg-[var(--color-primary)] text-white font-bold text-xs flex items-center justify-center rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-200">Bấm để sao chép</div>
+                                    </div>
 
-                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Đã gửi 1 bản sao vào Email của bạn.</p>
+                                    <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Đã gửi 1 bản sao vào Email của bạn</p>
                                 </>
                             )}
                         </motion.div>
                     ) : (
                         <motion.div 
                             key="form"
-                            initial={{ opacity: 0, y: 20 }}
+                            initial={{ opacity: 0, y: 12 }}
                             animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20 }}
-                            transition={{ duration: 0.4 }}
+                            exit={{ opacity: 0, y: -12 }}
+                            transition={{ duration: 0.25 }}
                         >
                             <div className="text-center mb-8">
-                                <motion.div 
-                                    whileHover={{ rotate: 0, scale: 1.05 }}
-                                    transition={{ type: 'spring' }}
-                                    className="w-16 h-16 bg-white shadow-xl rounded-full flex items-center justify-center mx-auto mb-6 transform -rotate-12 border border-slate-100"
-                                >
+                                <div className="w-16 h-16 bg-white shadow-sm rounded-full flex items-center justify-center mx-auto mb-5 border border-slate-200">
                                     {campaign.thumbnail_url ? (
                                         <img src={campaign.thumbnail_url} className="w-full h-full object-cover rounded-full" alt="Gift" />
                                     ) : (
                                         <Gift className="w-8 h-8 text-[var(--color-primary)]" />
                                     )}
-                                </motion.div>
-                                <h1 className="text-3xl font-black text-slate-800 tracking-tight leading-tight mb-3">
+                                </div>
+                                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight leading-tight mb-3">
                                     {campaign.name}
                                 </h1>
                                 <p className="text-sm text-slate-600 font-medium leading-relaxed">
-                                    {campaign.description || 'Vui lòng cung cấp thông tin để xác nhận danh tính và nhận ngay ưu đãi từ chương trình.'}
+                                    {campaign.description || 'Vui lòng cung cấp thông tin để xác nhận danh tính và nhận ưu đãi từ chương trình.'}
                                 </p>
                             </div>
 
@@ -192,7 +176,7 @@ export const PublicClaim: React.FC = () => {
                                     placeholder="Nhập tên của bạn" 
                                     value={formData.name} 
                                     onChange={e => setFormData({...formData, name: e.target.value})} 
-                                    className="bg-white/80 transition-shadow focus-within:shadow-md" 
+                                    className="bg-white transition-shadow focus-within:shadow-sm" 
                                 />
                                 <Input 
                                     label="Địa chỉ Email *" 
@@ -200,7 +184,7 @@ export const PublicClaim: React.FC = () => {
                                     placeholder="Cần chính xác để nhận mã" 
                                     value={formData.email} 
                                     onChange={e => setFormData({...formData, email: e.target.value})} 
-                                    className="bg-white/80 transition-shadow focus-within:shadow-md" 
+                                    className="bg-white transition-shadow focus-within:shadow-sm" 
                                     required
                                 />
                                 <Input 
@@ -209,27 +193,24 @@ export const PublicClaim: React.FC = () => {
                                     placeholder="0901234567" 
                                     value={formData.phone} 
                                     onChange={e => setFormData({...formData, phone: e.target.value})} 
-                                    className="bg-white/80 transition-shadow focus-within:shadow-md" 
+                                    className="bg-white transition-shadow focus-within:shadow-sm" 
                                 />
 
-                                <motion.button 
-                                    whileHover={{ y: -2 }}
-                                    whileTap={{ scale: 0.98 }}
+                                <button 
                                     type="submit" 
                                     disabled={submitting}
-                                    className="w-full mt-6 bg-[var(--color-primary)] hover:opacity-95 text-white font-black uppercase tracking-widest text-sm py-3.5 rounded-[14px] shadow-md transition-all disabled:opacity-50 flex items-center justify-center gap-2 relative overflow-hidden group"
+                                    className="w-full mt-6 bg-[var(--color-primary)] hover:opacity-95 text-white font-bold uppercase tracking-wider text-sm py-3.5 rounded-xl shadow-sm transition-opacity duration-150 disabled:opacity-50 flex items-center justify-center gap-2 relative overflow-hidden group"
                                 >
-                                    <div className="absolute inset-0 bg-white/20 -translate-x-full skew-x-12 group-hover:animate-shimmer" />
                                     {submitting ? <Scan className="w-5 h-5 animate-pulse" /> : 'Nhận Mã Ngay'} 
-                                    {!submitting && <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
-                                </motion.button>
+                                    {!submitting && <ArrowRight className="w-5 h-5" />}
+                                </button>
                             </form>
                         </motion.div>
                     )}
                 </AnimatePresence>
             </div>
             
-            <p className="absolute bottom-6 left-1/2 transform -translate-x-1/2 text-[10px] font-black tracking-widest text-slate-400 uppercase">
+            <p className="absolute bottom-6 left-1/2 transform -translate-x-1/2 text-[10px] font-semibold tracking-widest text-slate-400 uppercase">
                 Secured by MYERP Anti-Fraud &trade;
             </p>
         </div>

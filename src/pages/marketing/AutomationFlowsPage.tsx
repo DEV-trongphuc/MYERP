@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
     Plus, Trash2, RotateCcw, AlertTriangle, FileText, PauseCircle, PlayCircle, LayoutGrid, Clock, Filter, ChevronDown, Check,
-    Zap, Users, Sparkles, CheckCircle2, BarChart3, ShieldCheck, GitMerge, Split, Lightbulb, Target, Send, Layers, Tag, FileInput, BellRing, List, Search
+    Zap, Users, CheckCircle2, BarChart3, ShieldCheck, GitMerge, Split, Lightbulb, Target, Send, Layers, Tag, FileInput, BellRing, List, Search
 } from 'lucide-react';
 import { api } from '../../components/marketing/services/storageAdapter';
 import { logAction, getLogs, HistoryLog } from '../../components/marketing/services/historyService';
@@ -58,6 +58,7 @@ import Tabs from '../../components/marketing/components/common/Tabs';
 import TabTransition from '../../components/marketing/components/common/TabTransition';
 import TipsModal from '../../components/marketing/components/common/TipsModal';
 import { useIsAdmin, useAuthUser } from '../../components/marketing/hooks/useAuthUser';
+import { ensureArray, extractArray } from '../../utils/safeArray';
 import { usePermissionGuard } from '../../components/marketing/components/common/PermissionGuard';
 
 
@@ -520,7 +521,7 @@ const Flows: React.FC = () => {
                 try {
                     const res = await api.delete('flows?route=empty-trash');
                     if (res.success) {
-                        showToast('Đã dọn sạch thùng rác thành công!', 'success');
+                        showToast('Đã dọn sạch thùng rác thành công', 'success');
                         loadData();
                     } else {
                         showToast(res.message || 'Lỗi khi dọn sạch thùng rác', 'error');
@@ -548,7 +549,7 @@ const Flows: React.FC = () => {
                 try {
                     const res = await api.post('flows?route=bulk-delete', { ids: Array.from(selectedFlowIds) });
                     if (res.success) {
-                        showToast(`Đã xóa vĩnh viễn ${selectedFlowIds.size} kịch bản thành công!`, 'success');
+                        showToast(`Đã xóa vĩnh viễn ${selectedFlowIds.size} kịch bản thành công`, 'success');
                         setSelectedFlowIds(new Set());
                         loadData();
                     } else {
@@ -731,7 +732,7 @@ const Flows: React.FC = () => {
                 }).then(() => {
                     // Refresh snapshot list in background
                     api.get<FlowSnapshot[]>(`flows?id=${updated.id}&route=flow-snapshots`).then(res => {
-                        if (res.success) setFlowSnapshots(res.data || []);
+                        if (res.success) setFlowSnapshots(extractArray(res));
                     });
                 }).catch(err => console.warn('[Snapshot] Failed to save to DB:', err));
 
@@ -796,7 +797,7 @@ const Flows: React.FC = () => {
             setHasUnsavedChanges(true);
             setIsHistoryModalOpen(false);
             setRestoreConfirmSnapshot(null);
-            showToast(`✅ Đã khôi phục phiên bản: ${restoreConfirmSnapshot.label}. Nhớ bấm Lưu để áp dụng!`, 'success');
+            showToast(`Đã khôi phục phiên bản: ${restoreConfirmSnapshot.label}. Nhớ bấm Lưu để áp dụng`, 'success');
         } catch (e) {
             showToast('Lỗi khi khôi phục phiên bản', 'error');
         } finally {
@@ -1239,7 +1240,7 @@ const Flows: React.FC = () => {
                     });
 
                     if (res && res.success) {
-                        showToast('Đã nhân bản kịch bản thành công!', 'success');
+                        showToast('Đã nhân bản kịch bản thành công', 'success');
                         loadData();
                     } else {
                         // Fallback: Fetch complete flow by ID then POST
@@ -1261,7 +1262,7 @@ const Flows: React.FC = () => {
                         };
                         const createRes = await api.post<Flow>('flows', newFlow);
                         if (createRes && createRes.success) {
-                            showToast('Đã nhân bản kịch bản thành công!', 'success');
+                            showToast('Đã nhân bản kịch bản thành công', 'success');
                             loadData();
                         } else {
                             showToast(createRes?.message || 'Lỗi khi nhân bản kịch bản', 'error');
@@ -2331,19 +2332,19 @@ const Flows: React.FC = () => {
                                         title: 'Tạm dừng Kịch bản',
                                         message: (
                                             <div className="space-y-4 text-left">
-                                                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/50 rounded-[14px] flex gap-3">
+                                                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/50 rounded-xl flex gap-3">
                                                     <PauseCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                                                     <p className="text-sm font-medium text-amber-900 dark:text-amber-200 leading-relaxed">
                                                         {specificWarning}
                                                     </p>
                                                 </div>
-                                                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-[14px] flex gap-3">
+                                                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-xl flex gap-3">
                                                     <Users className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                                                     <p className="text-sm font-medium text-blue-900 dark:text-blue-200 leading-relaxed">
                                                         {activeWarning}
                                                     </p>
                                                 </div>
-                                                <p className="text-xs text-slate-500 italic px-1 font-medium">
+                                                <p className="text-xs text-slate-500 px-1 font-medium">
                                                     * Bạn có thể kích hoạt lại bất cứ lúc nào, nhưng các sự kiện phát sinh trong thời gian tạm dừng sẽ không được xử lý hồi tố.
                                                 </p>
                                             </div>
@@ -2392,7 +2393,7 @@ const Flows: React.FC = () => {
                         />
                         <div className="flex-1 flex overflow-hidden relative">
                             {/* MAIN CONTENT AREA */}
-                            <TabTransition key={flowViewTab} className={`flex-1 overflow-hidden relative flex flex-col transition-all duration-300 ${isSidebarOpen && selectedFlow && flowViewTab === 'builder' ? 'ml-0' : ''}`}>
+                            <TabTransition key={flowViewTab} className={`flex-1 overflow-hidden relative flex flex-col transition-colors duration-200 ${isSidebarOpen && selectedFlow && flowViewTab === 'builder' ? 'ml-0' : ''}`}>
                                 <div className="flex-1 overflow-hidden relative bg-slate-50 dark:bg-slate-950 dark:bg-slate-950/50">
                                     <React.Suspense fallback={
                                         <div className="w-full h-full overflow-auto bg-slate-50 dark:bg-slate-950/50 flex flex-col items-center pt-10 pb-20 px-4">
@@ -2723,37 +2724,37 @@ const Flows: React.FC = () => {
                     accentColor="emerald"
                     tips={[
                         {
-                            icon: Sparkles,
+                            icon: Target,
                             title: "Trigger Strategy",
                             description: "Bắt đầu flow bằng một Tag đặc biệt hoặc Segment động để tự động hóa 100%.",
-                            colorClass: "bg-gradient-to-br from-blue-400 to-indigo-500",
+                            colorClass: "bg-[#0F172A]",
                             highlight: "Cơ bản"
                         },
                         {
                             icon: Clock,
                             title: "Wait Steps thông minh",
                             description: "Đặt Thời gian chờ từ 1-2 tiếng giữa các tin nhắn để tránh cảm giác bị làm phiền.",
-                            colorClass: "bg-gradient-to-br from-amber-400 to-orange-500",
+                            colorClass: "bg-amber-600",
                             highlight: "Quan trọng"
                         },
                         {
                             icon: GitMerge,
                             title: "Rẽ nhánh điều kiện",
                             description: "Sử dụng các bước Điều kiện Có/Không để lọc Khách hàng đã mở hoặc click tin nhắn.",
-                            colorClass: "bg-gradient-to-br from-emerald-400 to-teal-500"
+                            colorClass: "bg-emerald-600"
                         },
                         {
                             icon: Split,
                             title: "Split Testing",
                             description: "Chia tệp Khách hàng để thử nghiệm 2 kịch bản khác nhau, đo lường hiệu quả thực tế.",
-                            colorClass: "bg-gradient-to-br from-purple-500 to-pink-500",
+                            colorClass: "bg-[#BD1D2D]",
                             highlight: "Nâng cao"
                         },
                         {
                             icon: ShieldCheck,
                             title: "Exit Logic",
                             description: "Luôn gán Tag Hoàn thành để gỡ Khách hàng khỏi luồng sau khi họ đã mua hàng.",
-                            colorClass: "bg-gradient-to-br from-rose-400 to-rose-600"
+                            colorClass: "bg-rose-600"
                         }
                     ]}
                 />
@@ -3058,15 +3059,15 @@ const Flows: React.FC = () => {
                         <div className="space-y-4">
                             <p className="text-[13px]">Hành động này sẽ thay thế flow hiện tại.</p>
                             <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-500/20 rounded-xl p-4 space-y-2 text-left">
-                                <p className="text-xs font-black text-amber-800 dark:text-amber-405">📋 Phiên bản được chọn:</p>
+                                <p className="text-xs font-bold text-amber-800 dark:text-amber-400">Phiên bản được chọn:</p>
                                 <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{restoreConfirmSnapshot.label}</p>
-                                <div className="flex gap-4 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                                    <span>🕐 {new Date(restoreConfirmSnapshot.created_at).toLocaleString('vi-VN')}</span>
-                                    {restoreConfirmSnapshot.created_by && <span>👤 {restoreConfirmSnapshot.created_by}</span>}
+                                <div className="flex gap-4 text-[10px] text-slate-500 dark:text-slate-400 font-medium tabular-nums">
+                                    <span>Thời gian: {new Date(restoreConfirmSnapshot.created_at).toLocaleString('vi-VN')}</span>
+                                    {restoreConfirmSnapshot.created_by && <span>Người tạo: {restoreConfirmSnapshot.created_by}</span>}
                                 </div>
                             </div>
                             <div className="bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-500/20 rounded-xl p-3 text-left">
-                                <p className="text-[11px] font-bold text-rose-700 dark:text-rose-405">⚠️ Cảnh báo: Mọi thay đổi chưa lưu hiện tại sẽ bị mất. Sau khi khôi phục, bạn cần bấm <strong>Lưu</strong> để áp dụng lên server.</p>
+                                <p className="text-[11px] font-bold text-rose-700 dark:text-rose-400">Cảnh báo: Mọi thay đổi chưa lưu hiện tại sẽ bị mất. Sau khi khôi phục, bạn cần bấm <strong>Lưu</strong> để áp dụng lên server.</p>
                             </div>
                         </div>
                     }

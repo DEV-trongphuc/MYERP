@@ -12,6 +12,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { createPortal } from 'react-dom';
 import styles from './EntityDrawer.module.css';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 interface EntityDrawerProps {
   isOpen: boolean;
@@ -483,7 +484,7 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
                               <h5 style={{ fontWeight: 600, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}><History size={16} color="var(--color-danger)" /> Chi phí phát sinh (Incurred Costs)</h5>
                               <p className="text-xs text-light mb-3">Ghi nhận các chi phí ngoại tuyến như tiền xăng xe, cà phê, đi nhậu gặp khách hàng để trừ vào Lợi nhuận gộp.</p>
 
-                              {invoiceForm.incurred_costs.map((cost, idx) => (
+                              {ensureArray(invoiceForm?.incurred_costs).map((cost, idx) => (
                                 <div key={idx} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
                                   <input className="form-input sm" style={{ flex: 1 }} placeholder="Tên chi phí (VD: Ăn uống)" value={cost.name} onChange={e => {
                                     const newCosts = [...invoiceForm.incurred_costs];
@@ -512,7 +513,7 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
 
                               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border-light)' }}>
                                 <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Tổng chi phí:</span>
-                                <span style={{ fontWeight: 700, color: 'var(--color-danger)' }}>{invoiceForm.incurred_costs.reduce((sum, item) => sum + item.amount, 0).toLocaleString('vi-VN')} đ</span>
+                                <span style={{ fontWeight: 700, color: 'var(--color-danger)' }}>{ensureArray(invoiceForm?.incurred_costs).reduce((sum, item) => sum + item.amount, 0).toLocaleString('vi-VN')} đ</span>
                               </div>
                             </div>
                           </div>

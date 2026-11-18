@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { Tag, Plus, X, AlertCircle, Sparkles, Search, Check, Minus, ArrowRightCircle, Info } from 'lucide-react';
+import { Tag, Plus, X, AlertCircle, Search, Check, Minus, ArrowRightCircle, Info } from 'lucide-react';
 import { api } from '../../../services/storageAdapter';
 import { Flow } from '../../../types';
 
@@ -64,8 +64,8 @@ const UpdateTagConfig: React.FC<UpdateTagConfigProps> = ({ config, onChange, dis
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-20">
-      <div className={`p-5 rounded-2xl border flex gap-4 items-center shadow-sm transition-colors ${action === 'remove' ? 'bg-rose-50 text-rose-700 border-rose-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
-        <Sparkles className="w-6 h-6 shrink-0" />
+      <div className={`p-5 rounded-2xl border flex gap-4 items-center shadow-sm transition-colors ${action === 'remove' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+        <Tag className="w-5 h-5 shrink-0" strokeWidth={1.75} />
         <p className="text-[11px] font-bold leading-relaxed">
             {action === 'remove' 
                 ? 'Hệ thống sẽ GỠ bỏ các nhãn dưới đây khỏi hồ sơ Khách hàng (nếu có).' 
@@ -78,14 +78,14 @@ const UpdateTagConfig: React.FC<UpdateTagConfigProps> = ({ config, onChange, dis
             <button
                 onClick={() => handleActionChange('add')}
                 disabled={disabled}
-                className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${action === 'add' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2 ${action === 'add' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
                 <Plus className="w-4 h-4" /> Gắn nhãn (Add)
             </button>
             <button
                 onClick={() => handleActionChange('remove')}
                 disabled={disabled}
-                className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${action === 'remove' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2 ${action === 'remove' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
                 <Minus className="w-4 h-4" /> Gỡ nhãn (Remove)
             </button>
@@ -93,12 +93,12 @@ const UpdateTagConfig: React.FC<UpdateTagConfigProps> = ({ config, onChange, dis
 
         {/* Selected Tags Display */}
         <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 px-1">Nhãn đã chọn ({tags.length})</label>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2 px-1 tabular-nums">Nhãn đã chọn ({tags.length})</label>
             <div className={`flex flex-col gap-2 p-2 rounded-2xl border-2 border-dashed bg-slate-50/50 ${action === 'remove' ? 'border-rose-200' : 'border-emerald-200'}`}>
                 {tags.length > 0 ? tags.map((t: string) => {
                     const linkedFlowName = action === 'add' ? tagTriggerMap[t] : null;
                     return (
-                        <div key={t} className="flex flex-col gap-1 p-2 bg-white border border-slate-200 rounded-xl shadow-sm animate-in zoom-in-95">
+                        <div key={t} className="flex flex-col gap-1 p-2 bg-white border border-slate-200 rounded-xl shadow-sm">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <Tag className={`w-3.5 h-3.5 ${action === 'remove' ? 'text-rose-500' : 'text-emerald-500'}`} />
@@ -114,15 +114,15 @@ const UpdateTagConfig: React.FC<UpdateTagConfigProps> = ({ config, onChange, dis
                             </div>
                             
                             {linkedFlowName && (
-                                <div className="mt-1 flex items-center gap-1.5 px-2 py-1 bg-orange-50 border border-orange-100 rounded-lg text-[9px] text-orange-700 font-bold animate-in slide-in-from-top-1">
+                                <div className="mt-1 flex items-center gap-1.5 px-2 py-1 bg-orange-50 border border-orange-200 rounded-lg text-[9px] text-orange-700 font-semibold">
                                     <ArrowRightCircle className="w-3 h-3" />
-                                    <span>Lưu ý: Nhãn này sẽ kích hoạt tiếp Flow: <span className="underline italic">"{linkedFlowName}"</span></span>
+                                    <span>Lưu ý: Nhãn này sẽ kích hoạt tiếp Flow: <span className="underline">"{linkedFlowName}"</span></span>
                                 </div>
                             )}
                         </div>
                     );
                 }) : (
-                    <span className="text-xs text-slate-400 font-medium italic w-full text-center py-4">Chưa có nhãn nào được chọn</span>
+                    <span className="text-xs text-slate-400 font-medium w-full text-center py-4">Chưa có nhãn nào được chọn</span>
                 )}
             </div>
         </div>
@@ -130,7 +130,7 @@ const UpdateTagConfig: React.FC<UpdateTagConfigProps> = ({ config, onChange, dis
         {/* Search & Picker */}
         <div className="pt-4">
             <div className="flex justify-between items-center px-1 mb-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Chọn Nhãn từ kho</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Chọn Nhãn từ kho</label>
             </div>
 
             <div className="relative mb-4">
@@ -138,7 +138,7 @@ const UpdateTagConfig: React.FC<UpdateTagConfigProps> = ({ config, onChange, dis
                 <input 
                     type="text" 
                     placeholder="Tìm nhãn nhanh..." 
-                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border-none rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     disabled={disabled}
@@ -156,7 +156,7 @@ const UpdateTagConfig: React.FC<UpdateTagConfigProps> = ({ config, onChange, dis
                       }
                     }}
                     disabled={disabled}
-                    className="px-4 py-2.5 rounded-xl text-xs font-black border-2 border-dashed border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all flex items-center gap-2 animate-in zoom-in-95"
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold border-2 border-dashed border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors flex items-center gap-2"
                   >
                     <Plus className="w-4 h-4" /> Tạo nhãn mới: "{search}"
                   </button>
@@ -168,7 +168,7 @@ const UpdateTagConfig: React.FC<UpdateTagConfigProps> = ({ config, onChange, dis
                         <button 
                             key={t}
                             onClick={() => toggleTag(t)}
-                            className={`px-4 py-2.5 rounded-xl text-xs font-black border-2 transition-all flex items-center gap-2 relative ${isSelected ? (action === 'remove' ? 'border-rose-500 bg-rose-500 text-white shadow-lg shadow-rose-200' : 'border-emerald-500 bg-emerald-500 text-white shadow-lg shadow-emerald-200') + ' order-first' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-200'} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition-colors flex items-center gap-2 relative ${isSelected ? (action === 'remove' ? 'border-rose-600 bg-rose-600 text-white shadow-sm' : 'border-emerald-600 bg-emerald-600 text-white shadow-sm') + ' order-first' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
                             disabled={disabled}
                         >
                             {isSelected ? (action === 'remove' ? <Minus className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />) : <Tag className="w-3.5 h-3.5" />}
@@ -177,15 +177,15 @@ const UpdateTagConfig: React.FC<UpdateTagConfigProps> = ({ config, onChange, dis
                         </button>
                     );
                 })}
-                {globalTags.length === 0 && !search && <p className="text-xs text-slate-400 italic">Chưa có nhãn nào trong kho. Hãy nhập để tạo mới.</p>}
+                {globalTags.length === 0 && !search && <p className="text-xs text-slate-400">Chưa có nhãn nào trong kho. Hãy nhập để tạo mới.</p>}
             </div>
         </div>
       </div>
 
       {tags.length === 0 && !disabled && (
-          <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 animate-pulse">
+          <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3">
               <AlertCircle className="w-4 h-4 text-rose-500" />
-              <p className="text-[10px] font-black text-rose-700 uppercase">Yêu cầu ít nhất 1 nhãn để lưu bước này</p>
+              <p className="text-[10px] font-bold text-rose-700 uppercase">Yêu cầu ít nhất 1 nhãn để lưu bước này</p>
           </div>
       )}
     </div>

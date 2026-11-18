@@ -58,6 +58,7 @@ import { PasteDropzoneArea } from '../components/ui/PasteDropzoneArea';
 import { fetchAPI } from '../utils/api';
 import styles from './EntityDrawer.module.css';
 import { Tooltip } from '../components/ui/Tooltip';
+import { ensureArray, extractArray } from '../utils/safeArray';
 import { useLanguage } from '../contexts/LanguageContext';
 import { getModulePermissionScope } from '../store/authStore';
 import { decodeHtmlEntities, stripHtml } from '../utils/textUtils';
@@ -94,7 +95,7 @@ const EditHistoryIndicator = ({ history }: { history: any }) => {
             {parsed.map((item: any, idx: number) => (
               <div key={idx} style={{ fontSize: '0.7rem', lineHeight: 1.3, color: 'var(--color-text)' }}>
                 <strong>{item.edited_by_name}</strong> · <span style={{ color: 'var(--color-text-muted)' }}>{new Date(item.edited_at).toLocaleDateString('vi-VN')}</span>
-                <p style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', margin: '2px 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <p style={{ color: 'var(--color-text-muted)', margin: '2px 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   Nội dung cũ: {item.old_body || item.old_subject}
                 </p>
               </div>
@@ -204,7 +205,7 @@ const DEFAULT_PIPELINE_STAGES = [
     db_id: 33,
     name: '03 – Connected',
     system_slug: 'connected',
-    color: '#8b5cf6',
+    color: '#0ea5e9',
     order_index: 3,
     definition: 'Đã có trao đổi hai chiều nhưng chưa đủ dữ liệu để xác định mức độ phù hợp.',
     target_goal: 'Qualification sơ bộ.',
@@ -288,7 +289,7 @@ const DEFAULT_PIPELINE_STAGES = [
     db_id: 40,
     name: '10 – Application Completed',
     system_slug: 'application_completed',
-    color: '#4338ca',
+    color: '#2563eb',
     order_index: 10,
     definition: 'Hồ sơ đã đầy đủ và được chuyển sang quy trình xét tuyển.',
     target_goal: 'Theo dõi xét tuyển và duy trì commitment.',
@@ -336,7 +337,7 @@ const DEFAULT_PIPELINE_STAGES = [
     db_id: 44,
     name: '14 – Enrolled',
     system_slug: 'enrolled',
-    color: '#db2777',
+    color: '#BD1D2D',
     order_index: 14,
     is_won: 1,
     definition: 'Khách chính thức trở thành học viên và được xác nhận trong intake.',
@@ -612,7 +613,7 @@ const ActivityComments: React.FC<{
   const fetchComments = async () => {
     try {
       const res = await api.get(`/activities/${activityId}/comments`);
-      const list = res.data.data || [];
+      const list = extractArray(res?.data);
       setComments(list);
       if (list.length > 0) {
         setExpanded(true);
@@ -1694,10 +1695,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       setTempSharesData([]);
       api.get(`/cooperation-slips?contact_id=${selectedDepForManage.contact_id}`)
         .then(res => {
-          const slips = res.data?.data || res.data || [];
+          const slips = extractArray(res?.data);
           if (slips.length > 0) {
             const matchedSlip = slips.find((s: any) => Number(s.deposit_slip_id) === Number(selectedDepForManage.id));
-            if (matchedSlip && matchedSlip.shareholders) {
+            if (matchedSlip && Array.isArray(matchedSlip.shareholders)) {
               setSharesData(matchedSlip.shareholders);
               setTempSharesData(matchedSlip.shareholders.map((sh: any) => ({ ...sh })));
             }
@@ -3200,7 +3201,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           is_referrer_lookup: 1
         }
       });
-      setContactsList(res.data.data?.items || res.data.data || []);
+      setContactsList(extractArray(res?.data));
     } catch (err) {}
   }, []);
 
@@ -3535,8 +3536,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           api.get(`/deposits?contact_id=${effectiveContactId}`).catch(() => ({ data: { data: [] } }))
         ]);
 
-        const docsData = resDocs?.data?.data?.items || [];
-        const mappedDocs = docsData.map((d: any) => ({
+        const docsData = extractArray(resDocs?.data);
+        const mappedDocs: any[] = docsData.map((d: any) => ({
           id: d.id,
           name: d.name,
           category: d.category || d.folder || 'general',
@@ -3546,8 +3547,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           type: d.name ? d.name.split('.').pop() : 'file'
         }));
 
-        const depositsData = resDeposits?.data?.data || [];
-        const depositsList = (Array.isArray(depositsData) ? depositsData : []).map((d: any) => ({
+        const depositsData = extractArray(resDeposits?.data);
+        const depositsList = depositsData.map((d: any) => ({
           ...d,
           id: d.id,
           title: d.unit_code && d.unit_code !== '—' && d.unit_code !== '-' && d.unit_code.trim() !== '' 
@@ -3586,7 +3587,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
         // Merge deposit milestone payment proofs (UNC) into docs
         depositsList.forEach((dep: any) => {
-          const milestones = dep.milestones || [];
+          const milestones = ensureArray(dep?.milestones);
           milestones.forEach((m: any) => {
             const fileUrl = m.unc_file_path || m.attachment_url;
             if (fileUrl) {
@@ -3677,7 +3678,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     try {
       const res = await fetchAPI(`cooperation-slips/suggestions?contact_id=${effectiveContactId}`);
       if (res.success) {
-        setSuggestedSales(res.data || []);
+        setSuggestedSales(extractArray(res));
       }
     } catch (e) {
       console.error("Error fetching suggestions:", e);
@@ -4192,7 +4193,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         onUpdate?.(normalized);
       }
       if (resultData.updated && updatedFields.length > 0) {
-        addToast(`✨ AI đã tự động quét hồ sơ & điền: ${updatedFields.join(', ')}`, 'success');
+        addToast(`AI đã tự động quét hồ sơ & điền: ${updatedFields.join(', ')}`, 'success');
         fetchData(activeTab, true);
         window.dispatchEvent(new CustomEvent('myerp:contact-updated', { detail: { contactId: cid } }));
       } else if (isExplicitButtonClick) {
@@ -4363,7 +4364,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   // Canonical 7 Student Stages: Enrolled => Tranning => Studying => Postpone => Withdraw => Completed => Graduated
   const STUDENT_STAGE_STEPS = useMemo(() => [
     { id: 'enrolled', label: 'Enrolled', subLabel: 'Nhập học', color: '#0284c7', bg: '#e0f2fe' },
-    { id: 'training', label: 'Tranning', subLabel: 'Đào tạo', color: '#4f46e5', bg: '#e0e7ff' },
+    { id: 'training', label: 'Tranning', subLabel: 'Đào tạo', color: '#0d9488', bg: '#ccfbf1' },
     { id: 'studying', label: 'Studying', subLabel: 'Đang học', color: '#16a34a', bg: '#dcfce7' },
     { id: 'postpone', label: 'Postpone', subLabel: 'Bảo lưu', color: '#d97706', bg: '#fef3c7' },
     { id: 'withdraw', label: 'Withdraw', subLabel: 'Rút / Tạm ngưng', color: '#dc2626', bg: '#fee2e2' },
@@ -4959,12 +4960,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         setAllowedProjects(data);
       }
       if (companiesRes) {
-        const data = companiesRes.data?.data?.items || companiesRes.data?.data || [];
+        const data = extractArray(companiesRes.data);
         globalCompaniesCache = data;
         setCompaniesList(data);
       }
       if (contactsRes) {
-        setContactsList(contactsRes.data?.data?.items || contactsRes.data?.data || []);
+        setContactsList(extractArray(contactsRes.data));
       }
 
       // 5. Xử lý Notes
@@ -5998,10 +5999,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         const labels = JSON.parse(data.pipeline_status_labels);
         const isNew14Stages = Array.isArray(hierarchy) && (hierarchy.includes('new_lead') || hierarchy.length >= 10);
         if (isNew14Stages) {
+          const bootstrapStages = getCachedTenantBootstrap()?.pipeline_stages || [];
           const mappedStages = hierarchy.map((slug: string, idx: number) => {
             const defaultStage = DEFAULT_PIPELINE_STAGES.find(s => s.id === slug || s.system_slug === slug);
             const cachedStage = (globalStagesCache || []).find((s: any) => s.system_slug === slug || String(s.id) === slug);
             const resolvedDbId = (cachedStage as any)?.db_id || (typeof cachedStage?.id === 'number' ? cachedStage.id : undefined) || (defaultStage as any)?.db_id || (31 + idx);
+            const tenantCfgStage = bootstrapStages.find((s: any) => s.system_slug === slug || Number(s.id) === Number(resolvedDbId));
             return {
               id: slug,
               db_id: resolvedDbId,
@@ -6012,7 +6015,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               definition: defaultStage?.definition || '',
               target_goal: defaultStage?.target_goal || '',
               sales_actions: defaultStage?.sales_actions || '',
-              exit_criteria: defaultStage?.exit_criteria || ''
+              exit_criteria: defaultStage?.exit_criteria || '',
+              notify_config: cachedStage?.notify_config || tenantCfgStage?.notify_config || null,
+              notify_config_json: cachedStage?.notify_config_json || tenantCfgStage?.notify_config_json || null
             };
           });
           globalStagesCache = mappedStages;
@@ -6075,7 +6080,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         setAllTags(globalTagsCache);
       } else {
         api.get('/tags').then(r => {
-          const data = r.data.data || [];
+          const data = extractArray(r?.data);
           globalTagsCache = data;
           setAllTags(data);
         }).catch(() => {});
@@ -6090,8 +6095,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         setProjectsList(filteredCached);
       }
       api.get('/projects?bypass_roster=1').then(r => {
-        const rawData = r.data.data || r.data || [];
-        const data = (Array.isArray(rawData) ? rawData : []).filter(
+        const data = extractArray(r?.data).filter(
           (p: any) => !p?.deleted_at && !Number(p?.is_archived) && p?.status !== 'deleted' && !/\bbba\b/i.test(String(p?.name || ''))
         );
         globalProjectsCache = data;
@@ -6104,7 +6108,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         setAllowedCampaigns(globalCampaignsCache);
       } else {
         api.get('/marketing-campaigns').then(r => {
-          const data = r.data.data?.items || r.data.data || [];
+          const data = extractArray(r?.data);
           globalCampaignsCache = data;
           setAllowedCampaigns(data);
         }).catch(() => {});
@@ -6115,7 +6119,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         setAllowedTeams(globalTeamsCache);
       } else {
         api.get('/teams').then(r => {
-          const data = r.data.data || r.data || [];
+          const data = extractArray(r?.data);
           globalTeamsCache = data;
           setAllowedTeams(data);
         }).catch(() => {});
@@ -6523,7 +6527,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         avatar: a.avatar_url || undefined,
         time: a.created_at,
         due_date: a.due_date,
-        color: a.status === 'cancelled' ? '#6b7280' : (isNoConnect ? '#7c3aed' : type === 'zalo_connect' ? '#0084FF' : type === 'call' ? '#3b82f6' : type === 'meeting' ? '#BD1D2D' : type === 'task' ? '#f59e0b' : type === 'system' ? '#64748b' : type === 'note' ? '#6366f1' : '#10b981'),
+        color: a.status === 'cancelled' ? '#6b7280' : (isNoConnect ? '#d97706' : type === 'zalo_connect' ? '#0084FF' : type === 'call' ? '#3b82f6' : type === 'meeting' ? '#BD1D2D' : type === 'task' ? '#f59e0b' : type === 'system' ? '#64748b' : type === 'note' ? '#0284c7' : '#10b981'),
         icon: isNoConnect ? <PhoneOff size={16} /> : (type === 'call' ? <Phone size={16} /> : type === 'zalo_connect' ? <img src="https://stc-zpl.zdn.vn/favicon.ico" style={{ width: 16, height: 16, objectFit: 'contain', borderRadius: '4px' }} alt="Zalo" /> : type === 'meeting' ? <User size={16} /> : type === 'task' ? <CheckSquare size={16} /> : type === 'system' ? <History size={16} /> : type === 'note' ? <FileText size={16} /> : <Mail size={16} />),
         note,
         comment_count: a.comment_count,
@@ -6832,11 +6836,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     setLoadingTaskComments(true);
     try {
       const res = await api.get(`/activities/${taskId}/comments`);
-      if (res.data.success && res.data.data) {
-        setTaskComments(res.data.data);
-      } else {
-        setTaskComments(res.data || []);
-      }
+      setTaskComments(extractArray(res?.data));
     } catch (err) {
       console.error(err);
     } finally {
@@ -7126,7 +7126,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const handleCompleteMeeting = async (ev: any) => {
     try {
       const res = await api.get(`/activities/${ev.id}/comments`);
-      const commentsList = res.data.data || [];
+      const commentsList = extractArray(res?.data);
       const hasImage = commentsList.some((c: any) => {
         const atts = Array.isArray(c.attachments) ? c.attachments : JSON.parse(c.attachments || '[]');
         return atts.some((att: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(att));
@@ -7695,7 +7695,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     const defaultNotifyIds = resolveDynamicStageNotifyUserIds(
       targetStageObj || { system_slug: targetId },
       users,
-      Number(currentUser?.id || 0)
+      0
     );
 
     setPipelineModal({
@@ -8764,7 +8764,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     name={collab.full_name} 
                                     size={22}
                                     style={{
-                                      border: '2px solid #9333ea',
+                                      border: '2px solid #0284c7',
                                       boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                                     }}
                                   />
@@ -9246,7 +9246,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       left: 0,
                       right: 0,
                       height: '2.5px',
-                      background: 'linear-gradient(90deg, #3b82f6, #6366f1, #10b981, #3b82f6)',
+                      background: 'linear-gradient(90deg, #BD1D2D, #334155, #BD1D2D)',
                       backgroundSize: '200% 100%',
                       animation: 'skeletonShimmer 1.4s ease-in-out infinite',
                       zIndex: 100
@@ -9750,7 +9750,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                             name={collab.full_name} 
                                             size={18}
                                             style={{
-                                              border: '1.5px solid #9333ea',
+                                              border: '1.5px solid #0284c7',
                                               boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                                             }}
                                           />
@@ -10428,7 +10428,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   }}
                                   title="Quét tự động CCCD/Passport, CV, Admission Form trong mục Hồ sơ để điền các trường còn thiếu"
                                 >
-                                  <Sparkles size={11} className={isAutoOcrScanning ? 'spin' : ''} />
+                                  <Sparkles size={11} strokeWidth={1.75} className={isAutoOcrScanning ? 'spin' : ''} />
                                   <span>{isAutoOcrScanning ? 'Đang quét AI...' : 'Quét AI Tự động điền'}</span>
                                 </button>
                               )}
@@ -10959,7 +10959,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     userSelect: 'text'
                                   }}
                                 >
-                                  {typeof formData.notes === 'string' && formData.notes ? decodeHtmlEntities(formData.notes) : <span style={{ color: '#a16207', fontStyle: 'italic' }}>Không có ghi chú ban đầu</span>}
+                                  {typeof formData.notes === 'string' && formData.notes ? decodeHtmlEntities(formData.notes) : <span style={{ color: '#a16207' }}>Không có ghi chú ban đầu</span>}
                                 </div>
                               )}
                             </motion.div>
@@ -10977,7 +10977,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         marginBottom: 0
                       }}>
                         <div className="flex items-center justify-between mb-4" style={{ flexWrap: 'wrap', gap: '8px' }}>
-                          <h4 className="panel-title" style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text, #0f172a)' }}>Thông tin liên hệ & Công việc</h4>
+                          <h4 className="panel-title" style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text, #0f172a)' }}>Thông tin liên hệ & Công việc</h4>
                           {isOwnerOrAdmin && (
                             <button
                               type="button"
@@ -10989,31 +10989,28 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '6px',
-                                padding: '5px 12px',
-                                borderRadius: '10px',
+                                padding: '6px 12px',
+                                borderRadius: '8px',
                                 fontSize: '0.78rem',
                                 fontWeight: 700,
-                                background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(168, 85, 247, 0.16) 100%)',
-                                color: '#6366f1',
-                                border: '1px solid rgba(99, 102, 241, 0.3)',
+                                background: 'rgba(189, 29, 45, 0.08)',
+                                color: '#BD1D2D',
+                                border: '1px solid rgba(189, 29, 45, 0.25)',
                                 cursor: 'pointer',
-                                transition: 'all 0.2s ease',
-                                boxShadow: '0 2px 6px rgba(99, 102, 241, 0.12)',
+                                transition: 'background-color 0.2s ease, border-color 0.2s ease',
                                 transform: 'none'
                               }}
                               onMouseEnter={e => {
-                                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(168, 85, 247, 0.24) 100%)';
-                                e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.5)';
-                                e.currentTarget.style.boxShadow = '0 3px 8px rgba(99, 102, 241, 0.2)';
+                                e.currentTarget.style.background = 'rgba(189, 29, 45, 0.14)';
+                                e.currentTarget.style.borderColor = 'rgba(189, 29, 45, 0.45)';
                               }}
                               onMouseLeave={e => {
-                                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(168, 85, 247, 0.16) 100%)';
-                                e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)';
-                                e.currentTarget.style.boxShadow = '0 2px 6px rgba(99, 102, 241, 0.12)';
+                                e.currentTarget.style.background = 'rgba(189, 29, 45, 0.08)';
+                                e.currentTarget.style.borderColor = 'rgba(189, 29, 45, 0.25)';
                               }}
                               title="Trích xuất Họ tên, CCCD, Passport, Ngày sinh, Địa chỉ từ tệp tài liệu trong hồ sơ bằng AI"
                             >
-                              <Sparkles size={14} style={{ color: '#8b5cf6' }} />
+                              <Sparkles size={14} strokeWidth={1.75} style={{ color: '#BD1D2D' }} />
                               <span>Trích xuất Passport / CCCD</span>
                             </button>
                           )}
@@ -12090,7 +12087,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 {
                                   value: 'training',
                                   label: 'Tranning (Đào tạo)',
-                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#4f46e5', display: 'inline-block', boxShadow: '0 0 0 2px rgba(79, 70, 229, 0.2)' }} />
+                                  icon: <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#0d9488', display: 'inline-block', boxShadow: '0 0 0 2px rgba(13, 148, 136, 0.2)' }} />
                                 },
                                 {
                                   value: 'studying',
@@ -12570,7 +12567,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                               )}
 
                                               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                {sub.host_sessions.map((hs: any, sidx: number) => (
+                                                {ensureArray(sub.host_sessions).map((hs: any, sidx: number) => (
                                                   <div key={sidx} style={{ padding: '8px 12px', background: '#ffffff', borderRadius: '8px', border: '1px solid var(--color-border-light)', fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                     <div>
                                                       <div style={{ fontWeight: 700, color: 'var(--color-text)' }}>{hs.name || `Buổi học ${sidx + 1}`}</div>
@@ -12590,11 +12587,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           {/* Seminars Section */}
                                           {Array.isArray(sub.seminars) && sub.seminars.length > 0 ? (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#6b21a8' }}>
+                                              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', fontVariantNumeric: 'tabular-nums' }}>
                                                 Lớp chuyên đề ({sub.seminars.length})
                                               </div>
                                               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                {sub.seminars.map((sem: any, sidx: number) => (
+                                                {ensureArray(sub.seminars).map((sem: any, sidx: number) => (
                                                   <div key={sidx} style={{ padding: '8px 12px', background: '#ffffff', borderRadius: '8px', border: '1px solid var(--color-border-light)', fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                     <div>
                                                       <div style={{ fontWeight: 700, color: 'var(--color-text)' }}>{sem.topic || `Chuyên đề ${sidx + 1}`}</div>
@@ -12602,7 +12599,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                                         Giờ: {sem.time_slot || 'Chưa cấu hình giờ'} | Phòng: {sem.location || 'Online'}
                                                       </div>
                                                     </div>
-                                                    <span style={{ fontWeight: 800, color: '#6b21a8', fontSize: '0.75rem' }}>
+                                                    <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#334155', fontSize: '0.75rem' }}>
                                                       {sem.date ? sem.date.split('-').reverse().join('/') : 'Chưa xếp ngày'}
                                                     </span>
                                                   </div>
@@ -12613,7 +12610,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
                                           {/* Empty State message when expanded but no schedules */}
                                           {isInactive && (
-                                            <div style={{ padding: '12px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.78rem', fontStyle: 'italic' }}>
+                                            <div style={{ padding: '12px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
                                               Chưa có lịch học hay chuyên đề nào được xếp cho môn này.
                                             </div>
                                           )}
@@ -12629,17 +12626,17 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             <div className="card-panel" style={{ padding: '1.5rem', borderRadius: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', boxShadow: 'var(--shadow-sm)' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
                                 <Calendar size={18} style={{ color: 'var(--color-primary)' }} />
-                                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lịch học 30 ngày tới ({upcomingSchedules.length})</h4>
+                                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lịch học 30 ngày tới ({upcomingSchedules.length})</h4>
                               </div>
                               {upcomingSchedules.length === 0 ? (
-                                <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>Chưa có lịch học trong 30 ngày tới.</div>
+                                <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Chưa có lịch học trong 30 ngày tới.</div>
                               ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                   {upcomingSchedules.map((sch: any, idx: number) => (
                                     <div key={idx} style={{ padding: '10px 12px', background: '#ffffff', borderRadius: '10px', border: '1px solid var(--color-border-light)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                          <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px', borderRadius: '100px', ...sch.type === 'school' ? { background: '#eff6ff', color: '#1d4ed8' } : { background: '#faf5ff', color: '#6b21a8' } }}>
+                                          <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', ...sch.type === 'school' ? { background: '#eff6ff', color: '#1d4ed8' } : { background: '#f1f5f9', color: '#334155' } }}>
                                             {sch.type === 'school' ? 'Trường' : 'Chuyên đề'}
                                           </span>
                                           <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{sch.subjectCode} - {sch.subjectName}</span>
@@ -13607,15 +13604,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 iconBg = 'rgba(239, 68, 68, 0.08)';
                                 iconBorder = '1px solid rgba(239, 68, 68, 0.25)';
                               } else {
-                                bg = 'linear-gradient(135deg, rgba(99, 102, 241, 0.04) 0%, rgba(99, 102, 241, 0.08) 100%)';
-                                border = '1px solid rgba(99, 102, 241, 0.15)';
-                                leftBorder = '4px solid #6366f1';
-                                statusIcon = <PenTool size={18} style={{ color: '#6366f1' }} />;
+                                bg = 'rgba(2, 132, 199, 0.06)';
+                                border = '1px solid rgba(2, 132, 199, 0.18)';
+                                leftBorder = '4px solid #0284c7';
+                                statusIcon = <PenTool size={18} style={{ color: '#0284c7' }} />;
                                 statusTitle = 'Chờ ký xác nhận';
                                 statusDesc = 'Đang chờ các thành viên liên quan ký xác nhận.';
                                 badgeClass = 'info';
-                                iconBg = 'rgba(99, 102, 241, 0.08)';
-                                iconBorder = '1px solid rgba(99, 102, 241, 0.25)';
+                                iconBg = 'rgba(2, 132, 199, 0.08)';
+                                iconBorder = '1px solid rgba(2, 132, 199, 0.25)';
                               }
 
                                      return (
@@ -13823,7 +13820,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             </div>
 
                             {/* Visual Partnership Split Breakdown Bar */}
-                            {coopSlip.shareholders && coopSlip.shareholders.length > 0 && (
+                            {Array.isArray(coopSlip?.shareholders) && coopSlip.shareholders.length > 0 && (
                               <div style={{ background: '#f8fafc', padding: '1.25rem', borderRadius: '12px', border: '1px dashed var(--color-border)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                                   <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -13834,8 +13831,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   </span>
                                 </div>
                                 <div style={{ display: 'flex', height: '14px', borderRadius: '7px', overflow: 'hidden', background: '#e2e8f0', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.1)' }}>
-                                  {coopSlip.shareholders.map((sh: any, shIdx: number) => {
-                                    const colors = ['var(--color-primary)', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+                                  {ensureArray(coopSlip?.shareholders).map((sh: any, shIdx: number) => {
+                                    const colors = ['#C6333D', '#334155', '#0284c7', '#10b981', '#d97706', '#0891b2'];
                                     const color = colors[shIdx % colors.length];
                                     return (
                                       <div 
@@ -13844,7 +13841,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           width: `${sh.percentage}%`, 
                                           backgroundColor: color, 
                                           height: '100%',
-                                          transition: 'all 0.3s ease'
+                                          transition: 'width 0.3s cubic-bezier(0.22, 1, 0.36, 1)'
                                         }} 
                                         title={`${sh.name}: ${sh.percentage}%`}
                                       />
@@ -13852,13 +13849,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   })}
                                 </div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 18px', marginTop: '12px' }}>
-                                  {coopSlip.shareholders.map((sh: any, shIdx: number) => {
-                                    const colors = ['var(--color-primary)', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+                                  {ensureArray(coopSlip?.shareholders).map((sh: any, shIdx: number) => {
+                                    const colors = ['#C6333D', '#334155', '#0284c7', '#10b981', '#d97706', '#0891b2'];
                                     const color = colors[shIdx % colors.length];
                                     return (
                                       <div key={sh.user_id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)' }}>
                                         <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: color, display: 'inline-block' }} />
-                                        <span>{sh.name} <strong style={{ color: color }}>{sh.percentage}%</strong></span>
+                                        <span>{sh.name} <strong style={{ color: color, fontVariantNumeric: 'tabular-nums' }}>{sh.percentage}%</strong></span>
                                       </div>
                                     );
                                   })}
@@ -13867,7 +13864,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             )}
 
                             {/* Signature request notification callout (if any) */}
-                            {(coopSlip.status === 'pending_signatures' || coopSlip.status === 'approved_pending_signatures') && coopSlip.shareholders?.some((s: any) => String(s.user_id) === String(currentUser?.id) && !s.signed) && !isViewer && (
+                            {(coopSlip.status === 'pending_signatures' || coopSlip.status === 'approved_pending_signatures') && ensureArray(coopSlip?.shareholders).some((s: any) => String(s.user_id) === String(currentUser?.id) && !s.signed) && !isViewer && (
                               <div style={{ padding: '1.25rem', background: 'rgba(189, 29, 45, 0.05)', border: '1px solid rgba(189, 29, 45, 0.2)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                                 <div>
                                   <h4 style={{ fontWeight: 700, color: '#BD1D2D', marginBottom: '0.25rem', fontSize: '0.9rem' }}>Bạn có yêu cầu ký xác nhận</h4>
@@ -13887,7 +13884,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 <Users size={16} style={{ color: 'var(--color-primary)' }} /> Bảng chữ ký và tỷ lệ
                               </h4>
                               <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? '1fr' : 'repeat(2, 1fr)', gap: '16px' }}>
-                                {coopSlip.shareholders?.map((sh: any) => (
+                                {ensureArray(coopSlip?.shareholders).map((sh: any) => (
                                   <div 
                                     key={sh.user_id} 
                                     className="card"
@@ -14026,7 +14023,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       <CustomSelect
                                         value={share.user_id}
                                         onChange={(val) => {
-                                          const newShares = coopShares.length > 0 ? [...coopShares] : coopSlip.shareholders.map((s: any) => ({ user_id: String(s.user_id), percentage: String(s.percentage || '0') }));
+                                          const newShares = coopShares.length > 0 ? [...coopShares] : ensureArray(coopSlip?.shareholders).map((s: any) => ({ user_id: String(s.user_id), percentage: String(s.percentage || '0') }));
                                           newShares[idx].user_id = val;
                                           setCoopShares(newShares);
                                         }}
@@ -14063,7 +14060,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           min="0"
                                           max="100"
                                           onChange={(e) => {
-                                            const currentList = coopShares.length > 0 ? coopShares : coopSlip.shareholders.map((s: any) => ({ user_id: String(s.user_id), percentage: String(s.percentage || '0') }));
+                                            const currentList = coopShares.length > 0 ? coopShares : ensureArray(coopSlip?.shareholders).map((s: any) => ({ user_id: String(s.user_id), percentage: String(s.percentage || '0') }));
                                             const newShares = [...currentList];
                                             newShares[idx].percentage = e.target.value;
                                             setCoopShares(newShares);
@@ -14115,7 +14112,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                         type="button"
                                         className="btn ghost text-danger sm" 
                                         onClick={() => {
-                                          const currentList = coopShares.length > 0 ? coopShares : coopSlip.shareholders.map((s: any) => ({ user_id: String(s.user_id), percentage: String(s.percentage || '0') }));
+                                          const currentList = coopShares.length > 0 ? coopShares : ensureArray(coopSlip?.shareholders).map((s: any) => ({ user_id: String(s.user_id), percentage: String(s.percentage || '0') }));
                                           setCoopShares(currentList.filter((_, i) => i !== idx));
                                         }}
                                         style={{ padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.1)', background: 'rgba(239, 68, 68, 0.02)', width: '36px', height: '36px', cursor: 'pointer' }}
@@ -14522,7 +14519,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             style={{ fontWeight: 700, borderRadius: '8px', padding: '6px 10px', fontSize: '0.78rem', height: '34px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                             title="Thêm vào Danh sách Marketing hoặc kích hoạt Kịch bản Automation"
                           >
-                            <Sparkles size={13} style={{ color: 'var(--color-primary)' }} />
+                            <Layers size={13} style={{ color: 'var(--color-primary)' }} />
                             <span>List / Flow</span>
                           </button>
                           {/* Add Interaction Button */}
@@ -14912,16 +14909,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <button 
                               type="button"
-                              className="btn sm hover-scale" 
+                              className="btn sm" 
                               onClick={() => {
                                 if (!isAtLeastDongLePhiHoSo) {
-                                  addToast(<span>Chặn thao tác: Chỉ được tạo lịch thanh toán khi khách hàng ở bước <strong>Đóng lệ phí hồ sơ</strong> trở đi!</span>, 'warning');
+                                  addToast(<span>Chặn thao tác: Chỉ được tạo lịch thanh toán khi khách hàng ở bước <strong>Đóng lệ phí hồ sơ</strong> trở đi</span>, 'warning');
                                   return;
                                 }
                                 useUIStore.getState().setShowPOS({ ...(contact || formData), openAIImport: true });
                               }}
                               style={{
-                                background: 'linear-gradient(135deg, #BD1D2D 0%, #94101e 100%)',
+                                background: '#BD1D2D',
                                 color: '#fff',
                                 border: 'none',
                                 fontWeight: 700,
@@ -14934,13 +14931,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               }}
                               title={!isAtLeastDongLePhiHoSo ? 'Chỉ được tạo lịch thanh toán khi khách hàng ở bước Đóng lệ phí hồ sơ trở đi' : 'Tự động tạo lịch thanh toán và đính kèm hợp đồng bằng AI'}
                             >
-                              <Sparkles size={14} /> AI Generate Lịch
+                              <Sparkles size={14} strokeWidth={1.75} /> AI Generate Lịch
                             </button>
                             <button 
                               className="btn primary sm" 
                               onClick={() => {
                                 if (!isAtLeastDongLePhiHoSo) {
-                                  addToast(<span>Chặn thao tác: Chỉ được tạo lịch thanh toán khi khách hàng ở bước <strong>Đóng lệ phí hồ sơ</strong> trở đi!</span>, 'warning');
+                                  addToast(<span>Chặn thao tác: Chỉ được tạo lịch thanh toán khi khách hàng ở bước <strong>Đóng lệ phí hồ sơ</strong> trở đi</span>, 'warning');
                                   return;
                                 }
                                 useUIStore.getState().setShowPOS(contact || formData);
@@ -14960,42 +14957,42 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           <StatRowSkeleton />
                         </div>
                       ) : deals.length === 0 ? (
-                        <div className="card-panel" style={{ textAlign: 'center', padding: '4rem 2rem', border: '2px dashed var(--color-border-light)', borderRadius: '24px' }}>
+                        <div className="card-panel" style={{ textAlign: 'center', padding: '4rem 2rem', border: '2px dashed var(--color-border-light)', borderRadius: '16px' }}>
                           <CreditCard size={48} style={{ color: 'var(--color-border)', margin: '0 auto 1.5rem', opacity: 0.4 }} />
-                          <h4 style={{ fontWeight: 800, color: 'var(--color-text)', marginBottom: '8px' }}>Chưa có lịch thanh toán</h4>
+                          <h4 style={{ fontWeight: 700, color: 'var(--color-text)', marginBottom: '8px' }}>Chưa có lịch thanh toán</h4>
                           <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', maxWidth: '240px', margin: '0 auto 1.5rem' }}>Đang không có lịch thanh toán nào cho khách hàng này.</p>
                           {!isViewer && (
                             <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
                               <button 
                                 type="button"
-                                className="btn sm hover-scale" 
+                                className="btn sm" 
                                 onClick={() => {
                                   if (!isAtLeastDongLePhiHoSo) {
-                                    addToast(<span>Chặn thao tác: Chỉ được tạo lịch thanh toán khi khách hàng ở bước <strong>Đóng lệ phí hồ sơ</strong> trở đi!</span>, 'warning');
+                                    addToast(<span>Chặn thao tác: Chỉ được tạo lịch thanh toán khi khách hàng ở bước <strong>Đóng lệ phí hồ sơ</strong> trở đi</span>, 'warning');
                                     return;
                                   }
                                   useUIStore.getState().setShowPOS({ ...(contact || formData), openAIImport: true });
                                 }}
                                 style={{
-                                  background: 'linear-gradient(135deg, #BD1D2D 0%, #94101e 100%)',
+                                  background: '#BD1D2D',
                                   color: '#fff',
                                   border: 'none',
+                                  borderRadius: '8px',
                                   fontWeight: 700,
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: '6px',
-                                  boxShadow: '0 2px 8px rgba(189, 29, 45, 0.25)',
                                   opacity: !isAtLeastDongLePhiHoSo ? 0.6 : 1,
                                   cursor: !isAtLeastDongLePhiHoSo ? 'not-allowed' : 'pointer',
                                 }}
                               >
-                                <Sparkles size={14} /> AI Generate Lịch
+                                <Sparkles size={14} strokeWidth={1.75} /> AI Generate Lịch
                               </button>
                               <button 
                                 className="btn primary sm" 
                                 onClick={() => {
                                   if (!isAtLeastDongLePhiHoSo) {
-                                    addToast(<span>Chặn thao tác: Chỉ được tạo lịch thanh toán khi khách hàng ở bước <strong>Đóng lệ phí hồ sơ</strong> trở đi!</span>, 'warning');
+                                    addToast(<span>Chặn thao tác: Chỉ được tạo lịch thanh toán khi khách hàng ở bước <strong>Đóng lệ phí hồ sơ</strong> trở đi</span>, 'warning');
                                     return;
                                   }
                                   useUIStore.getState().setShowPOS(contact || formData);
@@ -15086,7 +15083,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       </div>
                                       
                                       {/* Milestone rows */}
-                                      {d.milestones.map((m: any) => {
+                                      {ensureArray(d?.milestones).map((m: any) => {
                                         let formattedDate = '—';
                                         if (m.expected_pay_date) {
                                           const dateParts = m.expected_pay_date.split('-');
@@ -16024,13 +16021,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   fontSize: '0.825rem',
                                   fontWeight: 700,
                                   cursor: isAutoOcrScanning ? 'wait' : 'pointer',
-                                  transition: 'all 0.2s',
+                                  transition: 'background-color 0.2s, opacity 0.2s',
                                   height: '36px',
                                   opacity: isAutoOcrScanning ? 0.7 : 1
                                 }}
-                                className="hover-lift"
                               >
-                                <Sparkles size={15} className={isAutoOcrScanning ? 'spin' : ''} />
+                                <Sparkles size={15} strokeWidth={1.75} className={isAutoOcrScanning ? 'spin' : ''} />
                                 {isAutoOcrScanning ? 'Đang quét AI...' : 'Quét AI Hồ sơ'}
                               </button>
                             )}
@@ -16456,22 +16452,22 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 ) : isPdf ? (
                                   <div style={{ width: 42, height: 42, background: 'linear-gradient(135deg, #fff1f2 0%, #fee2e2 100%)', border: '1px solid #fca5a5', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', boxShadow: '0 2px 6px rgba(225, 29, 72, 0.1)' }} title="Tài liệu PDF">
                                     <FileText size={20} style={{ color: '#e11d48' }} />
-                                    <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 900, color: '#ffffff', background: '#e11d48', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, letterSpacing: '-0.3px', boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>PDF</span>
+                                    <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 700, color: '#ffffff', background: '#e11d48', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>PDF</span>
                                   </div>
                                 ) : isDoc ? (
                                   <div style={{ width: 42, height: 42, background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', border: '1px solid #bfdbfe', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', boxShadow: '0 2px 6px rgba(37, 99, 235, 0.1)' }} title="Tài liệu Word (DOC/DOCX)">
                                     <FileText size={20} style={{ color: '#2563eb' }} />
-                                    <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 900, color: '#ffffff', background: '#2563eb', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, letterSpacing: '-0.3px', boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>DOC</span>
+                                    <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 700, color: '#ffffff', background: '#2563eb', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>DOC</span>
                                   </div>
                                 ) : isExcel ? (
                                   <div style={{ width: 42, height: 42, background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', border: '1px solid #bbf7d0', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', boxShadow: '0 2px 6px rgba(22, 163, 74, 0.1)' }} title="Bảng tính Excel">
                                     <FileText size={20} style={{ color: '#16a34a' }} />
-                                    <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 900, color: '#ffffff', background: '#16a34a', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, letterSpacing: '-0.3px', boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>XLS</span>
+                                    <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 700, color: '#ffffff', background: '#16a34a', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>XLS</span>
                                   </div>
                                 ) : isPpt ? (
                                   <div style={{ width: 42, height: 42, background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', border: '1px solid #fed7aa', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', boxShadow: '0 2px 6px rgba(234, 88, 12, 0.1)' }} title="Trình chiếu PowerPoint">
                                     <FileText size={20} style={{ color: '#ea580c' }} />
-                                    <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 900, color: '#ffffff', background: '#ea580c', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, letterSpacing: '-0.3px', boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>PPT</span>
+                                    <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 700, color: '#ffffff', background: '#ea580c', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>PPT</span>
                                   </div>
                                 ) : (
                                   <div style={{ width: 42, height: 42, background: 'var(--color-info-light)', color: 'var(--color-info)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -17129,10 +17125,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 </div>
                               </div>
                               <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: '1rem', fontWeight: 900, color: 'var(--color-text)', marginBottom: '4px' }}>
+                                <div style={{ fontSize: '1rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--color-text)', marginBottom: '4px' }}>
                                   {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(q.total)}
                                 </div>
-                                <span className={`badge ${q.status === 'accepted' ? 'success' : q.status === 'rejected' ? 'danger' : q.status === 'sent' ? 'warning' : 'info'}`} style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                <span className={`badge ${q.status === 'accepted' ? 'success' : q.status === 'rejected' ? 'danger' : q.status === 'sent' ? 'warning' : 'info'}`} style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                   {q.status === 'accepted' ? 'Đã duyệt' : q.status === 'rejected' ? 'Từ chối' : q.status === 'sent' ? 'Đã gửi' : 'Bản nháp'}
                                 </span>
                               </div>
@@ -18095,7 +18091,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       marginBottom: '6px'
                     }}>
                       {(pipelineModal.notifyUserIds || []).length === 0 ? (
-                        <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '2px 4px' }}>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', padding: '2px 4px' }}>
                           Chưa chọn người nhận thông báo nào (chọn từ danh sách bên dưới)
                         </span>
                       ) : (
@@ -18960,12 +18956,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       <Avatar src={sh.avatar} name={sh.name} size="md" />
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)' }}>{sh.name}</span>
-                        <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontStyle: 'italic', marginTop: '2px' }}>
+                        <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
                           {numberToVietnameseWords(sh.percentage)}
                         </span>
                       </div>
                     </div>
-                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-primary)' }}>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--color-primary)' }}>
                       {sh.percentage}%
                     </div>
                   </div>
@@ -19491,10 +19487,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
               <div style={{ textAlign: 'center', padding: '1.25rem', background: 'var(--color-bg)', borderRadius: '12px', marginBottom: '1.25rem', border: '1px solid var(--color-border-light)' }}>
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '0.25rem', letterSpacing: '0.05em' }}>SỐ TIỀN CHI</span>
-                <h1 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#BD1D2D', margin: 0, letterSpacing: '-0.02em' }}>
+                <h1 style={{ fontSize: '1.25rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#BD1D2D', margin: 0, letterSpacing: '-0.02em' }}>
                   {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(viewExpense.split_amount || viewExpense.amount)}
                 </h1>
-                <p style={{ fontSize: '0.775rem', fontWeight: 700, fontStyle: 'italic', color: '#8a0f1b', marginTop: '0.5rem', marginBottom: 0 }}>
+                <p style={{ fontSize: '0.775rem', fontWeight: 600, color: '#8a0f1b', marginTop: '0.5rem', marginBottom: 0 }}>
                   Bằng chữ: {numberToText(viewExpense.split_amount || viewExpense.amount)}
                 </p>
               </div>
@@ -20582,7 +20578,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               alignItems: 'center',
               gap: '8px'
             }}>
-              <Sparkles size={16} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+              <Mail size={16} strokeWidth={1.75} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
               <div>
                 Hệ thống sẽ gửi email tới học viên và tự động ghi lại bản ghi nhật ký tại <strong>Lịch sử tương tác</strong> với tên của bạn.
               </div>
@@ -20772,7 +20768,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             />
                           </div>
                           <div>
-                            <div style={{ fontWeight: 900, fontSize: '1.15rem', letterSpacing: '0.05em', lineHeight: 1.1, color: '#ffffff' }}>{tenantConfig?.organization?.name || 'MYERP'}</div>
+                            <div style={{ fontWeight: 700, fontSize: '1.15rem', letterSpacing: '0.04em', lineHeight: 1.1, color: '#ffffff' }}>{tenantConfig?.organization?.name || 'MYERP'}</div>
                           </div>
                         </div>
                         <div style={{ fontSize: '0.72rem', background: 'rgba(0,0,0,0.2)', padding: '3px 8px', borderRadius: '4px', opacity: 0.9 }}>
@@ -20928,8 +20924,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               const currentStatus = normalizeStudentStageKey(formData.study_status || contact?.study_status || 'studying');
               const statusMeta: Record<string, { label: string; color: string; bg: string }> = {
                 enrolled: { label: 'Enrolled (Nhập học)', color: '#0284c7', bg: '#e0f2fe' },
-                training: { label: 'Tranning (Đào tạo)', color: '#4f46e5', bg: '#e0e7ff' },
-                tranning: { label: 'Tranning (Đào tạo)', color: '#4f46e5', bg: '#e0e7ff' },
+                training: { label: 'Tranning (Đào tạo)', color: '#0d9488', bg: '#ccfbf1' },
+                tranning: { label: 'Tranning (Đào tạo)', color: '#0d9488', bg: '#ccfbf1' },
                 studying: { label: 'Studying (Đang học)', color: '#16a34a', bg: '#dcfce7' },
                 postpone: { label: 'Postpone (Bảo lưu)', color: '#d97706', bg: '#fef3c7' },
                 reserved: { label: 'Postpone (Bảo lưu)', color: '#d97706', bg: '#fef3c7' },
@@ -21147,7 +21143,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 marginBottom: '6px'
               }}>
                 {(studyStatusModal.notifyUserIds || []).length === 0 ? (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '2px 4px' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', padding: '2px 4px' }}>
                     Chưa chọn nhân sự nào nhận thông báo (chọn thêm bên dưới)
                   </span>
                 ) : (

@@ -90,15 +90,15 @@ const ZbsGuidelinesModal: React.FC<ZbsGuidelinesModalProps> = ({ isOpen, onClose
 
                     {/* Section 2: Yêu cầu theo mục đích */}
                     <div className="space-y-4">
-                        <h4 className="text-base font-black text-slate-800 flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs">2</div>
+                        <h4 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs tabular-nums">2</div>
                             Phân loại mục đích gửi (Tags)
                         </h4>
                         <div className="space-y-3">
-                            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-5">
-                                <h5 className="font-bold text-indigo-800">Tag 1 - Giao dịch (Transaction)</h5>
-                                <p className="text-sm text-indigo-900/80 mt-1 mb-2">Thông báo đơn hàng, thanh toán, xác nhận lịch hẹn...</p>
-                                <ul className="text-sm list-disc ml-5 text-indigo-900/70 marker:text-indigo-300">
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+                                <h5 className="font-bold text-slate-900">Tag 1 - Giao dịch (Transaction)</h5>
+                                <p className="text-sm text-slate-700 mt-1 mb-2">Thông báo đơn hàng, thanh toán, xác nhận lịch hẹn...</p>
+                                <ul className="text-sm list-disc ml-5 text-slate-600 marker:text-slate-400">
                                     <li>Bắt buộc có tên khách hàng và 1 tham số mã giao dịch (mã đơn, mã HĐ...).</li>
                                     <li>Nếu yếu cầu thanh toán ngân hàng, bắt buộc dùng template dạng Thanh toán.</li>
                                 </ul>

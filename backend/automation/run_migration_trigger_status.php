@@ -1,22 +1,29 @@
 <?php
 // api/run_migration_trigger_status.php
 // Safe idempotent migration: Add status + workspace_id to trigger source tables
-// Run once via: https://automation.ideas.edu.vn/mail_api/run_migration_trigger_status.php?secret=autoflow_cron_2026
-// Or via CLI: php api/run_migration_trigger_status.php
+// Run via CLI: php backend/automation/run_migration_trigger_status.php
+// Or via HTTP with CRON_SECRET configured in backend/.env: ?secret=<CRON_SECRET>
 
-$secret = $_GET['secret'] ?? (php_sapi_name() === 'cli' ? 'autoflow_cron_2026' : '');
-if ($secret !== 'autoflow_cron_2026') {
+require_once dirname(__DIR__) . '/env.php';
+
+$expectedSecret = (string)($_ENV['CRON_SECRET'] ?? getenv('CRON_SECRET') ?: '');
+$secret = (string)($_GET['secret'] ?? '');
+if (php_sapi_name() !== 'cli' && ($expectedSecret === '' || !hash_equals($expectedSecret, $secret))) {
     http_response_code(403);
     echo json_encode(['error' => 'Forbidden']);
     exit;
 }
 
 // Direct DB connect (avoid session/auth overhead)
-$host    = 'localhost';
-$db      = 'vhvxoigh_mail_auto';
-$user    = 'vhvxoigh_mail_auto';
-$pass    = 'Ideas@812';
+$host    = $_ENV['DB_HOST'] ?? getenv('DB_HOST') ?: 'localhost';
+$db      = $_ENV['MAIL_DB_NAME'] ?? $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'vhvxoigh_mail_auto';
+$user    = $_ENV['DB_USER'] ?? getenv('DB_USER') ?: '';
+$pass    = $_ENV['DB_PASS'] ?? getenv('DB_PASS') ?: '';
 $charset = 'utf8mb4';
+if ($user === '' || $pass === '') {
+    echo json_encode(['success' => false, 'error' => 'Missing DB credentials in environment']);
+    exit(1);
+}
 
 try {
     $pdo = new PDO(

@@ -1238,7 +1238,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                   <Award size={16} />
                 </div>
               </div>
-              <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-primary, #BD1D2D)' }}>
+              <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-primary, #BD1D2D)', fontVariantNumeric: 'tabular-nums' }}>
                 {summary.multi_course_persons.toLocaleString('vi-VN')}
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '6px', fontWeight: 500 }}>
@@ -1301,8 +1301,8 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
             <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
-                    Thống Kê Theo Trường / Chương Trình
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
+                    Thống kê theo trường / chương trình
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--color-text-muted, #64748b)' }}>
                     Bấm vào từng trường để lọc nhanh toàn bộ báo cáo
@@ -1494,8 +1494,8 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
             <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
-                    Cơ Cấu Giới Tính &amp; Độ Tuổi
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
+                    Cơ cấu giới tính &amp; độ tuổi
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--color-text-muted, #64748b)' }}>
                     Tỷ lệ giới tính &amp; biểu đồ phân bố nhóm tuổi học viên
@@ -1694,33 +1694,34 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                         <XAxis
                           dataKey="name"
-                          tick={{ fontSize: 11, fill: '#475569', fontWeight: 600 }}
+                          tick={{ fontSize: 11, fill: '#475569', fontWeight: 500 }}
                           axisLine={{ stroke: '#e2e8f0' }}
                           tickLine={false}
                         />
                         <YAxis
-                          tick={{ fontSize: 10.5, fill: '#64748b' }}
+                          tick={{ fontSize: 11, fill: '#64748b' }}
                           axisLine={false}
                           tickLine={false}
                         />
                         <Tooltip
-                          cursor={{ fill: 'rgba(189, 29, 45, 0.05)' }}
+                          cursor={{ fill: 'rgba(15, 23, 42, 0.04)' }}
                           contentStyle={{
                             borderRadius: '8px',
                             border: '1px solid #e2e8f0',
                             fontSize: '0.76rem',
-                            boxShadow: '0 4px 12px rgba(15,23,42,0.08)'
+                            boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
+                            fontVariantNumeric: 'tabular-nums'
                           }}
                           formatter={(val: any, _name: any, props: any) => [
                             `${Number(val).toLocaleString('vi-VN')} HV (${props?.payload?.pct || 0}%)`,
                             props?.payload?.fullLabel || 'Độ tuổi'
                           ]}
                         />
-                        <Bar dataKey="count" barSize={24} radius={[6, 6, 2, 2]}>
+                        <Bar dataKey="count" barSize={24} radius={[4, 4, 0, 0]}>
                           <LabelList
                             dataKey="count"
                             position="top"
-                            style={{ fontSize: '10.5px', fontWeight: 800, fill: '#0f172a' }}
+                            style={{ fontSize: '11px', fontWeight: 600, fill: '#334155', fontVariantNumeric: 'tabular-nums' }}
                           />
                           {(data?.by_age_group || []).map((entry) => (
                             <Cell
@@ -1743,8 +1744,8 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
             <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
-                    Top Tư Vấn Viên / Sale Phụ Trách
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
+                    Top tư vấn viên / Sale phụ trách
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--color-text-muted, #64748b)' }}>
                     Bấm vào Tư vấn viên để lọc toàn bộ chân dung học viên của Sale đó
@@ -1869,8 +1870,8 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
             <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
-                    Thống Kê Theo Khóa Học (Intake)
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
+                    Thống kê theo khóa học (Intake)
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--color-text-muted, #64748b)' }}>
                     Biểu đồ lưu lượng học viên theo khóa (kèm tiền tố Trường)
@@ -1991,7 +1992,7 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
                           <LabelList
                             dataKey="count"
                             position="top"
-                            style={{ fontSize: '10.5px', fontWeight: 800, fill: '#0f172a' }}
+                            style={{ fontSize: '11px', fontWeight: 600, fill: '#334155', fontVariantNumeric: 'tabular-nums' }}
                           />
                           {chartIntakes.map((entry) => (
                             <Cell
@@ -2133,8 +2134,8 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
             <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '0.95rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
-                    Tháp Cấp Bậc Chức Vụ &amp; Quản Lý
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
+                    Tháp cấp bậc chức vụ &amp; quản lý
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--color-text-muted, #64748b)' }}>
                     Bấm vào từng cấp bậc để lọc danh sách học viên
@@ -2285,8 +2286,8 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
             <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '0.95rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
-                    Nhóm Ngành Nghề &amp; Lĩnh Vực
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
+                    Nhóm ngành nghề &amp; lĩnh vực
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--color-text-muted, #64748b)' }}>
                     Tỷ trọng phân bổ &amp; xếp hạng theo lĩnh vực công tác (bấm vào dòng để lọc)
@@ -2592,8 +2593,8 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
             <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '0.95rem', minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
-                    Top Công Ty / Đơn Vị Công Tác ({summary.distinct_companies})
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
+                    Top công ty / đơn vị công tác ({summary.distinct_companies})
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--color-text-muted, #64748b)' }}>
                     Các ngân hàng, tập đoàn và doanh nghiệp có nhiều học viên nhất
@@ -2759,8 +2760,8 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
             <div className="card" style={{ padding: '1.35rem', display: 'flex', flexDirection: 'column', gap: '0.95rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
-                    Độ Đầy Đủ Dữ Liệu Chân Dung
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
+                    Độ đầy đủ dữ liệu chân dung
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--color-text-muted, #64748b)' }}>
                     Tỷ lệ điền đầy đủ của 8 trường thông tin trên tập dữ liệu đang lọc
@@ -2857,8 +2858,8 @@ export const CustomerPersonaOverviewDeck: React.FC<CustomerPersonaOverviewDeckPr
           <div id="multi-course-students-section" className="card" style={{ padding: '1.35rem' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '10px' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
-                  Danh Sách Học Viên Học Nhiều Khóa / Nhiều Trường ({filteredMultiStudents.length})
+                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--color-text, #0f172a)', letterSpacing: '-0.01em' }}>
+                  Danh sách học viên học nhiều khóa / nhiều trường ({filteredMultiStudents.length})
                 </h3>
                 <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--color-text-muted, #64748b)' }}>
                   Bấm vào nút <strong>Số khóa</strong> để xem danh sách các khóa đã học, hoặc bấm vào dòng để mở Hồ sơ 360°

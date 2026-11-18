@@ -47,11 +47,11 @@ const ChatSummaryPanel: React.FC<ChatSummaryPanelProps> = ({
                 <div className={`p-4 border-b flex items-center justify-between shrink-0 ${isDarkTheme ? 'border-slate-800' : 'border-slate-100'}`}>
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 flex items-center justify-center text-[var(--color-primary)]">
-                            <Sparkles className="w-4 h-4" />
+                            <Sparkles className="w-4 h-4" strokeWidth={1.75} />
                         </div>
                         <div>
-                            <h3 className={`text-sm font-black uppercase tracking-wider ${isDarkTheme ? 'text-slate-100' : 'text-slate-800'}`}>Tóm tắt nội dung</h3>
-                            <p className={`text-[10px] font-bold ${isDarkTheme ? 'text-slate-500' : 'text-slate-400'}`}>KEY TAKEAWAYS & ACTIONS</p>
+                            <h3 className={`text-sm font-bold uppercase tracking-wider ${isDarkTheme ? 'text-slate-100' : 'text-slate-800'}`}>Tóm tắt nội dung</h3>
+                            <p className={`text-[10px] font-semibold ${isDarkTheme ? 'text-slate-500' : 'text-slate-400'}`}>KEY TAKEAWAYS & ACTIONS</p>
                         </div>
                     </div>
                     <button
@@ -69,24 +69,17 @@ const ChatSummaryPanel: React.FC<ChatSummaryPanelProps> = ({
                             <div className="relative">
                                 <div className="w-20 h-20 border-4 border-[var(--color-primary)]/10 border-t-[var(--color-primary)] rounded-full animate-spin" />
                                 <div className="absolute inset-0 flex items-center justify-center">
-                                    <Sparkles className="w-8 h-8 text-[var(--color-primary)] animate-pulse" />
+                                    <Sparkles className="w-8 h-8 text-[var(--color-primary)] animate-pulse" strokeWidth={1.75} />
                                 </div>
-                                <div className="absolute -top-1 -right-1 w-4 h-4 bg-[var(--color-primary)] rounded-full animate-ping" />
                             </div>
                             <div className="space-y-3">
-                                <h4 className={`text-base font-black uppercase tracking-wider ${isDarkTheme ? 'text-slate-100' : 'text-slate-800'}`}>Đang phân tích...</h4>
+                                <h4 className={`text-base font-bold uppercase tracking-wider ${isDarkTheme ? 'text-slate-100' : 'text-slate-800'}`}>Đang phân tích...</h4>
                                 <div className="flex flex-col gap-2 max-w-[240px] opacity-60">
-                                    <div className="h-2 bg-[var(--color-primary)]/20 rounded-full animate-[shimmer_2s_infinite] overflow-hidden relative">
-                                        <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-[var(--color-primary)]/30 to-transparent animate-[shimmer_2s_infinite]" />
-                                    </div>
-                                    <div className="h-2 bg-[var(--color-primary)]/20 rounded-full w-[80%] mx-auto overflow-hidden relative">
-                                        <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-[var(--color-primary)]/30 to-transparent animate-[shimmer_2.5s_infinite]" />
-                                    </div>
-                                    <div className="h-2 bg-[var(--color-primary)]/20 rounded-full w-[60%] mx-auto overflow-hidden relative">
-                                        <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-[var(--color-primary)]/30 to-transparent animate-[shimmer_3s_infinite]" />
-                                    </div>
+                                    <div className="h-2 bg-[var(--color-primary)]/20 rounded-full animate-pulse" />
+                                    <div className="h-2 bg-[var(--color-primary)]/20 rounded-full w-[80%] mx-auto animate-pulse" />
+                                    <div className="h-2 bg-[var(--color-primary)]/20 rounded-full w-[60%] mx-auto animate-pulse" />
                                 </div>
-                                <p className={`text-xs font-medium animate-pulse ${isDarkTheme ? 'text-slate-500' : 'text-slate-400'}`}>AI đang trích xuất các ý chính quan trọng</p>
+                                <p className={`text-xs font-medium ${isDarkTheme ? 'text-slate-500' : 'text-slate-400'}`}>AI đang trích xuất các ý chính quan trọng</p>
                             </div>
                         </div>
                     ) : summary ? (
@@ -95,7 +88,7 @@ const ChatSummaryPanel: React.FC<ChatSummaryPanelProps> = ({
                         </div>
                     ) : (
                         <div className="h-full flex flex-col items-center justify-center gap-4 text-center">
-                            <div className={`w-16 h-16 rounded-[14px] flex items-center justify-center mb-2 ${isDarkTheme ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
+                            <div className={`w-16 h-16 rounded-xl flex items-center justify-center mb-2 ${isDarkTheme ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
                                 <AlertTriangle className="w-8 h-8 text-slate-400" />
                             </div>
                             <div className="max-w-[200px]">
@@ -104,7 +97,7 @@ const ChatSummaryPanel: React.FC<ChatSummaryPanelProps> = ({
                             </div>
                             <button
                                 onClick={onRegenerate}
-                                className="mt-4 px-6 py-2.5 bg-[var(--color-primary)] text-white rounded-[var(--radius-md)] font-black uppercase tracking-widest text-[10px] shadow-lg shadow-[var(--color-primary)]/20 hover:scale-105 active:scale-95 transition-all"
+                                className="mt-4 px-6 py-2.5 bg-[var(--color-primary)] hover:bg-[#9A1523] text-white rounded-[var(--radius-md)] font-semibold uppercase tracking-widest text-[10px] transition-colors"
                             >
                                 Tạo tóm tắt ngay
                             </button>
@@ -117,14 +110,14 @@ const ChatSummaryPanel: React.FC<ChatSummaryPanelProps> = ({
                     <div className={`p-4 border-t flex items-center gap-2 shrink-0 ${isDarkTheme ? 'border-slate-800 bg-slate-900/50' : 'border-slate-100 bg-slate-50/50'}`}>
                         <button
                             onClick={handleCopy}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-[var(--radius-md)] text-[10px] font-black uppercase tracking-widest transition-all ${isDarkTheme ? 'bg-slate-800 hover:bg-slate-700 text-slate-200' : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 shadow-sm'}`}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-[var(--radius-md)] text-[10px] font-semibold uppercase tracking-widest transition-colors ${isDarkTheme ? 'bg-slate-800 hover:bg-slate-700 text-slate-200' : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 shadow-sm'}`}
                         >
                             {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Clipboard className="w-3.5 h-3.5" />}
                             {copied ? 'Đã sao chép' : 'Sao chép văn bản'}
                         </button>
                         <button
                             onClick={onRegenerate}
-                            className={`p-2.5 rounded-[var(--radius-md)] transition-all ${isDarkTheme ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 shadow-sm'}`}
+                            className={`p-2.5 rounded-[var(--radius-md)] transition-colors ${isDarkTheme ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 shadow-sm'}`}
                             title="Tóm tắt"
                         >
                             <RefreshCw className="w-4 h-4" />

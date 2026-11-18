@@ -10,7 +10,7 @@ import { ManualAddModal, EditDocModal } from '../components/ai/modals/TrainingMo
 import { useNavigation } from '../contexts/NavigationContext';
 import Modal from '../components/common/Modal';
 import TipsModal from '../components/common/TipsModal';
-import { Lightbulb, Target, Sparkles, Zap, ShieldCheck, Brain, MessageSquare, UserCheck, Search, ListCheck, Users, Shield, Activity, Bot, Copy, ExternalLink } from 'lucide-react';
+import { Lightbulb, Target, Zap, ShieldCheck, Brain, MessageSquare, UserCheck, Search, ListCheck, Users, Shield, Activity, Bot, Copy, ExternalLink } from 'lucide-react';
 import { useChatPage } from '../contexts/ChatPageContext';
 import OrgUserManager from '../components/ai/org/OrgUserManager';
 import FeedbackAdminPanel from '../components/ai/training/FeedbackAdminPanel';
@@ -18,6 +18,7 @@ import UnifiedChat from '../components/ai/UnifiedChat';
 import { API_BASE_URL } from '../utils/config';
 import { useAuthStore } from '../../../store/authStore';
 import { AppIcon } from '../../common/AppIcons';
+import { ensureArray, extractArray } from '../../../utils/safeArray';
 
 
 interface AIDoc {
@@ -469,7 +470,7 @@ const AITraining: React.FC = () => {
         script.src = `/ai-chat-embedded.js?v=${Date.now()}`;
         document.body.appendChild(script);
 
-        toast.success('Khởi tạo Widget Test...', { icon: '🤖' });
+        toast.success('Đang khởi tạo Widget Test');
     }, [selectedProperty, settings, chatbots, selectedCategoryId]);
 
     const handleSaveTags = async () => {
@@ -651,7 +652,7 @@ const AITraining: React.FC = () => {
         try {
             const res = await api.get<any>('ai_chatbots?action=list_categories');
             if (res.success) {
-                const cats = res.data || [];
+                const cats = extractArray(res);
                 setCategories(cats);
                 // Auto-select first category on load if none selected
                 if (!selectedCategoryId && cats.length > 0) {
@@ -852,7 +853,7 @@ const AITraining: React.FC = () => {
     const handleShareBot = (botId: string) => {
         const shareUrl = `${window.location.origin}/chat/${botId}`;
         navigator.clipboard.writeText(shareUrl);
-        toast.success('Đã copy link chia sẻ!', { icon: '🔗' });
+        toast.success('Đã sao chép liên kết chia sẻ');
     };
 
     const handleOpenAISpace = React.useCallback((categoryId: string, preferredBotId?: string) => {
@@ -1445,7 +1446,7 @@ Lịch sử hoạt động:
         try {
             const res = await api.post<any>('ai_training?action=auto_learn_synonyms', { property_id: selectedProperty });
             if (res.success) {
-                toast.success(res.message, { icon: '🚀' });
+                toast.success(res.message);
                 fetchSettings();
             } else {
                 toast.error(res.message);
@@ -1517,7 +1518,7 @@ Lịch sử hoạt động:
             const data = await res.json();
             if (data.success) {
                 toast.success(
-                    `📄 Đã đưa vào hàng đợi: ${data.total_chunks} đợt trích xuất (${totalPages} trang). AI sẽ học ngầm tự động!`,
+                    `Đã đưa vào hàng đợi: ${data.total_chunks} đợt trích xuất (${totalPages} trang). AI sẽ học ngầm tự động`,
                     { id: tId, duration: 6000 }
                 );
                 fetchDocs();
@@ -1586,7 +1587,7 @@ Lịch sử hoạt động:
                 intent_configs: settings.intent_configs
             });
             if (res.success) {
-                toast.success('Đã lưu cấu hình từ đồng nghĩa', { icon: '🤖' });
+                toast.success('Đã lưu cấu hình từ đồng nghĩa');
                 fetchSettings();
                 setIsSynonymsModalOpen(false);
             } else {
@@ -1634,7 +1635,7 @@ Lịch sử hoạt động:
                 items: priorityUpdates
             });
             if (res.success) {
-                toast.success('Đã cập nhật thứ tự', { icon: '🚀' });
+                toast.success('Đã cập nhật thứ tự');
             }
         } catch (e) {
             toast.error('Không thể lưu thứ tự mới');
@@ -2141,7 +2142,7 @@ Lịch sử hoạt động:
                                 <span className="text-sm font-bold text-slate-900 dark:text-white">
                                     AI Space: {activeSpaceCategory?.name || 'Trợ lý AI Nội bộ'}
                                 </span>
-                                <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 tabular-nums">
                                     {spaceBots.length} AI Agents
                                 </span>
                             </div>
@@ -2168,7 +2169,7 @@ Lịch sử hoạt động:
                                         onClick={() => handleOpenAISpace(cat.id)}
                                         className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors whitespace-nowrap border ${
                                             isCurrentCat
-                                                ? 'bg-indigo-600 text-white border-indigo-600'
+                                                ? 'bg-[#BD1D2D] text-white border-[#BD1D2D]'
                                                 : (isAITrainingDarkTheme
                                                     ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
                                                     : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100')
@@ -2186,7 +2187,7 @@ Lịch sử hoạt động:
                                     onClick={() => {
                                         const url = `${window.location.origin}/ai-space/${activeSpaceCategory?.id || aiSpaceModal.categoryId}`;
                                         navigator.clipboard.writeText(url);
-                                        toast.success('Đã sao chép đường dẫn AI Space!');
+                                        toast.success('Đã sao chép đường dẫn AI Space');
                                     }}
                                     className={`h-8 px-3 rounded-lg border text-[11px] font-semibold transition-colors flex items-center gap-1.5 ${
                                         isAITrainingDarkTheme
@@ -2222,7 +2223,7 @@ Lịch sử hoạt động:
                         <div className={`w-full lg:w-64 border-b lg:border-b-0 lg:border-r p-3 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto shrink-0 ${
                             isAITrainingDarkTheme ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50/50 border-slate-200'
                         }`}>
-                            <div className="hidden lg:block text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 mb-1">
+                            <div className="hidden lg:block text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1 mb-1 tabular-nums">
                                 Chọn AI Agent ({spaceBots.length})
                             </div>
                             {spaceBots.map(bot => {
@@ -2232,11 +2233,11 @@ Lịch sử hoạt động:
                                         key={bot.id}
                                         type="button"
                                         onClick={() => setAiSpaceModal(prev => ({ ...prev, activeBotId: bot.id }))}
-                                        className={`p-3 rounded-[14px] border text-left transition-colors flex items-start gap-2.5 shrink-0 lg:w-full min-w-[200px] lg:min-w-0 ${
+                                        className={`p-3 rounded-xl border text-left transition-colors flex items-start gap-2.5 shrink-0 lg:w-full min-w-[200px] lg:min-w-0 ${
                                             isSelected
                                                 ? (isAITrainingDarkTheme
-                                                    ? 'bg-indigo-500/15 border-indigo-500/40 text-white'
-                                                    : 'bg-indigo-50/80 border-indigo-300 text-slate-900')
+                                                    ? 'bg-rose-500/15 border-rose-500/40 text-white'
+                                                    : 'bg-rose-50/80 border-rose-200 text-slate-900')
                                                 : (isAITrainingDarkTheme
                                                     ? 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
                                                     : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300')
@@ -2248,7 +2249,7 @@ Lịch sử hoạt động:
                                             <div className="text-[10px] text-slate-400 truncate mt-0.5">
                                                 {bot.description || 'Trợ lý AI nội bộ'}
                                             </div>
-                                            <div className="flex items-center gap-2 mt-1.5 text-[10px] font-semibold text-slate-500">
+                                            <div className="flex items-center gap-2 mt-1.5 text-[10px] font-semibold text-slate-500 tabular-nums">
                                                 <span>{(bot.stats?.docs_count || 0)} docs</span>
                                                 <span>•</span>
                                                 <span>{(bot.stats?.queries_count || 0)} convos</span>

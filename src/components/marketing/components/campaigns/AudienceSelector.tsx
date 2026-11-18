@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useState, useMemo, useEffect } from 'react';
 import { api } from '../../services/storageAdapter';
-import { Search, Users, Layers, List, Plus, CheckCircle2, Upload, FileText, X, ArrowRight, Sparkles, Tag, RefreshCw, Zap, ChevronDown, Check, AlertTriangle } from 'lucide-react';
+import { Search, Users, Layers, List, Plus, CheckCircle2, Upload, FileText, X, ArrowRight, Tag, RefreshCw, Zap, ChevronDown, Check, AlertTriangle } from 'lucide-react';
 import Button from '../common/Button';
 import Input from '../common/Input';
 import Badge from '../common/Badge';
@@ -462,14 +462,14 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
                     )}
                     {activeTab === 'segments' && (
                         filteredSegs.length > 0 ? filteredSegs.map(s => (
-                            <div key={s.id} onClick={() => toggle('segment', s.id)} className={`group flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${selectedTarget.segmentIds?.includes(s.id) ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
+                            <div key={s.id} onClick={() => toggle('segment', s.id)} className={`group flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-colors duration-150 ${selectedTarget.segmentIds?.includes(s.id) ? 'bg-rose-50/70 border-rose-200' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${selectedTarget.segmentIds?.includes(s.id) ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${selectedTarget.segmentIds?.includes(s.id) ? 'bg-[#BD1D2D] text-white' : 'bg-slate-100 text-slate-400'}`}>
                                         <Layers className="w-4 h-4" />
                                     </div>
-                                    <div><p className="text-xs font-bold text-slate-800">{s.name}</p><p className="text-[9px] text-slate-400 font-semibold">{s.count.toLocaleString()} liên hệ</p></div>
+                                    <div><p className="text-xs font-bold text-slate-800">{s.name}</p><p className="text-[10px] text-slate-400 font-semibold tabular-nums">{s.count.toLocaleString()} liên hệ</p></div>
                                 </div>
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${selectedTarget.segmentIds?.includes(s.id) ? 'border-indigo-500 bg-indigo-500 text-white' : 'border-slate-300'}`}>{selectedTarget.segmentIds?.includes(s.id) && <CheckCircle2 className="w-3.5 h-3.5" />}</div>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${selectedTarget.segmentIds?.includes(s.id) ? 'border-[#BD1D2D] bg-[#BD1D2D] text-white' : 'border-slate-300'}`}>{selectedTarget.segmentIds?.includes(s.id) && <CheckCircle2 className="w-3.5 h-3.5" />}</div>
                             </div>
                         )) : <div className="text-center py-8 text-xs text-slate-400 font-medium">Không tìm thấy phân khúc nào.</div>
                     )}
@@ -488,11 +488,11 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
                     )}
                 </div>
 
-                <div className="absolute bottom-4 right-4 bg-slate-900/90 backdrop-blur-md text-white px-4 py-2.5 rounded-full shadow-xl flex items-center gap-3 animate-in slide-in-from-bottom-2">
-                    <Sparkles className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+                <div className="absolute bottom-4 right-4 bg-slate-900/95 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-3 animate-in slide-in-from-bottom-2">
+                    <Users className="w-3.5 h-3.5 text-rose-400" />
                     <div className="flex items-baseline gap-1">
                         <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">Ước tính:</span>
-                        <span className="text-sm font-bold">{estimatedReach.toLocaleString()}</span>
+                        <span className="text-sm font-bold tabular-nums">{estimatedReach.toLocaleString()}</span>
                     </div>
                     <button
                         onClick={refreshEstimate}
@@ -552,7 +552,7 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
                                                 />
                                                 {!rawData && (
                                                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none opacity-30">
-                                                        <Sparkles className="w-10 h-10 mx-auto mb-2" />
+                                                        <FileText className="w-10 h-10 mx-auto mb-2" />
                                                         <p className="text-[10px] font-bold uppercase tracking-widest">Pasted area</p>
                                                     </div>
                                                 )}
@@ -595,7 +595,7 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
 
                                     {importWarnings.length > 0 && (
                                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 text-amber-800">
-                                            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5 animate-bounce" />
+                                            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                                             <div className="space-y-1">
                                                 <h4 className="text-[10px] font-black uppercase tracking-wider text-amber-900">Cảnh báo tiêu đề cột</h4>
                                                 <ul className="list-disc pl-4 text-[10px] font-medium space-y-1">

@@ -283,7 +283,7 @@ const Dashboard: React.FC = () => {
         { id: 'seg_pipeline_uncontacted_01_02', name: 'Chưa tương tác được', stage_label: 'Pipeline 1-2', count: 0, pct: 0, color: '#f59e0b' },
         { id: 'seg_pipeline_qualified_03_12', name: 'Qualified', stage_label: 'Pipeline 3-12', count: 0, pct: 0, color: '#3b82f6' },
         { id: 'seg_pipeline_won_13_14', name: 'Won', stage_label: 'Pipeline 13-14', count: 0, pct: 0, color: '#10b981' },
-        { id: 'seg_pipeline_enrolled_14', name: 'Học viên chính thức', stage_label: 'Pipeline 14', count: 0, pct: 0, color: '#8b5cf6' },
+        { id: 'seg_pipeline_enrolled_14', name: 'Học viên chính thức', stage_label: 'Pipeline 14', count: 0, pct: 0, color: '#334155' },
     ];
     const sourcesBreakdown = statsData?.sources_breakdown || [];
     const dataCompleteness = statsData?.data_completeness || [];
@@ -462,7 +462,7 @@ const Dashboard: React.FC = () => {
                                     <div
                                         key={seg.id}
                                         onClick={() => navigate('/marketing/audience')}
-                                        className="p-3.5 rounded-xl cursor-pointer transition-all hover:bg-slate-50/80 group"
+                                        className="p-3.5 rounded-xl cursor-pointer transition-colors duration-150 hover:bg-slate-50/80 group"
                                         style={{
                                             background: '#ffffff',
                                             border: '1px solid #e2e8f0',
@@ -476,20 +476,20 @@ const Dashboard: React.FC = () => {
                                             >
                                                 {seg.stage_label}
                                             </span>
-                                            <span className="text-xs font-bold" style={{ color: tone.text }}>
+                                            <span className="text-xs font-bold tabular-nums" style={{ color: tone.text }}>
                                                 {seg.pct}%
                                             </span>
                                         </div>
                                         <div className="text-sm font-bold text-[#0f172a] truncate group-hover:text-[#C6333D] transition-colors">
                                             {seg.name}
                                         </div>
-                                        <div className="text-xl font-extrabold text-[#0f172a] mt-1">
+                                        <div className="text-xl font-extrabold text-[#0f172a] mt-1 tabular-nums">
                                             {fmt(seg.count)} <span className="text-xs font-normal text-[#64748b]">hồ sơ</span>
                                         </div>
                                         {/* Progress Bar with tone depending on % */}
                                         <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden mt-2.5">
                                             <div
-                                                className="h-full rounded-full transition-all duration-500"
+                                                className="h-full rounded-full transition-[width] duration-300"
                                                 style={{
                                                     width: `${Math.min(Math.max(seg.pct, 0), 100)}%`,
                                                     backgroundColor: tone.bar
@@ -531,7 +531,7 @@ const Dashboard: React.FC = () => {
                                             key={s}
                                             type="button"
                                             onClick={() => setSeries(s)}
-                                            className="px-3 py-1 rounded-md text-xs font-bold border-0 cursor-pointer transition-all"
+                                            className="px-3 py-1 rounded-md text-xs font-bold border-0 cursor-pointer transition-colors duration-150"
                                             style={{
                                                 background: series === s ? '#ffffff' : 'transparent',
                                                 color: series === s ? '#C6333D' : '#64748b',
@@ -669,7 +669,7 @@ const Dashboard: React.FC = () => {
                                                     </div>
                                                     <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden mt-0.5">
                                                         <div
-                                                            className="h-full rounded-full transition-all duration-300"
+                                                            className="h-full rounded-full transition-[width] duration-300"
                                                             style={{
                                                                 width: `${Math.min(Math.max(rate, 0), 100)}%`,
                                                                 backgroundColor: tone.bar
@@ -875,7 +875,7 @@ const Dashboard: React.FC = () => {
                                                 </div>
                                                 <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
                                                     <div
-                                                        className="h-full rounded-full bg-[#C6333D] transition-all duration-300"
+                                                        className="h-full rounded-full bg-[#C6333D] transition-[width] duration-300"
                                                         style={{ width: `${Math.min(Math.max(s.pct, 0), 100)}%` }}
                                                     />
                                                 </div>
@@ -931,7 +931,7 @@ const Dashboard: React.FC = () => {
                                                 {/* Dynamic Red / Yellow / Green progress bar */}
                                                 <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                                                     <div
-                                                        className="h-full rounded-full transition-all duration-500"
+                                                        className="h-full rounded-full transition-[width] duration-300"
                                                         style={{
                                                             width: `${Math.min(Math.max(item.pct, 0), 100)}%`,
                                                             backgroundColor: tone.bar
@@ -1081,9 +1081,9 @@ const Dashboard: React.FC = () => {
                                 key={module.id}
                                 type="button"
                                 onClick={() => handleModuleClick(module)}
-                                className="group flex items-center gap-3 p-3 text-left bg-white border border-[#e2e8f0] rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:border-[#cbd5e1] transition-all"
+                                className="group flex items-center gap-3 p-3 text-left bg-white border border-[#e2e8f0] rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:border-[#cbd5e1] transition-[border-color,box-shadow] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)]"
                             >
-                                <AppIcon name={module.id} size={36} className="shrink-0 group-hover:scale-105 transition-transform" />
+                                <AppIcon name={module.id} size={36} className="shrink-0" />
                                 <span className="text-sm font-semibold text-[#0f172a] truncate">{module.title}</span>
                                 <ArrowRight className="w-4 h-4 ml-auto text-[#64748b] group-hover:text-[#C6333D] shrink-0" />
                             </button>
@@ -1102,9 +1102,9 @@ const Dashboard: React.FC = () => {
                                 key={module.id}
                                 type="button"
                                 onClick={() => handleModuleClick(module)}
-                                className="group h-full flex items-start gap-3.5 p-4 text-left bg-white border border-[#e2e8f0] rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:border-[#cbd5e1] hover:shadow-md transition-all"
+                                className="group h-full flex items-start gap-3.5 p-4 text-left bg-white border border-[#e2e8f0] rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:border-[#cbd5e1] hover:shadow-md transition-[border-color,box-shadow] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)]"
                             >
-                                <AppIcon name={module.id} size={42} className="shrink-0 group-hover:scale-105 transition-transform" />
+                                <AppIcon name={module.id} size={42} className="shrink-0" />
                                 <span className="min-w-0 flex-1 flex flex-col">
                                     <span className="text-sm font-bold text-[#0f172a]">{module.title}</span>
                                     <span className="text-xs text-[#64748b] mt-1 leading-relaxed line-clamp-2">{module.sub}</span>

@@ -201,8 +201,7 @@ const trackPurchase = async () => {
                         <Button variant="outline" className="mt-5 px-6 h-[38px] rounded-[var(--radius-md)]" onClick={handleCreateNew}>Bắt đầu ngay</Button>
                     </div>
                 ) : events.map(evt => (
-                    <div key={evt.id} className="group hover-lift bg-[var(--color-surface)] p-5 rounded-[20px] border border-[var(--color-border)] shadow-xs hover:border-[var(--color-primary-light)] transition-all flex flex-col justify-between gap-4 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-8 opacity-[0.03] text-pink-600 group-hover:scale-125 transition-transform"><ShoppingBag className="w-32 h-32" /></div>
+                    <div key={evt.id} className="group bg-[var(--color-surface)] p-5 rounded-2xl border border-[var(--color-border)] shadow-xs hover:border-slate-300 transition-colors flex flex-col justify-between gap-4 relative overflow-hidden">
 
                         <div className="flex justify-between items-start relative z-10">
                             <div className="flex items-center gap-3">

@@ -304,45 +304,45 @@ const VoucherCampaignModal: React.FC<VoucherCampaignModalProps> = ({ isOpen, onC
 
                         <div className="grid grid-cols-1 gap-4">
                             {/* Option 1: Survey (Recommended) */}
-                            <div className={`p-4 border-2 transition-all rounded-[14px] cursor-pointer relative overflow-hidden group flex flex-col ${uiMagnetMode === 'survey' ? 'border-purple-400 bg-purple-50/50 shadow-sm' : 'border-slate-200 bg-white hover:border-purple-200'}`}
+                            <div className={`p-4 border-2 transition-colors rounded-xl cursor-pointer relative overflow-hidden group flex flex-col ${uiMagnetMode === 'survey' ? 'border-[#BD1D2D] bg-rose-50/40 shadow-xs' : 'border-slate-200 bg-white hover:border-slate-300'}`}
                                  onClick={() => handleToggleMagnet('survey')}>
-                                <div className="absolute top-0 right-0 bg-gradient-to-l from-purple-500 to-indigo-500 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl z-10 shadow-sm">
-                                    Khuyên Dùng
+                                <div className="absolute top-0 right-0 bg-[#BD1D2D] text-white text-[10px] font-bold uppercase px-3 py-1 rounded-bl-xl z-10">
+                                    Khuyên dùng
                                 </div>
                                 <div className="flex items-center justify-between mb-2">
-                                    <h5 className={`font-bold flex items-center gap-2 ${uiMagnetMode === 'survey' ? 'text-purple-800' : 'text-slate-600'}`}>
+                                    <h5 className={`font-bold flex items-center gap-2 ${uiMagnetMode === 'survey' ? 'text-[#BD1D2D]' : 'text-slate-700'}`}>
                                         <Layout className="w-4 h-4" /> Form Khảo Sát
                                     </h5>
                                     <label className="relative inline-flex items-center pointer-events-none">
                                         <input type="checkbox" className="sr-only peer" checked={uiMagnetMode === 'survey'} readOnly />
-                                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-[100%] peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-500"></div>
+                                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-[100%] peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#BD1D2D]"></div>
                                     </label>
                                 </div>
-                                <p className="text-[11px] text-slate-500 mb-4 leading-relaxed flex-1">
-                                    Sử dụng Trình tạo Khảo sát để thu thập mọi trường dữ liệu (Checkbox, Rating, Text). Thiết kế giao diện chuyên nghiệp và <strong className="text-purple-700">tặng đúng món quà theo câu trả lời của khách</strong>.
+                                <p className="text-[11px] text-slate-600 mb-4 leading-relaxed flex-1">
+                                    Sử dụng Trình tạo Khảo sát để thu thập mọi trường dữ liệu (Checkbox, Rating, Text). Thiết kế giao diện chuyên nghiệp và <strong className="text-[#BD1D2D]">tặng đúng món quà theo câu trả lời của khách</strong>.
                                 </p>
                                 
                                 {uiMagnetMode === 'survey' && (() => {
                                     const relatedSurveys = surveys.filter(s => s.settings_json?.voucher_config?.campaign_id === formData.id);
                                     return (
-                                        <div className="mt-auto space-y-2 pt-3 border-t border-purple-200/50 animate-in fade-in">
+                                        <div className="mt-auto space-y-2 pt-3 border-t border-rose-200/70 animate-in fade-in">
                                             {relatedSurveys.length > 0 ? (
                                                 <div className="space-y-2">
-                                                    <span className="text-[10px] font-bold text-purple-600 uppercase tracking-widest block">Đang dùng trong {relatedSurveys.length} Khảo sát:</span>
+                                                    <span className="text-[10px] font-bold text-[#BD1D2D] uppercase tracking-wider block">Đang dùng trong {relatedSurveys.length} Khảo sát:</span>
                                                     <div className="flex flex-wrap gap-2">
                                                         {relatedSurveys.map(s => (
-                                                            <a key={s.id} href={`/marketing/surveys?id=${s.id}`} target="_blank" rel="noreferrer" className="text-[10px] bg-white border border-purple-200 text-purple-700 px-2 py-1 rounded-md shadow-sm hover:border-purple-400 hover:bg-purple-50 transition-all flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                                            <a key={s.id} href={`/marketing/surveys?id=${s.id}`} target="_blank" rel="noreferrer" className="text-[10px] bg-white border border-rose-200 text-[#BD1D2D] px-2 py-1 rounded-md shadow-xs hover:border-[#BD1D2D] hover:bg-rose-50 transition-colors flex items-center gap-1" onClick={e => e.stopPropagation()}>
                                                                 <CheckSquare className="w-3 h-3 text-emerald-500" /> {s.name}
                                                             </a>
                                                         ))}
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <div className="text-[10px] text-slate-500 italic flex items-center gap-1 mb-2">
+                                                <div className="text-[10px] text-slate-500 flex items-center gap-1 mb-2">
                                                     <AlertCircle className="w-3 h-3" /> Chưa có khảo sát nào dùng mã này.
                                                 </div>
                                             )}
-                                            <a href="/marketing/surveys" className="text-[11px] font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-sm px-4 py-2 rounded-[var(--radius-md)] inline-flex items-center justify-center transition-all w-full mt-2" onClick={e => e.stopPropagation()}>
+                                            <a href="/marketing/surveys" className="text-[11px] font-bold text-white bg-[#BD1D2D] hover:bg-[#9A1523] shadow-xs px-4 py-2 rounded-lg inline-flex items-center justify-center transition-colors w-full mt-2" onClick={e => e.stopPropagation()}>
                                                 <Plus className="w-3.5 h-3.5 mr-1" /> Đi tới Khảo sát 
                                             </a>
                                         </div>

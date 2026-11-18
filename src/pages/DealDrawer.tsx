@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, DollarSign, History, Briefcase, Tag as TagIcon, Box, FileText, CheckCircle2, Link2, Paperclip, RefreshCw, Trash2, ArrowRight } from 'lucide-react';
+import { X, DollarSign, History, Briefcase, Box, FileText, CheckCircle2, Link2, Paperclip, RefreshCw, ArrowRight } from 'lucide-react';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomCheckbox } from '../components/ui/CustomCheckbox';
 import { EmptyCard } from '../components/ui/EmptyCard';
@@ -81,7 +81,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
         reason: switchReason
       });
       if (res.data.success) {
-        addToast('Đổi căn hộ giao dịch thành công!', 'success');
+        addToast('Đổi căn hộ giao dịch thành công', 'success');
         setIsSwitchModalOpen(false);
         onClose(); // Close the drawer to refresh the main page
         if (onSave) {
@@ -360,7 +360,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
     const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
     setNoteAttachmentFile(file);
     setNoteAttachmentPreview(previewUrl);
-    addToast('Đã thêm tệp đính kèm!', 'info');
+    addToast('Đã thêm tệp đính kèm', 'info');
   };
 
   const handleNoteFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -404,7 +404,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
       fetchNotes();
     } catch (e: any) {
       console.error('Lỗi khi lưu ghi chú deal:', e);
-      addToast(e?.response?.data?.message || 'Không thể lưu ghi chú vào máy chủ. Vui lòng thử lại!', 'error');
+      addToast(e?.response?.data?.message || 'Không thể lưu ghi chú vào máy chủ. Vui lòng thử lại.', 'error');
     } finally {
       addNoteInFlightRef.current = false;
       setIsSavingNote(false);
@@ -568,7 +568,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                             }} 
                           />
                           {formData?.value > 0 && (
-                            <div style={{ marginTop: '4px', fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 600, fontStyle: 'italic' }}>
+                            <div style={{ marginTop: '4px', fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 600 }}>
                               {numberToText(formData.value)}
                             </div>
                           )}
@@ -584,7 +584,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                               if (isReadOnly) {
                                 e.stopPropagation();
                                 const ownerName = formData?.owner_name || deal?.owner_name || deal?.consultant_name || 'chủ sở hữu';
-                                addToast(`Chặn thao tác: Chỉ chủ sở hữu (Owner: ${ownerName}) mới có quyền chuyển đổi giai đoạn Deal!`, 'error');
+                                addToast(`Chặn thao tác: Chỉ chủ sở hữu (Owner: ${ownerName}) mới có quyền chuyển đổi giai đoạn Deal`, 'error');
                               }
                             }}
                           >
@@ -696,7 +696,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                                      } catch (e: any) { console.error(e); }
                                     const isChecked = selected.includes(o);
                                     return (
-                                      <label key={o} style={{ display: 'flex', alignItems: 'center', cursor: isViewer ? 'not-allowed' : 'pointer', background: isChecked ? 'var(--color-primary)' : 'var(--color-bg)', padding: '6px 12px', borderRadius: '20px', border: `1px solid ${isChecked ? 'var(--color-primary)' : 'var(--color-border)'}`, transition: 'all 0.2s', opacity: isViewer ? 0.6 : 1 }}>
+                                      <label key={o} style={{ display: 'flex', alignItems: 'center', cursor: isViewer ? 'not-allowed' : 'pointer', background: isChecked ? 'var(--color-primary)' : 'var(--color-bg)', padding: '6px 12px', borderRadius: '8px', border: `1px solid ${isChecked ? 'var(--color-primary)' : 'var(--color-border)'}`, transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease', opacity: isViewer ? 0.6 : 1 }}>
                                         <input type="checkbox" checked={isChecked} disabled={isViewer} onChange={e => {
                                           const newFields = [...formData.custom_fields];
                                           const newSelected = e.target.checked ? [...selected, o] : selected.filter((s: string) => s !== o);
@@ -939,7 +939,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                         <Link2 size={20} />
                       </div>
                       <div>
-                        <h4 style={{ margin: 0, fontWeight: 800, fontSize: '0.9rem', color: 'var(--color-text)' }}>Sơ đồ Vết kiểm toán</h4>
+                        <h4 style={{ margin: 0, fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-text)' }}>Sơ đồ vết kiểm toán</h4>
                         <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                           Lịch sử dịch chuyển trạng thái, thay đổi căn hộ hoặc hoàn/bể cọc được đồng bộ thời gian thực.
                         </p>
@@ -966,7 +966,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                           borderRadius: '12px',
                         }}>
                           <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                            Luồng dịch chuyển Giao dịch (Unit Switching Flow)
+                            Luồng dịch chuyển giao dịch (Unit Switching Flow)
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '8px' }}>
                             {isChild ? (
@@ -985,20 +985,20 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                                     } catch (e) {}
                                   }}
                                 >
-                                  <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Deal Cũ (Đã Đóng)</div>
-                                  <div style={{ fontSize: '0.8rem', fontWeight: 700 }}>ID: #{linkedId}</div>
+                                  <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Deal cũ (Đã đóng)</div>
+                                  <div style={{ fontSize: '0.8rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>ID: #{linkedId}</div>
                                 </div>
                                 <div style={{ color: 'var(--color-primary)', display: 'flex', alignItems: 'center' }}><ArrowRight size={18} /></div>
                                 <div style={{ border: '1.5px solid var(--color-primary)', borderRadius: '8px', padding: '8px 12px', textAlign: 'center', background: 'var(--color-primary-light)' }}>
-                                  <div style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 600 }}>Deal Hiện tại</div>
-                                  <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>ID: #{formData.id} ({formData.title})</div>
+                                  <div style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 600 }}>Deal hiện tại</div>
+                                  <div style={{ fontSize: '0.8rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>ID: #{formData.id} ({formData.title})</div>
                                 </div>
                               </>
                             ) : (
                               <>
                                 <div style={{ border: '1.5px solid var(--color-primary)', borderRadius: '8px', padding: '8px 12px', textAlign: 'center', background: 'var(--color-primary-light)' }}>
-                                  <div style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 600 }}>Deal Cũ (Đã Đóng)</div>
-                                  <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>ID: #{formData.id} ({formData.title})</div>
+                                  <div style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 600 }}>Deal cũ (Đã đóng)</div>
+                                  <div style={{ fontSize: '0.8rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>ID: #{formData.id} ({formData.title})</div>
                                 </div>
                                 <div style={{ color: 'var(--color-primary)', display: 'flex', alignItems: 'center' }}><ArrowRight size={18} /></div>
                                 <div 
@@ -1015,8 +1015,8 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                                     } catch (e) {}
                                   }}
                                 >
-                                  <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Deal Mới (Đang chạy)</div>
-                                  <div style={{ fontSize: '0.8rem', fontWeight: 700 }}>ID: #{linkedId}</div>
+                                  <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Deal mới (Đang chạy)</div>
+                                  <div style={{ fontSize: '0.8rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>ID: #{linkedId}</div>
                                 </div>
                               </>
                             )}
@@ -1092,7 +1092,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                                 <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '2px' }}>
                                   {new Date(ev.date).toLocaleString('vi-VN')} {ev.user ? `• ${ev.user}` : ''}
                                 </div>
-                                <div style={{ fontWeight: 800, fontSize: '0.825rem', color: 'var(--color-text)' }}>
+                                <div style={{ fontWeight: 700, fontSize: '0.825rem', color: 'var(--color-text)' }}>
                                   {ev.title}
                                 </div>
                                 <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '2px', background: 'var(--color-bg-light)', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--color-border-light)' }}>
@@ -1187,7 +1187,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                       style={{ height: '38px', padding: '8px 12px', fontSize: '0.85rem' }}
                     />
                     {parseFloat(switchPrice) > 0 && (
-                      <div style={{ marginTop: '4px', fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 600, fontStyle: 'italic' }}>
+                      <div style={{ marginTop: '4px', fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 600 }}>
                         {numberToText(parseFloat(switchPrice))}
                       </div>
                     )}
@@ -1214,7 +1214,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                     <button className="btn ghost w-full" onClick={() => setIsSwitchModalOpen(false)} disabled={submittingSwitch}>Hủy bỏ</button>
-                    <button className="btn primary w-full hover-lift" style={{ backgroundColor: '#BD1D2D', borderColor: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleSwitchUnit} disabled={submittingSwitch}>
+                    <button className="btn primary w-full" style={{ backgroundColor: '#BD1D2D', borderColor: '#BD1D2D', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleSwitchUnit} disabled={submittingSwitch}>
                       {submittingSwitch && <RefreshCw size={14} className="spin" />}
                       <span>{submittingSwitch ? 'Đang xử lý...' : 'Xác nhận Đổi Căn'}</span>
                     </button>

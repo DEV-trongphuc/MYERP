@@ -16,6 +16,7 @@ interface ImportExportModalProps {
 }
 
 import { useUploadProgress } from '../../contexts/UploadProgressContext';
+import { ensureArray, extractArray } from '../../utils/safeArray';
 
 export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, onClose, entityName, onImport, onExport }) => {
   const { addToast } = useUIStore();
@@ -179,7 +180,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
                   {results?.error_log && results.error_log.length > 0 && (
                     <div style={{ padding: '1rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', maxHeight: '150px', overflowY: 'auto' }}>
                       <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--color-danger)' }}>Chi tiết lỗi:</h4>
-                      {results.error_log.map((err, i) => (
+                      {ensureArray(results?.error_log).map((err, i) => (
                         <p key={i} style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>• {err}</p>
                       ))}
                     </div>

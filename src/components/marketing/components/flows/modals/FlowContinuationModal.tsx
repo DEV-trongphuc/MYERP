@@ -63,7 +63,7 @@ const FlowContinuationModal: React.FC<FlowContinuationModalProps> = ({
                         <div>
                             <h4 className="text-sm font-bold text-amber-900 mb-1">Flow đang hoạt động</h4>
                             <p className="text-xs text-amber-700 leading-relaxed">
-                                Bạn đang thêm bước mới vào flow đang chạy Hiện có <strong>{completedUsers.total} người dùng</strong> đã Hoàn thành flow cũ.
+                                Bạn đang thêm bước mới vào flow đang chạy. Hiện có <strong className="tabular-nums">{completedUsers.total} người dùng</strong> đã hoàn thành flow cũ.
                                 Họ có nên tiếp tục thực hiện các bước mới không?
                             </p>
                         </div>
@@ -107,7 +107,7 @@ const FlowContinuationModal: React.FC<FlowContinuationModalProps> = ({
                             {Object.entries(completedUsers.byBranch).map(([branch, count]) => (
                                 <div key={branch} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-slate-200">
                                     <span className="text-sm font-semibold text-slate-700">{branch}</span>
-                                    <span className="text-xs bg-slate-200 text-slate-700 px-2 py-1 rounded-md font-bold">
+                                    <span className="text-xs bg-slate-200 text-slate-700 px-2 py-1 rounded-md font-bold tabular-nums">
                                         {count} người
                                     </span>
                                 </div>
@@ -124,7 +124,7 @@ const FlowContinuationModal: React.FC<FlowContinuationModalProps> = ({
                         {/* Option 1: Continue All */}
                         <button
                             onClick={() => setSelectedOption('continue')}
-                            className={`w-full text-left p-4 rounded-xl border-2 transition-all ${selectedOption === 'continue'
+                            className={`w-full text-left p-4 rounded-xl border-2 transition-colors ${selectedOption === 'continue'
                                 ? 'border-emerald-500 bg-emerald-50'
                                 : 'border-slate-200 bg-white hover:border-emerald-300'
                                 }`}
@@ -149,7 +149,7 @@ const FlowContinuationModal: React.FC<FlowContinuationModalProps> = ({
                         {/* Option 2: Stop All */}
                         <button
                             onClick={() => setSelectedOption('stop')}
-                            className={`w-full text-left p-4 rounded-xl border-2 transition-all ${selectedOption === 'stop'
+                            className={`w-full text-left p-4 rounded-xl border-2 transition-colors ${selectedOption === 'stop'
                                 ? 'border-rose-500 bg-rose-50'
                                 : 'border-slate-200 bg-white hover:border-rose-300'
                                 }`}
@@ -176,7 +176,7 @@ const FlowContinuationModal: React.FC<FlowContinuationModalProps> = ({
                         {Object.keys(completedUsers.byBranch || {}).length > 1 && (
                             <button
                                 onClick={() => setSelectedOption('choose')}
-                                className={`w-full text-left p-4 rounded-xl border-2 transition-all ${selectedOption === 'choose'
+                                className={`w-full text-left p-4 rounded-xl border-2 transition-colors ${selectedOption === 'choose'
                                     ? 'border-blue-500 bg-blue-50'
                                     : 'border-slate-200 bg-white hover:border-blue-300'
                                     }`}
@@ -222,7 +222,7 @@ const FlowContinuationModal: React.FC<FlowContinuationModalProps> = ({
                         <Button
                             variant="custom"
                             onClick={handleConfirm}
-                            className="w-full justify-center bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-lg shadow-emerald-500/20 active:scale-[0.95] rounded-2xl px-5 py-2.5 text-xs md:text-sm font-bold border-none transition-all"
+                            className="w-full justify-center bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm rounded-xl px-5 py-2.5 text-xs md:text-sm font-bold border-none transition-colors"
                         >
                             Tiếp tục và Thêm bước
                         </Button>
@@ -238,7 +238,7 @@ const FlowContinuationModal: React.FC<FlowContinuationModalProps> = ({
                         <Button
                             variant="custom"
                             onClick={handleConfirm}
-                            className="flex-1 bg-gradient-to-r from-[#ffbe1a] to-[#2563eb] hover:from-[#2563eb] hover:to-[#e69800] text-white shadow-lg shadow-yellow-500/20 active:scale-[0.95] rounded-2xl px-5 py-2.5 text-xs md:text-sm font-bold border-none transition-all"
+                            className="flex-1 bg-[#BD1D2D] hover:bg-[#9A1523] text-white shadow-sm rounded-xl px-5 py-2.5 text-xs md:text-sm font-bold border-none transition-colors"
                         >
                             Xác nhận
                         </Button>

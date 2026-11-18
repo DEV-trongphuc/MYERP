@@ -30,7 +30,7 @@ use MYERP\Tests\E2E\Helpers\HttpClient;
 use MYERP\Tests\E2E\Helpers\Assertions;
 
 $pdo = TestDatabase::pdo();
-$phpBin = 'C:\\Users\\LENOVO\\AppData\\Local\\Microsoft\\WinGet\\Packages\\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\\php.exe';
+$phpBin = getenv('PHP_BIN') ?: PHP_BINARY;
 
 echo "====================================================================\n";
 echo "   ADVERSARIAL CHALLENGER 2: EMPIRICAL VERIFICATION & STRESS SUITE  \n";

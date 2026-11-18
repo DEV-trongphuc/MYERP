@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspens
 import { Plus, CheckCircle2, Clock, Phone, Mail, Users, Calendar, AlignLeft, X, Loader2, Pencil, Trash2, RefreshCw, Link2, Search, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 import { useUIStore } from '../store/uiStore';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Pagination } from '../components/ui/Pagination';
@@ -17,6 +16,7 @@ import { CustomModal } from '../components/ui/CustomModal';
 import { useAuth } from '../contexts/AuthContext';
 import { MentionInput } from '../components/ui/MentionInput';
 import { pushOverlay } from '../utils/overlayStack';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 const PAGE_SIZE = 10;
 
@@ -120,17 +120,17 @@ export const ActivitiesPage: React.FC = () => {
 
   useEffect(() => {
     if (showModal) {
-      api.get('/contacts', { params: { limit: 1000 } }).then(r => setContacts(r.data.data?.items || [])).catch(() => {});
-      api.get('/deals', { params: { limit: 1000 } }).then(r => setDeals(r.data.data?.items || r.data.data || [])).catch(() => {});
-      api.get('/companies', { params: { limit: 1000 } }).then(r => setCompanies(r.data.data?.items || [])).catch(() => {});
+      api.get('/contacts', { params: { limit: 1000 } }).then(r => setContacts(extractArray(r?.data))).catch(() => {});
+      api.get('/deals', { params: { limit: 1000 } }).then(r => setDeals(extractArray(r?.data))).catch(() => {});
+      api.get('/companies', { params: { limit: 1000 } }).then(r => setCompanies(extractArray(r?.data))).catch(() => {});
     }
   }, [showModal]);
 
   useEffect(() => {
     const isPrivileged = ['admin', 'superadmin', 'super_admin', 'manager', 'director'].includes(user?.role || '');
     if (isPrivileged) {
-      api.get('/teams').then(r => setTeamsList(r.data.data || r.data || [])).catch(() => {});
-      api.get('/get_consultants').then(r => setConsultantsList(r.data.data || r.data || [])).catch(() => {});
+      api.get('/teams').then(r => setTeamsList(extractArray(r?.data))).catch(() => {});
+      api.get('/get_consultants').then(r => setConsultantsList(extractArray(r?.data))).catch(() => {});
     }
   }, [user?.role]);
 
@@ -381,18 +381,18 @@ export const ActivitiesPage: React.FC = () => {
       <div className="page-header">
         <div>
           <h1 className="page-title">Hoạt động & Lịch</h1>
-          <p className="page-subtitle">{loading ? '...' : `${doneCount}/${total} đã hoàn thành`}</p>
+          <p className="page-subtitle" style={{ fontVariantNumeric: 'tabular-nums' }}>{loading ? '...' : `${doneCount}/${total} đã hoàn thành`}</p>
         </div>
         <div className="flex gap-2">
           <div style={{ display: 'flex', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '4px', marginRight: '0.5rem', height: 44 }}>
             <button 
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 12px', borderRadius: 'var(--radius-md)', fontSize: '0.875rem', fontWeight: 600, background: viewMode === 'list' ? 'var(--color-primary-light)' : 'transparent', color: viewMode === 'list' ? 'var(--color-primary)' : 'var(--color-text-muted)', transition: 'all 0.2s', border: 'none', cursor: 'pointer', height: 36 }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 12px', borderRadius: 'var(--radius-md)', fontSize: '0.875rem', fontWeight: 600, background: viewMode === 'list' ? 'var(--color-primary-light)' : 'transparent', color: viewMode === 'list' ? 'var(--color-primary)' : 'var(--color-text-muted)', transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), color 0.2s cubic-bezier(0.22, 1, 0.36, 1)', border: 'none', cursor: 'pointer', height: 36 }}
               onClick={() => setViewMode('list')}
             >
               <LayoutList size={16} /> Danh sách
             </button>
             <button 
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 12px', borderRadius: 'var(--radius-md)', fontSize: '0.875rem', fontWeight: 600, background: viewMode === 'calendar' ? 'var(--color-primary-light)' : 'transparent', color: viewMode === 'calendar' ? 'var(--color-primary)' : 'var(--color-text-muted)', transition: 'all 0.2s', border: 'none', cursor: 'pointer', height: 36 }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 12px', borderRadius: 'var(--radius-md)', fontSize: '0.875rem', fontWeight: 600, background: viewMode === 'calendar' ? 'var(--color-primary-light)' : 'transparent', color: viewMode === 'calendar' ? 'var(--color-primary)' : 'var(--color-text-muted)', transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), color 0.2s cubic-bezier(0.22, 1, 0.36, 1)', border: 'none', cursor: 'pointer', height: 36 }}
               onClick={() => setViewMode('calendar')}
             >
               <Calendar size={16} /> Lịch biểu
@@ -454,9 +454,9 @@ export const ActivitiesPage: React.FC = () => {
         <div className="no-scrollbar" style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '4px' }}>
           {TYPES.map(t => (
             <button key={t} onClick={() => setFilterType(filterType === t ? '' : t)}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', background: filterType === t ? T_COLOR[t] : 'var(--color-surface)', color: filterType === t ? 'white' : 'var(--color-text)', border: `1px solid ${filterType === t ? T_COLOR[t] : 'var(--color-border)'}`, borderRadius: 'var(--radius-full)', fontSize: '0.8125rem', fontWeight: 600, whiteSpace: 'nowrap', transition: 'all 0.2s', cursor: 'pointer' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', background: filterType === t ? T_COLOR[t] : 'var(--color-surface)', color: filterType === t ? 'white' : 'var(--color-text)', border: `1px solid ${filterType === t ? T_COLOR[t] : 'var(--color-border)'}`, borderRadius: 'var(--radius-full)', fontSize: '0.8125rem', fontWeight: 600, whiteSpace: 'nowrap', transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), color 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1)', cursor: 'pointer' }}>
               <span style={{ color: filterType === t ? 'white' : T_COLOR[t] }}>{T_ICON[t]}</span>
-              {T_LABEL[t]} <span style={{ opacity: 0.75 }}>({counts[t] || 0})</span>
+              {T_LABEL[t]} <span style={{ opacity: 0.75, fontVariantNumeric: 'tabular-nums' }}>({counts[t] || 0})</span>
             </button>
           ))}
           <button onClick={() => setFilterStatus(filterStatus === 'done' ? '' : 'done')}
@@ -480,32 +480,30 @@ export const ActivitiesPage: React.FC = () => {
             initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
             style={{ marginBottom: '1.25rem', overflow: 'hidden' }}
           >
-            <div className="card" style={{ background: 'linear-gradient(135deg, rgba(189, 29, 45, 0.05), rgba(189, 29, 45, 0.05))', border: '1px solid var(--color-primary-light)', padding: '1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            <div className="card" style={{ background: 'rgba(189, 29, 45, 0.04)', border: '1px solid var(--color-primary-light)', padding: '20px', borderRadius: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
                 <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'var(--color-primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Zap size={18} fill="white" />
+                  <Zap size={16} fill="white" />
                 </div>
                 <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-primary)' }}>Tiêu điểm hôm nay</h3>
               </div>
-              <div style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto', paddingBottom: '4px' }}>
+              <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '4px' }}>
                 {items.filter(a => a.status === 'planned' && a.due_date && new Date(a.due_date).toDateString() === new Date().toDateString()).map(rem => (
-                  <motion.div 
+                  <div 
                     key={rem.id} 
-                    whileHover={{ y: -3, boxShadow: 'var(--shadow-md)' }}
-                    whileTap={{ scale: 0.98 }}
                     onClick={() => openEdit(rem)}
-                    style={{ minWidth: 220, padding: '0.875rem', background: 'var(--color-surface)', borderRadius: '12px', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)', cursor: 'pointer', transition: 'all 0.2s' }}
+                    style={{ minWidth: 220, padding: '14px 16px', background: 'var(--color-surface)', borderRadius: '12px', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)', cursor: 'pointer', transition: 'border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1)' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                       <span style={{ color: T_COLOR[rem.type] }}>{T_ICON[rem.type]}</span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{new Date(rem.due_date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{new Date(rem.due_date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                     <p style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '4px' }}>{rem.subject}</p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                        <Avatar name={rem.user_name} size="sm" />
                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-light)' }}>Phụ trách: {rem.user_name?.split(' ').pop()}</span>
                     </div>
-                  </motion.div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -569,17 +567,17 @@ export const ActivitiesPage: React.FC = () => {
                   return (
                     <div key={label}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                        <h4 style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: label === 'Quá hạn' ? 'var(--color-danger)' : 'var(--color-text-muted)', letterSpacing: '0.05em' }}>{label}</h4>
+                        <h4 style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: label === 'Quá hạn' ? 'var(--color-danger)' : 'var(--color-text-muted)', letterSpacing: '0.05em' }}>{label}</h4>
                         <div style={{ flex: 1, height: 1, background: 'var(--color-border-light)' }} />
-                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{groupItems.length}</span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>{groupItems.length}</span>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                         <AnimatePresence>
                           {groupItems.map(act => (
-                             <motion.div key={act.id} className="card hover-lift"
+                             <motion.div key={act.id} className="card"
                                initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} layout
                                onClick={() => openEdit(act)}
-                               style={{ cursor: 'pointer', padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1rem', borderLeft: `4px solid ${act.status === 'done' ? 'var(--color-success)' : T_COLOR[act.type]}`, borderRadius: 'var(--radius-lg)' }}>
+                               style={{ cursor: 'pointer', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '16px', borderLeft: `4px solid ${act.status === 'done' ? 'var(--color-success)' : T_COLOR[act.type]}`, borderRadius: 'var(--radius-lg)', transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1)' }}>
                               
                               <div style={{ width: 36, height: 36, borderRadius: '10px', background: T_COLOR[act.type] + '12', color: T_COLOR[act.type], display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                 {T_ICON[act.type]}
@@ -629,20 +627,19 @@ export const ActivitiesPage: React.FC = () => {
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); toggleDone(act); }}
                                   disabled={actionLoadingId === act.id}
-                                  className="hover-lift"
                                   title={act.status === 'done' ? 'Đánh dấu chưa xong' : 'Đánh dấu hoàn thành'}
                                   style={{ 
                                     width: 28, 
                                     height: 28, 
                                     borderRadius: '8px', 
-                                    border: `1.5px solid ${act.status === 'done' ? 'var(--color-success)' : 'var(--color-border)'}`, 
+                                    border: `1px solid ${act.status === 'done' ? 'var(--color-success)' : 'var(--color-border)'}`, 
                                     background: act.status === 'done' ? 'var(--color-success-light)' : 'transparent', 
                                     color: act.status === 'done' ? 'var(--color-success)' : 'var(--color-text-muted)', 
                                     display: 'flex', 
                                     alignItems: 'center', 
                                     justifyContent: 'center', 
                                     cursor: actionLoadingId === act.id ? 'not-allowed' : 'pointer', 
-                                    transition: 'all 0.2s',
+                                    transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), color 0.2s cubic-bezier(0.22, 1, 0.36, 1)',
                                     opacity: actionLoadingId === act.id ? 0.6 : 1
                                   }}
                                 >
@@ -688,17 +685,16 @@ export const ActivitiesPage: React.FC = () => {
                   key={t} type="button"
                   onClick={() => setForm({ ...form, type: t })}
                   style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.625rem',
-                    padding: '12px 0', borderRadius: '12px', cursor: 'pointer',
-                    background: form.type === t ? `${T_COLOR[t]}15` : 'var(--color-bg-alt)',
-                    border: form.type === t ? `1.5px solid ${T_COLOR[t]}` : '1px solid var(--color-border)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                    padding: '12px 0', borderRadius: '10px', cursor: 'pointer',
+                    background: form.type === t ? `${T_COLOR[t]}12` : 'var(--color-bg-alt)',
+                    border: form.type === t ? `1px solid ${T_COLOR[t]}` : '1px solid var(--color-border)',
                     color: form.type === t ? T_COLOR[t] : 'var(--color-text-muted)',
-                    fontWeight: form.type === t ? 700 : 500, transition: 'all 0.2s',
-                    boxShadow: form.type === t ? `0 4px 12px ${T_COLOR[t]}12` : 'none',
+                    fontWeight: form.type === t ? 700 : 500, transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), color 0.2s cubic-bezier(0.22, 1, 0.36, 1)',
                     outline: 'none'
                   }}
                 >
-                  <div style={{ transform: form.type === t ? 'scale(1.12)' : 'scale(1)', transition: 'transform 0.2s' }}>
+                  <div>
                     {T_ICON[t]}
                   </div>
                   <span style={{ fontSize: '0.8125rem' }}>{T_LABEL[t]}</span>
@@ -716,28 +712,29 @@ export const ActivitiesPage: React.FC = () => {
               <label className="form-label">Trạng thái</label>
               <div style={{ 
                 display: 'flex', 
-                background: 'rgba(100, 116, 139, 0.08)', 
-                borderRadius: '30px', 
+                background: '#f1f5f9', 
+                borderRadius: '10px', 
                 padding: '3px', 
-                border: '1px solid var(--color-border-light)',
-                height: 42,
-                alignItems: 'center'
+                border: '1px solid #e2e8f0',
+                height: 40,
+                alignItems: 'center',
+                gap: '2px'
               }}>
                 <button 
                   type="button" 
                   style={{ 
                     flex: 1, 
-                    height: '100%',
+                    height: '32px',
                     border: 'none', 
-                    borderRadius: '30px', 
-                    padding: '4px 12px', 
+                    borderRadius: '7px', 
+                    padding: '0 12px', 
                     fontSize: '0.8125rem', 
-                    fontWeight: form.status === 'planned' ? 700 : 500, 
+                    fontWeight: form.status === 'planned' ? 700 : 600, 
                     cursor: 'pointer', 
-                    transition: 'all 0.2s',
-                    background: form.status === 'planned' ? 'var(--color-surface)' : 'transparent',
-                    color: form.status === 'planned' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                    boxShadow: form.status === 'planned' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                    transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), color 0.2s cubic-bezier(0.22, 1, 0.36, 1)',
+                    background: form.status === 'planned' ? '#ffffff' : 'transparent',
+                    color: form.status === 'planned' ? 'var(--color-primary)' : '#64748b',
+                    boxShadow: form.status === 'planned' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                     outline: 'none'
                   }} 
                   onClick={() => setForm({...form, status: 'planned'})}
@@ -748,17 +745,17 @@ export const ActivitiesPage: React.FC = () => {
                   type="button" 
                   style={{ 
                     flex: 1, 
-                    height: '100%',
+                    height: '32px',
                     border: 'none', 
-                    borderRadius: '30px', 
-                    padding: '4px 12px', 
+                    borderRadius: '7px', 
+                    padding: '0 12px', 
                     fontSize: '0.8125rem', 
-                    fontWeight: form.status === 'done' ? 700 : 500, 
+                    fontWeight: form.status === 'done' ? 700 : 600, 
                     cursor: 'pointer', 
-                    transition: 'all 0.2s',
+                    transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), color 0.2s cubic-bezier(0.22, 1, 0.36, 1)',
                     background: form.status === 'done' ? 'var(--color-success)' : 'transparent',
-                    color: form.status === 'done' ? 'white' : 'var(--color-text-muted)',
-                    boxShadow: form.status === 'done' ? '0 2px 6px rgba(16, 185, 129, 0.2)' : 'none',
+                    color: form.status === 'done' ? 'white' : '#64748b',
+                    boxShadow: form.status === 'done' ? '0 1px 3px rgba(16, 185, 129, 0.2)' : 'none',
                     outline: 'none'
                   }} 
                   onClick={() => setForm({...form, status: 'done'})}
@@ -834,10 +831,10 @@ export const ActivitiesPage: React.FC = () => {
           {/* Automation Trigger Toggle */}
           <div 
             style={{
-              background: 'linear-gradient(135deg, rgba(189, 29, 45, 0.08), rgba(189, 29, 45, 0.08))',
-              border: '1px solid var(--color-primary-light)', borderRadius: 'var(--radius-xl)',
-              padding: '1rem', display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer',
-              marginTop: '0.25rem'
+              background: 'rgba(189, 29, 45, 0.04)',
+              border: '1px solid var(--color-primary-light)', borderRadius: '12px',
+              padding: '16px', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer',
+              marginTop: '4px'
             }}
             onClick={() => setForm({ ...form, auto_trigger: !form.auto_trigger })}
           >

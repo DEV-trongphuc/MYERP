@@ -52,7 +52,7 @@ const WorkspaceDocItem = React.memo(({
             return { Icon: FileVideo, color: 'text-red-600', bg: 'bg-red-50' };
         // Audio
         if (['mp3', 'wav', 'ogg'].includes(ext))
-            return { Icon: FileAudio, color: 'text-pink-600', bg: 'bg-pink-50' };
+            return { Icon: FileAudio, color: 'text-rose-600', bg: 'bg-rose-50' };
         // Default
         return { Icon: File, color: 'text-slate-400', bg: 'bg-slate-50' };
     };
@@ -81,7 +81,7 @@ const WorkspaceDocItem = React.memo(({
         }
 
         return (
-            <span className={`text-[7px] px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter backdrop-blur-md border shadow-sm ${classes}`}>
+            <span className={`text-[7px] px-1.5 py-0.5 rounded font-semibold uppercase backdrop-blur-md border shadow-sm ${classes}`}>
                 {label}
             </span>
         );
@@ -91,17 +91,17 @@ const WorkspaceDocItem = React.memo(({
         <div
             onContextMenu={onContextMenu}
             onClick={onClick}
-            className={`p-4 rounded-[14px] border transition-all cursor-pointer group flex flex-col gap-3 relative overflow-hidden ${isDarkTheme ? 'bg-[#161B24] border-slate-800 hover:border-[var(--color-primary)]/40 shadow-xl shadow-black/20' : 'bg-white border-slate-100 hover:border-[var(--color-primary)] hover:border-opacity-20 hover:shadow-lg'}`}
+            className={`p-4 rounded-xl border transition-colors cursor-pointer group flex flex-col gap-3 relative overflow-hidden ${isDarkTheme ? 'bg-[#161B24] border-slate-800 hover:border-slate-600 shadow-sm' : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm'}`}
         >
             {/* Actions overlay */}
-            <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100 z-10">
+            <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                 {!isVirtual && doc.source !== 'workspace' && doc.source !== 'global_training' && (
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
                             onMakeGlobal(doc);
                         }}
-                        className="p-2 rounded-xl border shadow-sm bg-white border-slate-200 text-slate-500 hover:text-purple-600 hover:bg-purple-50 transition-all font-bold"
+                        className="p-2 rounded-xl border shadow-sm bg-white border-slate-200 text-slate-500 hover:text-[#BD1D2D] hover:bg-rose-50 transition-colors font-semibold"
                         title="Make Global"
                     >
                         <Globe className="w-3.5 h-3.5" />
@@ -113,8 +113,8 @@ const WorkspaceDocItem = React.memo(({
                             e.stopPropagation();
                             onSaveSnippet(doc);
                         }}
-                        className={`p-2 rounded-xl border shadow-sm transition-all font-bold ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10' : 'bg-white border-slate-200 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50'}`}
-                        title="Luu nhanh (Quick Save)"
+                        className={`p-2 rounded-xl border shadow-sm transition-colors font-semibold ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10' : 'bg-white border-slate-200 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50'}`}
+                        title="Lưu nhanh (Quick Save)"
                     >
                         <Save className="w-3.5 h-3.5" />
                     </button>
@@ -124,7 +124,7 @@ const WorkspaceDocItem = React.memo(({
                             e.stopPropagation();
                             if (safeUrl) window.open(safeUrl, '_blank');
                         }}
-                        className={`p-2 rounded-xl border shadow-sm transition-all font-bold ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10' : 'bg-white border-slate-200 text-slate-500 hover:text-blue-600 hover:bg-blue-50'}`}
+                        className={`p-2 rounded-xl border shadow-sm transition-colors font-semibold ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10' : 'bg-white border-slate-200 text-slate-500 hover:text-blue-600 hover:bg-blue-50'}`}
                         title="Tải xuống"
                     >
                         <Download className="w-3.5 h-3.5" />
@@ -135,7 +135,7 @@ const WorkspaceDocItem = React.memo(({
                         e.stopPropagation();
                         onDelete(doc);
                     }}
-                    className={`p-2 rounded-xl border shadow-sm transition-all font-bold ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10' : 'bg-white border-slate-200 text-slate-500 hover:text-rose-600 hover:bg-rose-50'}`}
+                    className={`p-2 rounded-xl border shadow-sm transition-colors font-semibold ${isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10' : 'bg-white border-slate-200 text-slate-500 hover:text-rose-600 hover:bg-rose-50'}`}
                     title="Xóa tệp"
                 >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -148,7 +148,7 @@ const WorkspaceDocItem = React.memo(({
                         e.stopPropagation();
                         onToggleContext(doc);
                     }}
-                    className={`absolute bottom-3 right-3 p-2 rounded-xl border shadow-sm transition-all font-bold z-10 ${isInContext ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)] shadow-[var(--color-primary)]' : (isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-[var(--color-primary)]' : 'bg-white border-slate-200 text-slate-400 hover:text-[var(--color-primary)] hover:border-[var(--color-primary)]/40')}`}
+                    className={`absolute bottom-3 right-3 p-2 rounded-xl border shadow-sm transition-colors font-semibold z-10 ${isInContext ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' : (isDarkTheme ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-[var(--color-primary)]' : 'bg-white border-slate-200 text-slate-400 hover:text-[var(--color-primary)] hover:border-[var(--color-primary)]/40')}`}
                     title={isInContext ? "Gỡ khỏi Context" : "Ghim làm Context để hỏi AI"}
                 >
                     <Pin className={`w-3.5 h-3.5 ${isInContext ? 'fill-current' : ''}`} />
@@ -158,7 +158,7 @@ const WorkspaceDocItem = React.memo(({
             {/* Preview Section */}
             {isImage && safeUrl ? (
                 <div className="w-full h-32 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 relative group/img">
-                    <img src={safeUrl} alt={doc.name} className="w-full h-full object-cover transition-transform duration-500 group-hover/img:scale-110" />
+                    <img src={safeUrl} alt={doc.name} className="w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity" />
                     <div className="absolute bottom-2 left-2 z-10">
                         {renderSourceBadge()}
@@ -166,7 +166,7 @@ const WorkspaceDocItem = React.memo(({
                 </div>
             ) : (
                 <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 relative ${isDarkTheme ? 'bg-slate-800' : bg} ${color} group-hover:scale-110 transition-transform`}>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 relative ${isDarkTheme ? 'bg-slate-800' : bg} ${color}`}>
                         <Icon className="w-5 h-5" />
                     </div>
                     {renderSourceBadge()}

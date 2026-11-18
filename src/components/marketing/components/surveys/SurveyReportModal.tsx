@@ -87,7 +87,7 @@ const Bar: React.FC<{ value: number; color?: string; height?: string }> = ({
 }) => (
     <div className={`${height} bg-slate-100 rounded-full overflow-hidden`}>
         <div
-            className="h-full rounded-full transition-all duration-700"
+            className="h-full rounded-full transition-[width] duration-500"
             style={{ width: `${Math.min(100, value)}%`, background: color }}
         />
     </div>
@@ -106,8 +106,8 @@ const NpsGauge: React.FC<{ score: number; promoters: number; passives: number; d
         <div className="space-y-3">
             <div className="flex items-center justify-between">
                 <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">NPS Score</p>
-                    <p className={`text-4xl font-black leading-none mt-1 ${score >= 50 ? 'text-emerald-500' : score >= 0 ? 'text-amber-500' : 'text-red-500'}`}>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">NPS Score</p>
+                    <p className={`text-4xl font-bold leading-none mt-1 tabular-nums ${score >= 50 ? 'text-emerald-600' : score >= 0 ? 'text-amber-600' : 'text-[#BD1D2D]'}`}>
                         {score > 0 ? '+' : ''}{score}
                     </p>
                 </div>
@@ -118,22 +118,22 @@ const NpsGauge: React.FC<{ score: number; promoters: number; passives: number; d
                         { label: 'Detractors', val: detractors, pct: pD, color: '#ef4444', bg: '#fef2f2' },
                     ].map(s => (
                         <div key={s.label} className="rounded-xl px-3 py-2" style={{ background: s.bg }}>
-                            <p className="text-base font-black" style={{ color: s.color }}>{s.val}</p>
-                            <p className="text-[9px] font-bold uppercase text-slate-400">{s.label}</p>
+                            <p className="text-base font-bold tabular-nums" style={{ color: s.color }}>{s.val}</p>
+                            <p className="text-[9px] font-bold uppercase text-slate-500">{s.label}</p>
                         </div>
                     ))}
                 </div>
             </div>
             {/* Segmented bar */}
             <div className="flex h-3 rounded-full overflow-hidden">
-                <div className="bg-red-400 transition-all" style={{ width: `${pD}%` }} />
-                <div className="bg-amber-400 transition-all" style={{ width: `${pPa}%` }} />
-                <div className="bg-emerald-400 transition-all" style={{ width: `${pP}%` }} />
+                <div className="bg-red-500 transition-[width]" style={{ width: `${pD}%` }} />
+                <div className="bg-amber-400 transition-[width]" style={{ width: `${pPa}%` }} />
+                <div className="bg-emerald-500 transition-[width]" style={{ width: `${pP}%` }} />
             </div>
-            <div className="flex justify-between text-[10px] text-slate-400">
-                <span className="text-red-400 font-bold">Detractors {pD}%</span>
-                <span className="text-amber-400 font-bold">Passives {pPa}%</span>
-                <span className="text-emerald-400 font-bold">Promoters {pP}%</span>
+            <div className="flex justify-between text-[11px] text-slate-500 tabular-nums">
+                <span className="text-red-600 font-semibold">Detractors {pD}%</span>
+                <span className="text-amber-600 font-semibold">Passives {pPa}%</span>
+                <span className="text-emerald-600 font-semibold">Promoters {pP}%</span>
             </div>
         </div>
     );
@@ -146,14 +146,14 @@ const StarRating: React.FC<{ avg: number; dist?: Array<{ value: number; count: n
     return (
         <div className="space-y-2">
             <div className="flex items-center gap-3">
-                <span className="text-3xl font-black text-slate-800">{Number(avg).toFixed(1)}</span>
+                <span className="text-3xl font-bold text-slate-900 tabular-nums">{Number(avg).toFixed(1)}</span>
                 <div>
                     <div className="flex gap-0.5">
                         {Array.from({ length: 5 }).map((_, i) => (
                             <Star key={i} className="w-4 h-4" fill={i < Math.round(avg) ? '#f59e0b' : 'none'} stroke={i < Math.round(avg) ? '#f59e0b' : '#cbd5e1'} />
                         ))}
                     </div>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{total} phản hồi</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5 tabular-nums">{total} phản hồi</p>
                 </div>
             </div>
             {dist && (
@@ -163,12 +163,12 @@ const StarRating: React.FC<{ avg: number; dist?: Array<{ value: number; count: n
                         const cnt = entry?.count ?? 0;
                         return (
                             <div key={star} className="flex items-center gap-2">
-                                <span className="text-[10px] text-slate-400 w-4">{star}</span>
+                                <span className="text-[11px] text-slate-500 w-4 tabular-nums">{star}</span>
                                 <Star className="w-3 h-3 text-amber-400 flex-shrink-0" fill="#f59e0b" stroke="#f59e0b" />
                                 <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
                                     <div className="h-full bg-amber-400 rounded-full" style={{ width: `${pct(cnt, Math.max(...dist.map(d => d.count), 1))}%`, minWidth: cnt > 0 ? '4px' : 0 }} />
                                 </div>
-                                <span className="text-[10px] font-bold text-slate-500 w-6 text-right">{cnt}</span>
+                                <span className="text-[11px] font-semibold text-slate-600 w-6 text-right tabular-nums">{cnt}</span>
                             </div>
                         );
                     })}
@@ -180,7 +180,7 @@ const StarRating: React.FC<{ avg: number; dist?: Array<{ value: number; count: n
 
 // ─── Choice bar chart ─────────────────────────────────────────────────────────
 const ChoiceChart: React.FC<{ dist: Array<{ label: string; count: number; percentage: number }>; options?: any[] }> = ({ dist, options }) => {
-    const COLORS = ['#BD1D2D', '#3b82f6', '#10b981', '#8b5cf6', '#ef4444', '#ec4899', '#14b8a6', '#f97316'];
+    const COLORS = ['#C6333D', '#334155', '#E11D48', '#64748B', '#991B1B', '#475569', '#FB7185', '#94A3B8'];
 
     return (
         <div className="space-y-2.5">
@@ -190,10 +190,10 @@ const ChoiceChart: React.FC<{ dist: Array<{ label: string; count: number; percen
                     <div key={c.label}>
                         <div className="flex justify-between text-xs mb-1">
                             <span className="text-slate-600 font-medium truncate max-w-[70%]" title={labelFormatted}>{labelFormatted}</span>
-                            <span className="font-black text-slate-700 shrink-0 ml-2">{c.count} <span className="font-normal text-slate-400">({c.percentage}%)</span></span>
+                            <span className="font-bold text-slate-800 shrink-0 ml-2 tabular-nums">{c.count} <span className="font-normal text-slate-400">({c.percentage}%)</span></span>
                         </div>
                         <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full transition-all duration-700"
+                            <div className="h-full rounded-full transition-[width] duration-500"
                                 style={{ width: `${c.percentage}%`, background: COLORS[i % COLORS.length] }} />
                         </div>
                     </div>
@@ -206,16 +206,16 @@ const ChoiceChart: React.FC<{ dist: Array<{ label: string; count: number; percen
 // ─── Per-question card ────────────────────────────────────────────────────────
 const QuestionCard: React.FC<{ q: QuestionAnalytics; idx: number; survey?: Survey | null }> = ({ q, idx, survey }) => {
     const typeIcons: Record<string, React.ReactNode> = {
-        nps:           <div className="text-[9px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">NPS</div>,
+        nps:           <div className="text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded-full">NPS</div>,
         star_rating:   <Star className="w-3.5 h-3.5 text-amber-500" fill="#f59e0b" stroke="#f59e0b" />,
         single_choice: <div className="w-2 h-2 rounded-full border-2 border-slate-400" />,
         multi_choice:  <div className="w-2.5 h-2.5 rounded border-2 border-slate-400" />,
-        likert:        <BarChart2 className="w-3.5 h-3.5 text-blue-500" />,
-        slider:        <div className="text-[9px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">Range</div>,
+        likert:        <BarChart2 className="w-3.5 h-3.5 text-slate-600" />,
+        slider:        <div className="text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded-full">Range</div>,
         emoji_rating:  <span className="text-sm">😊</span>,
-        short_text:    <div className="text-[9px] font-black text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full">Text</div>,
-        long_text:     <div className="text-[9px] font-black text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full">Text</div>,
-        matrix_single: <div className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-full">Matrix</div>,
+        short_text:    <div className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-full">Text</div>,
+        long_text:     <div className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-full">Text</div>,
+        matrix_single: <div className="text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded-full">Matrix</div>,
     };
 
     const block = survey?.blocks?.find(b => b.id === q.question_id || (b as any).id === (q as any).id);
@@ -231,7 +231,7 @@ const QuestionCard: React.FC<{ q: QuestionAnalytics; idx: number; survey?: Surve
             {/* Header */}
             <div className="px-5 py-4 border-b border-slate-100 flex items-start gap-3">
                 <div className="w-7 h-7 rounded-xl bg-[var(--color-primary-light)] flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-[10px] font-black text-[var(--color-primary)]">#{idx + 1}</span>
+                    <span className="text-[11px] font-bold text-[var(--color-primary)] tabular-nums">#{idx + 1}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-slate-900 leading-snug">{displayTitle}</p>
@@ -398,7 +398,7 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                         return (
                             <div 
                                 key={r.id ?? i} 
-                                className={`bg-white rounded-2xl border transition-all ${isExpanded ? 'border-[var(--color-primary)] ring-1 ring-[var(--color-primary-light)]' : 'border-slate-200 hover:border-slate-300'}`}
+                                className={`bg-white rounded-2xl border transition-colors ${isExpanded ? 'border-[var(--color-primary)] ring-1 ring-[var(--color-primary-light)]' : 'border-slate-200 hover:border-slate-300'}`}
                             >
                                 <div className="p-4 flex items-center gap-3.5">
                                     {/* Shared Avatar component (Contract §1) */}
@@ -419,7 +419,7 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                                                 </button>
                                             ) : (
                                                 <p className="text-sm font-bold text-slate-900 truncate">
-                                                    {r.subscriber_name || <span className="text-slate-500 font-normal italic">Khách chưa lưu tên</span>}
+                                                    {r.subscriber_name || <span className="text-slate-500 font-normal">Khách chưa lưu tên</span>}
                                                 </p>
                                             )}
 
@@ -429,16 +429,16 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                                                     <Mail className="w-3 h-3 text-[var(--color-primary)]" /> Email
                                                 </span>
                                             ) : isQR ? (
-                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
-                                                    <QrCode className="w-3 h-3 text-purple-600" /> QR
+                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                                                    <QrCode className="w-3 h-3 text-slate-600" /> QR
                                                 </span>
                                             ) : isWidget ? (
                                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
                                                     <Zap className="w-3 h-3 text-emerald-600" /> Widget
                                                 </span>
                                             ) : (
-                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
-                                                    <Globe className="w-3 h-3 text-blue-600" /> Link trực tiếp
+                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                                                    <Globe className="w-3 h-3 text-slate-600" /> Link trực tiếp
                                                 </span>
                                             )}
 
@@ -472,7 +472,7 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                                     {/* Right actions */}
                                     <div className="flex items-center gap-2 shrink-0">
                                         <div className="text-right hidden sm:block">
-                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                            <span className={`text-[10px] font-bold tabular-nums px-2 py-0.5 rounded-full ${
                                                 (r.completion_rate ?? 0) >= 80
                                                     ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                                     : (r.completion_rate ?? 0) >= 50
@@ -482,7 +482,7 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                                                 {Math.round(r.completion_rate ?? 0)}% xong
                                             </span>
                                             {r.time_spent_sec ? (
-                                                <p className="text-[10px] text-slate-500 mt-0.5">{formatTime(r.time_spent_sec)}</p>
+                                                <p className="text-[10px] text-slate-500 mt-0.5 tabular-nums">{formatTime(r.time_spent_sec)}</p>
                                             ) : null}
                                         </div>
 
@@ -493,7 +493,7 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                                                     e.preventDefault();
                                                     openCustomerDrawer(r.contact_id);
                                                 }}
-                                                className="px-2.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-[var(--color-primary)] text-xs font-bold flex items-center gap-1 transition-all"
+                                                className="px-2.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-[var(--color-primary)] text-xs font-bold flex items-center gap-1 transition-colors"
                                                 title="Mở hồ sơ CRM 360°"
                                             >
                                                 <User className="w-3.5 h-3.5" />
@@ -505,7 +505,7 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                                         <button
                                             type="button"
                                             onClick={() => setExpandedId(isExpanded ? null : (r.id || String(i)))}
-                                            className={`p-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-all ${isExpanded ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)]' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
+                                            className={`p-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors ${isExpanded ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)]' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
                                             title="Xem chi tiết các câu trả lời"
                                         >
                                             <span className="hidden sm:inline">{isExpanded ? 'Thu gọn' : 'Xem trả lời'}</span>
@@ -516,7 +516,7 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                                             <button
                                                 type="button"
                                                 onClick={() => copyLink(r.subscriber_email)}
-                                                className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition-all"
+                                                className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors"
                                                 title="Sao chép link khảo sát cho người này"
                                             >
                                                 {copiedId === r.subscriber_email ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
@@ -539,21 +539,21 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                                                 return (
                                                     <div key={aIdx} className="bg-white p-3 rounded-xl border border-slate-200">
                                                         <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 mb-1">
-                                                            <span className="w-4 h-4 rounded bg-[var(--color-primary-light)] text-[var(--color-primary)] text-[10px] font-black flex items-center justify-center">{aIdx + 1}</span>
+                                                            <span className="w-4 h-4 rounded bg-[var(--color-primary-light)] text-[var(--color-primary)] text-[10px] font-bold tabular-nums flex items-center justify-center">{aIdx + 1}</span>
                                                             <span>{formatChoiceLabel(qTitle)}</span>
                                                         </div>
                                                         <div className="text-xs text-slate-900 font-medium pl-5">
                                                             {answerText ? (
                                                                 <span className="bg-slate-50 px-2 py-0.5 rounded border border-slate-200 inline-block">{answerText}</span>
                                                             ) : (
-                                                                <span className="text-slate-500 italic">Không có phản hồi</span>
+                                                                <span className="text-slate-500">Không có phản hồi</span>
                                                             )}
                                                         </div>
                                                     </div>
                                                 );
                                             })
                                         ) : (
-                                            <p className="text-xs text-slate-500 italic py-2">Không có chi tiết câu trả lời được lưu trong phiên này.</p>
+                                            <p className="text-xs text-slate-500 py-2">Không có chi tiết câu trả lời được lưu trong phiên này.</p>
                                         )}
                                     </div>
                                 )}
@@ -564,20 +564,20 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
             )}
 
             {/* Email tracking instruction */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100/80 rounded-2xl p-4 space-y-2.5">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2.5">
                 <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-blue-800 flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-blue-600" /> Cấu hình gửi qua Email Campaign
+                    <p className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-[#BD1D2D]" /> Cấu hình gửi qua Email Campaign
                     </p>
-                    <span className="text-[10px] font-bold bg-blue-100/80 text-blue-700 px-2 py-0.5 rounded-full">Tự động nhận diện danh tính</span>
+                    <span className="text-[10px] font-bold bg-slate-200/70 text-slate-700 px-2 py-0.5 rounded-full">Tự động nhận diện danh tính</span>
                 </div>
-                <p className="text-[11px] text-blue-700 leading-relaxed">
+                <p className="text-xs text-slate-600 leading-relaxed">
                     Khi gửi khảo sát qua Mailflow/Email Automation, gắn link dưới đây vào nút bấm (Call-To-Action).
                     Hệ thống sẽ tự động bắt Email, Họ tên và SĐT người click:
                 </p>
-                <div className="bg-white/90 rounded-xl px-3.5 py-2.5 font-mono text-[10px] text-slate-600 break-all border border-blue-100 flex items-center justify-between gap-2">
+                <div className="bg-white rounded-xl px-3.5 py-2.5 font-mono text-[11px] text-slate-600 break-all border border-slate-200 flex items-center justify-between gap-2">
                     <span className="select-all">
-                        {basePublicUrl}?utm_source=mailflow&amp;utm_medium=email&amp;email=<span className="text-blue-600">{"{{email}}"}</span>&amp;name=<span className="text-[var(--color-primary)]">{"{{name}}"}</span>&amp;phone=<span className="text-emerald-600">{"{{phone}}"}</span>
+                        {basePublicUrl}?utm_source=mailflow&amp;utm_medium=email&amp;email=<span className="text-slate-800 font-semibold">{"{{email}}"}</span>&amp;name=<span className="text-[#BD1D2D] font-semibold">{"{{name}}"}</span>&amp;phone=<span className="text-emerald-700 font-semibold">{"{{phone}}"}</span>
                     </span>
                     <button
                         type="button"
@@ -586,7 +586,7 @@ const RespondentsList: React.FC<{ surveyId: string; survey?: Survey | null }> = 
                             setCopiedId('template-link');
                             setTimeout(() => setCopiedId(null), 2000);
                         }}
-                        className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600 shrink-0 font-sans text-xs font-bold flex items-center gap-1"
+                        className="p-1.5 rounded-lg hover:bg-rose-50 text-[#BD1D2D] shrink-0 font-sans text-xs font-bold flex items-center gap-1"
                         title="Copy mẫu link"
                     >
                         {copiedId === 'template-link' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
@@ -652,14 +652,14 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
     const ov = analytics?.overview;
     const questions: QuestionAnalytics[] = analytics?.questions ?? [];
     const byDate: Array<{ date: string; count: number }> = analytics?.by_date ?? [];
-    const primaryColor = survey.theme?.primaryColor || '#BD1D2D';
+    const primaryColor = survey.theme?.primaryColor || '#C6333D';
 
     const CHANNEL_META: Record<string, { label: string; icon: React.ReactNode; color: string; key: string }> = {
-        direct:  { label: 'Link trực tiếp', icon: <Globe className="w-3.5 h-3.5" />,       color: '#3b82f6', key: 'direct_count' },
-        qr:      { label: 'QR Code',         icon: <QrCode className="w-3.5 h-3.5" />,      color: '#8b5cf6', key: 'qr_count' },
+        direct:  { label: 'Link trực tiếp', icon: <Globe className="w-3.5 h-3.5" />,       color: '#334155', key: 'direct_count' },
+        qr:      { label: 'QR Code',         icon: <QrCode className="w-3.5 h-3.5" />,      color: '#E11D48', key: 'qr_count' },
         email:   { label: 'Email',            icon: <Mail className="w-3.5 h-3.5" />,        color: '#BD1D2D', key: 'email_count' },
-        widget:  { label: 'Widget',           icon: <Zap className="w-3.5 h-3.5" />,         color: '#10b981', key: 'widget_count' },
-        api:     { label: 'API',              icon: <Link2 className="w-3.5 h-3.5" />,       color: '#ec4899', key: 'api_count' },
+        widget:  { label: 'Widget',           icon: <Zap className="w-3.5 h-3.5" />,         color: '#64748B', key: 'widget_count' },
+        api:     { label: 'API',              icon: <Link2 className="w-3.5 h-3.5" />,       color: '#0F172A', key: 'api_count' },
     };
 
     return createPortal(
@@ -713,7 +713,7 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                                     ID: <span className="font-mono text-slate-800">{survey.id.split('-')[0]}</span>
                                 </span>
                             </div>
-                            <h2 className="text-slate-900 font-black text-2xl leading-tight truncate mt-1">{survey.name}</h2>
+                            <h2 className="text-slate-900 font-bold text-2xl leading-tight truncate mt-1">{survey.name}</h2>
                         </div>
 
                         <div className="flex items-center gap-2 flex-shrink-0">
@@ -725,11 +725,11 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                                         .then(r => { if (r.success) setAnalytics(r.data); })
                                         .finally(() => setLoading(false));
                                 }}
-                                className="px-3 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold flex items-center gap-1.5 transition-all"
+                                className="px-3 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold flex items-center gap-1.5 transition-colors"
                             >
                                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Làm mới
                             </button>
-                            <button type="button" onClick={onClose} className="w-9 h-9 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-600 transition-all">
+                            <button type="button" onClick={onClose} className="w-9 h-9 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-600 transition-colors">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
@@ -738,13 +738,13 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                     {/* ── TABS ─────────────────────────────────────────────────── */}
                     <div className="flex border-b border-slate-200 mt-5 pt-1">
                         <button type="button" onClick={() => setTab('overview')}
-                            className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition-all -mb-px ${tab === 'overview' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
+                            className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition-colors -mb-px ${tab === 'overview' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
                         ><BarChart2 className="w-4 h-4" /> Báo cáo</button>
                         <button type="button" onClick={() => setTab('questions')}
-                            className={`flex items-center gap-1.5 py-3 px-4 text-xs font-bold border-b-2 transition-all -mb-px ${tab === 'questions' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
-                        ><BarChart2 className="w-4 h-4" /> Nội dung <span className="ml-0.5 bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded-md text-[9px]">{questions.length}</span></button>
+                            className={`flex items-center gap-1.5 py-3 px-4 text-xs font-bold border-b-2 transition-colors -mb-px ${tab === 'questions' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
+                        ><BarChart2 className="w-4 h-4" /> Nội dung <span className="ml-0.5 bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded-md text-[10px] tabular-nums">{questions.length}</span></button>
                         <button type="button" onClick={() => setTab('respondents')}
-                            className={`flex items-center gap-1.5 py-3 px-4 text-xs font-bold border-b-2 transition-all -mb-px ${tab === 'respondents' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
+                            className={`flex items-center gap-1.5 py-3 px-4 text-xs font-bold border-b-2 transition-colors -mb-px ${tab === 'respondents' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
                         ><Users className="w-4 h-4" /> Đối tượng</button>
                     </div>
                 </div>
@@ -843,15 +843,18 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                             {/* Trend chart (Trả lời theo ngày) */}
                             {byDate.length > 0 && (
                                 <div className="bg-white rounded-2xl border border-slate-200 p-5">
-                                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest mb-5">Lượt trả lời theo ngày</h4>
+                                    <h4 className="text-sm font-bold text-slate-900 mb-4">Lượt trả lời theo ngày</h4>
                                     <div className="w-full -ml-4" style={{ height: 260 }}>
                                         <ResponsiveContainer width="100%" height={260}>
                                             <LineChart data={byDate}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={v => String(v).slice(5)} />
-                                                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                                                <RechartsTooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: 'none' }} />
-                                                <Line type="monotone" dataKey="count" name="Phản hồi" stroke={primaryColor} strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 6 }} />
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }} axisLine={false} tickLine={false} tickFormatter={v => String(v).slice(5)} />
+                                                <YAxis tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }} axisLine={false} tickLine={false} />
+                                                <RechartsTooltip
+                                                    contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(15,23,42,0.06)', fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}
+                                                    formatter={(value: any) => typeof value === 'number' ? value.toLocaleString('vi-VN') : value}
+                                                />
+                                                <Line type="monotone" dataKey="count" name="Phản hồi" stroke={primaryColor} strokeWidth={2.5} dot={{ r: 3.5, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5.5 }} />
                                             </LineChart>
                                         </ResponsiveContainer>
                                     </div>
@@ -862,7 +865,7 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                 {/* Channel */}
                                 <div className="bg-white rounded-2xl border border-slate-200 p-5">
-                                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest mb-4">Nguồn kênh</h4>
+                                    <h4 className="text-sm font-bold text-slate-900 mb-4">Nguồn kênh</h4>
                                     <div className="space-y-3">
                                         {Object.entries(CHANNEL_META).map(([k, ch]) => {
                                             const cnt = Number(ov[ch.key] ?? 0);
@@ -874,7 +877,7 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                                                             <span style={{ color: ch.color }}>{ch.icon}</span>
                                                             {ch.label}
                                                         </span>
-                                                        <span className="font-black text-slate-800">{cnt} <span className="font-normal text-slate-500">({p}%)</span></span>
+                                                        <span className="font-bold text-slate-800 tabular-nums">{cnt.toLocaleString('vi-VN')} <span className="font-normal text-slate-500">({p}%)</span></span>
                                                     </div>
                                                     <Bar value={p} color={ch.color} />
                                                 </div>
@@ -885,10 +888,10 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
 
                                 {/* Device Donut Chart */}
                                 <div className="bg-white rounded-2xl border border-slate-200 p-5">
-                                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest mb-2">Thiết bị</h4>
+                                    <h4 className="text-sm font-bold text-slate-900 mb-2">Thiết bị</h4>
                                     <div className="w-full flex items-center justify-center" style={{ height: 260 }}>
                                         {(() => {
-                                            const DEVICE_COLORS: Record<string, string> = { 'Desktop': '#3b82f6', 'Mobile': '#BD1D2D', 'Tablet': '#8b5cf6' };
+                                            const DEVICE_COLORS: Record<string, string> = { 'Desktop': '#334155', 'Mobile': '#C6333D', 'Tablet': '#94A3B8' };
                                             const deviceData = [
                                                 { name: 'Desktop', value: Number(ov.desktop_count ?? 0) },
                                                 { name: 'Mobile', value: Number(ov.mobile_count ?? 0) },
@@ -909,7 +912,10 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                                                         >
                                                             {deviceData.map(e => <Cell key={e.name} fill={DEVICE_COLORS[e.name]} />)}
                                                         </Pie>
-                                                        <RechartsTooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: 'none' }} />
+                                                        <RechartsTooltip
+                                                            contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(15,23,42,0.06)', fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}
+                                                            formatter={(value: any) => typeof value === 'number' ? value.toLocaleString('vi-VN') : value}
+                                                        />
                                                         <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
                                                     </PieChart>
                                                 </ResponsiveContainer>
@@ -922,17 +928,21 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                             {/* Country Bar Chart */}
                             {ov.countries && ov.countries.length > 0 && (
                                 <div className="bg-white rounded-2xl border border-slate-200 p-5">
-                                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest mb-5 flex items-center gap-1">
-                                        <MapPin className="w-3.5 h-3.5" /> Vị trí (Quốc gia)
+                                    <h4 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-1.5">
+                                        <MapPin className="w-4 h-4 text-[#C6333D]" /> Vị trí (Quốc gia)
                                     </h4>
                                     <div className="w-full -ml-4" style={{ height: 260 }}>
                                         <ResponsiveContainer width="100%" height={260}>
                                             <BarChart data={ov.countries}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                                <XAxis dataKey="country" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                                                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                                                <RechartsTooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: 'none' }} />
-                                                <RechartsBar dataKey="count" name="Lượt phản hồi" fill="#14b8a6" radius={[4, 4, 0, 0]} />
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                                <XAxis dataKey="country" tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }} axisLine={false} tickLine={false} />
+                                                <YAxis tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }} axisLine={false} tickLine={false} />
+                                                <RechartsTooltip
+                                                    cursor={{ fill: 'rgba(15,23,42,0.03)' }}
+                                                    contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(15,23,42,0.06)', fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}
+                                                    formatter={(value: any) => typeof value === 'number' ? value.toLocaleString('vi-VN') : value}
+                                                />
+                                                <RechartsBar dataKey="count" name="Lượt phản hồi" fill="#C6333D" radius={[4, 4, 0, 0]} />
                                             </BarChart>
                                         </ResponsiveContainer>
                                     </div>
@@ -942,7 +952,7 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                             {/* NPS global if applicable */}
                             {ov.nps_score !== undefined && (
                                 <div className="bg-white rounded-2xl border border-slate-200 p-5">
-                                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest mb-4">NPS tổng thể</h4>
+                                    <h4 className="text-sm font-bold text-slate-900 mb-4">NPS tổng thể</h4>
                                     <NpsGauge
                                         score={ov.nps_score}
                                         promoters={ov.promoters ?? 0}
@@ -956,7 +966,7 @@ const SurveyReportModal: React.FC<Props> = ({ survey, isOpen, onClose: _onClose 
                             {questions.length > 0 && (
                                 <div className="bg-white rounded-2xl border border-slate-200 p-5">
                                     <div className="flex items-center justify-between mb-4">
-                                        <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest">Nổi bật từng câu</h4>
+                                        <h4 className="text-sm font-bold text-slate-900">Nổi bật từng câu</h4>
                                         <button type="button" onClick={() => setTab('questions')} className="text-xs font-bold text-[var(--color-primary)] hover:opacity-80 flex items-center gap-1">
                                             Xem tất cả <ChevronRight className="w-3 h-3" />
                                         </button>

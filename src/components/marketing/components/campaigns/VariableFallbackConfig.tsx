@@ -178,8 +178,8 @@ export const VariableFallbackConfig: React.FC<VariableFallbackConfigProps> = ({
                                             <span>Tải ảnh</span>
                                         </button>
                                     </div>
-                                    <p className="text-[10px] text-slate-400 italic">
-                                        💡 Nếu liên hệ chưa có ảnh trong tệp dữ liệu, ảnh này sẽ tự động thay thế để không bị lỗi icon vỡ.
+                                    <p className="text-[10px] text-slate-500">
+                                        Nếu liên hệ chưa có ảnh trong tệp dữ liệu, ảnh này sẽ tự động thay thế để tránh lỗi hiển thị
                                     </p>
                                 </div>
                             </div>
@@ -218,8 +218,8 @@ export const VariableFallbackConfig: React.FC<VariableFallbackConfigProps> = ({
                                     placeholder="VD: https://yoursite.com/tra-cuu hoặc #"
                                     className="w-full px-3 py-2 text-xs rounded-[var(--radius-md)] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:border-[var(--color-primary)] transition-all"
                                 />
-                                <p className="text-[10px] text-slate-400 italic mt-1">
-                                    💡 Nút bấm hoặc thẻ link gắn biến này sẽ chuyển hướng đến link trên nếu liên hệ chưa có URL riêng trong file.
+                                <p className="text-[10px] text-slate-500 mt-1">
+                                    Nút bấm hoặc thẻ link gắn biến này sẽ chuyển hướng đến link trên nếu liên hệ chưa có URL riêng trong file
                                 </p>
                             </div>
                         </div>

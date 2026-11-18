@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export const TAG_COLORS = [
-  '#BD1D2D', '#e11d48', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6'
+  '#BD1D2D', '#E11D48', '#334155', '#F43F5E', '#D97706', '#059669', '#0284C7', '#475569', '#64748B'
 ];
 
 export const getTagColor = (tag: unknown): string => {

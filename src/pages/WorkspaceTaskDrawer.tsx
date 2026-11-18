@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
-  X, CheckSquare, Check, Paperclip, Link2, MessageSquare, Calendar, User, Clock, 
-  Settings, AlertCircle, Trash2, Plus, Send, Share2, FileText, Globe,
-  Bold, Italic, List, ListOrdered, Image as ImageIcon, 
-  Users, RefreshCw, Layers, CheckSquare2, Info, Receipt, Scale, ArrowUpRight, Search, Save, Bell, BellOff,
-  Eye, EyeOff, ExternalLink, UserPlus, UserCheck, Edit3, Play, Sparkles, ArrowRight, Building2, Megaphone, Loader2, RotateCcw,
-  CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle, FileSpreadsheet, Maximize2, Download, Folder, Copy, Archive
+  X, Check, Paperclip, Link2, MessageSquare, Calendar, User, Clock, 
+  AlertCircle, Trash2, Plus, Send, Share2, FileText,
+  List, Image as ImageIcon, 
+  Users, RefreshCw, Layers, CheckSquare2, ArrowUpRight, Search, Save, BellOff,
+  Eye, EyeOff, ExternalLink, UserPlus, Edit3, Building2, Megaphone, Loader2,
+  CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle, FileSpreadsheet, Download, Folder, Copy, Archive
 } from 'lucide-react';
 import { downloadFileWithName } from '../utils/fileDownloader';
 import { triggerLocalConfetti } from '../utils/confettiHelper';
@@ -34,6 +34,7 @@ import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/A
 import { parseTaskBody, convertTextToHtmlParagraphs, formatVietnameseDescription } from '../utils/taskBodyParser';
 import { formatCommentBody } from '../utils/commentFormatter';
 import { getLocalDateStr } from '../utils/dateUtils';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 interface WorkspaceTaskDrawerProps {
   isOpen: boolean;
@@ -665,7 +666,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     const shareUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
     
     navigator.clipboard.writeText(shareUrl).then(() => {
-      toast.success(t('Đã sao chép liên kết chia sẻ công việc!'));
+      toast.success(t('Đã sao chép liên kết chia sẻ công việc'));
     }).catch(err => {
       console.error('Failed to copy text: ', err);
       toast.error(t('Không thể sao chép liên kết'));
@@ -768,7 +769,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       setAllowedTeams(cachedTeams.data);
     } else {
       api.get('/teams').then(res => {
-        const list = res.data?.data || res.data || [];
+        const list = extractArray(res?.data);
         cachedTeams = { data: list, timestamp: Date.now() };
         setAllowedTeams(list);
       }).catch(() => {});
@@ -863,7 +864,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         });
         const fileUrl = res.data?.data?.url || res.data?.url;
         if (res.data && res.data.success && fileUrl) {
-          toast.success(t('Tải ảnh lên thành công!'), { id: toastId });
+          toast.success(t('Tải ảnh lên thành công'), { id: toastId });
 
           const apiBase = import.meta.env.VITE_API_URL || '/backend';
           let resolvedUrl = fileUrl;
@@ -951,7 +952,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         });
         const fileUrl = res.data?.data?.url || res.data?.url;
         if (res.data && res.data.success && fileUrl) {
-          toast.success(t('Tải ảnh lên thành công!'), { id: toastId });
+          toast.success(t('Tải ảnh lên thành công'), { id: toastId });
 
           const apiBase = import.meta.env.VITE_API_URL || '/backend';
           let resolvedUrl = fileUrl;
@@ -1297,7 +1298,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         await loadComments(Number(tid));
         if (activeTab === 'timeline') await loadTimeline(Number(tid));
         if (onUpdate) onUpdate({ ...task, ...formData, id: tid, comment_count: Math.max(0, Number(formData.comment_count || task?.comment_count || 1) - 1) });
-        toast.success(t('Đã xóa bình luận!'));
+        toast.success(t('Đã xóa bình luận'));
       } else {
         toast.error(res.data?.message || t('Không thể xóa bình luận'));
       }
@@ -2224,7 +2225,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             window.dispatchEvent(new CustomEvent('task-local-updated', { detail: { id: newId, ...payload, ...(createdTask || {}) } }));
           }
           const taskName = formData.subject || t('Không có tiêu đề');
-          toast.success(t('Đã tạo công việc "{subject}" thành công!').replace('{subject}', taskName));
+          toast.success(t('Đã tạo công việc "{subject}" thành công').replace('{subject}', taskName));
           setOriginalHash(currentHash);
           setIsClonedDraft(false);
           setIsSaving(false);
@@ -2263,11 +2264,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             applyLiveServerTask(serverTask, { fromSave: true });
           }
 
-          toast.success(t('Đã lưu các thay đổi của công việc "{subject}" thành công!').replace('{subject}', taskName));
+          toast.success(t('Đã lưu các thay đổi của công việc "{subject}" thành công').replace('{subject}', taskName));
           setIsSaving(false);
 
           if (isJustSubmittedForApproval && approverName) {
-            toast.success(t('Đã gửi thông báo email phê duyệt tới {name}!').replace('{name}', approverName));
+            toast.success(t('Đã gửi thông báo email phê duyệt tới {name}').replace('{name}', approverName));
             setShowApprovalSuccessModal(approverName);
           }
 
@@ -2722,7 +2723,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         const newLinks = [...(curMeta.links || []), newResource];
         const updatedMeta = { ...curMeta, links: newLinks };
         handleSaveMeta(updatedMeta, undefined, { dirtyMetaFields: ['links'] });
-        toast.success(t('Tải lên tài liệu thành công!'));
+        toast.success(t('Tải lên tài liệu thành công'));
       } else {
         finishUpload(taskId, false, res.data?.message || t('Lỗi tải tệp lên'));
         toast.error(res.data?.message || t('Lỗi tải tệp lên'));
@@ -2747,7 +2748,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       const newLinks = [...(curMeta.links || []), newResource];
       const updatedMeta = { ...curMeta, links: newLinks };
       handleSaveMeta(updatedMeta, undefined, { dirtyMetaFields: ['links'] });
-      toast.success(t('Thêm liên kết đính kèm thành công!'));
+      toast.success(t('Thêm liên kết đính kèm thành công'));
       return;
     }
 
@@ -2784,7 +2785,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           const newLinks = [...(curMeta.links || []), newResource];
           const updatedMeta = { ...curMeta, links: newLinks };
           handleSaveMeta(updatedMeta, undefined, { dirtyMetaFields: ['links'] });
-          toast.success(t('Tải lên đính kèm thành công!'));
+          toast.success(t('Tải lên đính kèm thành công'));
         } else {
           finishUpload(taskId, false, res.data?.message || t('Lỗi tải tệp lên'));
           toast.error(res.data?.message || t('Lỗi tải tệp lên'));
@@ -2807,7 +2808,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     }
     const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
     setCommentAttachments(prev => [...prev, { file, name: file.name, previewUrl }]);
-    toast.success(t('Đã thêm tệp đính kèm!'));
+    toast.success(t('Đã thêm tệp đính kèm'));
   };
 
   const handleCommentAttachmentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2893,7 +2894,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         if (activeTab === 'timeline') await loadTimeline(Number(targetId));
         const latestForm = formDataRef.current || formData;
         if (onUpdate) onUpdate({ ...task, ...latestForm, id: targetId, comment_count: Number(latestForm.comment_count ?? task?.comment_count ?? 0) + 1 });
-        toast.success(t('Đã thêm bình luận!'));
+        toast.success(t('Đã thêm bình luận'));
       }
     } catch (e: any) {
       toast.error(t('Không thể gửi bình luận: ') + e.message);
@@ -2913,7 +2914,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     }
     const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
     setSubtaskCommentAttachments(prev => [...prev, { file, name: file.name, previewUrl }]);
-    toast.success(t('Đã thêm tệp đính kèm!'));
+    toast.success(t('Đã thêm tệp đính kèm'));
   };
 
   const handleSubtaskCommentAttachmentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2992,7 +2993,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         loadSubtaskCommentCounts();
         const latestForm = formDataRef.current || formData;
         if (onUpdate) onUpdate({ ...task, ...latestForm, id: targetId });
-        toast.success(t('Đã thêm bình luận việc con!'));
+        toast.success(t('Đã thêm bình luận việc con'));
       }
     } catch (e: any) {
       toast.error(t('Không thể gửi bình luận: ') + e.message);
@@ -3201,7 +3202,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           setTimeline([]);
           setSelectedSubtask(null);
 
-          toast.success(t('Đã nhân bản công việc thành công!'));
+          toast.success(t('Đã nhân bản công việc thành công'));
           if (onUpdate) onUpdate(cleanDuplicatedTask);
           window.dispatchEvent(new CustomEvent('task-updated', { detail: cleanDuplicatedTask }));
           duplicateTaskInFlightRef.current = false;
@@ -3281,7 +3282,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       setTimeline([]);
       setSelectedSubtask(null);
 
-      toast.success(t('Đã nhân bản công việc! Dữ liệu đã được điền sẵn, hãy kiểm tra và bấm "Tạo việc" để lưu.'));
+      toast.success(t('Đã nhân bản công việc. Dữ liệu đã được điền sẵn, hãy kiểm tra và bấm "Tạo việc" để lưu'));
     } finally {
       duplicateTaskInFlightRef.current = false;
     }
@@ -3646,7 +3647,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
                 <h3 style={{ 
                   fontSize: '0.92rem', 
-                  fontWeight: 800, 
+                  fontWeight: 700, 
                   color: 'var(--color-text)', 
                   margin: 0, 
                   overflow: 'hidden', 
@@ -3688,7 +3689,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 {erpMeta.internal_type === 'announcement' ? <AlertCircle size={20} /> : <CheckSquare2 size={20} />}
               </div>
               <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--color-text)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-text)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   <span 
                     style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                     title={formData.subject || t("Chi tiết công việc")}
@@ -3698,17 +3699,18 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   <span className="badge" style={{
                     background: 'rgba(107, 114, 128, 0.1)',
                     color: 'var(--color-text-muted)',
-                    fontSize: '0.6rem',
-                    fontWeight: 800,
-                    padding: '1px 6px',
+                    fontSize: '0.6875rem',
+                    fontWeight: 600,
+                    fontVariantNumeric: 'tabular-nums',
+                    padding: '2px 8px',
                     borderRadius: '4px',
                     textTransform: 'uppercase',
                     flexShrink: 0
                   }}>#{isNew ? t('MỚI') : formData.id}</span>
                   <span className={`badge ${formData.priority === 'high' ? 'danger' : formData.priority === 'low' ? 'info' : 'warning'}`} style={{
-                    fontSize: '0.6rem',
-                    fontWeight: 800,
-                    padding: '1px 6px',
+                    fontSize: '0.6875rem',
+                    fontWeight: 600,
+                    padding: '2px 8px',
                     borderRadius: '4px',
                     textTransform: 'uppercase',
                     flexShrink: 0
@@ -3724,16 +3726,16 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     const creatorName = formData.created_by_name || matchedCreator?.full_name || matchedCreator?.name || (isSelfCreator ? (currentUser?.name || (currentUser as any)?.full_name) : '') || t('Hệ thống / Admin');
                     const creatorAvatar = formData.created_by_avatar || matchedCreator?.avatar_url || matchedCreator?.avatar || (isSelfCreator ? (currentUser?.avatar || (currentUser as any)?.avatar_url) : '') || undefined;
                     return (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <span>{t('Người tạo:')}</span>
                         <Avatar src={creatorAvatar} name={creatorName} size={20} />
-                        <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{creatorName}</span>
+                        <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{creatorName}</span>
                       </div>
                     );
                   })()}
 
                   {formatHeaderDate(formData.created_at) && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-bg)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--color-border-light)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-bg)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--color-border-light)', fontVariantNumeric: 'tabular-nums' }}>
                       <Calendar size={12} style={{ color: 'var(--color-primary)' }} />
                       <span>{t('Ngày tạo:')}</span>
                       <strong style={{ color: 'var(--color-text)' }}>
@@ -3743,7 +3745,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   )}
 
                   {formatHeaderDate(formData.due_date) ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-bg)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--color-border-light)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-bg)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--color-border-light)', fontVariantNumeric: 'tabular-nums' }}>
                       <Clock size={12} style={{ color: 'var(--color-danger, #ef4444)' }} />
                       <span>{t('Hạn hoàn thành:')}</span>
                       <strong style={{ color: 'var(--color-text)' }}>
@@ -3753,7 +3755,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-bg)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--color-border-light)', color: 'var(--color-text-muted)' }}>
                       <Clock size={12} style={{ color: 'var(--color-text-muted)' }} />
-                      <span style={{ fontStyle: 'italic', fontSize: '0.72rem' }}>{t('Không có thời hạn')}</span>
+                      <span style={{ fontSize: '0.72rem' }}>{t('Không có thời hạn')}</span>
                     </div>
                   )}
 
@@ -3761,7 +3763,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     <button
                       type="button"
                       onClick={() => { navigate(`/projects?id=${erpMeta.project_id}`); onClose?.(); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(59, 130, 246, 0.08)', color: 'var(--color-info)', border: 'none', padding: '2px 8px', borderRadius: '6px', fontSize: '0.725rem', fontWeight: 700, cursor: 'pointer' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(59, 130, 246, 0.08)', color: 'var(--color-info)', border: 'none', padding: '2px 8px', borderRadius: '6px', fontSize: '0.725rem', fontWeight: 600, cursor: 'pointer' }}
                       title={t('Mở Drawer xem chi tiết Dự án')}
                     >
                       <Building2 size={12} />
@@ -3772,7 +3774,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     <button
                       type="button"
                       onClick={() => { navigate(`/projects?tab=campaigns&id=${erpMeta.campaign_id}`); onClose?.(); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(245, 158, 11, 0.08)', color: 'var(--color-warning)', border: 'none', padding: '2px 8px', borderRadius: '6px', fontSize: '0.725rem', fontWeight: 700, cursor: 'pointer' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(245, 158, 11, 0.08)', color: 'var(--color-warning)', border: 'none', padding: '2px 8px', borderRadius: '6px', fontSize: '0.725rem', fontWeight: 600, cursor: 'pointer' }}
                       title={t('Mở Drawer xem chi tiết Chiến dịch')}
                     >
                       <Megaphone size={12} />
@@ -3784,13 +3786,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: isMobileOrTablet ? '6px' : '10px', alignItems: 'center', flexShrink: 0, justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', gap: isMobileOrTablet ? '8px' : '12px', alignItems: 'center', flexShrink: 0, justifyContent: 'flex-end' }}>
             {/* Share Task Button */}
             {Boolean(!isNew && formData.id && formData.id !== 'new' && formData.id !== 0 && formData.id !== '0') && (
               <button
                 type="button"
                 onClick={handleShareTask}
-                className="hover-lift"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -3803,7 +3804,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   color: 'var(--color-text-muted)',
                   cursor: 'pointer',
                   boxShadow: 'var(--shadow-sm)',
-                  transition: 'all 0.2s',
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
                   padding: 0
                 }}
                 title={t("Chia sẻ liên kết công việc")}
@@ -3817,7 +3818,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               <button
                 type="button"
                 onClick={handleDeleteTask}
-                className="hover-lift"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -3830,7 +3830,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   color: 'var(--color-danger, #ef4444)',
                   cursor: 'pointer',
                   boxShadow: 'var(--shadow-sm)',
-                  transition: 'all 0.2s',
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease',
                   padding: 0
                 }}
                 title={t("Xóa công việc")}
@@ -3844,7 +3844,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               <button
                 type="button"
                 onClick={handleToggleArchive}
-                className="hover-lift"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -3852,12 +3851,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   width: isMobileOrTablet ? '32px' : '36px',
                   height: isMobileOrTablet ? '32px' : '36px',
                   borderRadius: '8px',
-                  border: formData.is_archived ? '1.5px solid var(--color-warning, #f59e0b)' : '1px solid var(--color-border)',
+                  border: formData.is_archived ? '1px solid var(--color-warning, #f59e0b)' : '1px solid var(--color-border)',
                   background: formData.is_archived ? 'rgba(245, 158, 11, 0.08)' : 'var(--color-surface)',
                   color: formData.is_archived ? 'var(--color-warning, #f59e0b)' : 'var(--color-text-muted)',
                   cursor: 'pointer',
                   boxShadow: 'var(--shadow-sm)',
-                  transition: 'all 0.2s',
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
                   padding: 0
                 }}
                 title={formData.is_archived ? t("Công việc đang được lưu trữ (Bấm để bỏ lưu trữ)") : t("Lưu trữ công việc")}
@@ -3872,7 +3871,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 type="button"
                 onClick={handleHideClick}
                 disabled={loadingHide}
-                className="hover-lift"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -3880,12 +3878,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   width: isMobileOrTablet ? '32px' : '36px',
                   height: isMobileOrTablet ? '32px' : '36px',
                   borderRadius: '8px',
-                  border: isHidden ? '1.5px solid var(--color-danger)' : '1px solid var(--color-border)',
+                  border: isHidden ? '1px solid var(--color-danger)' : '1px solid var(--color-border)',
                   background: isHidden ? 'rgba(239, 68, 68, 0.08)' : 'var(--color-surface)',
                   color: isHidden ? 'var(--color-danger)' : 'var(--color-text-muted)',
                   cursor: 'pointer',
                   boxShadow: 'var(--shadow-sm)',
-                  transition: 'all 0.2s',
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
                   padding: 0
                 }}
                 title={isHidden ? t("Công việc đang ẩn (Bấm để hiển thị lại)") : t("Ẩn công việc khỏi bàn làm việc")}
@@ -3899,7 +3897,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               <button
                 type="button"
                 onClick={onOpenFocusMode}
-                className="hover-lift"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -3912,7 +3909,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   color: 'var(--color-text-muted)',
                   cursor: 'pointer',
                   boxShadow: 'var(--shadow-sm)',
-                  transition: 'all 0.2s',
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
                   padding: 0
                 }}
                 title={t("Chế độ tập trung (Focus Mode)")}
@@ -3926,7 +3923,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               <button
                 type="button"
                 onClick={handleDuplicateTask}
-                className="hover-lift"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -3939,7 +3935,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   color: 'var(--color-text-muted)',
                   cursor: 'pointer',
                   boxShadow: 'var(--shadow-sm)',
-                  transition: 'all 0.2s',
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
                   padding: 0
                 }}
                 title={t("Nhân bản công việc (sao chép toàn bộ nội dung, việc con, người thực hiện, bỏ deadline)")}
@@ -3961,7 +3957,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 width: isMobileOrTablet ? 'auto' : undefined,
                 borderRadius: '8px',
                 fontSize: isMobileOrTablet ? '0.8rem' : '0.9rem',
-                fontWeight: 700,
+                fontWeight: 600,
                 height: isMobileOrTablet ? '32px' : '38px',
                 background: 'var(--color-primary)',
                 borderColor: 'var(--color-primary)',
@@ -3969,7 +3965,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 cursor: isSaving ? 'not-allowed' : 'pointer',
                 opacity: isSaving ? 0.7 : 1,
                 boxShadow: 'var(--shadow-sm)',
-                transition: 'all 0.2s'
+                transition: 'opacity 0.15s ease, background-color 0.15s ease'
               }}
             >
               {isSaving ? <RefreshCw className="spin" size={14} /> : <Save size={isMobileOrTablet ? 14 : 16} />}
@@ -3978,7 +3974,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
             <button 
               onClick={handleCloseDrawer} 
-              className="hover-lift"
               style={{
                 background: 'var(--color-bg)',
                 border: '1px solid var(--color-border)',
@@ -4909,7 +4904,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                   alignItems: 'center',
                                   justifyContent: 'center'
                                 }}
-                                className="hover-lift"
                                 title={t('Xóa việc con')}
                               >
                                 <Trash2 size={15} />
@@ -5227,8 +5221,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     {t('Thêm link')}
                   </button>
                   <label
-                    className="btn outline sm hover-lift"
-                    style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', margin: 0, borderColor: 'var(--color-border)', color: 'var(--color-text-light)' }}
+                    className="btn outline sm"
+                    style={{ fontSize: '0.72rem', padding: '4px 8px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', margin: 0, borderColor: 'var(--color-border)', color: 'var(--color-text-light)' }}
                   >
                     {uploadingFile ? <RefreshCw className="spin" size={12} /> : <Plus size={12} />}
                     {t('Tải tệp lên')}
@@ -5416,9 +5410,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     subLabel = t('Tệp nén • Nhấn để tải về');
                   } else if (isWebLink) {
                     formatBadge = 'LINK';
-                    formatColor = '#7c3aed';
-                    formatBg = 'rgba(124, 58, 237, 0.08)';
-                    formatBorder = 'rgba(124, 58, 237, 0.25)';
+                    formatColor = '#475569';
+                    formatBg = 'rgba(15, 23, 42, 0.06)';
+                    formatBorder = 'rgba(15, 23, 42, 0.16)';
                     subLabel = t('Liên kết web • Nhấn để mở');
                   }
 
@@ -5430,14 +5424,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                         flexDirection: 'column',
                         background: 'var(--color-surface)',
                         border: '1px solid var(--color-border-light)',
-                        padding: '10px 14px',
+                        padding: '12px 16px',
                         borderRadius: '12px',
                         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
-                        gap: '10px',
-                        transition: 'all 0.2s ease',
+                        gap: '12px',
+                        transition: 'background-color 0.15s ease, border-color 0.15s ease',
                         cursor: 'pointer'
                       }}
-                      className="hover-lift task-attachment-item"
+                      className="task-attachment-item"
                       data-file-url={fullUrl}
                       data-file-name={link.label || link.url}
                       onClick={(e) => {
@@ -5788,7 +5782,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 {activeTab === 'comments' ? (
                   <>
                     {/* Add comment input */}
-                    <div className="workspace-task-comment-input-box" style={{ background: 'rgba(0, 0, 0, 0.015)', border: '1px solid var(--color-border-light)', padding: '12px', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.01)' }}>
+                    <div className="workspace-task-comment-input-box" style={{ background: 'rgba(0, 0, 0, 0.015)', border: '1px solid var(--color-border-light)', padding: '12px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.01)' }}>
                       {replyTo && (
                         <div style={{ 
                           display: 'flex', 
@@ -5815,7 +5809,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                               background: 'transparent', 
                               color: 'var(--color-text-muted)', 
                               cursor: 'pointer', 
-                              fontWeight: 800, 
+                              fontWeight: 700, 
                               fontSize: '1rem', 
                               padding: '0 4px',
                               lineHeight: 1
@@ -5845,9 +5839,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       
                       {/* Attachment Chips List */}
                       {commentAttachments.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', paddingTop: '2px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingTop: '4px' }}>
                           {commentAttachments.map((att: any, idx: number) => (
-                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', padding: '3px 8px', borderRadius: '12px', fontSize: '0.72rem', color: 'var(--color-text)' }}>
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', padding: '4px 8px', borderRadius: '8px', fontSize: '0.72rem', color: 'var(--color-text)' }}>
                               {att.previewUrl ? (
                                 <img src={att.previewUrl} alt="preview" style={{ width: '22px', height: '22px', borderRadius: '4px', objectFit: 'cover' }} />
                               ) : (
@@ -5865,7 +5859,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           onClick={handlePostComment}
                           disabled={isSubmittingComment || uploadingFile || (!newCommentText.trim() && commentAttachments.length === 0)}
                           className="btn primary sm"
-                          style={{ padding: '6px 18px', fontSize: '0.78rem', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '5px', background: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: '#fff' }}
+                          style={{ padding: '6px 16px', fontSize: '0.78rem', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: '#fff' }}
                         >
                           {isSubmittingComment ? <RefreshCw className="spin" size={13} /> : <Send size={13} />}
                           <span>{t('Gửi')}</span>
@@ -5927,8 +5921,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                 <Avatar src={comment.avatar_url || commUser?.avatar || commUser?.avatar_url} name={commUser?.full_name || comment.user_name || 'Đồng nghiệp'} size={isReply ? 24 : 32} />
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-                                    <span style={{ fontSize: isReply ? '0.76rem' : '0.82rem', fontWeight: 800, color: 'var(--color-text)' }}>{commUser?.full_name || comment.user_name || 'Đồng nghiệp'}</span>
-                                    <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>{new Date(comment.created_at.replace(/-/g, '/')).toLocaleString('vi-VN')}</span>
+                                    <span style={{ fontSize: isReply ? '0.76rem' : '0.82rem', fontWeight: 700, color: 'var(--color-text)' }}>{commUser?.full_name || comment.user_name || 'Đồng nghiệp'}</span>
+                                    <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{new Date(comment.created_at.replace(/-/g, '/')).toLocaleString('vi-VN')}</span>
                                   </div>
                                   {comment.content && (/<[a-z][\s\S]*>/i.test(comment.content) || /[📕📄📊📝📦🖼️📎]/.test(comment.content)) ? (
                                     <div 
@@ -6461,7 +6455,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             <div className="card" style={cardStyle}>
               {formData.type === 'meeting' ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text)' }}>{t('Trạng thái lịch hẹn')}</span>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Trạng thái lịch hẹn')}</span>
                   
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('Trạng thái hiện tại:')}</span>
@@ -6489,15 +6483,15 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       className="btn success" 
                       style={{ 
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', 
-                        padding: '8px 12px', fontSize: '0.8rem', fontWeight: 700, borderRadius: '8px', border: 'none', cursor: 'pointer',
+                        padding: '8px 12px', fontSize: '0.8rem', fontWeight: 600, borderRadius: '8px', border: 'none', cursor: 'pointer',
                         background: formData.status === 'done' ? 'var(--color-success)' : 'rgba(16, 185, 129, 0.08)',
                         color: formData.status === 'done' ? '#fff' : 'var(--color-success)',
-                        transition: 'all 0.2s'
+                        transition: 'background-color 0.15s ease, color 0.15s ease'
                       }}
                       onClick={async () => {
                         try {
                           const res = await api.get(`/activities/${task.id}/comments`);
-                          const commentsList = res.data.data || [];
+                          const commentsList = extractArray(res?.data);
                           const hasImage = commentsList.some((c: any) => {
                             const atts = Array.isArray(c.attachments) ? c.attachments : JSON.parse(c.attachments || '[]');
                             return atts.some((att: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(att));
@@ -6538,10 +6532,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       className="btn danger" 
                       style={{ 
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', 
-                        padding: '8px 12px', fontSize: '0.8rem', fontWeight: 700, borderRadius: '8px', border: 'none', cursor: 'pointer',
+                        padding: '8px 12px', fontSize: '0.8rem', fontWeight: 600, borderRadius: '8px', border: 'none', cursor: 'pointer',
                         background: formData.status === 'cancelled' ? 'var(--color-danger)' : 'rgba(239, 68, 68, 0.08)',
                         color: formData.status === 'cancelled' ? '#fff' : 'var(--color-danger)',
-                        transition: 'all 0.2s'
+                        transition: 'background-color 0.15s ease, color 0.15s ease'
                       }}
                       onClick={() => {
                         setCancellingMeeting(task);
@@ -6590,8 +6584,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               ) : (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text)' }}>{t('Tiến độ công việc')}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Tiến độ công việc')}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontVariantNumeric: 'tabular-nums' }}>
                       <input
                         type="number"
                         min="0"
@@ -6617,10 +6611,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           }
                         }}
                         style={{
-                          width: '45px',
+                          width: '44px',
                           height: '24px',
                           fontSize: '0.8rem',
-                          fontWeight: 800,
+                          fontWeight: 700,
+                          fontVariantNumeric: 'tabular-nums',
                           textAlign: 'center',
                           color: 'var(--color-primary)',
                           border: '1px solid var(--color-border-light)',
@@ -6629,7 +6624,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           padding: 0
                         }}
                       />
-                      <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--color-primary)' }}>%</span>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-primary)' }}>%</span>
                     </div>
                   </div>
                   <input
@@ -6668,7 +6663,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     style={{
                       background: (formData.progress || 0) === 100
                         ? 'var(--color-success)'
-                        : 'linear-gradient(to right, #BD1D2D 0%, #F97316 ' + (formData.progress || 0) + '%, var(--color-border-light) ' + (formData.progress || 0) + '%, var(--color-border-light) 100%)'
+                        : 'linear-gradient(to right, #BD1D2D 0%, #BD1D2D ' + (formData.progress || 0) + '%, var(--color-border-light) ' + (formData.progress || 0) + '%, var(--color-border-light) 100%)'
                     }}
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
@@ -6763,7 +6758,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   {((formData.related_type === 'contact' || formData.contact_id) && (formData.related_type === 'contact' ? formData.related_id : formData.contact_id)) ? (
                     <div style={{ marginBottom: '4px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                        <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                           {t('Khách hàng chính')}
                         </div>
                         <button
@@ -6785,7 +6780,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                         </button>
                       </div>
                       <div 
-                        className="hover-lift"
                         onClick={() => {
                           const contactIdVal = Number(formData.related_type === 'contact' ? formData.related_id : formData.contact_id);
                           if (contactIdVal) {
@@ -7031,9 +7025,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     {formData.approval_status === 'pending' ? (
                       `Đang chờ Người duyệt (${users.find(u => String(u.id) === String(formData.approver_id))?.full_name || 'Chưa phân công'}) phê duyệt hoàn thành.`
                     ) : formData.approval_status === 'approved' ? (
-                      t('Nhiệm vụ đã được phê duyệt duyệt thành công!')
+                      t('Nhiệm vụ đã được phê duyệt thành công')
                     ) : (
-                      t('Yêu cầu hoàn thành nhiệm vụ bị từ chối!')
+                      t('Yêu cầu hoàn thành nhiệm vụ bị từ chối')
                     )}
                   </span>
                 </div>
@@ -7051,7 +7045,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           if (res.data && res.data.success) {
                             setFormData((prev: any) => ({ ...prev, approval_status: 'approved', status: 'done' }));
                             triggerLocalConfetti();
-                            toast.success(t('Đã phê duyệt hoàn thành công việc!'));
+                            toast.success(t('Đã phê duyệt hoàn thành công việc'));
                             if (onUpdate) onUpdate({ ...task, ...formData, approval_status: 'approved', status: 'done' });
                           }
                         } catch (e: any) {
@@ -7101,8 +7095,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             <div className="card" style={cardStyle}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text)' }}>{t('Yêu cầu phê duyệt')}</span>
-                  <p style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', margin: 0 }}>{t('Duyệt hoàn thành khi đạt 100%')}</p>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Yêu cầu phê duyệt')}</span>
+                  <p style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', margin: 0 }}>{t('Duyệt hoàn thành khi đạt 100%')}</p>
                 </div>
                 <button
                   type="button"
@@ -7154,7 +7148,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
               {formData.require_approval === 1 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px', borderTop: '1px solid var(--color-border-light)', paddingTop: '8px' }}>
-                  <label style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{t('Người phê duyệt')}</label>
+                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{t('Người phê duyệt')}</label>
                   <CustomSelect
                     options={approverSelectOptions}
                     value={formData.approver_id ? String(formData.approver_id) : ''}
@@ -7404,7 +7398,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           setShowParticipantsModal(true);
                         }}
                         title={t('Xem chi tiết người liên quan')}
-                        className="hover-lift"
                       >
                         {participants.map((u, idx) => (
                           <div
@@ -7596,11 +7589,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     gap: '8px',
                     padding: '8px 12px',
                     borderRadius: '8px',
-                    background: 'rgba(99, 102, 241, 0.08)',
+                    background: 'rgba(15, 23, 42, 0.06)',
+                    border: '1px solid var(--color-border-light)',
                     marginTop: '4px'
                   }}>
-                    <Shield size={15} color="#4f46e5" style={{ flexShrink: 0 }} />
-                    <span style={{ fontSize: '0.76rem', color: '#4338ca', lineHeight: 1.4 }}>
+                    <Shield size={15} color="#334155" style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.76rem', color: 'var(--color-text)', lineHeight: 1.4 }}>
                       <strong>{t('Công việc cá nhân:')}</strong> {t('Chỉ bạn nhìn thấy')}
                     </span>
                   </div>
@@ -8081,13 +8075,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Modal Header */}
               <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-text)', margin: 0 }}>
-                    {t('Quản lý Người liên quan & Công việc')}
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+                    {t('Quản lý người liên quan & công việc')}
                   </h3>
-                  <p style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
+                  <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
                     {t('Chọn thành viên tham gia và theo dõi tiến độ của từng người')}
                   </p>
                 </div>
@@ -8123,11 +8116,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                       {/* Current Related Members Section */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontVariantNumeric: 'tabular-nums' }}>
                           {t('Thành viên liên quan')} ({currentRelatedUsers.length})
                         </span>
                         {currentRelatedUsers.length === 0 ? (
-                          <div style={{ textAlign: 'center', padding: '1.5rem 0', color: 'var(--color-text-muted)', fontSize: '0.78rem', fontStyle: 'italic', border: '1px dashed var(--color-border-light)', borderRadius: '12px' }}>
+                          <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--color-text-muted)', fontSize: '0.78rem', border: '1px dashed var(--color-border-light)', borderRadius: '12px' }}>
                             {t('Chưa có thành viên liên quan nào')}
                           </div>
                         ) : (
@@ -8142,11 +8135,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                   background: 'rgba(189,29,45,0.02)',
                                   border: '1px solid var(--color-border-light)',
                                   borderRadius: '12px',
-                                  padding: '10px 14px',
+                                  padding: '12px 16px',
                                   display: 'flex',
                                   flexDirection: 'column',
-                                  gap: '6px',
-                                  transition: 'all 0.2s'
+                                  gap: '8px',
+                                  transition: 'background-color 0.15s ease, border-color 0.15s ease'
                                 }}
                               >
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -8159,17 +8152,17 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                     />
                                     <Avatar src={u.avatar_url || u.avatar} name={u.full_name} size={28} />
                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                      <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--color-text)' }}>{u.full_name}</span>
-                                      <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>{getRoleDisplayName(u)}</span>
+                                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)' }}>{u.full_name}</span>
+                                      <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)' }}>{getRoleDisplayName(u)}</span>
                                     </div>
                                   </div>
                                 </div>
 
                                 {/* Display sub-tasks for this member */}
-                                <div style={{ borderTop: '1px dashed var(--color-border-light)', paddingTop: '6px', marginTop: '4px' }}>
+                                <div style={{ borderTop: '1px dashed var(--color-border-light)', paddingTop: '8px', marginTop: '4px' }}>
                                   {subtasks.length > 0 ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginLeft: '38px' }}>
-                                      <span style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginLeft: '36px' }}>
+                                      <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontVariantNumeric: 'tabular-nums' }}>
                                         {t('Nhiệm vụ được giao')} ({subtasks.length}):
                                       </span>
                                       {subtasks.map((st: any) => (
@@ -8188,20 +8181,21 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                               fontSize: '0.68rem',
                                               color: 'var(--color-text-muted)',
                                               background: 'var(--color-bg-subtle, rgba(0,0,0,0.02))',
-                                              padding: '1px 6px',
+                                              padding: '2px 8px',
                                               borderRadius: '4px',
                                               border: '1px solid var(--color-border-light)',
-                                              marginLeft: '6px'
+                                              marginLeft: '8px',
+                                              fontVariantNumeric: 'tabular-nums'
                                             }}>
                                               {t('Hạn')}: {new Date(st.due_date).toLocaleDateString('vi-VN')}
                                             </span>
                                           )}
                                           {st.priority && st.priority !== 'medium' && (
                                             <span style={{
-                                              fontSize: '0.55rem',
-                                              fontWeight: 800,
-                                              padding: '1px 4px',
-                                              borderRadius: '3px',
+                                              fontSize: '0.625rem',
+                                              fontWeight: 600,
+                                              padding: '2px 6px',
+                                              borderRadius: '4px',
                                               background: st.priority === 'high' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(59, 130, 246, 0.08)',
                                               color: st.priority === 'high' ? 'var(--color-danger)' : 'var(--color-info)',
                                               textTransform: 'uppercase',
@@ -8214,7 +8208,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                       ))}
                                     </div>
                                   ) : (
-                                    <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', marginLeft: '38px', fontStyle: 'italic' }}>
+                                    <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginLeft: '36px' }}>
                                       {t('Chưa giao việc con nào')}
                                     </span>
                                   )}
@@ -8236,17 +8230,16 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '8px',
-                                padding: '10px 24px',
+                                padding: '8px 20px',
                                 background: 'var(--color-primary-light, rgba(163,20,34,0.05))',
                                 color: 'var(--color-primary, #a31422)',
                                 border: '1px dashed var(--color-primary, #a31422)',
-                                borderRadius: '24px',
+                                borderRadius: '10px',
                                 fontSize: '0.8rem',
-                                fontWeight: 700,
+                                fontWeight: 600,
                                 cursor: 'pointer',
-                                transition: 'all 0.15s ease'
+                                transition: 'background-color 0.15s ease'
                               }}
-                              className="hover-lift"
                             >
                               <UserPlus size={15} />
                               {t('Thêm thành viên')}
@@ -8255,7 +8248,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontVariantNumeric: 'tabular-nums' }}>
                                 {t('Thành viên chưa liên quan')} ({nonRelatedUsers.length})
                               </span>
                               <button
@@ -8266,7 +8259,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                   background: 'transparent',
                                   color: 'var(--color-primary)',
                                   fontSize: '0.7rem',
-                                  fontWeight: 700,
+                                  fontWeight: 600,
                                   cursor: 'pointer'
                                 }}
                               >
@@ -8296,7 +8289,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             </div>
 
                             {nonRelatedUsers.length === 0 ? (
-                              <div style={{ textAlign: 'center', padding: '1rem 0', color: 'var(--color-text-muted)', fontSize: '0.75rem', fontStyle: 'italic' }}>
+                              <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
                                 {t('Tất cả nhân sự đều đã được thêm làm người liên quan')}
                               </div>
                             ) : (
@@ -8322,7 +8315,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'space-between',
-                                      transition: 'all 0.15s ease'
+                                      transition: 'background-color 0.15s ease'
                                     }}
                                     className="hover-bg-alt"
                                   >
@@ -8335,8 +8328,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                       />
                                       <Avatar src={u.avatar_url || u.avatar} name={u.full_name} size={28} />
                                       <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                        <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text)' }}>{u.full_name}</span>
-                                        <span style={{ fontSize: '0.66rem', color: 'var(--color-text-muted)' }}>{getRoleDisplayName(u)}</span>
+                                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)' }}>{u.full_name}</span>
+                                        <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)' }}>{getRoleDisplayName(u)}</span>
                                       </div>
                                     </div>
                                   </div>
@@ -8352,8 +8345,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               </div>
 
               {/* Modal Footer */}
-              <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'flex-end', background: 'var(--color-surface)' }}>
-                <button className="btn outline" onClick={() => { setShowParticipantsModal(false); setShowAddParticipantsSection(false); }} style={{ borderRadius: '20px', padding: '6px 20px' }}>
+              <div style={{ padding: '16px 24px', borderTop: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'flex-end', background: 'var(--color-surface)' }}>
+                <button className="btn outline" onClick={() => { setShowParticipantsModal(false); setShowAddParticipantsSection(false); }} style={{ borderRadius: '8px', padding: '6px 20px' }}>
                   {t('Đóng')}
                 </button>
               </div>
@@ -8395,9 +8388,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)', margin: 0 }}>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
                     {t('Người thực hiện công việc con')}
                   </h3>
                   <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', margin: '2px 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '340px' }}>
@@ -8413,7 +8406,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               </div>
 
               {/* List of Users */}
-              <div style={{ padding: '1.25rem 1.5rem', maxHeight: '400px', overflowY: 'auto' }} className="custom-scrollbar">
+              <div style={{ padding: '16px 24px', maxHeight: '400px', overflowY: 'auto' }} className="custom-scrollbar">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {(() => {
                     const rawAssigneeId = selectedSubtaskForParticipants.assignee_id || (isPersonalTask && personalUser?.id ? String(personalUser.id) : '');
@@ -8425,7 +8418,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
                     if (subtaskUsers.length === 0) {
                       return (
-                        <div style={{ textAlign: 'center', padding: '1rem 0', color: 'var(--color-text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                        <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
                           {t('Chưa phân công ai')}
                         </div>
                       );
@@ -8435,8 +8428,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 12px', background: 'var(--color-bg-subtle, rgba(0,0,0,0.01))', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
                         <Avatar src={u.avatar_url || u.avatar} name={u.full_name} size={32} />
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontSize: '0.825rem', fontWeight: 800, color: 'var(--color-text)' }}>{u.full_name}</span>
-                          <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>{getRoleDisplayName(u)}</span>
+                          <span style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--color-text)' }}>{u.full_name}</span>
+                          <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)' }}>{getRoleDisplayName(u)}</span>
                         </div>
                       </div>
                     ));
@@ -8445,8 +8438,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               </div>
 
               {/* Footer */}
-              <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'flex-end', background: 'var(--color-surface)' }}>
-                <button className="btn outline" onClick={() => setSelectedSubtaskForParticipants(null)} style={{ borderRadius: '20px', padding: '6px 20px', fontSize: '0.8rem' }}>
+              <div style={{ padding: '16px 24px', borderTop: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'flex-end', background: 'var(--color-surface)' }}>
+                <button className="btn outline" onClick={() => setSelectedSubtaskForParticipants(null)} style={{ borderRadius: '8px', padding: '6px 20px', fontSize: '0.8rem' }}>
                   {t('Đóng')}
                 </button>
               </div>
@@ -8582,22 +8575,22 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: 'var(--color-text)' }}>
-                      {t('Công việc chưa được tạo!')}
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
+                      {t('Công việc chưa được tạo')}
                     </h3>
                     <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.5 }}>
                       {t('Bạn đang tạo công việc mới mà chưa bấm tạo thật sự. Bạn muốn thoát luôn hay tạo ngay bây giờ?')}
                     </p>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', marginTop: '0.25rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', marginTop: '4px' }}>
                     {/* Tạo ngay */}
                     <button 
                       type="button"
                       className="btn primary" 
                       onClick={async () => {
                         if (!formData.subject?.trim()) {
-                          toast.error(t('Vui lòng nhập tên công việc trước khi tạo!'));
+                          toast.error(t('Vui lòng nhập tên công việc trước khi tạo'));
                           setShowUnsavedNewTaskPrompt(false);
                           const titleInput = document.querySelector('input[placeholder*="tên công việc"]') as HTMLInputElement;
                           if (titleInput) titleInput.focus();
@@ -8608,9 +8601,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       }}
                       style={{ 
                         width: '100%', 
-                        padding: '11px 16px', 
+                        padding: '12px 16px', 
                         borderRadius: '10px', 
-                        fontWeight: 700,
+                        fontWeight: 600,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -8709,9 +8702,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   }}>
                     <CheckSquare2 size={30} />
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                    <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: 'var(--color-text)' }}>
-                      {t('Đã gửi yêu cầu phê duyệt!')}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
+                      {t('Đã gửi yêu cầu phê duyệt')}
                     </h3>
                     <p style={{ fontSize: '0.8rem', color: 'var(--color-success)', fontWeight: 700, margin: 0 }}>
                       {t('Tiến độ đạt 100%')}

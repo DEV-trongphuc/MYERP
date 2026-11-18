@@ -271,7 +271,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                 } else if (isDocx) {
                     const arrayBuffer = await blob.arrayBuffer();
                     const result = await mammoth.convertToHtml({ arrayBuffer });
-                    const html = result.value || '<p class="text-slate-400 italic text-center py-20">Văn bản này không có nội dung hiển thị được.</p>';
+                    const html = result.value || '<p class="text-slate-400 text-center py-20">Văn bản này không có nội dung hiển thị được.</p>';
                     const text = (await mammoth.extractRawText({ arrayBuffer })).value;
                     setDocContent(html);
                     // Update main workspace state with extracted text for AI context
@@ -337,7 +337,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
             if (res.success) {
                 setDocContent(newText);
                 setIsEditing(false);
-                toast.success('Đã lưu thay đổi!', { id: tid });
+                toast.success('Đã lưu thay đổi', { id: tid });
 
                 // Also update the parent state
                 onUpdateDoc({ ...activeDoc, content: newText });
@@ -400,7 +400,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                 // Update active doc in parent
                 onUpdateDoc({ ...activeDoc, name: finalName, previewUrl: finalUrl });
 
-                toast.success(`Đã lưu "${finalName}" vào workspace!`, { id: tid });
+                toast.success(`Đã lưu "${finalName}" vào workspace`, { id: tid });
             } else {
                 toast.error("Upload failed: " + (uploadData.error || 'Unknown'), { id: tid });
             }
@@ -441,7 +441,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                 version_id: versionToRestore
             })) as any;
             if (res.success) {
-                toast.success('Đã khôi phục phiên bản!', { id: tid });
+                toast.success('Đã khôi phục phiên bản', { id: tid });
                 // Refresh content
                 if (activeDoc) {
                     processDocument(activeDoc);
@@ -536,7 +536,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
     // --- Interaction Menu ---
     const SelectionMenu = selectionCoords && (
         <div
-            className="fixed z-[100] bg-slate-900/95 backdrop-blur-xl text-white rounded-[14px] shadow-xl border border-white/10 p-2 flex items-center gap-1 animate-in zoom-in-95 duration-200"
+            className="fixed z-[100] bg-slate-900/95 backdrop-blur-xl text-white rounded-xl shadow-xl border border-white/10 p-2 flex items-center gap-1 animate-in zoom-in-95 duration-200"
             style={{ top: selectionCoords.y, left: selectionCoords.x, transform: 'translate(-50%, calc(-100% - 15px))' }}
         >
             <div className="flex items-center">
@@ -545,7 +545,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                     className="px-2.5 py-1.5 hover:bg-white/10 rounded-lg text-[9px] font-bold uppercase tracking-wider flex flex-col items-center gap-1 min-w-[50px] transition-colors"
                     title="Explain"
                 >
-                    <Sparkles className="w-3.5 h-3.5 text-[var(--color-primary)]" />
+                    <Sparkles className="w-3.5 h-3.5 text-[var(--color-primary)]" strokeWidth={1.75} />
                     <span>Explain</span>
                 </button>
                 <button
@@ -604,11 +604,11 @@ const FilePreview: React.FC<FilePreviewProps> = ({
             <div className="w-px h-8 bg-white/10 mx-1" />
 
             <button
-                onClick={() => { navigator.clipboard.writeText(selectedText); toast.success('Copied!'); setSelectionCoords(null); }}
+                onClick={() => { navigator.clipboard.writeText(selectedText); toast.success('Đã sao chép'); setSelectionCoords(null); }}
                 className="p-2.5 hover:bg-white/10 rounded-lg transition-colors group"
                 title="Copy Selection"
             >
-                <Copy className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                <Copy className="w-4 h-4" />
             </button>
         </div>
     );
@@ -619,7 +619,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
             <div className={`flex flex-col w-full h-full relative ${isCodeMode ? 'bg-[#0B0F17]' : 'bg-slate-50'}`} onContextMenu={(e) => e.preventDefault()}>
                 {selectionCoords && (
                     <div
-                        className="fixed z-[100] bg-white text-slate-800 rounded-[14px] shadow-lg border border-slate-200 p-2 flex items-center gap-1 animate-in zoom-in-95 duration-200"
+                        className="fixed z-[100] bg-white text-slate-800 rounded-xl shadow-lg border border-slate-200 p-2 flex items-center gap-1 animate-in zoom-in-95 duration-200"
                         style={{ top: selectionCoords.y, left: selectionCoords.x, transform: 'translate(-50%, calc(-100% - 15px))' }}
                     >
                         <div className="flex items-center">
@@ -641,9 +641,9 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                     }
                                     setSelectionCoords(null);
                                 }}
-                                className="px-3 py-2 hover:bg-slate-50 rounded-xl text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-1.5 min-w-[70px] transition-all group"
+                                className="px-3 py-2 hover:bg-slate-50 rounded-xl text-[10px] font-semibold uppercase tracking-widest flex flex-col items-center gap-1.5 min-w-[70px] transition-colors group"
                             >
-                                <Sparkles className="w-4 h-4 text-[var(--color-primary)] group-hover:scale-110" />
+                                <Sparkles className="w-4 h-4 text-[var(--color-primary)]" strokeWidth={1.75} />
                                 <span>Giải thích</span>
                             </button>
                             <button
@@ -664,9 +664,9 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                     }
                                     setSelectionCoords(null);
                                 }}
-                                className="px-3 py-2 hover:bg-slate-50 rounded-xl text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-1.5 min-w-[70px] transition-all group"
+                                className="px-3 py-2 hover:bg-slate-50 rounded-xl text-[10px] font-semibold uppercase tracking-widest flex flex-col items-center gap-1.5 min-w-[70px] transition-colors group"
                             >
-                                <BookOpen className="w-4 h-4 text-slate-400 group-hover:scale-110" />
+                                <BookOpen className="w-4 h-4 text-slate-400" />
                                 <span>Tóm tắt</span>
                             </button>
                         </div>
@@ -676,7 +676,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                 setSelectionRange(null);
                                 setSelectionCoords(null);
                             }}
-                            className="p-2.5 hover:bg-rose-50 hover:text-rose-600 rounded-xl text-slate-400 transition-all active:scale-95"
+                            className="p-2.5 hover:bg-rose-50 hover:text-rose-600 rounded-xl text-slate-400 transition-colors"
                         >
                             <Trash2 className="w-4 h-4" />
                         </button>
@@ -686,7 +686,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                 <div className={`px-4 py-2.5 border-b flex items-center justify-between backdrop-blur-md shrink-0 z-20 ${isCodeMode ? 'bg-[#0B0F17] border-slate-800' : 'bg-white border-slate-200'}`}>
                     <div className="flex items-center gap-2">
                         <Table className="w-4 h-4 text-slate-400" />
-                        <span className="text-xs font-bold text-slate-500">{docData.length} Rows</span>
+                        <span className="text-xs font-semibold tabular-nums text-slate-500">{docData.length} Rows</span>
                         {sheetNames.length > 1 && (
                             <select
                                 className={`ml-2 text-xs border-none bg-transparent font-bold focus:ring-0 cursor-pointer ${isCodeMode ? 'text-slate-200' : 'text-slate-500'}`}
@@ -717,7 +717,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                     setInput(`Analyze entire table: ${activeDoc.name}`);
                                 }
                             }}
-                            className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-all shadow-md bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary)]-accent text-white hover:brightness-110 active:scale-95`}
+                            className="text-[10px] font-semibold uppercase tracking-widest px-4 py-2 rounded-xl transition-colors bg-[#BD1D2D] hover:bg-[#9A1523] text-white"
                         >
                             {selectionRange ? 'Analyze Selection' : 'Analyze All'}
                         </button>
@@ -747,7 +747,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                         <tbody className={`divide-y ${isCodeMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
                             {docData.slice(0, 500).map((row: any, rIdx: number) => (
                                 <tr key={rIdx} className={`group transition-colors ${isCodeMode ? 'hover:bg-[#1E2532]/50' : 'hover:bg-slate-50'}`}>
-                                    <td className={`p-3 border-r text-center font-mono text-[10px] text-slate-400 transition-all ${isCodeMode ? 'bg-[#0B0F17] border-slate-800' : 'bg-slate-50 border-slate-100 group-hover:bg-slate-100 group-hover:text-slate-600'}`}>
+                                    <td className={`p-3 border-r text-center font-mono tabular-nums text-[10px] text-slate-400 transition-colors ${isCodeMode ? 'bg-[#0B0F17] border-slate-800' : 'bg-slate-50 border-slate-100 group-hover:bg-slate-100 group-hover:text-slate-600'}`}>
                                         {rIdx + 1}
                                     </td>
                                     {docColumns.map((col, cIdx) => {
@@ -760,7 +760,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                         return (
                                             <td
                                                 key={cIdx}
-                                                className={`p-3 border-r truncate max-w-[300px] cursor-cell transition-all duration-200 ${isCodeMode ? 'border-slate-800' : 'border-slate-100'} ${isSelected
+                                                className={`p-3 border-r truncate max-w-[300px] cursor-cell transition-colors ${isCodeMode ? 'border-slate-800' : 'border-slate-100'} ${isSelected
                                                     ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)] ring-1 ring-inset ring-[var(--color-primary)]/30 relative z-10'
                                                     : (isCodeMode ? 'text-slate-300 group-hover:text-white font-medium' : 'text-slate-600 group-hover:text-slate-900 font-medium')
                                                     }`}
@@ -811,15 +811,15 @@ const FilePreview: React.FC<FilePreviewProps> = ({
             {/* Header Toolbar - Glassmorphism Light */}
             <header className={`h-16 px-6 border-b flex items-center justify-between shrink-0 z-50 relative ${isCodeMode ? 'bg-[#0B0F17] border-slate-800' : 'bg-white/80 border-slate-100'} backdrop-blur-2xl`}>
                 <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-[14px] border flex items-center justify-center shadow-sm ${isCodeMode ? 'bg-[#1E2532] border-slate-700' : 'bg-white border-slate-100'}`}>
-                        {isCode ? <Code className={`w-5 h-5 ${isCodeMode ? 'text-[var(--color-primary)]' : 'text-[var(--color-primary)]'}`} /> : <FileText className={`w-5 h-5 ${isCodeMode ? 'text-slate-400' : 'text-slate-400'}`} />}
+                    <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shadow-sm ${isCodeMode ? 'bg-[#1E2532] border-slate-700' : 'bg-white border-slate-100'}`}>
+                        {isCode ? <Code className="w-5 h-5 text-[var(--color-primary)]" /> : <FileText className="w-5 h-5 text-slate-400" />}
                     </div>
                     <div>
-                        <h2 className={`text-xs font-black uppercase tracking-[0.2em] line-clamp-1 ${isCodeMode ? 'text-slate-200' : 'text-slate-800'}`}>{activeDoc.name}</h2>
+                        <h2 className={`text-xs font-bold uppercase tracking-[0.2em] line-clamp-1 ${isCodeMode ? 'text-slate-200' : 'text-slate-800'}`}>{activeDoc.name}</h2>
                         <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{formatFileSize(activeDoc.size || 0)}</span>
+                            <span className="text-[9px] font-semibold tabular-nums text-slate-400 uppercase tracking-widest">{formatFileSize(activeDoc.size || 0)}</span>
                             <div className="w-1 h-1 rounded-full bg-slate-200" />
-                            <span className="text-[9px] font-bold text-[var(--color-primary)] uppercase tracking-widest">{isSnippet ? 'Virtual Sync' : 'Workspace File'}</span>
+                            <span className="text-[9px] font-semibold text-[var(--color-primary)] uppercase tracking-widest">{isSnippet ? 'Virtual Sync' : 'Workspace File'}</span>
                         </div>
                     </div>
                 </div>
@@ -831,13 +831,13 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                             <>
                                 <button
                                     onClick={() => setPdfViewMode('native')}
-                                    className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${pdfViewMode === 'native' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                                    className={`px-3 py-1.5 text-[9px] font-semibold uppercase tracking-widest rounded-lg transition-colors ${pdfViewMode === 'native' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                                 >
                                     Native
                                 </button>
                                 <button
                                     onClick={() => setPdfViewMode('reader')}
-                                    className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${pdfViewMode === 'reader' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                                    className={`px-3 py-1.5 text-[9px] font-semibold uppercase tracking-widest rounded-lg transition-colors ${pdfViewMode === 'reader' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                                 >
                                     Reader
                                 </button>
@@ -847,13 +847,13 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                             <>
                                 <button
                                     onClick={() => setDocWorkspaceView('code')}
-                                    className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${docWorkspaceView === 'code' ? 'bg-[var(--color-primary)] text-white shadow-sm' : 'text-slate-500 hover:text-[var(--color-primary)]'}`}
+                                    className={`px-3 py-1.5 text-[9px] font-semibold uppercase tracking-widest rounded-lg transition-colors ${docWorkspaceView === 'code' ? 'bg-[var(--color-primary)] text-white shadow-sm' : 'text-slate-500 hover:text-[var(--color-primary)]'}`}
                                 >
                                     Code
                                 </button>
                                 <button
                                     onClick={() => setDocWorkspaceView('preview')}
-                                    className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${docWorkspaceView === 'preview' ? 'bg-[var(--color-primary)] text-white shadow-sm' : 'text-slate-500 hover:text-[var(--color-primary)]'}`}
+                                    className={`px-3 py-1.5 text-[9px] font-semibold uppercase tracking-widest rounded-lg transition-colors ${docWorkspaceView === 'preview' ? 'bg-[var(--color-primary)] text-white shadow-sm' : 'text-slate-500 hover:text-[var(--color-primary)]'}`}
                                 >
                                     Preview
                                 </button>
@@ -867,7 +867,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                         {!isDocx && !isDoc && !isPdf && (
                             <button
                                 onClick={() => setIsEditing(!isEditing)}
-                                className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all ${isEditing ? 'bg-[var(--color-primary)] text-white' : (isCodeMode ? 'bg-[#1E2532] border border-slate-700 text-slate-400 hover:text-[var(--color-primary)]' : 'bg-white border border-slate-200 text-slate-500 hover:text-[var(--color-primary)]')}`}
+                                className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${isEditing ? 'bg-[var(--color-primary)] text-white' : (isCodeMode ? 'bg-[#1E2532] border border-slate-700 text-slate-400 hover:text-[var(--color-primary)]' : 'bg-white border border-slate-200 text-slate-500 hover:text-[var(--color-primary)]')}`}
                                 title="Chỉnh sửa nội dung"
                             >
                                 <Edit3 className="w-4 h-4" />
@@ -875,16 +875,16 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                         )}
 
                         <button
-                            onClick={() => { navigator.clipboard.writeText(docContent); toast.success('Đã sao chép toàn bộ!'); }}
-                            className={`w-9 h-9 flex items-center justify-center rounded-xl border transition-all group ${isCodeMode ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-[var(--color-primary)]' : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-[var(--color-primary)] hover:bg-white'}`}
+                            onClick={() => { navigator.clipboard.writeText(docContent); toast.success('Đã sao chép toàn bộ'); }}
+                            className={`w-9 h-9 flex items-center justify-center rounded-xl border transition-colors group ${isCodeMode ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-[var(--color-primary)]' : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-[var(--color-primary)] hover:bg-white'}`}
                             title="Sao chép toàn bộ"
                         >
-                            <Copy className="w-4 h-4 group-hover:scale-110" />
+                            <Copy className="w-4 h-4" />
                         </button>
 
                         <button
                             onClick={toggleVersionHistory}
-                            className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all ${showHistory ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' : (isCodeMode ? 'bg-[#1E2532] border border-slate-700 text-slate-400 hover:text-[var(--color-primary)]' : 'bg-white border border-slate-200 text-slate-500 hover:text-[var(--color-primary)]')}`}
+                            className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${showHistory ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' : (isCodeMode ? 'bg-[#1E2532] border border-slate-700 text-slate-400 hover:text-[var(--color-primary)]' : 'bg-white border border-slate-200 text-slate-500 hover:text-[var(--color-primary)]')}`}
                             title="Lịch sử phiên bản"
                         >
                             <History className="w-4 h-4" />
@@ -895,9 +895,9 @@ const FilePreview: React.FC<FilePreviewProps> = ({
 
                     <button
                         onClick={() => setIsAiSidebarOpen(!isAiSidebarOpen)}
-                        className={`px-4 h-9 flex items-center gap-2 rounded-xl transition-all shadow-lg text-[10px] font-black uppercase tracking-widest group bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary)]-accent text-white hover:brightness-110 active:scale-95`}
+                        className="px-4 h-9 flex items-center gap-2 rounded-xl transition-colors text-[10px] font-semibold uppercase tracking-widest bg-[#BD1D2D] hover:bg-[#9A1523] text-white"
                     >
-                        <Sparkles className={`w-3.5 h-3.5 ${isAiSidebarOpen ? 'animate-pulse' : 'group-hover:rotate-12 transition-transform'}`} />
+                        <Sparkles className="w-3.5 h-3.5" strokeWidth={1.75} />
                         <span>AI Assistant</span>
                     </button>
                 </div>
@@ -917,7 +917,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                             <div className={`p-5 border-b flex items-center justify-between ${isCodeMode ? 'bg-[#1E2532]/30 border-slate-800' : 'bg-slate-50/50 border-slate-100'}`}>
                                 <div className="flex items-center gap-2">
                                     <History className="w-4 h-4 text-[var(--color-primary)]" />
-                                    <h4 className={`text-[11px] font-black uppercase tracking-widest ${isCodeMode ? 'text-slate-200' : 'text-slate-800'}`}>Version History</h4>
+                                    <h4 className={`text-[11px] font-bold uppercase tracking-widest ${isCodeMode ? 'text-slate-200' : 'text-slate-800'}`}>Version History</h4>
                                 </div>
                                 <button onClick={() => setShowHistory(false)} className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-colors">
                                     <X className="w-4 h-4" />
@@ -933,11 +933,11 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                     </div>
                                 ) : (
                                     docVersions.map((v) => (
-                                        <div key={v.id} className={`p-4 border rounded-[14px] hover:shadow-md transition-all group relative overflow-hidden ${isCodeMode ? 'bg-[#1E2532] border-slate-800 hover:bg-[#252D3D] hover:border-[var(--color-primary)]/40' : 'bg-slate-50 border-slate-100 hover:bg-white hover:shadow-md'}`}>
+                                        <div key={v.id} className={`p-4 border rounded-xl transition-colors group relative overflow-hidden ${isCodeMode ? 'bg-[#1E2532] border-slate-800 hover:bg-[#252D3D] hover:border-[var(--color-primary)]/40' : 'bg-slate-50 border-slate-100 hover:bg-white hover:border-slate-200'}`}>
                                             <div className="flex justify-between items-center relative z-10">
                                                 <div className="flex flex-col">
-                                                    <span className={`text-[11px] font-bold ${isCodeMode ? 'text-white' : 'text-slate-800'}`}>{new Date(v.created_at).toLocaleString('vi-VN')}</span>
-                                                    <span className="text-[9px] text-slate-400 uppercase font-black tracking-widest mt-1.5 flex items-center gap-1.5">
+                                                    <span className={`text-[11px] font-bold tabular-nums ${isCodeMode ? 'text-white' : 'text-slate-800'}`}>{new Date(v.created_at).toLocaleString('vi-VN')}</span>
+                                                    <span className="text-[9px] text-slate-400 uppercase font-semibold tabular-nums tracking-widest mt-1.5 flex items-center gap-1.5">
                                                         <Save className="w-2.5 h-2.5" />
                                                         {formatFileSize(v.size)}
                                                     </span>
@@ -945,7 +945,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                                 <button
                                                     onClick={() => handleRestoreVersion(v.id)}
                                                     disabled={isRestoring}
-                                                    className="w-8 h-8 flex items-center justify-center bg-[var(--color-primary)] text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:scale-110 disabled:opacity-50 shadow-sm"
+                                                    className="w-8 h-8 flex items-center justify-center bg-[var(--color-primary)] text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 shadow-sm"
                                                     title="Khôi phục phiên bản này"
                                                 >
                                                     <RotateCcw className="w-3.5 h-3.5" />
@@ -973,7 +973,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                 <button
                                     onClick={() => handleSaveContent(docContent)}
                                     disabled={isSavingDoc}
-                                    className="px-8 py-3.5 bg-[var(--color-primary)] text-white rounded-[14px] shadow-xl hover:brightness-110 transition-all flex items-center gap-3 font-black text-xs uppercase tracking-widest active:scale-95 disabled:opacity-50"
+                                    className="px-8 py-3.5 bg-[#BD1D2D] hover:bg-[#9A1523] text-white rounded-xl shadow-lg transition-colors flex items-center gap-3 font-semibold text-xs uppercase tracking-widest disabled:opacity-50"
                                 >
                                     {isSavingDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                                     <span>Save Changes</span>
@@ -984,12 +984,8 @@ const FilePreview: React.FC<FilePreviewProps> = ({
 
                     {isEditing ? (
                         <div className={`w-full h-full relative flex flex-col group/editor animate-in fade-in duration-500 ${isCodeMode ? 'bg-[#0B0F17]' : 'bg-white'}`}>
-                            {/* Ambient Glow Backgrounds - Subtle */}
-                            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-[var(--color-primary)]/5 blur-[120px] rounded-full pointer-events-none" />
-                            <div className={`absolute bottom-1/4 right-1/4 w-96 h-96 blur-[120px] rounded-full pointer-events-none ${isCodeMode ? 'bg-[var(--color-primary)]/5' : 'bg-slate-100'}`} />
-
                             {/* Top Accent Bar */}
-                            <div className="h-0.5 w-full bg-gradient-to-r from-transparent via-[var(--color-primary)] via-opacity-40 to-transparent shrink-0 z-20" />
+                            <div className="h-0.5 w-full bg-[var(--color-primary)]/40 shrink-0 z-20" />
 
                             <textarea
                                 value={docContent}
@@ -1001,18 +997,18 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                             />
 
                             {/* Editor Status Bar - Professional Look */}
-                            <div className={`px-6 py-2.5 border-t flex items-center justify-between text-[10px] text-slate-400 font-mono tracking-widest shrink-0 z-20 ${isCodeMode ? 'bg-[#1E2532] border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                            <div className={`px-6 py-2.5 border-t flex items-center justify-between text-[10px] text-slate-400 font-mono tabular-nums tracking-widest shrink-0 z-20 ${isCodeMode ? 'bg-[#1E2532] border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
                                 <div className="flex items-center gap-6">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] animate-pulse shadow-sm" />
-                                        <span className={`font-bold uppercase ${isCodeMode ? 'text-slate-400' : 'text-slate-500'}`}>Editor Active</span>
+                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                        <span className={`font-semibold uppercase ${isCodeMode ? 'text-slate-400' : 'text-slate-500'}`}>Editor Active</span>
                                     </div>
                                     <span className="hidden md:inline">LINE {docContent.split('\n').length}</span>
                                     <span className="hidden md:inline">UTF-8</span>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <span className="opacity-60 truncate max-w-[150px]">{activeDoc.name}</span>
-                                    <div className="px-2 py-0.5 rounded bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/20 text-[var(--color-primary)] font-black">
+                                    <div className="px-2 py-0.5 rounded bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/20 text-[var(--color-primary)] font-bold">
                                         {activeDoc.name.split('.').pop()?.toUpperCase() || 'TXT'}
                                     </div>
                                 </div>
@@ -1027,7 +1023,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                         href={activeDoc.previewUrl || ''}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all"
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-[10px] font-semibold uppercase tracking-widest transition-colors"
                                     >
                                         <ExternalLink className="w-3 h-3" />
                                         Open PDF
@@ -1078,11 +1074,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                 </div>
                             </div>
                             {/* Reader View Container */}
-                            <div className={`pdf-content-container p-8 pb-32 space-y-12 absolute inset-0 scroll-smooth overflow-y-auto overflow-x-hidden custom-scrollbar transition-all duration-300 ${isCodeMode ? 'bg-[#0B0F17]' : 'bg-slate-100'} ${pdfViewMode === 'reader' ? 'z-10 opacity-100' : 'invisible opacity-0 -z-10'}`}>
-                                {/* Ambient Background Glow for PDF - Subtle */}
-                                <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                                    <div className="absolute top-1/4 -left-1/4 w-[800px] h-[800px] bg-[var(--color-primary)]/5 blur-[150px] rounded-full" />
-                                </div>
+                            <div className={`pdf-content-container p-8 pb-32 space-y-12 absolute inset-0 scroll-smooth overflow-y-auto overflow-x-hidden custom-scrollbar transition-opacity duration-300 ${isCodeMode ? 'bg-[#0B0F17]' : 'bg-slate-100'} ${pdfViewMode === 'reader' ? 'z-10 opacity-100' : 'invisible opacity-0 -z-10'}`}>
                                 {docContent.split('[Page ').filter(p => p.trim()).map((page, idx) => {
                                     const pageNum = page.match(/^(\d+)\]/)?.[1] || (idx + 1).toString();
                                     const content = page.replace(/^\d+\]/, '').trim();
@@ -1091,12 +1083,12 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                             initial={{ opacity: 0, y: 40 }}
                                             whileInView={{ opacity: 1, y: 0 }}
                                             viewport={{ once: true, margin: "-100px" }}
-                                            transition={{ duration: 0.8, ease: "easeOut" }}
+                                            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
                                             key={idx}
                                             id={`pdf-page-${pageNum}`}
-                                            className={`mx-auto max-w-[850px] min-h-[1100px] p-[80px] relative transition-all duration-500 border group/page ${isCodeMode ? 'bg-[#1E2532] border-slate-800 shadow-2xl shadow-black/40' : 'bg-white shadow-xl border-slate-100 shadow-slate-200/50'}`}
+                                            className={`mx-auto max-w-[850px] min-h-[1100px] p-[80px] relative transition-colors border group/page ${isCodeMode ? 'bg-[#1E2532] border-slate-800 shadow-xl' : 'bg-white shadow-lg border-slate-100'}`}
                                         >
-                                            <div className="absolute top-10 left-0 right-0 px-16 text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] flex justify-between pointer-events-none select-none opacity-60 group-hover/page:opacity-100 transition-opacity">
+                                            <div className="absolute top-10 left-0 right-0 px-16 text-[10px] text-slate-400 font-semibold uppercase tracking-[0.2em] flex justify-between pointer-events-none select-none opacity-60 group-hover/page:opacity-100 transition-opacity tabular-nums">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)]" />
                                                     <span>Premium AI Insight Mode</span>
@@ -1123,7 +1115,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                         <button
                                             key={name}
                                             onClick={() => setActiveSheet(name)}
-                                            className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeSheet === name ? 'bg-[var(--color-primary)] text-white shadow-sm' : (isCodeMode ? 'bg-[#0B0F17] border border-slate-700 text-slate-400 hover:bg-[#1E2532] hover:text-[var(--color-primary)]' : 'text-slate-500 hover:text-slate-800 bg-white border border-slate-200')}`}
+                                            className={`px-4 py-1.5 rounded-xl text-[10px] font-semibold uppercase tracking-widest transition-colors ${activeSheet === name ? 'bg-[var(--color-primary)] text-white shadow-sm' : (isCodeMode ? 'bg-[#0B0F17] border border-slate-700 text-slate-400 hover:bg-[#1E2532] hover:text-[var(--color-primary)]' : 'text-slate-500 hover:text-slate-800 bg-white border border-slate-200')}`}
                                         >
                                             {name}
                                         </button>
@@ -1137,7 +1129,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                     <thead className="sticky top-0 z-20">
                                         <tr className={`backdrop-blur-3xl border-b shadow-sm ${isCodeMode ? 'bg-[#1E2532]/90 border-slate-800' : 'bg-slate-50/90 border-slate-200'}`}>
                                             {docColumns.map((col, i) => (
-                                                <th key={i} className={`px-6 py-4 text-left border-b text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ${isCodeMode ? 'border-slate-800' : 'border-slate-100'}`}>
+                                                <th key={i} className={`px-6 py-4 text-left border-b text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] ${isCodeMode ? 'border-slate-800' : 'border-slate-100'}`}>
                                                     {col || `Column ${i + 1}`}
                                                 </th>
                                             ))}
@@ -1162,15 +1154,10 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                     </tbody>
                                 </table>
 
-                                {/* Ambient Background Glow for Table */}
-                                <div className="absolute inset-0 pointer-events-none opacity-20 group-hover/table:opacity-40 transition-opacity duration-1000">
-                                    <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-[var(--color-primary)]/5 blur-[120px] rounded-full" />
-                                    <div className={`absolute bottom-0 right-1/4 w-[500px] h-[500px] blur-[120px] rounded-full ${isCodeMode ? 'bg-[var(--color-primary)]/5' : 'bg-slate-100'}`} />
-                                </div>
                             </div>
 
                             {/* Table Status Bar */}
-                            <div className={`px-6 py-2.5 border-t flex items-center justify-between text-[10px] text-slate-400 font-black uppercase tracking-widest shrink-0 ${isCodeMode ? 'bg-[#1E2532] border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                            <div className={`px-6 py-2.5 border-t flex items-center justify-between text-[10px] text-slate-400 font-semibold tabular-nums uppercase tracking-widest shrink-0 ${isCodeMode ? 'bg-[#1E2532] border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
                                 <div className="flex items-center gap-4">
                                     <span className="flex items-center gap-1.5"><Table className="w-3 h-3 text-[var(--color-primary)]" /> {docData?.length || 0} ROWS</span>
                                     <span className="flex items-center gap-1.5"><Layout className="w-3 h-3 text-slate-400" /> {docColumns.length} COLUMNS</span>
@@ -1183,7 +1170,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                         </div>
                     ) : (isDoc || isDocx) ? (
                         <div className={`w-full h-full flex flex-col items-center justify-center p-10 text-center gap-6 ${isCodeMode ? 'bg-[#0B0F17]' : 'bg-slate-50'}`}>
-                            <div className={`w-20 h-20 rounded-[18px] flex items-center justify-center border ${isCodeMode ? 'bg-[#1E2532] border-slate-700' : 'bg-slate-100 border-slate-200'}`}>
+                            <div className={`w-20 h-20 rounded-2xl flex items-center justify-center border ${isCodeMode ? 'bg-[#1E2532] border-slate-700' : 'bg-slate-100 border-slate-200'}`}>
                                 <FileText className={`w-10 h-10 ${isCodeMode ? 'text-slate-500' : 'text-slate-400'}`} />
                             </div>
                             <div className="space-y-2 max-w-sm">
@@ -1196,7 +1183,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                 <a
                                     href={activeDoc.previewUrl || activeDoc.base64}
                                     download={activeDoc.name}
-                                    className="inline-flex items-center gap-2 px-6 py-3 bg-[var(--color-primary)] text-white rounded-[14px] text-xs font-black uppercase tracking-widest shadow-sm transition-all hover:scale-105 mt-4"
+                                    className="inline-flex items-center gap-2 px-6 py-3 bg-[#BD1D2D] hover:bg-[#9A1523] text-white rounded-xl text-xs font-semibold uppercase tracking-widest shadow-sm transition-colors mt-4"
                                 >
                                     <Download className="w-4 h-4" />
                                     Tải xuống tài liệu
@@ -1209,7 +1196,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                 src={activeDoc.previewUrl || activeDoc.base64}
                                 alt={activeDoc.name}
                                 onClick={() => setPreviewImage(activeDoc.previewUrl || activeDoc.base64 || null)}
-                                className="max-w-full max-h-full object-contain shadow-lg rounded-lg cursor-zoom-in hover:scale-[1.01] transition-transform duration-300"
+                                className="max-w-full max-h-full object-contain shadow-lg rounded-lg cursor-zoom-in"
                             />
                         </div>
                     ) : isCode ? (
@@ -1255,7 +1242,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                             initial={{ y: 100, x: '-50%', opacity: 0 }}
                             animate={{ y: 0, x: '-50%', opacity: 1 }}
                             exit={{ y: 100, x: '-50%', opacity: 0 }}
-                            className={`absolute bottom-8 left-1/2 backdrop-blur-2xl rounded-[14px] shadow-lg z-[80] border overflow-hidden ${isCodeMode ? 'bg-[#1E2532]/95 border-slate-700' : 'bg-white/95 border-slate-200'}`}
+                            className={`absolute bottom-8 left-1/2 backdrop-blur-2xl rounded-xl shadow-lg z-[80] border overflow-hidden ${isCodeMode ? 'bg-[#1E2532]/95 border-slate-700' : 'bg-white/95 border-slate-200'}`}
                             style={{ transform: 'translateX(-50%)' }}
                         >
                             {/* Search row */}
@@ -1294,7 +1281,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                             </div>
                             {/* Page nav row */}
                             <div className="flex items-center gap-1 p-2">
-                                <div className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest border-r shrink-0 ${isCodeMode ? 'text-slate-200 border-slate-700' : 'text-slate-800 border-slate-100'}`}>
+                                <div className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest border-r shrink-0 ${isCodeMode ? 'text-slate-200 border-slate-700' : 'text-slate-800 border-slate-100'}`}>
                                     Explorer
                                 </div>
                                 <div ref={pageNavRef} className="flex items-center gap-1 px-2 overflow-x-auto max-w-[300px] no-scrollbar">
@@ -1306,9 +1293,9 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                                 key={i}
                                                 data-page={num}
                                                 onClick={() => (window as any).__navigateToPage(num)}
-                                                className={`w-8 h-8 flex items-center justify-center rounded-xl text-[10px] font-bold transition-all shrink-0 ${isActive
-                                                    ? 'bg-[var(--color-primary)] text-white shadow-md scale-110'
-                                                    : `text-slate-400 hover:bg-[var(--color-primary)]/10 hover:text-[var(--color-primary)] ${isCodeMode ? '' : ''}`
+                                                className={`w-8 h-8 flex items-center justify-center rounded-xl text-[10px] font-bold tabular-nums transition-colors shrink-0 ${isActive
+                                                    ? 'bg-[var(--color-primary)] text-white shadow-sm'
+                                                    : 'text-slate-400 hover:bg-[var(--color-primary)]/10 hover:text-[var(--color-primary)]'
                                                     }`}
                                             >
                                                 {num}
@@ -1318,7 +1305,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                 </div>
                                 <button
                                     onClick={() => { const el = document.querySelector('.pdf-content-container'); el?.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                                    className="w-9 h-9 bg-[var(--color-primary)] text-white rounded-xl flex items-center justify-center shadow-md hover:brightness-110 active:scale-95 transition-all shrink-0"
+                                    className="w-9 h-9 bg-[#BD1D2D] hover:bg-[#9A1523] text-white rounded-xl flex items-center justify-center shadow-sm transition-colors shrink-0"
                                     title="Về đầu trang"
                                 >
                                     <RotateCcw className="w-4 h-4" />
@@ -1342,13 +1329,13 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                             <div className={`h-16 px-6 border-b flex items-center justify-between ${isCodeMode ? 'bg-[#1E2532]/30 border-slate-800' : 'bg-slate-50/50 border-slate-100'}`}>
                                 <div className="flex items-center gap-3">
                                     <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${isCodeMode ? 'bg-[var(--color-primary)]/20' : 'bg-[var(--color-primary)]/10'}`}>
-                                        <Sparkles className="w-4 h-4 text-[var(--color-primary)]" />
+                                        <Sparkles className="w-4 h-4 text-[var(--color-primary)]" strokeWidth={1.75} />
                                     </div>
-                                    <h4 className={`text-[11px] font-black uppercase tracking-widest ${isCodeMode ? 'text-slate-200' : 'text-slate-800'}`}>AI Assistant</h4>
+                                    <h4 className={`text-[11px] font-bold uppercase tracking-widest ${isCodeMode ? 'text-slate-200' : 'text-slate-800'}`}>AI Assistant</h4>
                                 </div>
                                 <button
                                     onClick={() => setIsAiSidebarOpen(false)}
-                                    className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-all hover:text-slate-600"
+                                    className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-colors hover:text-slate-600"
                                 >
                                     <PanelRightClose className="w-4 h-4" />
                                 </button>
@@ -1358,7 +1345,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                             <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
                                 {aiMessages.length === 0 ? (
                                     <div className="h-full flex flex-col items-center justify-center text-center px-4">
-                                        <div className="w-16 h-16 rounded-[18px] bg-slate-50 border border-slate-100 flex items-center justify-center mb-6">
+                                        <div className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center mb-6">
                                             <MessageSquare className="w-8 h-8 text-slate-300" />
                                         </div>
                                         <h5 className="text-slate-800 text-sm font-bold mb-2 tracking-wide">Work with this document</h5>
@@ -1376,9 +1363,9 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                                     <button
                                                         key={i}
                                                         onClick={() => handleSendAi(tip.label)}
-                                                        className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-[14px] text-[10px] font-bold text-slate-500 hover:bg-white hover:border-[var(--color-primary)]/30 hover:text-[var(--color-primary)] transition-all text-left shadow-sm hover:shadow-md group"
+                                                        className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-semibold text-slate-600 hover:bg-white hover:border-[var(--color-primary)]/40 hover:text-[var(--color-primary)] transition-colors text-left shadow-sm group"
                                                     >
-                                                        <TipIcon className="w-3.5 h-3.5 group-hover:scale-110" />
+                                                        <TipIcon className="w-3.5 h-3.5" />
                                                         {tip.label}
                                                     </button>
                                                 );
@@ -1388,22 +1375,22 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                 ) : (
                                     aiMessages.map((msg, i) => (
                                         <div key={msg.id || i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-                                            <div className={`max-w-[85%] p-4 rounded-[14px] text-[12px] leading-relaxed shadow-sm ${msg.role === 'user'
+                                            <div className={`max-w-[85%] p-4 rounded-xl text-[12px] leading-relaxed shadow-sm ${msg.role === 'user'
                                                 ? 'bg-[var(--color-primary)] text-white rounded-br-none'
                                                 : 'bg-slate-100 text-slate-700 border border-slate-200 rounded-bl-none'
                                                 }`}>
                                                 {msg.content}
                                             </div>
-                                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-2 px-1">
+                                            <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest mt-2 px-1">
                                                 {msg.role === 'user' ? 'You' : 'Assistant'}
                                             </span>
                                         </div>
                                     ))
                                 )}
                                 {isAiLoading && (
-                                    <div className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-100 rounded-[14px] animate-pulse">
+                                    <div className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-100 rounded-xl animate-pulse">
                                         <Loader2 className="w-4 h-4 text-[var(--color-primary)] animate-spin" />
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Analyzing document...</span>
+                                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Analyzing document...</span>
                                     </div>
                                 )}
                             </div>
@@ -1419,17 +1406,17 @@ const FilePreview: React.FC<FilePreviewProps> = ({
                                         value={aiInput}
                                         onChange={(e) => setAiInput(e.target.value)}
                                         placeholder="Ask about this doc..."
-                                        className="flex-1 h-12 bg-white border border-slate-200 rounded-[14px] px-5 text-[12px] text-slate-800 placeholder:text-slate-400 focus:border-[var(--color-primary)]/40 outline-none transition-all pr-12 shadow-sm"
+                                        className="flex-1 h-12 bg-white border border-slate-200 rounded-xl px-5 text-[12px] text-slate-800 placeholder:text-slate-400 focus:border-[var(--color-primary)]/40 outline-none transition-colors pr-12 shadow-sm"
                                     />
                                     <button
                                         type="submit"
                                         disabled={!aiInput.trim() || isAiLoading}
-                                        className="absolute right-1.5 w-9 h-9 bg-[var(--color-primary)] text-white rounded-xl shadow-md flex items-center justify-center disabled:opacity-30 disabled:scale-95 transition-all active:scale-90"
+                                        className="absolute right-1.5 w-9 h-9 bg-[var(--color-primary)] text-white rounded-xl shadow-sm flex items-center justify-center disabled:opacity-30 transition-colors"
                                     >
                                         <Send className="w-4 h-4" />
                                     </button>
                                 </form>
-                                <p className="text-[9px] text-slate-400 mt-3 text-center uppercase font-black tracking-widest">Powered by Advanced Agentic AI</p>
+                                <p className="text-[9px] text-slate-400 mt-3 text-center uppercase font-semibold tracking-widest">Powered by Agentic AI</p>
                             </div>
                         </motion.div>
                     )}

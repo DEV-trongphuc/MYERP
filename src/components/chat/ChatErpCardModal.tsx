@@ -8,6 +8,7 @@ import {
 import api from '../../api/axios';
 import { Avatar } from '../ui/Avatar';
 import type { ErpEntitySearchResult } from '../../types/chat';
+import { ensureArray, extractArray } from '../../utils/safeArray';
 
 interface Props {
   isOpen: boolean;
@@ -20,36 +21,36 @@ const TABS = [
     key: 'workflow', 
     label: 'Quy trình', 
     icon: Clipboard,
-    gradient: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
-    shadow: '0 3px 8px rgba(220, 38, 38, 0.35)'
+    gradient: '#BD1D2D',
+    shadow: 'none'
   },
   { 
     key: 'task', 
     label: 'Task / Todo', 
     icon: CheckSquare,
-    gradient: 'linear-gradient(135deg, #f97316 0%, #c2410c 100%)',
-    shadow: '0 3px 8px rgba(234, 88, 12, 0.35)'
+    gradient: '#D97706',
+    shadow: 'none'
   },
   { 
     key: 'so', 
     label: 'Đơn cọc (SO)', 
     icon: Receipt,
-    gradient: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-    shadow: '0 3px 8px rgba(37, 99, 235, 0.35)'
+    gradient: '#0284C7',
+    shadow: 'none'
   },
   { 
     key: 'po', 
     label: 'Chi phí (PO)', 
     icon: CreditCard,
-    gradient: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-    shadow: '0 3px 8px rgba(5, 150, 105, 0.35)'
+    gradient: '#059669',
+    shadow: 'none'
   },
   { 
     key: 'contact', 
     label: 'Khách hàng', 
     icon: Users,
-    gradient: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
-    shadow: '0 3px 8px rgba(99, 102, 241, 0.35)'
+    gradient: '#334155',
+    shadow: 'none'
   },
 ] as const;
 
@@ -127,7 +128,7 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
         params: { q: q.trim(), type },
         signal: controller.signal
       });
-      const data = res.data?.data || res.data || [];
+      const data = extractArray(res?.data);
       cacheRef.current.set(cacheKey, data);
       setResults(data);
     } catch (e: any) {
@@ -186,8 +187,8 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
       '01': { name: '01 – New Lead', color: '#dc2626' },
       'contact_attempted': { name: '02 – Contact Attempted', color: '#eab308' },
       '02': { name: '02 – Contact Attempted', color: '#eab308' },
-      'connected': { name: '03 – Connected', color: '#8b5cf6' },
-      '03': { name: '03 – Connected', color: '#8b5cf6' },
+      'connected': { name: '03 – Connected', color: '#0284C7' },
+      '03': { name: '03 – Connected', color: '#0284C7' },
       'needed': { name: '04 – Needed', color: '#ef4444' },
       '04': { name: '04 – Needed', color: '#ef4444' },
       'discovery_completed': { name: '05 – Discovery Completed', color: '#0d9488' },
@@ -432,19 +433,19 @@ export const ChatErpCardModal: React.FC<Props> = ({ isOpen, onClose, onSelect })
                         position: 'relative',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '9px',
-                        padding: '6px 14px 6px 8px',
-                        borderRadius: '12px',
-                        border: '1.5px solid',
-                        borderColor: isActive ? '#dc2626' : '#e2e8f0',
-                        background: isActive ? '#fef2f2' : '#ffffff',
-                        color: isActive ? '#dc2626' : '#475569',
+                        gap: '8px',
+                        padding: '6px 12px 6px 8px',
+                        borderRadius: '10px',
+                        border: '1px solid',
+                        borderColor: isActive ? '#BD1D2D' : '#E2E8F0',
+                        background: isActive ? 'rgba(189, 29, 45, 0.08)' : '#FFFFFF',
+                        color: isActive ? '#BD1D2D' : '#475569',
                         fontSize: '0.84rem',
-                        fontWeight: isActive ? 750 : 600,
+                        fontWeight: isActive ? 700 : 600,
                         cursor: 'pointer',
                         whiteSpace: 'nowrap',
-                        boxShadow: isActive ? '0 2px 8px rgba(220, 38, 38, 0.16)' : '0 1px 2px rgba(0, 0, 0, 0.03)',
-                        transition: 'all 0.15s ease'
+                        boxShadow: 'none',
+                        transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
                       }}
                     >
                       <div style={{

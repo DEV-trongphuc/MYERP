@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Save, Plus, Trash2, Users, Crown, Zap, ShieldCheck, ChevronDown, Check, X, Filter, Sparkles, Copy, Search, Loader2, MessageCircle, Bell, Flame, Briefcase } from 'lucide-react';
+import { Save, Plus, Trash2, Users, Crown, Zap, ShieldCheck, ChevronDown, Check, X, Filter, Copy, Search, Loader2, MessageCircle, Bell, Flame, Briefcase } from 'lucide-react';
 import { Segment, Subscriber } from '../../types';
 import { api } from '../../services/storageAdapter';
 import { getMktPortalRoot } from '../../utils/portalRoot';
@@ -210,8 +210,8 @@ const SEGMENT_TEMPLATES: SegmentTemplate[] = [
     {
         id: 'new_leads',
         name: 'Người mới (7 ngày)',
-        icon: Sparkles,
-        color: 'blue',
+        icon: Users,
+        color: 'slate',
         criteria: [{
             id: 'g1', conditions: [
                 { id: 'c1', field: 'joinedAt', operator: 'after', value: new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0] }
@@ -233,7 +233,7 @@ const SEGMENT_TEMPLATES: SegmentTemplate[] = [
         id: 'deposited',
         name: 'Đã đặt cọc CRM',
         icon: Briefcase,
-        color: 'indigo',
+        color: 'crimson',
         criteria: [{
             id: 'g1', conditions: [
                 { id: 'c1', field: 'crm_deposit_status', operator: 'is', value: 'approved' }
@@ -887,7 +887,7 @@ const SegmentBuilderModal: React.FC<SegmentBuilderModalProps> = ({ isOpen, onClo
                     <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-50 flex items-center justify-center">
                         <div className="flex flex-col items-center gap-2">
                             <Loader2 className="w-8 h-8 text-[var(--color-primary)] animate-spin" />
-                            <p className="text-xs font-bold text-slate-500 animate-pulse">Đang xử lý...</p>
+                            <p className="text-xs font-semibold text-slate-500">Đang xử lý...</p>
                         </div>
                     </div>
                 )}
@@ -922,9 +922,9 @@ const SegmentBuilderModal: React.FC<SegmentBuilderModalProps> = ({ isOpen, onClo
                                         <button
                                             key={tpl.id}
                                             onClick={() => applyTemplate(tpl)}
-                                            className="flex flex-col items-center justify-center p-3 rounded-[14px] border border-slate-100 bg-white hover:border-[var(--color-primary)]/30 hover:shadow-md hover:bg-rose-50/20 transition-all group w-full"
+                                            className="flex flex-col items-center justify-center p-3 rounded-xl border border-slate-200/80 bg-white hover:border-[#BD1D2D]/40 hover:bg-rose-50/30 transition-colors group w-full"
                                         >
-                                            <div className="w-8 h-8 rounded-[var(--radius-md)] flex items-center justify-center mb-2 transition-transform group-hover:scale-110 bg-rose-50 text-[var(--color-primary)]">
+                                            <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-2 transition-colors bg-rose-50 text-[#BD1D2D]">
                                                 <Icon className="w-4 h-4" />
                                             </div>
                                             <span className="text-[10px] font-bold text-slate-600 group-hover:text-slate-800 text-center leading-tight">{tpl.name}</span>
@@ -966,11 +966,11 @@ const SegmentBuilderModal: React.FC<SegmentBuilderModalProps> = ({ isOpen, onClo
                     </div>
 
                     {/* Features Toggle */}
-                    <div className="flex flex-col p-3.5 rounded-[14px] border border-slate-200 bg-white shadow-sm mt-4 transition-all">
+                    <div className="flex flex-col p-3.5 rounded-xl border border-slate-200 bg-white shadow-sm mt-4 transition-colors">
                         <div className="flex items-center justify-between group">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-[var(--radius-md)] bg-rose-50 flex items-center justify-center transition-colors group-hover:bg-rose-100 border border-rose-100 shadow-sm">
-                                    <Bell className={`w-5 h-5 text-[var(--color-primary)] ${notifyOnJoin ? 'animate-pulse' : ''}`} />
+                                <div className="w-10 h-10 rounded-lg bg-rose-50 flex items-center justify-center transition-colors group-hover:bg-rose-100 border border-rose-100">
+                                    <Bell className="w-5 h-5 text-[#BD1D2D]" />
                                 </div>
                                 <div>
                                     <h4 className="text-sm font-bold text-slate-800 tracking-tight mb-0.5">Thời gian thực: Báo Cáo Lead Mới</h4>

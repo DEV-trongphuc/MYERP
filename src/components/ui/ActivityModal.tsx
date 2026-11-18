@@ -26,7 +26,7 @@ const TYPES = [
   { id: 'zalo_connect', label: 'Zalo', icon: <img src="https://stc-zpl.zdn.vn/favicon.ico" style={{ width: 16, height: 16, objectFit: 'contain' }} alt="Zalo" />, color: '#0084FF' },
   { id: 'email', label: 'Email', icon: <Mail size={16} />, color: '#10b981' },
   { id: 'meeting', label: 'Gặp gỡ', icon: <Users size={16} />, color: '#f59e0b' },
-  { id: 'note', label: 'Ghi chú', icon: <FileText size={16} />, color: '#8b5cf6' }
+  { id: 'note', label: 'Ghi chú', icon: <FileText size={16} />, color: '#475569' }
 ];
 
 const DEFAULT_SUBJECTS: Record<string, string> = {
@@ -658,7 +658,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
                       </button>
                     </div>
                   ) : (
-                    <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100px', border: '2px dashed var(--color-border)', borderRadius: '10px', cursor: 'pointer', background: 'var(--color-bg)', transition: 'border-color 0.2s', padding: '0.5rem' }} className="hover-lift">
+                    <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100px', border: '2px dashed var(--color-border)', borderRadius: '10px', cursor: 'pointer', background: 'var(--color-bg)', transition: 'border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1)', padding: '8px' }}>
                       <Camera size={24} style={{ color: 'var(--color-text-muted)', marginBottom: '4px' }} />
                       <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600, textAlign: 'center' }}>Tải ảnh minh chứng gặp gỡ lên</span>
                       <input 
@@ -695,8 +695,8 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
               flexShrink: 0
             }}
           >
-            <button type="button" className="btn outline lg hover-lift" style={{ flex: 1 }} onClick={onClose} disabled={loading}>Hủy bỏ</button>
-            <button type="button" className="btn primary lg hover-lift" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={handleSubmit} disabled={loading}>
+            <button type="button" className="btn outline lg" style={{ flex: 1 }} onClick={onClose} disabled={loading}>Hủy bỏ</button>
+            <button type="button" className="btn primary lg" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={handleSubmit} disabled={loading}>
               {loading && <Loader2 size={16} className="spin" />}
               <span>{loading ? 'Đang lưu...' : 'Lưu hoạt động'}</span>
             </button>

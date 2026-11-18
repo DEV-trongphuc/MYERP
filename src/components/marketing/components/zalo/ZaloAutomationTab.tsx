@@ -223,17 +223,12 @@ const ZaloAutomationTab: React.FC = () => {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredScenarios.map((scenario) => (
-                        <div key={scenario.id} className="group bg-white rounded-[18px] border border-slate-100 shadow-sm hover:shadow-md hover:border-[var(--color-primary-light)] transition-all p-6 relative overflow-hidden cursor-pointer hover:-translate-y-0.5" onClick={() => { setEditingScenario(scenario); setIsModalOpen(true); }}>
-                            <div className={`absolute top-0 right-0 w-40 h-40 -mr-12 -mt-12 rounded-full opacity-[0.03] transition-transform group-hover:scale-125 ${scenario.type === 'welcome' ? 'bg-[var(--color-primary)]' :
-                                scenario.type === 'ai_reply' ? 'bg-purple-500' :
-                                    scenario.type === 'holiday' ? 'bg-rose-500' :
-                                        'bg-blue-500'}`}></div>
-
+                        <div key={scenario.id} className="group bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-slate-300 transition-[border-color,box-shadow] p-6 relative overflow-hidden cursor-pointer" onClick={() => { setEditingScenario(scenario); setIsModalOpen(true); }}>
                             <div className="flex justify-between items-start mb-6 relative z-10">
-                                <div className={`p-3.5 rounded-[14px] shadow-sm ${scenario.type === 'welcome' ? 'bg-gradient-to-br from-[#BD1D2D] to-[#9A1523] text-white shadow-[var(--color-primary)]/20' :
-                                    scenario.type === 'ai_reply' ? 'bg-gradient-to-br from-fuchsia-500 to-purple-600 text-white shadow-purple-500/20' :
-                                        scenario.type === 'holiday' ? 'bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-rose-500/20' :
-                                            'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-blue-500/20'}`}>
+                                <div className={`p-3.5 rounded-xl ${scenario.type === 'welcome' ? 'bg-[#BD1D2D] text-white' :
+                                    scenario.type === 'ai_reply' ? 'bg-slate-900 text-white' :
+                                        scenario.type === 'holiday' ? 'bg-rose-50 text-[#BD1D2D] border border-rose-200' :
+                                            'bg-slate-100 text-slate-700 border border-slate-200'}`}>
                                     {scenario.type === 'welcome' ? <Star className="w-6 h-6" /> :
                                         scenario.type === 'ai_reply' ? <Bot className="w-6 h-6" /> :
                                             scenario.type === 'holiday' ? <Calendar className="w-6 h-6" /> :
@@ -242,14 +237,14 @@ const ZaloAutomationTab: React.FC = () => {
                                 <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                                     <button
                                         onClick={() => setViewingStatsScenario(scenario)}
-                                        className="p-2.5 bg-blue-50 text-blue-500 hover:bg-blue-100 rounded-xl transition-all flex items-center justify-center"
+                                        className="p-2.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors flex items-center justify-center"
                                         title="Báo cáo hiệu quả"
                                     >
                                         <BarChart className="w-4 h-4" />
                                     </button>
                                     <button
                                         onClick={() => toggleStatus(scenario)}
-                                        className={`p-2.5 rounded-xl transition-all flex items-center justify-center ${scenario.status === 'active' ? 'bg-emerald-50 text-emerald-500 hover:bg-emerald-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
+                                        className={`p-2.5 rounded-xl transition-colors flex items-center justify-center ${scenario.status === 'active' ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
                                         title={scenario.status === 'active' ? 'Dừng' : 'Kích hoạt'}
                                     >
                                         <Play className={`w-4 h-4 ${scenario.status === 'active' ? 'hidden' : ''}`} />
@@ -257,7 +252,7 @@ const ZaloAutomationTab: React.FC = () => {
                                     </button>
                                     <button
                                         onClick={() => handleDelete(scenario.id)}
-                                        className="p-2.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all flex items-center justify-center"
+                                        className="p-2.5 text-slate-400 hover:text-[#BD1D2D] hover:bg-rose-50 rounded-xl transition-colors flex items-center justify-center"
                                     >
                                         <Trash2 className="w-4 h-4" />
                                     </button>
@@ -266,36 +261,36 @@ const ZaloAutomationTab: React.FC = () => {
 
                             <div className="relative z-10 space-y-3">
                                 <div className="flex items-center gap-2">
-                                    <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-widest border ${scenario.type === 'welcome' ? 'bg-amber-50 text-[var(--color-primary)] border-amber-100' :
-                                        scenario.type === 'ai_reply' ? 'bg-purple-50 text-purple-600 border-purple-100' :
-                                            scenario.type === 'holiday' ? 'bg-rose-50 text-rose-600 border-rose-100' :
-                                                'bg-blue-50 text-blue-600 border-blue-100'}`}>
+                                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider border ${scenario.type === 'welcome' ? 'bg-rose-50 text-[#BD1D2D] border-rose-200' :
+                                        scenario.type === 'ai_reply' ? 'bg-slate-100 text-slate-700 border-slate-200' :
+                                            scenario.type === 'holiday' ? 'bg-rose-50 text-[#BD1D2D] border-rose-200' :
+                                                'bg-slate-100 text-slate-600 border-slate-200'}`}>
                                         {scenario.type === 'welcome' ? 'Chào mừng' :
                                             scenario.type === 'ai_reply' ? 'AI Phản hồi' :
                                                 scenario.type === 'holiday' ? 'Ngày nghỉ' :
                                                     'Từ khóa'}
                                     </span>
                                     {scenario.status === 'inactive' && (
-                                        <span className="text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-widest bg-slate-100 text-slate-500 border border-slate-200">
+                                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-200">
                                             Tạm dừng
                                         </span>
                                     )}
                                 </div>
 
                                 <div>
-                                    <h3 className="text-lg font-black text-slate-800 group-hover:text-blue-600 transition-colors line-clamp-1 mb-1">{scenario.title}</h3>
+                                    <h3 className="text-lg font-bold text-slate-800 group-hover:text-[#BD1D2D] transition-colors line-clamp-1 mb-1">{scenario.title}</h3>
                                     {scenario.type === 'keyword' && (
                                         <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-2">
                                             <MessageSquare className="w-3.5 h-3.5" />
                                             <span>Keywords: </span>
-                                            <span className="font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">{scenario.trigger_text ? scenario.trigger_text.split(',')[0] : ''}...</span>
+                                            <span className="font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">{scenario.trigger_text ? scenario.trigger_text.split(',')[0] : ''}...</span>
                                         </div>
                                     )}
                                     {scenario.type === 'ai_reply' && (
                                         <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-2">
-                                            <Bot className="w-3.5 h-3.5 text-purple-500" />
+                                            <Bot className="w-3.5 h-3.5 text-slate-600" />
                                             <span>Chatbot: </span>
-                                            <span className="font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded text-[11px]">{scenario.ai_bot_name || 'Hệ thống'}</span>
+                                            <span className="font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">{scenario.ai_bot_name || 'Hệ thống'}</span>
                                         </div>
                                     )}
                                     <p className="text-sm text-slate-400 line-clamp-2 leading-relaxed h-10 font-medium">

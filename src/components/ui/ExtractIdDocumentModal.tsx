@@ -384,9 +384,9 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
       <div 
         style={{
           background: 'var(--color-surface, #ffffff)',
-          color: 'var(--color-text, #1e293b)',
-          borderRadius: '20px',
-          boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.7)',
+          color: 'var(--color-text, #0F172A)',
+          borderRadius: '16px',
+          boxShadow: '0 20px 48px -12px rgba(15, 23, 42, 0.35)',
           border: '1px solid var(--color-border, #e2e8f0)',
           width: '95vw',
           maxWidth: '960px',
@@ -395,39 +395,38 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+          transition: 'opacity 0.2s cubic-bezier(0.22, 1, 0.36, 1)'
         }}
         onClick={e => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div style={{
-          padding: '18px 24px',
-          borderBottom: '1px solid var(--color-border-light, #f1f5f9)',
+          padding: '16px 24px',
+          borderBottom: '1px solid var(--color-border-light, #E2E8F0)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(168, 85, 247, 0.05) 100%)'
+          background: 'var(--color-bg, #F8FAFC)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-              color: '#ffffff',
+              width: '40px',
+              height: '40px',
+              borderRadius: '10px',
+              background: 'rgba(189, 29, 45, 0.08)',
+              color: '#BD1D2D',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.35)',
               flexShrink: 0
             }}>
-              <Sparkles size={22} />
+              <Sparkles size={20} strokeWidth={1.75} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-text, #0f172a)' }}>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--color-text, #0F172A)' }}>
                 Trích xuất Passport / CCCD bằng AI
               </h3>
-              <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: 'var(--color-text-muted, #64748b)' }}>
+              <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--color-text-muted, #64748B)' }}>
                 {step === 'select' && 'Chọn tệp ảnh hoặc PDF từ tab Hồ sơ & Tài liệu của khách hàng (hoặc tải trực tiếp từ máy)'}
                 {step === 'scanning' && 'Đang quét và phân tích dữ liệu định danh bằng Vision AI...'}
                 {step === 'review' && 'Kiểm tra & chỉnh sửa thông tin trích xuất trước khi điền vào hồ sơ'}
@@ -441,41 +440,40 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
             style={{
               background: 'transparent',
               border: 'none',
-              color: 'var(--color-text-muted, #94a3b8)',
+              color: 'var(--color-text-muted, #64748B)',
               cursor: 'pointer',
-              padding: '6px',
+              padding: '8px',
               borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}
-            className="hover-lift"
           >
-            <X size={20} />
+            <X size={20} strokeWidth={1.75} />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div style={{ padding: '22px 26px', overflowY: 'auto', flex: 1 }}>
+        <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
 
           {/* STEP 1: SELECT FILE */}
           {step === 'select' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               
               {/* Action Banner & Direct Upload Button */}
               <div style={{
-                background: 'rgba(99, 102, 241, 0.08)',
-                border: '1px solid rgba(99, 102, 241, 0.2)',
-                borderRadius: '14px',
-                padding: '12px 18px',
+                background: 'var(--color-bg, #F8FAFC)',
+                border: '1px solid var(--color-border-light, #E2E8F0)',
+                borderRadius: '12px',
+                padding: '12px 16px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
                 gap: '12px'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.84rem', color: '#4f46e5', flex: 1, minWidth: '260px' }}>
-                  <ShieldCheck size={20} style={{ flexShrink: 0 }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.84rem', color: 'var(--color-text, #334155)', flex: 1, minWidth: '260px' }}>
+                  <ShieldCheck size={20} style={{ flexShrink: 0, color: '#BD1D2D' }} strokeWidth={1.75} />
                   <span>
                     Chỉ chấp nhận <strong>CCCD/CMND hoặc Hộ chiếu (Passport)</strong> dạng ảnh hoặc PDF. AI sẽ tự động từ chối nếu không đúng định danh.
                   </span>
@@ -491,17 +489,15 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                       alignItems: 'center',
                       gap: '8px',
                       padding: '8px 16px',
-                      borderRadius: '10px',
-                      background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                      borderRadius: '8px',
+                      background: '#BD1D2D',
                       color: '#ffffff',
                       border: 'none',
                       fontSize: '0.84rem',
-                      fontWeight: 700,
+                      fontWeight: 600,
                       cursor: isUploading ? 'not-allowed' : 'pointer',
-                      boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
-                      transition: 'all 0.2s ease'
+                      transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
                     }}
-                    className="hover-lift"
                   >
                     {isUploading ? (
                       <>
@@ -510,7 +506,7 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                       </>
                     ) : (
                       <>
-                        <UploadCloud size={16} />
+                        <UploadCloud size={16} strokeWidth={1.75} />
                         Tải tệp từ máy tính
                       </>
                     )}
@@ -544,7 +540,7 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                       animation: shimmerWave 1.8s ease-in-out infinite !important;
                     }
                   `}</style>
-                  <div style={{ display: 'flex', alignItems: 'center', color: '#6366f1', fontSize: '0.84rem', fontWeight: 600 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', color: '#BD1D2D', fontSize: '0.84rem', fontWeight: 600 }}>
                     <span>Đang tải danh sách tài liệu từ hồ sơ khách hàng...</span>
                   </div>
                   <div style={{
@@ -630,24 +626,23 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                     disabled={isUploading}
                     onClick={() => fileInputRef.current?.click()}
                     style={{
-                      background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                      background: '#BD1D2D',
                       color: '#ffffff',
                       border: 'none',
-                      padding: '10px 22px',
-                      borderRadius: '10px',
+                      padding: '10px 20px',
+                      borderRadius: '8px',
                       fontSize: '0.9rem',
-                      fontWeight: 700,
+                      fontWeight: 600,
                       cursor: isUploading ? 'not-allowed' : 'pointer',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '8px',
-                      boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
-                      opacity: isUploading ? 0.7 : 1
+                      opacity: isUploading ? 0.7 : 1,
+                      transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
                     }}
-                    className={isUploading ? '' : 'hover-lift'}
                   >
-                    {isUploading ? <Loader2 size={18} className="animate-spin" /> : <UploadCloud size={18} />}
-                    {isUploading ? 'Đang tải tệp lên...' : 'Tải tệp CCCD / Hộ chiếu lên ngay'}
+                    {isUploading ? <Loader2 size={18} className="animate-spin" /> : <UploadCloud size={18} strokeWidth={1.75} />}
+                    {isUploading ? 'Đang tải tệp lên...' : 'Tải tệp CCCD / Hộ chiếu lên'}
                   </button>
                 </div>
               ) : (
@@ -658,19 +653,19 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                     <div>
                       <div style={{
                         fontSize: '0.78rem',
-                        fontWeight: 800,
+                        fontWeight: 700,
                         textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        color: '#6366f1',
+                        letterSpacing: '0.04em',
+                        color: '#BD1D2D',
                         marginBottom: '8px',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '6px'
+                        gap: '8px'
                       }}>
-                        <CreditCard size={14} />
+                        <CreditCard size={14} strokeWidth={1.75} />
                         Đề xuất CCCD / Passport ({suggestedDocs.length})
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
                         {suggestedDocs.map(doc => {
                           const isSelected = selectedDoc?.id === doc.id;
                           return (
@@ -678,28 +673,26 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                               key={doc.id}
                               onClick={() => setSelectedDoc(doc)}
                               style={{
-                                border: isSelected ? '2px solid #6366f1' : '1px solid rgba(99, 102, 241, 0.25)',
-                                background: isSelected ? 'rgba(99, 102, 241, 0.08)' : 'var(--color-surface, #ffffff)',
+                                border: isSelected ? '2px solid #BD1D2D' : '1px solid #E2E8F0',
+                                background: isSelected ? 'rgba(189, 29, 45, 0.06)' : 'var(--color-surface, #ffffff)',
                                 borderRadius: '12px',
-                                padding: '10px 12px',
+                                padding: '12px',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '10px',
+                                gap: '12px',
                                 cursor: 'pointer',
-                                transition: 'all 0.15s ease',
-                                boxShadow: isSelected ? '0 4px 14px rgba(99, 102, 241, 0.18)' : 'none'
+                                transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
                               }}
-                              className="hover-lift"
                             >
                               <DocThumbnail doc={doc} isSuggested={true} />
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{
                                   fontSize: '0.84rem',
-                                  fontWeight: 700,
+                                  fontWeight: 600,
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',
-                                  color: isSelected ? '#4f46e5' : 'var(--color-text)'
+                                  color: isSelected ? '#BD1D2D' : 'var(--color-text)'
                                 }}>
                                   {doc.name}
                                 </div>
@@ -712,14 +705,14 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                                   width: '20px',
                                   height: '20px',
                                   borderRadius: '50%',
-                                  background: '#6366f1',
+                                  background: '#BD1D2D',
                                   color: '#ffffff',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
                                   flexShrink: 0
                                 }}>
-                                  <Check size={12} strokeWidth={3} />
+                                  <Check size={12} strokeWidth={2.5} />
                                 </div>
                               )}
                             </div>
@@ -736,14 +729,14 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                         fontSize: '0.78rem',
                         fontWeight: 700,
                         textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
+                        letterSpacing: '0.04em',
                         color: 'var(--color-text-muted)',
                         marginBottom: '8px',
                         marginTop: suggestedDocs.length > 0 ? '8px' : '0'
                       }}>
                         Các tài liệu ảnh / PDF khác ({otherDocs.length})
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
                         {otherDocs.map(doc => {
                           const isSelected = selectedDoc?.id === doc.id;
                           const isImg = /\.(jpe?g|png|webp)($|\?)/i.test(doc.url || doc.file_path || '') || /\.(jpe?g|png|webp)$/i.test(doc.name || '');
@@ -752,18 +745,16 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                               key={doc.id}
                               onClick={() => setSelectedDoc(doc)}
                               style={{
-                                border: isSelected ? '2px solid #6366f1' : '1px solid var(--color-border-light, #e2e8f0)',
-                                background: isSelected ? 'rgba(99, 102, 241, 0.08)' : 'var(--color-surface, #ffffff)',
+                                border: isSelected ? '2px solid #BD1D2D' : '1px solid var(--color-border-light, #E2E8F0)',
+                                background: isSelected ? 'rgba(189, 29, 45, 0.06)' : 'var(--color-surface, #ffffff)',
                                 borderRadius: '12px',
-                                padding: '10px 12px',
+                                padding: '12px',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '10px',
+                                gap: '12px',
                                 cursor: 'pointer',
-                                transition: 'all 0.15s ease',
-                                boxShadow: isSelected ? '0 4px 14px rgba(99, 102, 241, 0.18)' : 'none'
+                                transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
                               }}
-                              className="hover-lift"
                             >
                               <DocThumbnail doc={doc} isSuggested={false} />
                               <div style={{ flex: 1, minWidth: 0 }}>
@@ -772,7 +763,8 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                                   fontWeight: 600,
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
-                                  textOverflow: 'ellipsis'
+                                  textOverflow: 'ellipsis',
+                                  color: isSelected ? '#BD1D2D' : 'var(--color-text)'
                                 }}>
                                   {doc.name}
                                 </div>
@@ -785,14 +777,14 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                                   width: '20px',
                                   height: '20px',
                                   borderRadius: '50%',
-                                  background: '#6366f1',
+                                  background: '#BD1D2D',
                                   color: '#ffffff',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
                                   flexShrink: 0
                                 }}>
-                                  <Check size={12} strokeWidth={3} />
+                                  <Check size={12} strokeWidth={2.5} />
                                 </div>
                               )}
                             </div>
@@ -822,26 +814,25 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                   width: '100%',
                   maxWidth: '540px',
                   height: '380px',
-                  background: '#0f172a',
-                  border: '2px solid rgba(99, 102, 241, 0.85)',
+                  background: '#0F172A',
+                  border: '1px solid #334155',
                   borderRadius: '16px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   marginBottom: '20px',
                   position: 'relative',
-                  overflow: 'hidden',
-                  boxShadow: '0 8px 32px rgba(99, 102, 241, 0.22)'
+                  overflow: 'hidden'
                 }}
               >
                 {/* Tia quét Laser */}
                 <div className="ai-scan-laser" />
 
                 {/* 4 Góc nhắm HUD */}
-                <div style={{ position: 'absolute', top: '8px', left: '8px', width: '16px', height: '16px', borderTop: '3px solid #38bdf8', borderLeft: '3px solid #38bdf8' }} />
-                <div style={{ position: 'absolute', top: '8px', right: '8px', width: '16px', height: '16px', borderTop: '3px solid #38bdf8', borderRight: '3px solid #38bdf8' }} />
-                <div style={{ position: 'absolute', bottom: '8px', left: '8px', width: '16px', height: '16px', borderBottom: '3px solid #38bdf8', borderLeft: '3px solid #38bdf8' }} />
-                <div style={{ position: 'absolute', bottom: '8px', right: '8px', width: '16px', height: '16px', borderBottom: '3px solid #38bdf8', borderRight: '3px solid #38bdf8' }} />
+                <div style={{ position: 'absolute', top: '8px', left: '8px', width: '16px', height: '16px', borderTop: '2px solid #BD1D2D', borderLeft: '2px solid #BD1D2D' }} />
+                <div style={{ position: 'absolute', top: '8px', right: '8px', width: '16px', height: '16px', borderTop: '2px solid #BD1D2D', borderRight: '2px solid #BD1D2D' }} />
+                <div style={{ position: 'absolute', bottom: '8px', left: '8px', width: '16px', height: '16px', borderBottom: '2px solid #BD1D2D', borderLeft: '2px solid #BD1D2D' }} />
+                <div style={{ position: 'absolute', bottom: '8px', right: '8px', width: '16px', height: '16px', borderBottom: '2px solid #BD1D2D', borderRight: '2px solid #BD1D2D' }} />
 
                 {/* Preview file đang quét */}
                 {isSelectedImage && selectedFileUrl ? (
@@ -858,13 +849,13 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                       borderRadius: '10px',
                       opacity: 0.9,
                       transition: 'opacity 0.2s',
-                      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)'
+                      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)'
                     }} 
                   />
                 ) : (
-                  <div style={{ textAlign: 'center', color: '#94a3b8' }}>
-                    <FileText size={56} style={{ color: '#818cf8', marginBottom: '8px' }} />
-                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#f1f5f9', padding: '0 16px' }}>
+                  <div style={{ textAlign: 'center', color: '#94A3B8' }}>
+                    <FileText size={56} strokeWidth={1.5} style={{ color: '#94A3B8', marginBottom: '8px' }} />
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#F1F5F9', padding: '0 16px' }}>
                       {selectedDoc?.name}
                     </div>
                   </div>
@@ -875,10 +866,10 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
-                color: '#6366f1',
-                fontWeight: 700,
-                fontSize: '0.98rem',
+                gap: '8px',
+                color: '#BD1D2D',
+                fontWeight: 600,
+                fontSize: '0.95rem',
                 marginBottom: '8px'
               }}>
                 <RefreshCw size={18} className="animate-spin" />
@@ -948,17 +939,17 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                   <div style={{
                     padding: '8px 12px',
                     borderRadius: '8px',
-                    background: extractedData.document_type === 'passport' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(99, 102, 241, 0.1)',
-                    color: extractedData.document_type === 'passport' ? '#059669' : '#4f46e5',
+                    background: extractedData.document_type === 'passport' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(15, 23, 42, 0.06)',
+                    color: extractedData.document_type === 'passport' ? '#059669' : '#334155',
                     fontSize: '0.8rem',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     textAlign: 'center',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '6px'
+                    gap: '8px'
                   }}>
-                    <Award size={14} />
+                    <Award size={14} strokeWidth={1.75} />
                     {extractedData.document_type === 'passport' ? 'Hộ chiếu (Passport)' : 'Căn cước công dân (CCCD)'}
                   </div>
                 </div>
@@ -970,19 +961,19 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  marginBottom: '14px'
+                  marginBottom: '12px'
                 }}>
                   <div style={{
                     fontSize: '0.78rem',
-                    fontWeight: 800,
+                    fontWeight: 700,
                     textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    color: '#6366f1',
+                    letterSpacing: '0.04em',
+                    color: '#BD1D2D',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px'
+                    gap: '8px'
                   }}>
-                    <Sparkles size={14} />
+                    <Sparkles size={14} strokeWidth={1.75} />
                     Thông tin trích xuất (Có thể chỉnh sửa nếu cần)
                   </div>
                 </div>
@@ -1157,18 +1148,17 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                     background: 'var(--color-surface, #ffffff)',
                     color: 'var(--color-text, #1e293b)',
                     border: '1px solid var(--color-border, #cbd5e1)',
-                    padding: '8px 18px',
-                    borderRadius: '10px',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
                     fontSize: '0.85rem',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px'
+                    gap: '8px'
                   }}
-                  className="hover-lift"
                 >
-                  <ArrowLeft size={16} />
+                  <ArrowLeft size={16} strokeWidth={1.75} />
                   Chọn lại tài liệu khác
                 </button>
               </div>
@@ -1179,12 +1169,12 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
 
         {/* Modal Footer */}
         <div style={{
-          padding: '14px 24px',
-          borderTop: '1px solid var(--color-border-light, #f1f5f9)',
+          padding: '16px 24px',
+          borderTop: '1px solid var(--color-border-light, #E2E8F0)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          background: 'var(--color-bg, #f8fafc)'
+          background: 'var(--color-bg, #F8FAFC)'
         }}>
           {step === 'select' && (
             <>
@@ -1197,10 +1187,10 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                 overflow: 'hidden'
               }}>
                 {selectedDoc ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }} title={selectedDoc.name}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, overflow: 'hidden' }} title={selectedDoc.name}>
                     <span style={{ flexShrink: 0 }}>Đã chọn:</span>
                     <strong style={{
-                      color: '#4f46e5',
+                      color: '#BD1D2D',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
@@ -1214,17 +1204,17 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                   <span>Vui lòng chọn 1 tài liệu CCCD/Passport để tiếp tục</span>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   type="button"
                   onClick={onClose}
                   disabled={isUploading}
                   style={{
                     background: 'transparent',
-                    border: '1px solid var(--color-border, #cbd5e1)',
+                    border: '1px solid var(--color-border, #CBD5E1)',
                     color: 'var(--color-text-muted)',
                     padding: '8px 16px',
-                    borderRadius: '10px',
+                    borderRadius: '8px',
                     fontSize: '0.85rem',
                     fontWeight: 600,
                     cursor: isUploading ? 'not-allowed' : 'pointer',
@@ -1239,24 +1229,22 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                   onClick={() => handleStartScan()}
                   style={{
                     background: selectedDoc 
-                      ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' 
-                      : 'var(--color-border, #e2e8f0)',
+                      ? '#BD1D2D' 
+                      : 'var(--color-border, #E2E8F0)',
                     color: selectedDoc ? '#ffffff' : 'var(--color-text-muted)',
                     border: 'none',
                     padding: '8px 20px',
-                    borderRadius: '10px',
+                    borderRadius: '8px',
                     fontSize: '0.85rem',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     cursor: selectedDoc ? 'pointer' : 'not-allowed',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
-                    boxShadow: selectedDoc ? '0 4px 14px rgba(99, 102, 241, 0.3)' : 'none',
-                    transition: 'all 0.2s'
+                    transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
                   }}
-                  className={selectedDoc ? 'hover-lift' : ''}
                 >
-                  <Sparkles size={16} />
+                  <Sparkles size={15} strokeWidth={1.75} />
                   Bắt đầu trích xuất AI
                 </button>
               </div>
@@ -1270,41 +1258,40 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                 onClick={() => setStep('select')}
                 style={{
                   background: 'transparent',
-                  border: '1px solid var(--color-border, #cbd5e1)',
+                  border: '1px solid var(--color-border, #CBD5E1)',
                   color: 'var(--color-text-muted)',
                   padding: '8px 16px',
-                  borderRadius: '10px',
+                  borderRadius: '8px',
                   fontSize: '0.85rem',
                   fontWeight: 600,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px'
+                  gap: '8px'
                 }}
               >
-                <ArrowLeft size={16} />
+                <ArrowLeft size={16} strokeWidth={1.75} />
                 Chọn tài liệu khác
               </button>
               <button
                 type="button"
                 onClick={handleApply}
                 style={{
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  background: '#059669',
                   color: '#ffffff',
                   border: 'none',
-                  padding: '9px 22px',
-                  borderRadius: '10px',
+                  padding: '8px 20px',
+                  borderRadius: '8px',
                   fontSize: '0.88rem',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)'
+                  transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)'
                 }}
-                className="hover-lift"
               >
-                <Check size={18} strokeWidth={2.5} />
+                <Check size={16} strokeWidth={2} />
                 Xác nhận & Tự động điền vào hồ sơ
               </button>
             </>

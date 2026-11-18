@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
 import { 
-  X, MessageSquare, Clock, AlertCircle, User, Paperclip, Send, CheckCircle2, 
+  X, MessageSquare, Clock, AlertCircle, User, Paperclip, CheckCircle2, 
   XCircle, Inbox, Image as ImageIcon, FileText, ExternalLink, Loader2, Lock, 
-  Eye, Calendar, Trash2, Download, File, RotateCcw
+  Trash2, Download, File, RotateCcw
 } from 'lucide-react';
 import { Avatar } from '../components/ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -16,6 +16,7 @@ import { StatRowSkeleton } from '../components/ui/Skeleton';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import styles from './EntityDrawer.module.css'; 
 import { pushOverlay } from '../utils/overlayStack'; 
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 interface Props {
   isOpen: boolean;
@@ -204,7 +205,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
     deleteCommentInFlightRef.current = true;
     try {
       await api.delete(`/tickets/${tid}/comments/${commentId}`);
-      addToast(t('Đã xóa bình luận!'), 'success');
+      addToast(t('Đã xóa bình luận'), 'success');
       fetchComments(tid);
     } catch (err: any) {
       addToast(t('Lỗi khi xóa bình luận: ') + (err.response?.data?.message || err.message), 'error');
@@ -242,7 +243,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
       } else if (ticket.customer_name && ticket.customer_name !== 'Hệ thống / Yêu cầu chung') {
         api.get('/contacts', { params: { search: ticket.customer_name, limit: 5 }, signal: controller.signal }).then(res => {
           if (controller.signal.aborted) return;
-          const list = res.data.data?.items || res.data.data || [];
+          const list = extractArray(res?.data);
           const matched = list.find((x: any) => {
             const fullName = (x.full_name || '').trim().toLowerCase();
             const cName = x.name ? x.name.trim().toLowerCase() : '';
@@ -629,18 +630,19 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
 
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-text)', margin: 0, lineHeight: 1.3 }}>
+                    <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--color-text)', margin: 0, lineHeight: 1.3 }}>
                       {formData.subject}
                     </h2>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{
                         fontSize: '0.7rem',
-                        fontWeight: 800,
+                        fontWeight: 700,
+                        fontVariantNumeric: 'tabular-nums',
                         color: 'var(--color-text-muted)',
                         background: 'var(--color-bg)',
-                        padding: '2px 7px',
-                        borderRadius: '5px',
+                        padding: '2px 8px',
+                        borderRadius: '6px',
                         border: '1px solid var(--color-border-light)'
                       }}>
                         #{formData.id}
@@ -764,7 +766,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
             <div className={styles.drawerBody} style={{ background: 'var(--color-bg)', display: 'flex', flex: 1, overflow: 'hidden', flexDirection: isMobile ? 'column' : 'row' }}>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: isMobile ? 'none' : '1px solid var(--color-border)', borderBottom: isMobile ? '1px dashed var(--color-border)' : 'none', overflow: 'hidden' }}>
                 <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? '0.75rem 0.5rem 100px 0.5rem' : '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                  <h4 style={{ fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-muted)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <h4 style={{ fontSize: '0.825rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-text-muted)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px', fontVariantNumeric: 'tabular-nums' }}>
                     <MessageSquare size={15} style={{ color: 'var(--color-primary)' }} /> Nhật ký trao đổi ({comments.length})
                   </h4>
 
@@ -856,7 +858,6 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
                                           aspectRatio: '1',
                                           cursor: 'pointer'
                                         }}
-                                        className="hover-lift"
                                       >
                                         <img src={img.url} alt={img.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                       </div>
@@ -904,8 +905,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
                                       {!isReply && (
                                         <button
                                           onClick={() => setReplyTo({ id: msg.id, userName: msg.user_name || msg.user || 'Đồng nghiệp' })}
-                                          style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', fontSize: '0.7rem', padding: '4px 0 0 0', cursor: 'pointer', fontWeight: 700 }}
-                                          className="hover-lift"
+                                          style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', fontSize: '0.7rem', padding: '4px 0 0 0', cursor: 'pointer', fontWeight: 600 }}
                                         >
                                           Phản hồi
                                         </button>
@@ -914,7 +914,6 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
                                         <button
                                           onClick={() => setCommentToDelete(msg.id)}
                                           style={{ background: 'transparent', border: 'none', color: 'var(--color-danger, #ef4444)', display: 'inline-flex', alignItems: 'center', cursor: 'pointer', padding: '4px 0 0 0' }}
-                                          className="hover-lift"
                                           title={t('Xóa bình luận')}
                                         >
                                           <Trash2 size={12} />
@@ -977,7 +976,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
                     {replyTo && (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(201, 24, 43, 0.08)', padding: '6px 12px', borderRadius: '8px', fontSize: '0.72rem', color: '#c9182b', fontWeight: 700, marginBottom: '8px' }}>
                         <span>Đang trả lời {replyTo.userName}</span>
-                        <button onClick={() => setReplyTo(null)} style={{ border: 'none', background: 'transparent', color: '#c9182b', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', padding: '0 4px' }}>×</button>
+                        <button onClick={() => setReplyTo(null)} style={{ border: 'none', background: 'transparent', color: '#c9182b', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem', padding: '0 4px' }}>×</button>
                       </div>
                     )}
 
@@ -1051,7 +1050,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
 
               <div style={{ width: isMobile ? '100%' : '330px', background: 'var(--color-surface)', padding: isMobile ? '0.75rem 0.5rem 100px 0.5rem' : '1.25rem', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: '1.25rem', flexShrink: 0 }}>
                 <div>
-                  <h4 style={{ fontSize: '0.825rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-light)', marginBottom: '0.625rem' }}>Người phụ trách</h4>
+                  <h4 style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-text-light)', marginBottom: '0.5rem' }}>Người phụ trách</h4>
                   <div className="card" style={{ padding: '0.75rem 0.875rem', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', borderRadius: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <Avatar name={assigneeName} src={assigneeAvatar} size={36} />
@@ -1064,7 +1063,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
                 </div>
 
                 <div>
-                  <h4 style={{ fontSize: '0.825rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-light)', marginBottom: '0.625rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <h4 style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-text-light)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <FileText size={14} style={{ color: 'var(--color-primary)' }} /> Nội dung yêu cầu hỗ trợ
                   </h4>
                   <div className="card" style={{ padding: '0.875rem 1rem', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', borderRadius: '12px' }}>
@@ -1074,7 +1073,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
 
                     {attachedMedia.images.length > 0 && (
                       <div style={{ marginTop: '0.875rem', paddingTop: '0.75rem', borderTop: '1px dashed var(--color-border-light)' }}>
-                        <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '4px', fontVariantNumeric: 'tabular-nums' }}>
                           <ImageIcon size={13} style={{ color: 'var(--color-primary)' }} /> Ảnh đính kèm ({attachedMedia.images.length}):
                         </p>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(75px, 1fr))', gap: '8px' }}>
@@ -1091,7 +1090,6 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
                                 cursor: 'pointer',
                                 background: 'var(--color-bg)'
                               }}
-                              className="hover-lift"
                               title={img.label}
                             >
                               <img src={img.url} alt={img.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -1103,7 +1101,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
 
                     {attachedMedia.files.length > 0 && (
                       <div style={{ marginTop: '0.875rem', paddingTop: '0.75rem', borderTop: '1px dashed var(--color-border-light)' }}>
-                        <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '4px', fontVariantNumeric: 'tabular-nums' }}>
                           <File size={13} style={{ color: 'var(--color-primary)' }} /> Tệp đính kèm ({attachedMedia.files.length}):
                         </p>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -1126,7 +1124,6 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
                                 color: 'var(--color-text)',
                                 fontSize: '0.75rem'
                               }}
-                              className="hover-lift"
                             >
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
                                 <FileText size={14} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
@@ -1142,9 +1139,9 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
                 </div>
 
                 <div>
-                  <h4 style={{ fontSize: '0.825rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-light)', marginBottom: '0.625rem' }}>Thời hạn xử lý (SLA)</h4>
+                  <h4 style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-text-light)', marginBottom: '0.5rem' }}>Thời hạn xử lý (SLA)</h4>
                   <div className="card" style={{ padding: '0.75rem 0.875rem', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', borderRadius: '12px' }}>
-                    <p style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                    <p style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '6px', margin: 0, fontVariantNumeric: 'tabular-nums' }}>
                       <Clock size={14}/> {formatSlaDate(formData.due_date)}
                     </p>
                   </div>
@@ -1152,7 +1149,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
 
                 {!isSystemTicket && (
                   <div>
-                    <h4 style={{ fontSize: '0.825rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-light)', marginBottom: '0.625rem' }}>THÔNG TIN KHÁCH HÀNG</h4>
+                    <h4 style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-text-light)', marginBottom: '0.5rem' }}>Thông tin khách hàng</h4>
                     {(() => {
                       const cid = formData.contact_id || formData.customer_id || (formData.related_contacts && formData.related_contacts.length > 0 ? formData.related_contacts[0] : null);
                       const matchedContact = resolvedContact || (cid 
@@ -1177,14 +1174,14 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
                               onOpenContact?.(targetContact);
                             }
                           }}
-                          className="card hover-lift"
+                          className="card"
                           style={{ 
                             padding: '0.75rem 0.875rem', 
                             background: 'var(--color-surface)', 
                             border: '1px solid var(--color-border-light)', 
                             borderRadius: '12px',
                             cursor: 'pointer',
-                            transition: 'all 0.2s ease',
+                            transition: 'background-color 0.15s ease, border-color 0.15s ease',
                             boxShadow: 'var(--shadow-xs)'
                           }}
                         >
@@ -1213,7 +1210,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
 
                 {formData.related_contacts?.length > 0 && !isSystemTicket && (
                   <div>
-                    <h4 style={{ fontSize: '0.825rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-light)', marginBottom: '0.625rem' }}>Khách hàng liên quan khác</h4>
+                    <h4 style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-text-light)', marginBottom: '0.5rem' }}>Khách hàng liên quan khác</h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                       {formData.related_contacts.map((cid: any) => {
                         const c = (contacts || []).find(x => String(x.id) === String(cid));
@@ -1223,12 +1220,11 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
                             key={cid} 
                             onClick={() => onOpenContact?.(c)}
                             style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '6px 8px', borderRadius: '8px', background: 'var(--color-bg)' }}
-                            className="hover-lift"
                           >
                             <Avatar src={c.avatar_url} name={c.full_name || ''} size={28} />
                             <div style={{ fontSize: '0.8125rem' }}>
                               <p style={{ fontWeight: 600, margin: 0 }}>{c.full_name}</p>
-                              <p style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', margin: 0 }}>{c.phone}</p>
+                              <p style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', margin: 0, fontVariantNumeric: 'tabular-nums' }}>{c.phone}</p>
                             </div>
                           </div>
                         );
@@ -1245,7 +1241,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
       {showRejectModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2147483645, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
           <div style={{ background: 'var(--color-surface)', width: '100%', maxWidth: '440px', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--color-text)', marginBottom: '0.5rem' }}>Từ chối & Đóng Ticket</h3>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '0.5rem' }}>Từ chối & đóng Ticket</h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '1rem' }}>
               Vui lòng nhập lý do từ chối hỗ trợ ticket này. Lý do sẽ được thông báo trực tiếp cho người tạo ticket.
             </p>
@@ -1258,14 +1254,14 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
               style={{ width: '100%', resize: 'none', marginBottom: '1.25rem' }}
             />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button className="btn outline sm hover-lift" onClick={() => { setShowRejectModal(false); setRejectReason(''); }} disabled={isSubmitting}>Hủy bỏ</button>
+              <button className="btn outline sm" onClick={() => { setShowRejectModal(false); setRejectReason(''); }} disabled={isSubmitting}>Hủy bỏ</button>
               <button 
-                className="btn danger sm hover-lift" 
+                className="btn danger sm" 
                 onClick={handleRejectTicket} 
                 disabled={isSubmitting || !rejectReason.trim()}
               >
                 {isSubmitting ? <Loader2 size={14} className="spin" /> : <XCircle size={14} />}
-                <span>{isSubmitting ? 'Đang từ chối...' : 'Xác nhận Từ chối'}</span>
+                <span>{isSubmitting ? 'Đang từ chối...' : 'Xác nhận từ chối'}</span>
               </button>
             </div>
           </div>

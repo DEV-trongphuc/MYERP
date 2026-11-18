@@ -226,7 +226,7 @@ const FlowTreeInner = memo(({
                 {isRemove ? (
                     <div className="mt-2 flex flex-col items-center opacity-30">
                         <Flag className="w-5 h-5 text-rose-400" />
-                        <span className="text-[9px] font-black text-rose-400 uppercase mt-0.5">Terminated</span>
+                        <span className="text-[9px] font-bold text-rose-400 uppercase mt-0.5">Terminated</span>
                     </div>
                 ) : isLink ? (
                     step.config.linkedFlowId && (
@@ -241,8 +241,8 @@ const FlowTreeInner = memo(({
                             <BranchConnector
                                 height={CONNECTOR_HEIGHT}
                                 dashed={true}
-                                leftColor={isCondition ? '#10b981' : '#8b5cf6'}
-                                rightColor={isCondition ? '#f43f5e' : '#8b5cf6'}
+                                leftColor={isCondition ? '#10b981' : '#64748B'}
+                                rightColor={isCondition ? '#f43f5e' : '#64748B'}
                             />
 
                             <div className="flex-1 flex flex-col items-center relative px-20 min-w-[300px]">
@@ -256,7 +256,7 @@ const FlowTreeInner = memo(({
                                                 <AddBtn isDropTarget={!!draggedStepId} onDrop={(e) => handleDropOnAdd(e, step.id)} onClick={() => onAddStep(step.id, 'yes')} onQuickWait={() => onQuickAddWait(step.id, 'yes')} branch="yes" isReportMode={isReportMode} />
                                                 <div className={`flex flex-col items-center mt-4 ${isReportMode ? 'opacity-10' : 'opacity-30'}`}>
                                                     <Flag className="w-5 h-5 text-slate-300" />
-                                                    <span className="text-[9px] font-black text-slate-300 uppercase mt-0.5">End</span>
+                                                    <span className="text-[9px] font-semibold text-slate-300 uppercase mt-0.5">End</span>
                                                 </div>
                                             </div>
                                         )
@@ -267,7 +267,7 @@ const FlowTreeInner = memo(({
                                                 <AddBtn isDropTarget={!!draggedStepId} onDrop={(e) => handleDropOnAdd(e, step.id)} onClick={() => onAddStep(step.id, 'A')} onQuickWait={() => onQuickAddWait(step.id, 'A')} branch="A" isReportMode={isReportMode} />
                                                 <div className={`flex flex-col items-center mt-4 ${isReportMode ? 'opacity-10' : 'opacity-30'}`}>
                                                     <Flag className="w-5 h-5 text-slate-300" />
-                                                    <span className="text-[9px] font-black text-slate-300 uppercase mt-0.5">End</span>
+                                                    <span className="text-[9px] font-semibold text-slate-300 uppercase mt-0.5">End</span>
                                                 </div>
                                             </div>
                                         )
@@ -285,7 +285,7 @@ const FlowTreeInner = memo(({
                                                 <AddBtn isDropTarget={!!draggedStepId} onDrop={(e) => handleDropOnAdd(e, step.id)} onClick={() => onAddStep(step.id, 'no')} onQuickWait={() => onQuickAddWait(step.id, 'no')} branch="no" isReportMode={isReportMode} />
                                                 <div className={`flex flex-col items-center mt-4 ${isReportMode ? 'opacity-10' : 'opacity-30'}`}>
                                                     <Flag className="w-5 h-5 text-slate-300" />
-                                                    <span className="text-[9px] font-black text-slate-300 uppercase mt-0.5">End</span>
+                                                    <span className="text-[9px] font-semibold text-slate-300 uppercase mt-0.5">End</span>
                                                 </div>
                                             </div>
                                         )
@@ -296,7 +296,7 @@ const FlowTreeInner = memo(({
                                                 <AddBtn isDropTarget={!!draggedStepId} onDrop={(e) => handleDropOnAdd(e, step.id)} onClick={() => onAddStep(step.id, 'B')} onQuickWait={() => onQuickAddWait(step.id, 'B')} branch="B" isReportMode={isReportMode} />
                                                 <div className={`flex flex-col items-center mt-4 ${isReportMode ? 'opacity-10' : 'opacity-30'}`}>
                                                     <Flag className="w-5 h-5 text-slate-300" />
-                                                    <span className="text-[9px] font-black text-slate-300 uppercase mt-0.5">End</span>
+                                                    <span className="text-[9px] font-semibold text-slate-300 uppercase mt-0.5">End</span>
                                                 </div>
                                             </div>
                                         )
@@ -387,7 +387,7 @@ const FlowTreeInner = memo(({
                                     />
                                     <div className={`mt-2 flex flex-col items-center ${isReportMode ? 'opacity-10' : 'opacity-20'}`}>
                                         <Flag className="w-5 h-5 text-slate-400" />
-                                        <span className="text-[9px] font-black text-slate-400 uppercase mt-0.5">End</span>
+                                        <span className="text-[9px] font-semibold text-slate-400 uppercase mt-0.5">End</span>
                                     </div>
                                 </div>
                             )

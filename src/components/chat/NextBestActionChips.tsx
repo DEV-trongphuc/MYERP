@@ -48,34 +48,34 @@ export const NextBestActionChips: React.FC<NextBestActionChipsProps> = ({
   };
 
   return (
-    <div style={{ marginTop: '10px', marginBottom: '4px' }}>
+    <div style={{ marginTop: '8px', marginBottom: '4px' }}>
       {hasClarify && (
         <div
           style={{
-            marginBottom: hasActions ? '10px' : '0px',
-            padding: '10px 12px',
+            marginBottom: hasActions ? '8px' : '0px',
+            padding: '12px',
             borderRadius: '12px',
-            border: '1px solid #e2e8f0',
-            background: 'linear-gradient(135deg, rgba(255, 251, 235, 0.95) 0%, rgba(254, 243, 199, 0.75) 100%)',
-            boxShadow: '0 2px 8px rgba(245, 158, 11, 0.08)',
+            border: '1px solid #FDE68A',
+            background: '#FFFBEB',
+            boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
           }}
         >
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              fontSize: '11.5px',
-              fontWeight: 750,
-              color: '#b45309',
+              gap: '8px',
+              fontSize: '12px',
+              fontWeight: 600,
+              color: '#92400E',
               marginBottom: '8px',
             }}
           >
-            <Target size={14} style={{ color: '#d97706', flexShrink: 0 }} />
-            <span>Vui lòng chọn chính xác đối tượng bạn muốn thao tác:</span>
+            <Target size={14} style={{ color: '#D97706', flexShrink: 0 }} strokeWidth={1.75} />
+            <span>Vui lòng chọn chính xác đối tượng cần thao tác</span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {clarifyOptions!.map((opt, idx) => {
               const isLoading = activePrompt === opt.prompt;
               const isDisabled = disabled || isLoading;
@@ -89,36 +89,36 @@ export const NextBestActionChips: React.FC<NextBestActionChipsProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    gap: '10px',
+                    gap: '8px',
                     width: '100%',
                     padding: '8px 12px',
-                    borderRadius: '10px',
-                    border: '1px solid #e2e8f0',
-                    background: '#ffffff',
-                    color: '#1e293b',
+                    borderRadius: '8px',
+                    border: '1px solid #E2E8F0',
+                    background: '#FFFFFF',
+                    color: '#0F172A',
                     cursor: isDisabled ? 'not-allowed' : 'pointer',
                     textAlign: 'left',
                     opacity: isDisabled ? 0.7 : 1,
-                    transition: 'all 0.15s ease',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                    transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
+                    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.03)',
                   }}
                 >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-                    <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#0f172a' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                    <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#0F172A' }}>
                       {opt.label}
                     </span>
                     {opt.sub && (
-                      <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>
+                      <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 500 }}>
                         {opt.sub}
                       </span>
                     )}
                   </div>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flexShrink: 0, color: '#d97706', fontSize: '11.5px', fontWeight: 700 }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flexShrink: 0, color: '#B45309', fontSize: '12px', fontWeight: 600 }}>
                     <span>Chọn</span>
                     {isLoading ? (
-                      <Loader2 size={13} className="animate-spin" style={{ color: '#d97706' }} />
+                      <Loader2 size={13} className="animate-spin" style={{ color: '#D97706' }} />
                     ) : (
-                      <ArrowRight size={13} />
+                      <ArrowRight size={13} strokeWidth={1.75} />
                     )}
                   </div>
                 </button>
@@ -134,27 +134,27 @@ export const NextBestActionChips: React.FC<NextBestActionChipsProps> = ({
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '5px',
-              fontSize: '11px',
+              gap: '4px',
+              fontSize: '11.5px',
               fontWeight: 600,
-              color: isDisambiguation ? '#b45309' : '#64748b',
-              marginBottom: '6px',
+              color: isDisambiguation ? '#92400E' : '#475569',
+              marginBottom: '8px',
             }}
             className="dark:!text-slate-400"
           >
             {isDisambiguation && !hasClarify ? (
-              <Target size={14} style={{ color: '#d97706', flexShrink: 0 }} />
+              <Target size={14} style={{ color: '#D97706', flexShrink: 0 }} strokeWidth={1.75} />
             ) : (
-              <Sparkles size={13} style={{ color: isDisambiguation ? '#d97706' : '#8b5cf6' }} />
+              <Sparkles size={13} style={{ color: isDisambiguation ? '#D97706' : '#BD1D2D' }} strokeWidth={1.75} />
             )}
             <span>
               {isDisambiguation && !hasClarify
-                ? 'Vui lòng chọn chính xác đối tượng bạn muốn thao tác:'
-                : 'Gợi ý bước tiếp theo:'}
+                ? 'Vui lòng chọn chính xác đối tượng cần thao tác'
+                : 'Gợi ý bước tiếp theo'}
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {actions!.map((act, idx) => {
               const isLoading = activePrompt === act;
               const isDisabled = disabled || isLoading;
@@ -164,17 +164,14 @@ export const NextBestActionChips: React.FC<NextBestActionChipsProps> = ({
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    borderRadius: '20px',
-                    border: 'none',
-                    background: isLoading
-                      ? 'linear-gradient(135deg, rgba(238, 242, 255, 1) 0%, rgba(224, 231, 255, 1) 100%)'
-                      : 'linear-gradient(135deg, rgba(245, 243, 255, 0.9) 0%, rgba(238, 242, 255, 0.9) 100%)',
-                    boxShadow: '0 2px 6px rgba(139, 92, 246, 0.08)',
+                    borderRadius: '8px',
+                    border: isLoading ? '1px solid rgba(189, 29, 45, 0.35)' : '1px solid #E2E8F0',
+                    background: isLoading ? 'rgba(189, 29, 45, 0.08)' : '#F8FAFC',
                     opacity: isDisabled ? 0.7 : 1,
                     overflow: 'hidden',
-                    transition: 'all 0.2s ease',
+                    transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
                   }}
-                  className="hover:!bg-purple-100 hover:!shadow-sm dark:!bg-purple-950/40 dark:hover:!bg-purple-900/60"
+                  className="hover:!bg-slate-100 hover:!border-slate-300 dark:!bg-slate-800/70 dark:!border-slate-700 dark:hover:!bg-slate-800"
                 >
                   <button
                     type="button"
@@ -183,24 +180,24 @@ export const NextBestActionChips: React.FC<NextBestActionChipsProps> = ({
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '6px',
-                      padding: '6px 9px 6px 11px',
+                      gap: '8px',
+                      padding: '6px 10px 6px 12px',
                       fontSize: '12px',
                       fontWeight: 500,
                       border: 'none',
                       background: 'none',
-                      color: '#5b21b6',
+                      color: isLoading ? '#BD1D2D' : '#0F172A',
                       cursor: isDisabled ? 'not-allowed' : 'pointer',
                       textAlign: 'left',
                     }}
-                    className="dark:!text-purple-300"
-                    title="Gửi ngay câu hỏi này"
+                    className="dark:!text-slate-200"
+                    title="Gửi câu hỏi này"
                   >
                     <span>{act}</span>
                     {isLoading ? (
-                      <Loader2 size={12} className="animate-spin" style={{ color: '#8b5cf6' }} />
+                      <Loader2 size={12} className="animate-spin" style={{ color: '#BD1D2D' }} />
                     ) : (
-                      <ArrowRight size={12} style={{ opacity: 0.7 }} />
+                      <ArrowRight size={12} style={{ color: '#64748B' }} strokeWidth={1.75} />
                     )}
                   </button>
 
@@ -215,23 +212,24 @@ export const NextBestActionChips: React.FC<NextBestActionChipsProps> = ({
                         justifyContent: 'center',
                         padding: '6px 8px',
                         border: 'none',
-                        borderLeft: '1px solid rgba(139, 92, 246, 0.25)',
+                        borderLeft: '1px solid #E2E8F0',
                         background: 'none',
-                        color: '#7c3aed',
+                        color: '#475569',
                         cursor: isDisabled ? 'not-allowed' : 'pointer',
-                        transition: 'all 0.15s ease',
+                        transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
                       }}
+                      className="dark:!border-slate-700 dark:!text-slate-400"
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(139, 92, 246, 0.15)';
-                        e.currentTarget.style.color = '#4c1d95';
+                        e.currentTarget.style.backgroundColor = 'rgba(189, 29, 45, 0.08)';
+                        e.currentTarget.style.color = '#BD1D2D';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = 'transparent';
-                        e.currentTarget.style.color = '#7c3aed';
+                        e.currentTarget.style.color = '#475569';
                       }}
-                      title="Chèn vào ô nhập tin nhắn để sửa trước khi gửi"
+                      title="Chèn vào ô nhập tin nhắn để chỉnh sửa"
                     >
-                      <Edit3 size={11} />
+                      <Edit3 size={11} strokeWidth={1.75} />
                     </button>
                   )}
                 </div>

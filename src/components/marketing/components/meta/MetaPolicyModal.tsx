@@ -28,76 +28,72 @@ const MetaPolicyModal: React.FC<MetaPolicyModalProps> = ({ isOpen, onClose }) =>
             noPadding
         >
             <div className="flex flex-col h-full">
-                {/* Header with Gradient Background */}
-                <div className="relative h-36 bg-gradient-to-r from-blue-600 to-indigo-700 p-8 flex items-end shrink-0">
+                {/* Header */}
+                <div className="relative h-36 bg-slate-900 p-8 flex items-end shrink-0">
                     <button
                         onClick={onClose}
-                        className="absolute top-6 right-6 p-2 bg-white/20 hover:bg-white/30 rounded-full text-white transition-colors z-20"
+                        className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors z-20"
                     >
                         <X className="w-5 h-5" />
                     </button>
                     <div className="flex items-center gap-4 relative z-10">
-                        <div className="p-3 bg-white/10 backdrop-blur-md rounded-[14px] text-white ring-1 ring-white/20">
+                        <div className="p-3 bg-white/10 rounded-xl text-white border border-white/15">
                             <Clock className="w-8 h-8" />
                         </div>
                         <div>
-                            <h2 className="text-2xl font-black text-white leading-tight">Chính sách 24 Giờ</h2>
-                            <p className="text-blue-100 text-sm font-bold opacity-80 uppercase tracking-wider">Standard Messaging Window</p>
+                            <h2 className="text-2xl font-bold text-white leading-tight">Chính sách 24 Giờ</h2>
+                            <p className="text-slate-300 text-xs font-semibold uppercase tracking-wider mt-0.5">Standard Messaging Window</p>
                         </div>
                     </div>
-
-                    {/* Decorative blobs */}
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 blur-[80px] rounded-full -mr-20 -mt-20 pointer-events-none" />
                 </div>
 
                 <div className="p-8 space-y-8 flex-1">
                     {/* General Rule */}
-                    <section className="bg-blue-50/50 p-6 rounded-[18px] border border-blue-100 relative overflow-hidden group hover:shadow-lg hover:shadow-blue-500/5 transition-all">
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:rotate-12 transition-transform">
-                            <Info className="w-16 h-16 text-blue-600" />
+                    <section className="bg-slate-50 p-6 rounded-2xl border border-slate-200 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-10">
+                            <Info className="w-16 h-16 text-slate-400" />
                         </div>
-                        <h3 className="text-lg font-black text-slate-800 mb-2 flex items-center gap-2">
-                            <Zap className="w-5 h-5 text-blue-600 fill-blue-600 animate-pulse" />
+                        <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2">
+                            <Zap className="w-5 h-5 text-[#BD1D2D]" />
                             Quy tắc vàng 24h
                         </h3>
                         <p className="text-sm text-slate-600 leading-relaxed font-medium">
                             Đây là khoảng Thời gian tiêu chuẩn mà Meta cho phép bạn phản hồi tin nhắn Khách hàng.
-                            Khi một người tương tác với Trang, bạn có <span className="text-blue-600 font-black">tối đa 24 giờ</span> đã gửi tin nhắn.
+                            Khi một người tương tác với Trang, bạn có <span className="text-[#BD1D2D] font-bold">tối đa 24 giờ</span> để gửi tin nhắn.
                         </p>
-                        <div className="mt-5 flex items-center gap-2 bg-white w-fit px-4 py-2 rounded-[14px] border border-blue-100 shadow-sm">
-                            <Megaphone className="w-4 h-4 text-[var(--color-primary)]" />
-                            <p className="text-[10px] font-black text-slate-700 uppercase tracking-tight">Cho phép nội dung quảng cáo</p>
+                        <div className="mt-5 flex items-center gap-2 bg-white w-fit px-4 py-2 rounded-xl border border-slate-200 shadow-xs">
+                            <Megaphone className="w-4 h-4 text-[#BD1D2D]" />
+                            <p className="text-[11px] font-bold text-slate-700 uppercase">Cho phép nội dung quảng cáo</p>
                         </div>
                     </section>
 
                     {/* Triggers */}
                     <div>
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-5 px-1 flex items-center gap-2">
+                        <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-5 px-1 flex items-center gap-2">
                             <div className="w-6 h-px bg-slate-200" />
                             Các hành động mở cửa sổ 24h
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {triggers.map((item, idx) => (
-                                <div key={idx} className="flex items-start gap-4 p-4 bg-white hover:bg-slate-50 border border-slate-100 rounded-[18px] transition-all group shadow-sm hover:shadow-md hover:-translate-y-0.5">
-                                    <div className="p-2 bg-blue-50 rounded-xl text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all transform group-hover:scale-110">
+                                <div key={idx} className="flex items-start gap-3 p-4 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-xl transition-colors group">
+                                    <div className="p-2 bg-rose-50 rounded-lg text-[#BD1D2D] group-hover:bg-[#BD1D2D] group-hover:text-white transition-colors shrink-0">
                                         <CheckCircle2 className="w-4 h-4" />
                                     </div>
-                                    <p className="text-xs font-bold text-slate-700 leading-snug">{item}</p>
+                                    <p className="text-xs font-semibold text-slate-700 leading-snug">{item}</p>
                                 </div>
                             ))}
                         </div>
                     </div>
 
                     {/* Note */}
-                    <div className="bg-emerald-50/50 border border-emerald-100 p-7 rounded-[18px] relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 blur-3xl rounded-full" />
+                    <div className="bg-emerald-50/50 border border-emerald-200/80 p-6 rounded-2xl relative overflow-hidden">
                         <div className="flex items-start gap-4 relative z-10">
-                            <div className="p-2.5 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-[14px] text-white shadow-lg shadow-emerald-500/20 group-hover:rotate-12 transition-transform">
+                            <div className="p-2.5 bg-emerald-600 rounded-xl text-white shrink-0">
                                 <MessageSquare className="w-5 h-5" />
                             </div>
                             <div>
-                                <h4 className="font-black text-emerald-900 text-sm mb-1 tracking-tight">Lời khuyên phản hồi</h4>
-                                <p className="text-xs text-emerald-700 leading-relaxed font-medium">
+                                <h4 className="font-bold text-emerald-900 text-sm mb-1">Lời khuyên phản hồi</h4>
+                                <p className="text-xs text-emerald-800 leading-relaxed font-medium">
                                     Mọi người đều mong nhận được phản hồi kịp thời. Bạn nên trả lời sớm nhất có thể.
                                     Sau 24 giờ, hệ thống sẽ bị hạn chế gửi tin nhắn trừ khi có thẻ tin nhắn (Message Tag) hợp lệ.
                                 </p>
@@ -107,10 +103,10 @@ const MetaPolicyModal: React.FC<MetaPolicyModalProps> = ({ isOpen, onClose }) =>
                 </div>
 
                 {/* Footer */}
-                <div className="p-8 bg-slate-50 flex justify-center border-t border-slate-100 shrink-0">
+                <div className="p-6 bg-slate-50 flex justify-center border-t border-slate-200 shrink-0">
                     <button
                         onClick={onClose}
-                        className="w-full sm:w-auto px-16 py-4 bg-slate-900 text-white rounded-[14px] font-black text-sm hover:bg-black transition-all shadow-xl shadow-slate-900/10 hover:-translate-y-1 active:scale-95"
+                        className="w-full sm:w-auto px-12 py-3.5 bg-slate-900 text-white rounded-xl font-semibold text-sm hover:bg-slate-800 transition-colors shadow-sm"
                     >
                         Đã hiểu quy tắc
                     </button>

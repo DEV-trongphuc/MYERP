@@ -13,7 +13,6 @@ import {
   Clock,
   Building2,
   Calendar,
-  Sparkles,
   ArrowUpRight,
   Home,
   Copy,
@@ -402,7 +401,7 @@ export const DocumentationPage: React.FC = () => {
                       <td>Toàn quyền Xem, Sửa, Xóa mềm (Soft Delete) và khôi phục từ thùng rác đối với mọi dữ liệu thuộc cùng <code>tenant_id</code>.</td>
                     </tr>
                     <tr>
-                      <td><code style={{ color: '#7c3aed', fontWeight: 700 }}>director</code></td>
+                      <td><code style={{ color: '#0f172a', fontWeight: 700 }}>director</code></td>
                       <td><strong>3. Director</strong><br /><small style={{ color: 'var(--color-text-muted)' }}>Ban Giám Đốc / Điều Hành</small></td>
                       <td style={{ textAlign: 'center', fontWeight: 700, color: '#059669' }}>all</td>
                       <td>Giám đốc điều hành, theo dõi toàn bộ dashboard KPI, dòng tiền thực thu/chi, tiến độ tuyển sinh, phê duyệt các khoản chi lớn (≥ 20 triệu), phê duyệt hợp đồng đối tác và chính sách hoa hồng.</td>
@@ -456,7 +455,7 @@ export const DocumentationPage: React.FC = () => {
                       <td>Chỉ truy cập dữ liệu lớp học và học viên được phân công giảng dạy. Tuyệt đối không xem thông tin chi phí, doanh thu, hợp đồng kinh doanh hay bảng lương người khác.</td>
                     </tr>
                     <tr>
-                      <td><code style={{ color: '#9333ea', fontWeight: 700 }}>marketing</code></td>
+                      <td><code style={{ color: '#BD1D2D', fontWeight: 700 }}>marketing</code></td>
                       <td><strong>10. Marketing</strong><br /><small style={{ color: 'var(--color-text-muted)' }}>Tiếp Thị &amp; Nguồn Lead</small></td>
                       <td style={{ textAlign: 'center', fontWeight: 700, color: '#059669' }}>all (Campaigns)</td>
                       <td>Quản lý kênh tiếp thị: tích hợp UTM Tracking, Landing Pages, Form Webhooks, Fanpage Lead Ads. Đo lường tỷ lệ chuyển đổi, chi phí trên từng liên hệ (CPL) và hiệu quả chiến dịch (ROI).</td>
@@ -679,7 +678,7 @@ export const DocumentationPage: React.FC = () => {
                 </div>
                 <div className="doc-stage">
                   <strong>
-                    <Cpu size={15} color="#8b5cf6" />
+                    <Cpu size={15} color="#BD1D2D" />
                     <span>Token Blacklisting &amp; Revocation</span>
                   </strong>
                   <p>Khi nhân viên đổi mật khẩu hoặc đăng xuất, Token ID (JTI) được đẩy ngay vào bảng Blacklist. Mọi request sử dụng token cũ sẽ lập tức bị chặn.</p>
@@ -1365,7 +1364,7 @@ export const DocumentationPage: React.FC = () => {
     {
       id: 'gatekeeper',
       title: '2. AI Gatekeeper, Pre-Screening & Chấm Điểm Dữ Liệu',
-      icon: Sparkles,
+      icon: Cpu,
       items: [
         {
           id: 'gate-scoring',
@@ -1454,12 +1453,12 @@ export const DocumentationPage: React.FC = () => {
           ],
           content: (
             <div className="doc-prose">
-              <div style={{ background: '#eef2ff', border: '1px solid #c7d2fe', padding: '14px 18px', borderRadius: '8px', marginBottom: '22px' }}>
-                <strong style={{ color: '#4338ca', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Sparkles size={16} />
-                  <span>Tính Năng AI Độc Quyền Của MYERP (Đã Đưa Vào Vận Hành Thực Tế)</span>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderLeft: '3px solid #BD1D2D', padding: '14px 18px', borderRadius: '8px', marginBottom: '22px' }}>
+                <strong style={{ color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Cpu size={16} style={{ color: '#BD1D2D' }} />
+                  <span>Tính năng AI tích hợp trên MYERP</span>
                 </strong>
-                <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#3730a3' }}>
+                <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#475569' }}>
                   Hỗ trợ chuyên viên Tuyển sinh và Quản trị Đào tạo loại bỏ 95% thao tác gõ phím thủ công khi tiếp nhận hồ sơ xét tuyển, đảm bảo tính chuẩn xác tuyệt đối của dữ liệu định danh pháp lý phục vụ cấp văn bằng và làm thủ tục tốt nghiệp.
                 </p>
               </div>
@@ -1776,7 +1775,7 @@ export const DocumentationPage: React.FC = () => {
                     <tr>
                       <td><code>04</code></td>
                       <td>
-                        <strong style={{ color: '#7c3aed' }}>04 – Needed</strong><br />
+                        <strong style={{ color: '#0f172a' }}>04 – Needed</strong><br />
                         <code>needed</code>
                       </td>
                       <td>Khách được xác định có khả năng phù hợp với chương trình IDEAS đang tuyển sinh.</td>
@@ -2066,7 +2065,7 @@ export const DocumentationPage: React.FC = () => {
                     </tr>
                     <tr>
                       <td>
-                        <strong style={{ color: '#7c3aed' }}>Khối Học Vụ (Academic)</strong>
+                        <strong style={{ color: '#0f172a' }}>Khối Học Vụ (Academic)</strong>
                       </td>
                       <td>
                         <code>Stage 14: Enrolled</code><br />
@@ -3378,7 +3377,7 @@ export const DocumentationPage: React.FC = () => {
                       <td>Bắn thông báo khẩn <code>HRM_PAYSLIP_DISPUTED</code> tới HR &amp; Kế toán để rà soát, chỉnh sửa và phát hành lại.</td>
                     </tr>
                     <tr>
-                      <td><code style={{ color: '#7c3aed', fontWeight: 700 }}>locked</code></td>
+                      <td><code style={{ color: '#0f172a', fontWeight: 700 }}>locked</code></td>
                       <td>Đã khóa kỳ lương vĩnh viễn</td>
                       <td>Ban Giám đốc &amp; Kế toán trưởng kích hoạt lệnh <code>lockPayroll</code> sau khi tất cả khiếu nại đã được giải quyết.</td>
                       <td>Toàn bộ bảng công và phiếu lương chuyển sang chế độ chỉ đọc (Read-only); tuyệt đối chống sửa đổi hồi tố.</td>

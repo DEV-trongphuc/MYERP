@@ -53,13 +53,13 @@ const ListEditorModal: React.FC<ListEditorModalProps> = ({ isOpen, onClose, onSa
                 }
             >
                 <div className="space-y-6">
-                    <div className="flex items-center gap-4 bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
-                        <div className="p-3 bg-white rounded-xl text-indigo-600 shadow-sm">
+                    <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                        <div className="p-3 bg-white rounded-xl text-[#BD1D2D] border border-slate-200 shadow-xs">
                             <List className="w-6 h-6" />
                         </div>
                         <div>
-                            <p className="text-xs font-bold text-indigo-900 uppercase">Static List</p>
-                            <p className="text-[10px] text-indigo-600/80">Danh sách tĩnh không tự động cập nhật.</p>
+                            <p className="text-xs font-bold text-slate-900 uppercase">Static List</p>
+                            <p className="text-[11px] text-slate-500">Danh sách tĩnh không tự động cập nhật</p>
                         </div>
                     </div>
                     <Input

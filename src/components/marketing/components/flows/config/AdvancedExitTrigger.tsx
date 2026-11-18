@@ -68,8 +68,8 @@ const MultiSelectProp: React.FC<MultiSelectProps> = ({ items, selectedIds, isAll
             <div
                 onClick={() => !disabled && setIsOpen(!isOpen)}
                 className={`
-                    w-full min-h-[42px] px-3 py-2 bg-white border rounded-xl flex items-center justify-between cursor-pointer transition-all
-                    ${isOpen ? 'border-slate-400 ring-4 ring-slate-100' : 'border-slate-200 hover:border-slate-300'}
+                    w-full min-h-[42px] px-3 py-2 bg-white border rounded-xl flex items-center justify-between cursor-pointer transition-colors
+                    ${isOpen ? 'border-slate-400 ring-2 ring-slate-200' : 'border-slate-200 hover:border-slate-300'}
                     ${disabled ? 'opacity-60 bg-slate-50 cursor-not-allowed' : ''}
                 `}
             >
@@ -121,7 +121,7 @@ const MultiSelectProp: React.FC<MultiSelectProps> = ({ items, selectedIds, isAll
                             <div
                                 onClick={toggleAll}
                                 className={`
-                                    px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-between cursor-pointer transition-all
+                                    px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-between cursor-pointer transition-colors
                                     ${isAll ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}
                                 `}
                             >
@@ -137,7 +137,7 @@ const MultiSelectProp: React.FC<MultiSelectProps> = ({ items, selectedIds, isAll
                                     key={item.id}
                                     onClick={() => toggleItem(item.id)}
                                     className={`
-                                        px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-between cursor-pointer transition-all
+                                        px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-between cursor-pointer transition-colors
                                         ${isSel && !isAll ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-50'}
                                         ${isAll ? 'opacity-50 pointer-events-none' : ''}
                                     `}
@@ -148,7 +148,7 @@ const MultiSelectProp: React.FC<MultiSelectProps> = ({ items, selectedIds, isAll
                             );
                         })}
                         {filteredItems.length === 0 && (
-                            <div className="text-center py-4 text-xs text-slate-400 italic">Không tìm thấy kết quả</div>
+                            <div className="text-center py-4 text-xs text-slate-400">Không tìm thấy kết quả</div>
                         )}
                     </div>
                 </div>
@@ -204,7 +204,7 @@ const AdvancedExitTrigger: React.FC<AdvancedExitTriggerProps> = ({ config, onCha
         const colorName = colorClass.split('-')[1]; // e.g. amber, emerald
 
         return (
-            <div className={`border rounded-xl p-1 transition-all ${isEnabled ? 'bg-white border-emerald-500 shadow-sm' : 'bg-slate-50 border-slate-200'}`}>
+            <div className={`border rounded-xl p-1 transition-colors ${isEnabled ? 'bg-white border-emerald-500 shadow-sm' : 'bg-slate-50 border-slate-200'}`}>
                 {/* Header / Enable Switch */}
                 <div
                     className="flex items-center justify-between cursor-pointer p-4 pb-2"
@@ -215,12 +215,12 @@ const AdvancedExitTrigger: React.FC<AdvancedExitTriggerProps> = ({ config, onCha
                             {React.createElement(icon, { size: 18 })}
                         </div>
                         <div>
-                            <h4 className={`text-sm font-black ${isEnabled ? 'text-slate-800' : 'text-slate-500'}`}>{title}</h4>
+                            <h4 className={`text-sm font-bold ${isEnabled ? 'text-slate-800' : 'text-slate-500'}`}>{title}</h4>
                             <p className="text-[10px] text-slate-400 font-medium mt-0.5">Xảy ra khi Khách hàng thực hiện hành động này</p>
                         </div>
                     </div>
                     <div className={`w-10 h-6 rounded-full transition-colors relative shrink-0 ${isEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-                        <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all shadow-sm ${isEnabled ? 'left-5' : 'left-1'}`} />
+                        <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-[left] duration-200 shadow-sm ${isEnabled ? 'left-5' : 'left-1'}`} />
                     </div>
                 </div>
 
@@ -235,7 +235,7 @@ const AdvancedExitTrigger: React.FC<AdvancedExitTriggerProps> = ({ config, onCha
                             placeholder="Chọn sự kiện cụ thể..."
                             disabled={disabled}
                         />
-                        <p className="text-[10px] text-slate-400 mt-2 font-medium italic">
+                        <p className="text-[10px] text-slate-400 mt-2 font-medium">
                             * Mặc định chọn "Tất cả" nếu bạn không chọn sự kiện nào cụ thể.
                         </p>
                     </div>
@@ -249,10 +249,10 @@ const AdvancedExitTrigger: React.FC<AdvancedExitTriggerProps> = ({ config, onCha
     return (
         <div className="space-y-4">
             <div className="flex items-center gap-2 px-1 mb-2">
-                <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg border border-indigo-100 shadow-sm">
+                <div className="p-1.5 bg-slate-100 text-slate-700 rounded-lg border border-slate-200 shadow-sm">
                     <Filter className="w-3.5 h-3.5" />
                 </div>
-                <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest">Ngắt luồng nâng cao (Trigger)</h3>
+                <h3 className="text-sm font-bold text-slate-700 uppercase tracking-widest">Ngắt luồng nâng cao (Trigger)</h3>
             </div>
 
             {renderSection('forms', 'Khi khách gửi Biểu mẫu (Form Submit)', FileInput, 'bg-amber-100 text-amber-600', forms)}

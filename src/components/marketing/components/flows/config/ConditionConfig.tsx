@@ -361,24 +361,24 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                 <button
                     type="button"
                     onClick={() => handleCategorySwitch('myerp')}
-                    className={`py-2.5 px-3 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`py-2.5 px-3 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
                         activeCategory === 'myerp'
-                            ? 'bg-white text-indigo-700 shadow-sm border border-indigo-100'
+                            ? 'bg-white text-[#BD1D2D] shadow-sm border border-slate-200'
                             : 'text-slate-500 hover:text-slate-700'
                     }`}
                 >
-                    <span>🏢 Điều kiện MYERP & Sale</span>
+                    <span>Điều kiện MYERP & Sale</span>
                 </button>
                 <button
                     type="button"
                     onClick={() => handleCategorySwitch('campaign')}
-                    className={`py-2.5 px-3 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`py-2.5 px-3 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
                         activeCategory === 'campaign'
-                            ? 'bg-white text-orange-600 shadow-sm border border-orange-100'
+                            ? 'bg-white text-[#BD1D2D] shadow-sm border border-slate-200'
                             : 'text-slate-500 hover:text-slate-700'
                     }`}
                 >
-                    <span>📧 Tương tác Chiến dịch</span>
+                    <span>Tương tác Chiến dịch</span>
                 </button>
             </div>
 
@@ -438,8 +438,8 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
 
                     {/* Sub-config for crm_assigned_to */}
                     {config.conditionType === 'crm_assigned_to' && (
-                        <div className="p-4 bg-indigo-50/50 border border-indigo-200 rounded-2xl space-y-3 animate-in slide-in-from-top-2">
-                            <label className="text-[10px] font-black uppercase text-indigo-800 tracking-wider block">
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                            <label className="text-[10px] font-bold uppercase text-slate-700 tracking-wider block">
                                 Tiêu chí kiểm tra phân bổ Sale
                             </label>
                             <select
@@ -455,7 +455,7 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                                     });
                                 }}
                                 disabled={disabled}
-                                className="w-full h-10 px-3 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-[#BD1D2D]"
                             >
                                 <option value="any_assigned">Đã có Sale phụ trách (Không để trống)</option>
                                 <option value="specific_team">Thuộc Vòng chia / Team Sale cụ thể</option>
@@ -469,7 +469,7 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                                         value={config.targetTeamId || ''}
                                         onChange={(e) => onChange({ ...config, targetTeamId: e.target.value, assignMatchMode: 'specific_team' })}
                                         disabled={disabled}
-                                        className="w-full h-10 px-3 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-[#BD1D2D]"
                                     >
                                         <option value="">-- Chọn Vòng chia / Team Sale --</option>
                                         {erpTeams.map(t => (
@@ -486,7 +486,7 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                                         value={config.targetOwnerId || ''}
                                         onChange={(e) => onChange({ ...config, targetOwnerId: e.target.value, assignMatchMode: 'specific_owner' })}
                                         disabled={disabled}
-                                        className="w-full h-10 px-3 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-[#BD1D2D]"
                                     >
                                         <option value="">-- Chọn Tư vấn viên --</option>
                                         {erpUsers.map(u => (
@@ -500,15 +500,15 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
 
                     {/* Sub-config for crm_stage_is */}
                     {config.conditionType === 'crm_stage_is' && (
-                        <div className="p-4 bg-purple-50/50 border border-purple-200 rounded-2xl space-y-2 animate-in slide-in-from-top-2">
-                            <label className="text-[10px] font-black uppercase text-purple-800 tracking-wider block">
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                            <label className="text-[10px] font-bold uppercase text-slate-700 tracking-wider block">
                                 Chọn Giai đoạn Pipeline CRM cần kiểm tra
                             </label>
                             <select
                                 value={config.targetStageId || config.stageId || ''}
                                 onChange={(e) => onChange({ ...config, targetStageId: e.target.value, stageId: e.target.value })}
                                 disabled={disabled}
-                                className="w-full h-10 px-3 bg-white border border-purple-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500"
+                                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-[#BD1D2D]"
                             >
                                 <option value="">-- Chọn Giai đoạn Pipeline --</option>
                                 {erpStages.map(st => (
@@ -520,15 +520,15 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
 
                     {/* Sub-config for crm_temperature_is */}
                     {config.conditionType === 'crm_temperature_is' && (
-                        <div className="p-4 bg-amber-50/50 border border-amber-200 rounded-2xl space-y-2 animate-in slide-in-from-top-2">
-                            <label className="text-[10px] font-black uppercase text-amber-800 tracking-wider block">
+                        <div className="p-4 bg-amber-50/50 border border-amber-200 rounded-2xl space-y-2">
+                            <label className="text-[10px] font-bold uppercase text-amber-800 tracking-wider block">
                                 Chọn mức Độ nóng Lead (Temperature)
                             </label>
                             <div className="grid grid-cols-3 gap-2">
                                 {[
-                                    { id: 'hot', label: '🔥 Nóng (Hot)' },
-                                    { id: 'warm', label: '🌤️ Ấm (Warm)' },
-                                    { id: 'cold', label: '❄️ Lạnh (Cold)' }
+                                    { id: 'hot', label: 'Nóng (Hot)' },
+                                    { id: 'warm', label: 'Ấm (Warm)' },
+                                    { id: 'cold', label: 'Lạnh (Cold)' }
                                 ].map(temp => {
                                     const currentTemp = config.targetTemperature || config.temperature || 'hot';
                                     const isSelected = currentTemp === temp.id;
@@ -538,7 +538,7 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                                             type="button"
                                             disabled={disabled}
                                             onClick={() => onChange({ ...config, targetTemperature: temp.id, temperature: temp.id })}
-                                            className={`py-2.5 px-3 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                                            className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                                                 isSelected
                                                     ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
                                                     : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-50'
@@ -554,8 +554,8 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
 
                     {/* Sub-config for channel_reachability */}
                     {config.conditionType === 'channel_reachability' && (
-                        <div className="p-4 bg-cyan-50/50 border border-cyan-200 rounded-2xl space-y-2 animate-in slide-in-from-top-2">
-                            <label className="text-[10px] font-black uppercase text-cyan-800 tracking-wider block">
+                        <div className="p-4 bg-cyan-50/50 border border-cyan-200 rounded-2xl space-y-2">
+                            <label className="text-[10px] font-bold uppercase text-cyan-800 tracking-wider block">
                                 Chọn Kênh liên lạc cần kiểm tra
                             </label>
                             <select
@@ -579,10 +579,10 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                     {parentEmailStep ? (
                         <div className="flex items-center justify-between mb-2 px-1">
                             <div className="flex items-center gap-2">
-                                <GitMerge className="w-4 h-4 text-indigo-500" />
-                                <span className="text-[10px] font-black uppercase text-indigo-500 tracking-widest">Nguồn theo dõi:</span>
+                                <GitMerge className="w-4 h-4 text-slate-600" />
+                                <span className="text-[10px] font-bold uppercase text-slate-500 tracking-widest">Nguồn theo dõi:</span>
                             </div>
-                            <div className="flex items-center gap-1.5 text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg font-bold text-[10px] border border-indigo-100 shadow-sm">
+                            <div className="flex items-center gap-1.5 text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg font-bold text-[10px] border border-slate-200 shadow-xs">
                                 <Link className="w-3 h-3" />
                                 <span className="truncate max-w-[180px]">{parentEmailStep.label}</span>
                             </div>
@@ -612,7 +612,7 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
 
                             {config.conditionType === 'survey_score' && (
                                 <div className="p-5 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-3 mt-4">
-                                    <label className="text-[10px] font-black uppercase text-emerald-700 tracking-widest">Logic khoảng điểm</label>
+                                    <label className="text-[10px] font-bold uppercase text-emerald-700 tracking-widest">Logic khoảng điểm</label>
                                     <div className="grid grid-cols-2 gap-3">
                                         <Select
                                             options={[
@@ -634,18 +634,18 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                                             disabled={disabled}
                                         />
                                     </div>
-                                    <p className="text-[10px] text-emerald-600 italic">Tổng số điểm của bài khảo sát (được dùng để chấm điểm Test Quiz).</p>
+                                    <p className="text-[10px] text-emerald-700">Tổng số điểm của bài khảo sát (được dùng để chấm điểm Test Quiz).</p>
                                 </div>
                             )}
 
                             {config.conditionType === 'survey_answer' && (
-                                <div className="p-5 bg-indigo-50 border border-indigo-200 rounded-2xl space-y-3 mt-4">
-                                    <label className="text-[10px] font-black uppercase text-indigo-700 tracking-widest">Logic câu trả lời</label>
+                                <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 mt-4">
+                                    <label className="text-[10px] font-bold uppercase text-slate-700 tracking-widest">Logic câu trả lời</label>
                                     {surveyData ? (
                                         <div className="relative">
-                                            {isLoadingSurvey && <div className="absolute right-3 top-1/2 -translate-y-1/2 p-2"><RefreshCw className="w-4 h-4 animate-spin text-indigo-300" /></div>}
+                                            {isLoadingSurvey && <div className="absolute right-3 top-1/2 -translate-y-1/2 p-2"><RefreshCw className="w-4 h-4 animate-spin text-slate-400" /></div>}
                                             <select
-                                                className="w-full h-11 px-4 bg-white border border-indigo-100 rounded-xl font-bold text-sm text-indigo-900 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all appearance-none"
+                                                className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:border-[#BD1D2D] focus:ring-4 focus:ring-rose-500/10 outline-none transition-colors appearance-none"
                                                 value={config.questionId || ''}
                                                 onChange={(e) => onChange({ ...config, questionId: e.target.value })}
                                                 disabled={disabled || isLoadingSurvey}
@@ -671,7 +671,7 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                                         if (surveyData && hasOptions) {
                                             return (
                                                 <select
-                                                    className="w-full h-11 px-4 bg-white border border-indigo-100 rounded-xl font-bold text-sm text-indigo-900 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all appearance-none"
+                                                    className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:border-[#BD1D2D] focus:ring-4 focus:ring-rose-500/10 outline-none transition-colors appearance-none"
                                                     value={config.answerMatch || ''}
                                                     onChange={(e) => onChange({ ...config, answerMatch: e.target.value })}
                                                     disabled={disabled || isLoadingSurvey}
@@ -694,18 +694,18 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                                             );
                                         }
                                     })()}
-                                    <p className="text-[10px] text-indigo-600 italic">Nếu người dùng trả lời khớp nội dung này, rẽ nhánh TRUE (Màu xanh).</p>
+                                    <p className="text-[10px] text-slate-600">Nếu người dùng trả lời khớp nội dung này, rẽ nhánh TRUE (Màu xanh).</p>
                                 </div>
                             )}
 
                             {config.conditionType === 'survey_screen' && (
                                 <div className="p-5 bg-blue-50 border border-blue-200 rounded-2xl space-y-3 mt-4">
-                                    <label className="text-[10px] font-black uppercase text-blue-700 tracking-widest">Màn hình Kết thúc</label>
+                                    <label className="text-[10px] font-bold uppercase text-blue-700 tracking-widest">Màn hình Kết thúc</label>
                                     {surveyData ? (
                                         <div className="relative">
                                             {isLoadingSurvey && <div className="absolute right-3 top-1/2 -translate-y-1/2 p-2"><RefreshCw className="w-4 h-4 animate-spin text-blue-300" /></div>}
                                             <select
-                                                className="w-full h-11 px-4 bg-white border border-blue-100 rounded-xl font-bold text-sm text-blue-900 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all appearance-none"
+                                                className="w-full h-11 px-4 bg-white border border-blue-200 rounded-xl font-bold text-sm text-blue-900 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 outline-none transition-colors appearance-none"
                                                 value={config.endScreenId || 'default'}
                                                 onChange={(e) => onChange({ ...config, endScreenId: e.target.value })}
                                                 disabled={disabled || isLoadingSurvey}
@@ -724,7 +724,7 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                                             disabled={disabled}
                                         />
                                     )}
-                                    <p className="text-[10px] text-blue-600 italic">Kiểm tra xem người dùng có được đưa tới đúng màn hình này khi kết thúc khảo sát không.</p>
+                                    <p className="text-[10px] text-blue-600">Kiểm tra xem người dùng có được đưa tới đúng màn hình này khi kết thúc khảo sát không.</p>
                                 </div>
                             )}
                         </>
@@ -759,8 +759,8 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
 
                     {/* Specific link URL input if clicked_specific and no scanned links */}
                     {config.conditionType === 'clicked_specific' && availableLinks.length === 0 && (
-                        <div className="p-4 bg-indigo-50/50 border border-indigo-200 rounded-2xl space-y-2">
-                            <label className="text-[10px] font-black uppercase text-indigo-800 tracking-wider block">
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                            <label className="text-[10px] font-bold uppercase text-slate-700 tracking-wider block">
                                 Đường dẫn URL cần kiểm tra
                             </label>
                             <Input
@@ -775,21 +775,21 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                     {/* Reminder ID Input */}
                     {['received_reminder', 'opened_reminder'].includes(config.conditionType) && (
                         <div className="p-5 bg-amber-50 border border-amber-200 rounded-2xl space-y-2 mt-4">
-                            <label className="text-[10px] font-black uppercase text-amber-700 tracking-widest">ID Chiến dịch Reminder</label>
+                            <label className="text-[10px] font-bold uppercase text-amber-700 tracking-widest">ID Chiến dịch Reminder</label>
                             <Input
                                 placeholder="Nhập ID Reminder (VD: 1, 2...)"
                                 value={config.reminderId || ''}
                                 onChange={(e) => onChange({ ...config, reminderId: e.target.value })}
                                 disabled={disabled}
                             />
-                            <p className="text-[10px] text-amber-600 italic">ID này nằm trong cài đặt Reminder của Chiến dịch.</p>
+                            <p className="text-[10px] text-amber-700">ID này nằm trong cài đặt Reminder của Chiến dịch.</p>
                         </div>
                     )}
 
                     {(config.conditionType === 'clicked' || config.conditionType === 'clicked_specific' || config.conditionType === 'zns_clicked') && (
                         <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-4 duration-500" ref={linkContainerRef}>
                             <div className="flex items-center justify-between px-1">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Chọn Link cần theo dõi (OR Logic)</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Chọn Link cần theo dõi (OR Logic)</p>
                                 {scanning && <RefreshCw className="w-3 h-3 animate-spin text-slate-400" />}
                             </div>
 
@@ -800,10 +800,10 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                                 </div>
                             ) : availableLinks.length > 0 ? (
                                 <>
-                                    <div className={`p-4 rounded-2xl border-2 transition-all flex items-center justify-between ${selectedLinks.length === 0 ? 'border-indigo-500 bg-indigo-50/50 shadow-sm ring-4 ring-indigo-500/5' : 'border-slate-100 bg-slate-50/30'}`}>
+                                    <div className={`p-4 rounded-2xl border-2 transition-colors flex items-center justify-between ${selectedLinks.length === 0 ? 'border-[#BD1D2D] bg-rose-50/40 shadow-sm ring-4 ring-rose-500/5' : 'border-slate-200 bg-slate-50/30'}`}>
                                         <div className="flex-1">
-                                            <p className="text-xs font-black text-slate-800">Theo dõi BẤT KỲ Link nào (Any)</p>
-                                            <p className="text-[10px] text-slate-400 font-medium leading-tight mt-0.5">Hợp lệ nếu khách click vào bất cứ link nào có trong nội dung.</p>
+                                            <p className="text-xs font-bold text-slate-800">Theo dõi BẤT KỲ Link nào (Any)</p>
+                                            <p className="text-[10px] text-slate-500 font-medium leading-tight mt-0.5">Hợp lệ nếu khách click vào bất cứ link nào có trong nội dung.</p>
                                         </div>
                                         <button
                                             type="button"
@@ -817,10 +817,10 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                                                     onChange({ ...config, linkTargets: [] });
                                                 }
                                             }}
-                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 focus:outline-none ${selectedLinks.length === 0 ? 'bg-indigo-600' : 'bg-slate-300'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${selectedLinks.length === 0 ? 'bg-[#BD1D2D]' : 'bg-slate-300'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                                             disabled={disabled}
                                         >
-                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 shadow-md ${selectedLinks.length === 0 ? 'translate-x-6' : 'translate-x-1'}`} />
+                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 shadow-sm ${selectedLinks.length === 0 ? 'translate-x-6' : 'translate-x-1'}`} />
                                         </button>
                                     </div>
 
@@ -832,17 +832,17 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                                                     key={link.id}
                                                     type="button"
                                                     onClick={() => toggleLink(link.url)}
-                                                    className={`w-full flex items-center justify-between p-3.5 rounded-2xl border transition-all text-left group ${isSelected ? 'border-indigo-200 bg-white shadow-sm' : 'border-slate-100 bg-white hover:border-slate-200'} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                                    className={`w-full flex items-center justify-between p-3.5 rounded-2xl border transition-colors text-left group ${isSelected ? 'border-rose-200 bg-white shadow-xs' : 'border-slate-200 bg-white hover:border-slate-300'} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
                                                     disabled={disabled}
                                                 >
                                                     <div className="flex-1 overflow-hidden pr-2">
                                                         <div className="flex items-center gap-2 mb-0.5">
-                                                            {isSelected ? <CheckSquare className="w-3 h-3 text-indigo-500" /> : <Square className="w-3 h-3 text-slate-300 group-hover:text-slate-400" />}
-                                                            <p className={`text-xs font-black truncate transition-colors ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>{link.label}</p>
+                                                            {isSelected ? <CheckSquare className="w-3 h-3 text-[#BD1D2D]" /> : <Square className="w-3 h-3 text-slate-300 group-hover:text-slate-400" />}
+                                                            <p className={`text-xs font-bold truncate transition-colors ${isSelected ? 'text-slate-900' : 'text-slate-700'}`}>{link.label}</p>
                                                         </div>
-                                                        <p className={`text-[10px] truncate font-mono ml-5 transition-colors ${isSelected ? 'text-indigo-500/70' : 'text-slate-400'}`}>{link.url}</p>
+                                                        <p className={`text-[10px] truncate font-mono ml-5 transition-colors ${isSelected ? 'text-slate-600' : 'text-slate-400'}`}>{link.url}</p>
                                                     </div>
-                                                    <div className={`w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 transition-all ${isSelected ? 'bg-indigo-500 border-indigo-500 text-white scale-110 shadow-lg shadow-indigo-200' : 'border-slate-200 bg-slate-50 opacity-0 group-hover:opacity-100'}`}>
+                                                    <div className={`w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'bg-[#BD1D2D] border-[#BD1D2D] text-white' : 'border-slate-200 bg-slate-50 opacity-0 group-hover:opacity-100'}`}>
                                                         {isSelected && <CheckSquare className="w-3 h-3" />}
                                                     </div>
                                                 </button>
@@ -860,13 +860,13 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
             <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
                 <div className="flex items-center gap-2 mb-2">
                     <Clock className="w-4 h-4 text-slate-500" />
-                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                    <span className="text-[10px] font-bold uppercase text-slate-500 tracking-widest">
                         Chế độ Kiểm tra tức thì vs. Chờ phản hồi (Timeout)
                     </span>
                 </div>
 
                 <div
-                    className="flex items-center justify-between gap-4 p-4 bg-white border border-slate-100 rounded-2xl shadow-sm hover:border-slate-200 transition-all cursor-pointer"
+                    className="flex items-center justify-between gap-4 p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-slate-300 transition-colors cursor-pointer"
                     onClick={() => {
                         if (disabled) return;
                         if (config.waitDuration === 0) {
@@ -893,10 +893,10 @@ const ConditionConfig: React.FC<ConditionConfigProps> = ({ config, onChange, flo
                                 onChange({ ...config, waitDuration: 0, waitUnit: 'hours' });
                             }
                         }}
-                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-all duration-300 focus:outline-none ${config.waitDuration === 0 ? 'bg-[var(--color-primary)]' : 'bg-slate-300'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none ${config.waitDuration === 0 ? 'bg-[var(--color-primary)]' : 'bg-slate-300'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                         disabled={disabled}
                     >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 shadow-md ${config.waitDuration === 0 ? 'translate-x-6' : 'translate-x-1'}`} />
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 shadow-sm ${config.waitDuration === 0 ? 'translate-x-6' : 'translate-x-1'}`} />
                     </button>
                 </div>
 

@@ -804,16 +804,16 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         }}>
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{
                 width: 38, height: 38, borderRadius: '50%',
-                background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
+                background: 'var(--color-primary)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                border: '2px solid rgba(192, 132, 252, 0.8)'
+                border: '2px solid rgba(255, 255, 255, 0.25)'
               }}>
                 <img src="/LOGO.jpg" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} alt="logo" />
               </div>
-              <span style={{ fontSize: '1.25rem', fontWeight: 900, color: 'white', letterSpacing: '-0.02em' }}>IDEAS</span>
+              <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>IDEAS</span>
             </div>
             <button 
               onClick={() => setIsMobileSidebarOpen(false)}
@@ -1014,31 +1014,31 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
-                    gap: '14px', 
+                    gap: '16px', 
                     marginBottom: '1.5rem', 
-                    background: 'linear-gradient(135deg, rgba(189, 29, 45, 0.05) 0%, rgba(244, 63, 94, 0.05) 100%)', 
+                    background: 'rgba(189, 29, 45, 0.05)', 
                     padding: '16px', 
                     borderRadius: '16px', 
-                    border: '1px solid rgba(189, 29, 45, 0.08)' 
+                    border: '1px solid rgba(189, 29, 45, 0.14)' 
                   }}>
                     <div style={{ 
                       width: 48, 
                       height: 48, 
                       borderRadius: '12px', 
-                      background: 'linear-gradient(135deg, #BD1D2D 0%, #ef4444 100%)', 
+                      background: '#BD1D2D', 
                       display: 'flex', 
                       justifyContent: 'center', 
                       alignItems: 'center', 
                       color: '#fff',
-                      boxShadow: '0 8px 20px -6px rgba(189, 29, 45, 0.5)',
-                      fontWeight: 800,
+                      fontWeight: 700,
+                      fontVariantNumeric: 'tabular-nums',
                       fontSize: '1.25rem'
                     }}>
                       {totalPending}
                     </div>
                     <div>
-                      <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--color-text)', margin: 0, letterSpacing: '-0.02em' }}>
-                        {t("Vấn đề cần xử lý!")}
+                      <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+                        {t("Vấn đề cần xử lý")}
                       </h3>
                       <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', margin: '4px 0 0', fontWeight: 500 }}>
                         {t("Bạn đang có các vấn đề tồn đọng cần xử lý:")}
@@ -1064,26 +1064,25 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                           </div>
                           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Ticket báo lỗi data")}</span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span className="badge danger" style={{ borderRadius: '20px', padding: '4px 10px', fontWeight: 700, fontSize: '0.72rem', boxShadow: '0 2px 6px rgba(239, 68, 68, 0.12)' }}>{effTicketsCount} {t('chờ duyệt')}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span className="badge danger" style={{ borderRadius: '6px', padding: '4px 8px', fontWeight: 600, fontVariantNumeric: 'tabular-nums', fontSize: '0.72rem' }}>{effTicketsCount} {t('chờ duyệt')}</span>
                           
                           <div style={{
-                            borderRadius: '20px',
-                            padding: '5px 12px',
-                            fontWeight: 700,
+                            borderRadius: '8px',
+                            padding: '6px 12px',
+                            fontWeight: 600,
                             fontSize: '0.72rem',
                             color: '#fff',
-                            background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
-                            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.25)',
+                            background: '#BD1D2D',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px',
-                            transition: 'all 0.2s',
+                            transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
                             whiteSpace: 'nowrap',
                             flexShrink: 0
                           }}>
                             <span>{t('Duyệt ngay')}</span>
-                            <ChevronRight className="chevron-arrow" size={12} style={{ transition: 'all 0.25s' }} />
+                            <ChevronRight className="chevron-arrow" size={12} />
                           </div>
                         </div>
                       </div>
@@ -1106,26 +1105,25 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                           </div>
                           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Data tạm giữ (AI Lọc)")}</span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span className="badge warning" style={{ borderRadius: '20px', padding: '4px 10px', fontWeight: 700, fontSize: '0.72rem', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', boxShadow: '0 2px 6px rgba(245, 158, 11, 0.12)' }}>{effHeldCount} {t('chờ duyệt')}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span className="badge warning" style={{ borderRadius: '6px', padding: '4px 8px', fontWeight: 600, fontVariantNumeric: 'tabular-nums', fontSize: '0.72rem', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706' }}>{effHeldCount} {t('chờ duyệt')}</span>
                           
                           <div style={{
-                            borderRadius: '20px',
-                            padding: '5px 12px',
-                            fontWeight: 700,
+                            borderRadius: '8px',
+                            padding: '6px 12px',
+                            fontWeight: 600,
                             fontSize: '0.72rem',
                             color: '#fff',
-                            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                            boxShadow: '0 4px 12px rgba(245, 158, 11, 0.25)',
+                            background: '#D97706',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px',
-                            transition: 'all 0.2s',
+                            transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
                             whiteSpace: 'nowrap',
                             flexShrink: 0
                           }}>
                             <span>{t('Duyệt ngay')}</span>
-                            <ChevronRight className="chevron-arrow" size={12} style={{ transition: 'all 0.25s' }} />
+                            <ChevronRight className="chevron-arrow" size={12} />
                           </div>
                         </div>
                       </div>
@@ -1148,26 +1146,25 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                           </div>
                           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Yêu cầu chấm công bổ sung")}</span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span className="badge" style={{ borderRadius: '20px', padding: '4px 10px', fontWeight: 700, fontSize: '0.72rem', background: 'rgba(189, 29, 45, 0.1)', color: 'var(--color-primary)', boxShadow: '0 2px 6px rgba(189, 29, 45, 0.12)' }}>{effCheckInsCount} {t('chờ duyệt')}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span className="badge" style={{ borderRadius: '6px', padding: '4px 8px', fontWeight: 600, fontVariantNumeric: 'tabular-nums', fontSize: '0.72rem', background: 'rgba(189, 29, 45, 0.1)', color: 'var(--color-primary)' }}>{effCheckInsCount} {t('chờ duyệt')}</span>
                           
                           <div style={{
-                            borderRadius: '20px',
-                            padding: '5px 12px',
-                            fontWeight: 700,
+                            borderRadius: '8px',
+                            padding: '6px 12px',
+                            fontWeight: 600,
                             fontSize: '0.72rem',
                             color: '#fff',
-                            background: 'linear-gradient(135deg, #BD1D2D 0%, #a31422 100%)',
-                            boxShadow: '0 4px 12px rgba(189, 29, 45, 0.25)',
+                            background: '#BD1D2D',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px',
-                            transition: 'all 0.2s',
+                            transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
                             whiteSpace: 'nowrap',
                             flexShrink: 0
                           }}>
                             <span>{t('Duyệt ngay')}</span>
-                            <ChevronRight className="chevron-arrow" size={12} style={{ transition: 'all 0.25s' }} />
+                            <ChevronRight className="chevron-arrow" size={12} />
                           </div>
                         </div>
                       </div>
@@ -1190,26 +1187,25 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                           </div>
                           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Phê duyệt ký hợp tác chia hoa hồng")}</span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span className="badge" style={{ borderRadius: '20px', padding: '4px 10px', fontWeight: 700, fontSize: '0.72rem', background: 'rgba(189, 29, 45, 0.1)', color: 'var(--color-primary)', boxShadow: '0 2px 6px rgba(189, 29, 45, 0.12)' }}>{effCoopsCount} {t('chờ duyệt')}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span className="badge" style={{ borderRadius: '6px', padding: '4px 8px', fontWeight: 600, fontVariantNumeric: 'tabular-nums', fontSize: '0.72rem', background: 'rgba(189, 29, 45, 0.1)', color: 'var(--color-primary)' }}>{effCoopsCount} {t('chờ duyệt')}</span>
                           
                           <div style={{
-                            borderRadius: '20px',
-                            padding: '5px 12px',
-                            fontWeight: 700,
+                            borderRadius: '8px',
+                            padding: '6px 12px',
+                            fontWeight: 600,
                             fontSize: '0.72rem',
                             color: '#fff',
-                            background: 'linear-gradient(135deg, #BD1D2D 0%, #a31422 100%)',
-                            boxShadow: '0 4px 12px rgba(189, 29, 45, 0.25)',
+                            background: '#BD1D2D',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px',
-                            transition: 'all 0.2s',
+                            transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
                             whiteSpace: 'nowrap',
                             flexShrink: 0
                           }}>
                             <span>{t('Duyệt ngay')}</span>
-                            <ChevronRight className="chevron-arrow" size={12} style={{ transition: 'all 0.25s' }} />
+                            <ChevronRight className="chevron-arrow" size={12} />
                           </div>
                         </div>
                       </div>
@@ -1232,26 +1228,25 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                           </div>
                           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Ticket yêu cầu hỗ trợ (IT/CS)")}</span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span className="badge" style={{ borderRadius: '20px', padding: '4px 10px', fontWeight: 700, fontSize: '0.72rem', background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', boxShadow: '0 2px 6px rgba(37, 99, 235, 0.12)' }}>{supportTicketsCount} {t('chờ xử lý')}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span className="badge" style={{ borderRadius: '6px', padding: '4px 8px', fontWeight: 600, fontVariantNumeric: 'tabular-nums', fontSize: '0.72rem', background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb' }}>{supportTicketsCount} {t('chờ xử lý')}</span>
                           
                           <div style={{
-                            borderRadius: '20px',
-                            padding: '5px 12px',
-                            fontWeight: 700,
+                            borderRadius: '8px',
+                            padding: '6px 12px',
+                            fontWeight: 600,
                             fontSize: '0.72rem',
                             color: '#fff',
-                            background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-                            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
+                            background: '#2563EB',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px',
-                            transition: 'all 0.2s',
+                            transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
                             whiteSpace: 'nowrap',
                             flexShrink: 0
                           }}>
                             <span>{t('Xử lý ngay')}</span>
-                            <ChevronRight className="chevron-arrow" size={12} style={{ transition: 'all 0.25s' }} />
+                            <ChevronRight className="chevron-arrow" size={12} />
                           </div>
                         </div>
                       </div>
@@ -1281,26 +1276,25 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                           </div>
                           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Quy trình & Đề xuất cần duyệt")}</span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span className="badge success" style={{ borderRadius: '20px', padding: '4px 10px', fontWeight: 700, fontSize: '0.72rem', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', boxShadow: '0 2px 6px rgba(16, 185, 129, 0.12)' }}>{pendingExpensesCount} {t('chờ duyệt')}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span className="badge success" style={{ borderRadius: '6px', padding: '4px 8px', fontWeight: 600, fontVariantNumeric: 'tabular-nums', fontSize: '0.72rem', background: 'rgba(16, 185, 129, 0.1)', color: '#059669' }}>{pendingExpensesCount} {t('chờ duyệt')}</span>
                           
                           <div style={{
-                            borderRadius: '20px',
-                            padding: '5px 12px',
-                            fontWeight: 700,
+                            borderRadius: '8px',
+                            padding: '6px 12px',
+                            fontWeight: 600,
                             fontSize: '0.72rem',
                             color: '#fff',
-                            background: 'linear-gradient(135deg, #10b981 0%, #047857 100%)',
-                            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
+                            background: '#059669',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px',
-                            transition: 'all 0.2s',
+                            transition: 'background-color 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
                             whiteSpace: 'nowrap',
                             flexShrink: 0
                           }}>
                             <span>{t('Duyệt ngay')}</span>
-                            <ChevronRight className="chevron-arrow" size={12} style={{ transition: 'all 0.25s' }} />
+                            <ChevronRight className="chevron-arrow" size={12} />
                           </div>
                         </div>
                       </div>
@@ -1314,29 +1308,28 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
-                    gap: '14px', 
+                    gap: '16px', 
                     marginBottom: '1.5rem', 
-                    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(52, 211, 153, 0.05) 100%)', 
+                    background: 'rgba(16, 185, 129, 0.06)', 
                     padding: '16px', 
                     borderRadius: '16px', 
-                    border: '1px solid rgba(16, 185, 129, 0.08)' 
+                    border: '1px solid rgba(16, 185, 129, 0.16)' 
                   }}>
                     <div style={{ 
                       width: 48, 
                       height: 48, 
                       borderRadius: '12px', 
-                      background: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)', 
+                      background: '#059669', 
                       display: 'flex', 
                       justifyContent: 'center', 
                       alignItems: 'center', 
-                      color: '#fff',
-                      boxShadow: '0 8px 20px -6px rgba(16, 185, 129, 0.5)'
+                      color: '#fff'
                     }}>
-                      <CheckCircle2 size={24} />
+                      <CheckCircle2 size={24} strokeWidth={1.75} />
                     </div>
                     <div>
-                      <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--color-text)', margin: 0, letterSpacing: '-0.02em' }}>
-                        {t("Tuyệt vời! Không có tồn đọng")}
+                      <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+                        {t("Không có hồ sơ tồn đọng")}
                       </h3>
                       <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', margin: '4px 0 0', fontWeight: 500 }}>
                         {t("Hiện tại hệ thống không ghi nhận công việc nào cần phê duyệt.")}
@@ -1356,12 +1349,12 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                     textAlign: 'center',
                     marginBottom: '1.5rem'
                   }}>
-                    <CheckCircle2 size={48} style={{ color: '#10b981', marginBottom: '1rem' }} />
+                    <CheckCircle2 size={48} style={{ color: '#10b981', marginBottom: '1rem' }} strokeWidth={1.5} />
                     <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>
                       {t("Mọi thứ đã được xử lý hoàn tất")}
                     </span>
-                    <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginTop: '6px', maxWidth: '380px', lineHeight: 1.5 }}>
-                      {t("Không còn yêu cầu chờ duyệt nào. Chúc bạn một ngày làm việc hiệu quả và tràn đầy năng lượng!")}
+                    <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginTop: '8px', maxWidth: '380px', lineHeight: 1.5 }}>
+                      {t("Không còn yêu cầu chờ duyệt nào trong danh sách.")}
                     </p>
                   </div>
                 </>
@@ -1369,7 +1362,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             }
           })()}
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <button 
                 type="button"
@@ -1384,13 +1377,13 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                 className="btn outline sm"
                 style={{ 
                   borderRadius: '8px', 
-                  padding: '7px 13px', 
+                  padding: '8px 12px', 
                   fontWeight: 600, 
                   height: 36, 
                   fontSize: '0.8rem',
                   display: 'inline-flex', 
                   alignItems: 'center', 
-                  gap: '6px',
+                  gap: '8px',
                   color: 'var(--color-text-muted)',
                   borderColor: 'var(--color-border)'
                 }}
@@ -1414,13 +1407,13 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                 className="btn outline sm"
                 style={{ 
                   borderRadius: '8px', 
-                  padding: '7px 13px', 
+                  padding: '8px 12px', 
                   fontWeight: 600, 
                   height: 36, 
                   fontSize: '0.8rem',
                   display: 'inline-flex', 
                   alignItems: 'center', 
-                  gap: '6px',
+                  gap: '8px',
                   color: 'var(--color-text-muted)',
                   borderColor: 'var(--color-border)'
                 }}
@@ -1461,22 +1454,22 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             marginBottom: '1rem',
             color: 'var(--color-success)'
           }}>
-            <Scale size={28} />
+            <Scale size={28} strokeWidth={1.75} />
           </div>
           
           <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '0.5rem' }}>
-            {t("Bạn có hợp đồng chờ ký!")}
+            {t("Bạn có hợp đồng chờ ký")}
           </h3>
           
           <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', lineHeight: '1.5', marginBottom: '1.5rem' }}>
-            {t("Hệ thống ghi nhận bạn đang có")} <strong style={{ color: 'var(--color-success)', fontSize: '1.05rem', fontWeight: 'bold' }}>{salesPendingSignCount}</strong> {t("phiếu hợp tác phân chia hoa hồng dự án đang chờ bạn ký xác nhận.")}
+            {t("Hệ thống ghi nhận bạn đang có")} <strong style={{ color: 'var(--color-success)', fontSize: '1.05rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{salesPendingSignCount}</strong> {t("phiếu hợp tác phân chia hoa hồng dự án đang chờ bạn ký xác nhận.")}
           </p>
 
-          <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
+          <div style={{ display: 'flex', gap: '12px', width: '100%' }}>
             <button 
               onClick={() => setIsSalesSignModalOpen(false)}
               className="btn outline"
-              style={{ flex: 1, borderRadius: '9999px', height: 42, fontWeight: 600 }}
+              style={{ flex: 1, borderRadius: '8px', height: 40, fontWeight: 600 }}
             >
               {t("Để sau")}
             </button>
@@ -1488,13 +1481,12 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
               className="btn primary"
               style={{ 
                 flex: 1, 
-                borderRadius: '9999px', 
-                height: 42, 
+                borderRadius: '8px', 
+                height: 40, 
                 fontWeight: 600,
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                borderColor: '#10b981',
-                color: 'white',
-                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)'
+                background: '#059669',
+                borderColor: '#059669',
+                color: 'white'
               }}
             >
               {t("Ký ngay")}

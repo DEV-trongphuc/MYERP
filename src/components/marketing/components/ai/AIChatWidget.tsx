@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
     MessageCircle, X, Send, User,
     Bot, Maximize2, Minimize2,
-    Sparkles, ShieldCheck, HeartHandshake,
+    Sparkles, ShieldCheck,
     FileText, ArrowRight
 } from 'lucide-react';
 import { api } from '../../services/storageAdapter';
@@ -87,15 +87,15 @@ const renderContent = (content: string, role: 'user' | 'assistant', onActionClic
                         rel="noopener noreferrer"
                         className="block group mt-2 mb-2 no-underline"
                     >
-                        <div className="overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-sm transition-all group-hover:border-orange-400 group-hover:shadow-lg">
+                        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs transition-colors group-hover:border-[#BD1D2D]/40">
                             <div className="relative aspect-video w-full overflow-hidden bg-slate-100">
                                 <img
                                     src={thumb}
                                     alt="YouTube Preview"
-                                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                    className="h-full w-full object-cover"
                                 />
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-colors">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-600 text-white shadow-xl transition-transform group-hover:scale-110">
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/15 transition-colors">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#BD1D2D] text-white shadow-md">
                                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
                                     </div>
                                 </div>
@@ -117,12 +117,12 @@ const renderContent = (content: string, role: 'user' | 'assistant', onActionClic
                             href={url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="block overflow-hidden rounded-[14px] border border-slate-100 shadow-sm transition-all hover:scale-[1.01] hover:shadow-xl hover:shadow-[var(--color-primary)]/5 group/img"
+                            className="block overflow-hidden rounded-xl border border-slate-200 shadow-xs transition-colors hover:border-slate-300 group/img"
                         >
                             <img
                                 src={url}
                                 alt={label || "Shared image"}
-                                className="w-full h-auto max-h-[400px] object-contain bg-black/5 transition-transform duration-500 group-hover/img:scale-[1.02]"
+                                className="w-full h-auto max-h-[400px] object-contain bg-black/5"
                                 onError={(e) => {
                                     (e.target as HTMLImageElement).style.display = 'none';
                                 }}
@@ -143,7 +143,7 @@ const renderContent = (content: string, role: 'user' | 'assistant', onActionClic
                         rel="noopener noreferrer"
                         className="block group mt-2 mb-2 no-underline"
                     >
-                        <div className="flex items-center gap-3 p-3 bg-slate-50 border-2 border-slate-200 rounded-xl transition-all group-hover:border-[#2563eb] group-hover:bg-white group-hover:shadow-lg group-hover:shadow-[var(--color-primary)]/10">
+                        <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl transition-colors group-hover:border-[#BD1D2D]/40 group-hover:bg-white">
                             <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${ext === 'pdf' ? 'bg-rose-100 text-rose-500' :
                                 ext.includes('doc') ? 'bg-blue-100 text-blue-500' :
                                     ext.includes('xls') ? 'bg-emerald-100 text-emerald-500' :
@@ -152,10 +152,10 @@ const renderContent = (content: string, role: 'user' | 'assistant', onActionClic
                                 <FileText className="w-5 h-5" />
                             </div>
                             <div className="flex-1 min-w-0">
-                                <h5 className="text-[13px] font-bold text-slate-700 truncate group-hover:text-[#2563eb] transition-colors">{fileName}</h5>
+                                <h5 className="text-[13px] font-bold text-slate-700 truncate group-hover:text-[#BD1D2D] transition-colors">{fileName}</h5>
                                 <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">{ext.toUpperCase()} FILE • Bấm để tải</p>
                             </div>
-                            <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center group-hover:bg-[#2563eb] group-hover:text-white transition-all">
+                            <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center group-hover:bg-[#BD1D2D] group-hover:text-white transition-colors">
                                 <Maximize2 className="w-4 h-4 rotate-45" />
                             </div>
                         </div>
@@ -172,7 +172,7 @@ const renderContent = (content: string, role: 'user' | 'assistant', onActionClic
                         rel={url.startsWith('http') ? "noopener noreferrer" : undefined}
                         className={isCitation
                             ? "mf-citation"
-                            : `font-medium transition-all duration-200 decoration-1 underline-offset-4 hover:underline ${role === 'user' ? 'text-blue-200 hover:text-white' : 'text-[var(--color-primary)] hover:text-[#9A1523]'}`
+                            : `font-medium transition-colors duration-200 decoration-1 underline-offset-4 hover:underline ${role === 'user' ? 'text-blue-200 hover:text-white' : 'text-[var(--color-primary)] hover:text-[#9A1523]'}`
                         }
                     >
                         {label || url}
@@ -268,9 +268,9 @@ const renderContent = (content: string, role: 'user' | 'assistant', onActionClic
                     <button
                         key={`action-${i}`}
                         onClick={() => onActionClick(action)}
-                        className="px-4 py-2 bg-slate-50 hover:bg-orange-50 text-slate-700 hover:text-[#9A1523] border border-slate-200 hover:border-orange-200 rounded-xl text-[13px] font-bold transition-all active:scale-[0.98] shadow-sm flex items-center gap-2 mf-ignore-tracking"
+                        className="px-4 py-2 bg-slate-50 hover:bg-rose-50 text-slate-700 hover:text-[#9A1523] border border-slate-200 hover:border-rose-200 rounded-xl text-[13px] font-semibold transition-colors shadow-xs flex items-center gap-2 mf-ignore-tracking"
                     >
-                        <Sparkles className="w-3.5 h-3.5 text-orange-400 mf-ignore-tracking" />
+                        <Sparkles className="w-3.5 h-3.5 text-[#BD1D2D] mf-ignore-tracking" strokeWidth={1.75} />
                         {action}
                     </button>
                 ))}
@@ -593,14 +593,14 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-3 flex items-center justify-between w-full p-3 bg-slate-50 hover:bg-[#2563eb] group/btn border border-slate-200 hover:border-[#2563eb] rounded-xl transition-all cursor-pointer no-underline"
+                className="mt-3 flex items-center justify-between w-full p-3 bg-slate-50 hover:bg-[#0F172A] group/btn border border-slate-200 hover:border-[#0F172A] rounded-xl transition-colors cursor-pointer no-underline"
             >
                 <div className="flex flex-col min-w-0">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover/btn:text-white/80 transition-colors">Đường dẫn đề xuất</span>
                     <span className="text-xs font-bold text-slate-700 truncate group-hover/btn:text-white transition-colors">Truy cập liên kết</span>
                 </div>
-                <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm group-hover/btn:scale-110 transition-transform">
-                    <ArrowRight className="w-4 h-4 text-[#2563eb]" />
+                <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0 shadow-xs">
+                    <ArrowRight className="w-4 h-4 text-[#0F172A]" />
                 </div>
             </a>
         );
@@ -611,35 +611,34 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
         return (
             <button
                 onClick={() => setIsOpen(true)}
-                className={`fixed ${positionClass} w-16 h-16 bg-gradient-to-br from-[#2563eb] to-[#e08900] text-white rounded-[14px] shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-[200] group mf-ignore-tracking`}
-                style={config?.brand_color ? { background: `linear-gradient(135deg, ${config.brand_color}, ${config.brand_color}dd)` } : {}}
+                className={`fixed ${positionClass} w-14 h-14 bg-[#BD1D2D] hover:bg-[#9A1523] text-white rounded-2xl shadow-xl flex items-center justify-center transition-colors z-[200] group mf-ignore-tracking`}
+                style={config?.brand_color ? { backgroundColor: config.brand_color } : {}}
             >
-                <div className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 border-4 border-white rounded-full animate-bounce mf-ignore-tracking"></div>
-                <MessageCircle className="w-8 h-8 group-hover:rotate-12 transition-transform mf-ignore-tracking" />
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full mf-ignore-tracking"></div>
+                <MessageCircle className="w-6 h-6 mf-ignore-tracking" strokeWidth={1.75} />
             </button>
         );
     }
 
     return (
         <div id="mf-chat-widget" className={`
-            fixed ${positionClass} bg-white/95 !backdrop-blur-xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] rounded-[2.5rem] border border-white/20 flex flex-col overflow-hidden z-[200] transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]
+            fixed ${positionClass} bg-white/95 !backdrop-blur-xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] rounded-2xl border border-slate-200 flex flex-col overflow-hidden z-[200] transition-[width,height,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]
             chat-widget-animate mf-ignore-tracking
             ${isMaximized ? 'w-[450px] h-[750px] max-h-[calc(100vh-80px)] max-w-[calc(100vw-32px)]' : 'w-[400px] h-[650px] max-h-[calc(100vh-80px)] max-w-[calc(100vw-32px)]'}
-        `} style={{ fontFamily: '"Inter", sans-serif', '--brand-primary': config?.brand_color || '#2563eb' } as React.CSSProperties}>
+        `} style={{ fontFamily: '"Inter", sans-serif', '--brand-primary': config?.brand_color || '#BD1D2D' } as React.CSSProperties}>
 
             <style dangerouslySetInnerHTML={{
                 __html: `
                 @keyframes widget-entrance {
-                    0% { transform: scale(0.7) translateY(100px); opacity: 0; transform-origin: bottom right; }
-                    60% { transform: scale(1.03) translateY(-10px); opacity: 1; }
-                    100% { transform: scale(1) translateY(0); }
-                }
-                @keyframes message-pop {
-                    0% { transform: scale(0.8) translateY(10px); opacity: 0; }
+                    0% { transform: scale(0.95) translateY(20px); opacity: 0; transform-origin: bottom right; }
                     100% { transform: scale(1) translateY(0); opacity: 1; }
                 }
-                .chat-widget-animate { animation: widget-entrance 0.5s cubic-bezier(0.23, 1, 0.32, 1) forwards; }
-                .message-animate { animation: message-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+                @keyframes message-pop {
+                    0% { transform: translateY(8px); opacity: 0; }
+                    100% { transform: translateY(0); opacity: 1; }
+                }
+                .chat-widget-animate { animation: widget-entrance 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+                .message-animate { animation: message-pop 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
                 
                 .chat-scroll::-webkit-scrollbar { width: 5px; }
                 .chat-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -655,41 +654,29 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
                         left: 50% !important;
                         top: 50% !important;
                         transform: translate(-50%, -50%) !important;
-                        border-radius: 2rem !important;
+                        border-radius: 1.5rem !important;
                     }
                 }
             `}} />
 
             {/* Header */}
             <div
-                className="relative px-7 py-6 flex items-center justify-between overflow-hidden"
-                style={config?.brand_color ? { background: `linear-gradient(135deg, ${config.brand_color}, ${config.brand_color}dd)` } : { background: 'linear-gradient(135deg, #0f172a, #1e293b)' }}
+                className="relative px-6 py-5 flex items-center justify-between overflow-hidden"
+                style={{ backgroundColor: config?.brand_color || '#0F172A' }}
             >
-                {/* Background Pattern */}
-                <div className="absolute inset-0 opacity-10 pointer-events-none">
-                    <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-                        <defs>
-                            <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                                <path d="M 20 0 L 0 0 0 20" fill="none" stroke="white" strokeWidth="0.5" />
-                            </pattern>
-                        </defs>
-                        <rect width="100%" height="100%" fill="url(#grid)" />
-                    </svg>
-                </div>
-
-                <div className="flex items-center gap-4 relative z-10">
+                <div className="flex items-center gap-3.5 relative z-10">
                     <div className="relative">
-                        <div className="w-12 h-12 bg-white/15 backdrop-blur-md rounded-[14px] flex items-center justify-center shadow-xl border border-white/20 overflow-hidden transition-transform hover:scale-105">
+                        <div className="w-11 h-11 bg-white/15 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/20 overflow-hidden">
                             {config?.bot_avatar ? (
                                 <img src={config.bot_avatar} className="w-full h-full object-cover" alt="avatar" />
                             ) : (
-                                <Bot className="w-7 h-7 text-white" />
+                                <Bot className="w-6 h-6 text-white" strokeWidth={1.75} />
                             )}
                         </div>
-                        <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-500 border-[3px] border-white rounded-full"></div>
+                        <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full"></div>
                     </div>
                     <div>
-                        <h3 className="text-white font-bold text-base flex items-center gap-1.5 tracking-tight">
+                        <h3 className="text-white font-bold text-base flex items-center gap-1.5">
                             {config?.bot_name || 'AI Consultant'}
                             <ShieldCheck className="w-4 h-4 text-emerald-300" />
                         </h3>
@@ -698,16 +685,16 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
                         </div>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 relative z-10">
+                <div className="flex items-center gap-1.5 relative z-10">
                     <button
                         onClick={() => setIsMaximized(!isMaximized)}
-                        className="p-2.5 text-white/60 hover:text-white hover:bg-white/15 rounded-xl transition-all active:scale-90"
+                        className="p-2 text-white/70 hover:text-white hover:bg-white/15 rounded-xl transition-colors"
                     >
-                        {isMaximized ? <Minimize2 className="w-4.5 h-4.5" /> : <Maximize2 className="w-4.5 h-4.5" />}
+                        {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                     </button>
                     <button
                         onClick={handleClose}
-                        className="p-2.5 text-white/60 hover:text-white hover:bg-white/15 rounded-xl transition-all active:scale-90"
+                        className="p-2 text-white/70 hover:text-white hover:bg-white/15 rounded-xl transition-colors"
                     >
                         <X className="w-5 h-5" />
                     </button>
@@ -715,41 +702,41 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto chat-scroll p-6 bg-slate-50/40 space-y-7">
+            <div className="flex-1 overflow-y-auto chat-scroll p-6 bg-slate-50/40 space-y-6">
                 {messages.map((msg) => (
                     <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} message-animate`}>
-                        <div className={`flex gap-3.5 max-w-[88%] min-w-0 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm transition-transform hover:scale-110 ${msg.role === 'user' ? 'bg-slate-200 text-slate-600' : 'bg-white text-[var(--color-primary)] border border-slate-100'}`}>
+                        <div className={`flex gap-3 max-w-[88%] min-w-0 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${msg.role === 'user' ? 'bg-slate-200 text-slate-600' : 'bg-white text-[var(--color-primary)] border border-slate-200'}`}>
                                 {msg.role === 'user' ? <User className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
                             </div>
                             <div className={`flex flex-col gap-1.5 min-w-0 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                                 <div
-                                    className={`px-5 py-3.5 rounded-[1.5rem] text-[14px] leading-[1.6] break-words shadow-sm ${msg.role === 'user'
-                                        ? 'bg-slate-900 text-white rounded-tr-none shadow-lg shadow-slate-900/10'
-                                        : 'bg-white border border-slate-100/80 text-slate-700 rounded-tl-none'
+                                    className={`px-4 py-3 rounded-2xl text-[14px] leading-[1.6] break-words shadow-xs ${msg.role === 'user'
+                                        ? 'bg-slate-900 text-white rounded-tr-none'
+                                        : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'
                                         }`}
                                 >
                                     {renderContent(msg.content.replace('[SHOW_LEAD_FORM]', ''), msg.role as 'user' | 'assistant', handleSendMessage)}
                                 </div>
 
                                 {msg.role === 'assistant' && msg.content.includes('[SHOW_LEAD_FORM]') && (
-                                    <div className="mt-2 w-full p-5 bg-white border border-orange-100/50 rounded-[14px] shadow-xl shadow-[var(--color-primary)]/5 border-l-[6px] border-l-orange-400 animate-in zoom-in-95 duration-500">
-                                        <h4 className="text-[13px] font-bold text-slate-800 mb-4 flex items-center gap-2.5">
-                                            <Sparkles className="w-4 h-4 text-orange-400" />
+                                    <div className="mt-2 w-full p-5 bg-white border border-slate-200 rounded-xl shadow-sm border-l-4 border-l-[#BD1D2D]">
+                                        <h4 className="text-[13px] font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                            <Sparkles className="w-4 h-4 text-[#BD1D2D]" strokeWidth={1.75} />
                                             Thông tin hỗ trợ tư vấn
                                         </h4>
-                                        <div className="space-y-3.5">
+                                        <div className="space-y-3">
                                             <input
                                                 type="email"
                                                 id={`email-${msg.id}`}
                                                 placeholder="Email của mình..."
-                                                className="w-full px-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-[var(--color-primary)]/10 focus:border-[var(--color-primary)] transition-all bg-slate-50/50"
+                                                className="w-full px-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/10 focus:border-[var(--color-primary)] transition-colors bg-slate-50/50"
                                             />
                                             <input
                                                 type="tel"
                                                 id={`phone-${msg.id}`}
                                                 placeholder="Số điện thoại..."
-                                                className="w-full px-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-[var(--color-primary)]/10 focus:border-[var(--color-primary)] transition-all bg-slate-50/50 mf-ignore-tracking"
+                                                className="w-full px-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/10 focus:border-[var(--color-primary)] transition-colors bg-slate-50/50 mf-ignore-tracking"
                                             />
                                             <button
                                                 onClick={() => {
@@ -763,10 +750,10 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
                                                         (window as any)._mfIdentify(email || null, phone || null);
                                                     }
 
-                                                    const formContainer = (document.getElementById(`email-${msg.id}`)?.closest('.animate-in'));
-                                                    if (formContainer) formContainer.innerHTML = '<div class="py-2 text-[13px] text-emerald-600 font-bold flex items-center gap-2 mf-ignore-tracking"><div class="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center mf-ignore-tracking"><svg class="w-4 h-4 mf-ignore-tracking" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div> đã gửi thông tin thành công!</div>';
+                                                    const formContainer = (document.getElementById(`email-${msg.id}`)?.closest('.border-l-4'));
+                                                    if (formContainer) formContainer.innerHTML = '<div class="py-2 text-[13px] text-emerald-600 font-semibold flex items-center gap-2 mf-ignore-tracking"><div class="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center mf-ignore-tracking"><svg class="w-4 h-4 mf-ignore-tracking" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div> Đã gửi thông tin thành công</div>';
                                                 }}
-                                                className="w-full py-3.5 bg-[var(--color-primary)] hover:bg-[#9A1523] active:scale-[0.97] text-white text-[13px] font-bold rounded-xl transition-all shadow-lg shadow-[var(--color-primary)]/25 flex items-center justify-center gap-2.5 mf-ignore-tracking"
+                                                className="w-full py-3 bg-[var(--color-primary)] hover:bg-[#9A1523] text-white text-[13px] font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 mf-ignore-tracking"
                                             >
                                                 Gửi thông tin tư vấn
                                                 <ArrowRight className="w-4 h-4 mf-ignore-tracking" />
@@ -777,7 +764,7 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
 
                                 {navLink(msg)}
 
-                                <span className="text-[10px] text-slate-400 mt-1.5 px-2 font-medium tracking-wide">
+                                <span className="text-[10px] text-slate-400 mt-1 px-2 font-medium tracking-wide tabular-nums">
                                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </span>
                             </div>
@@ -786,14 +773,14 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
                 ))}
                 {loading && (
                     <div className="flex justify-start">
-                        <div className="flex gap-3.5 max-w-[85%]">
-                            <div className={`w-9 h-9 rounded-xl bg-white border border-slate-100 shadow-sm flex items-center justify-center shrink-0`} style={config?.brand_color ? { color: config.brand_color } : { color: '#94a3b8' }}>
+                        <div className="flex gap-3 max-w-[85%]">
+                            <div className={`w-9 h-9 rounded-xl bg-white border border-slate-200 shadow-xs flex items-center justify-center shrink-0`} style={config?.brand_color ? { color: config.brand_color } : { color: '#94a3b8' }}>
                                 <Bot className="w-5 h-5" />
                             </div>
-                            <div className="bg-white border border-slate-100/80 px-5 py-3.5 rounded-[1.5rem] rounded-tl-none flex gap-2 items-center h-12 shadow-sm">
-                                <span className="w-2 h-2 rounded-full animate-bounce [animation-delay:-0.3s]" style={{ backgroundColor: config?.brand_color || '#cbd5e1' }}></span>
-                                <span className="w-2 h-2 rounded-full animate-bounce [animation-delay:-0.15s]" style={{ backgroundColor: config?.brand_color || '#cbd5e1' }}></span>
-                                <span className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: config?.brand_color || '#cbd5e1' }}></span>
+                            <div className="bg-white border border-slate-200 px-5 py-3.5 rounded-2xl rounded-tl-none flex gap-2 items-center h-12 shadow-xs">
+                                <span className="w-2 h-2 rounded-full animate-pulse [animation-delay:-0.3s]" style={{ backgroundColor: config?.brand_color || '#94a3b8' }}></span>
+                                <span className="w-2 h-2 rounded-full animate-pulse [animation-delay:-0.15s]" style={{ backgroundColor: config?.brand_color || '#94a3b8' }}></span>
+                                <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: config?.brand_color || '#94a3b8' }}></span>
                             </div>
                         </div>
                     </div>
@@ -803,7 +790,7 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
 
             {/* Fast Actions */}
             {quickActions.length > 0 && (
-                <div className="px-6 py-3 overflow-x-auto whitespace-nowrap hide-scrollbar flex gap-2.5 bg-white border-t border-slate-50">
+                <div className="px-6 py-3 overflow-x-auto whitespace-nowrap hide-scrollbar flex gap-2 bg-white border-t border-slate-100">
                     <style dangerouslySetInnerHTML={{ __html: '.hide-scrollbar::-webkit-scrollbar { display: none; } .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }' }} />
                     {quickActions.map((qa, idx) => (
                         <button
@@ -812,17 +799,17 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
                                 setQuickActions([]);
                                 handleSendMessage(qa);
                             }}
-                            className="px-4 py-2 bg-slate-50 hover:bg-orange-50 border border-slate-100 hover:border-orange-200 hover:text-[#9A1523] rounded-full text-[12px] font-bold text-slate-600 transition-all flex items-center gap-2 shadow-sm active:scale-95 message-animate mf-ignore-tracking"
-                            style={{ animationDelay: `${idx * 0.1}s` }}
+                            className="px-4 py-2 bg-slate-50 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 hover:text-[#9A1523] rounded-full text-[12px] font-semibold text-slate-600 transition-colors flex items-center gap-2 message-animate mf-ignore-tracking"
+                            style={{ animationDelay: `${idx * 0.05}s` }}
                         >
-                            <Sparkles className="w-3.5 h-3.5 text-orange-400 mf-ignore-tracking" /> {qa}
+                            <Sparkles className="w-3.5 h-3.5 text-[#BD1D2D] mf-ignore-tracking" strokeWidth={1.75} /> {qa}
                         </button>
                     ))}
                 </div>
             )}
 
             {/* Input */}
-            <div className="p-6 pt-2 bg-white border-t border-slate-50">
+            <div className="p-5 pt-2 bg-white border-t border-slate-100">
                 <div className="relative flex items-center">
                     <input
                         type="text"
@@ -835,18 +822,18 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
                         }}
                         disabled={cooldown > 0}
                         placeholder={cooldown > 0 ? `Vui lòng đợi ${cooldown}s...` : "Nhập câu hỏi của mình..."}
-                        className="w-full pl-6 pr-16 py-4 bg-slate-50 border border-slate-100 rounded-[14px] text-[14px] focus:bg-white focus:ring-4 focus:ring-[var(--color-primary)]/5 focus:border-[var(--color-primary)] outline-none transition-all placeholder:text-slate-400 disabled:opacity-70 disabled:cursor-not-allowed mf-ignore-tracking"
+                        className="w-full pl-5 pr-16 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-[14px] focus:bg-white focus:ring-2 focus:ring-[var(--color-primary)]/10 focus:border-[var(--color-primary)] outline-none transition-colors placeholder:text-slate-400 disabled:opacity-70 disabled:cursor-not-allowed mf-ignore-tracking"
                     />
                     <button
                         onClick={() => handleSendMessage()}
                         disabled={!input.trim() || cooldown > 0}
-                        className="absolute right-2 w-11 h-11 bg-[var(--color-primary)] text-white rounded-xl flex items-center justify-center shadow-lg shadow-[var(--color-primary)]/20 hover:scale-[1.03] active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all mf-ignore-tracking"
-                        style={config?.brand_color ? { background: config.brand_color } : {}}
+                        className="absolute right-2 w-10 h-10 bg-[var(--color-primary)] text-white rounded-xl flex items-center justify-center hover:brightness-95 disabled:opacity-50 transition-colors mf-ignore-tracking"
+                        style={config?.brand_color ? { backgroundColor: config.brand_color } : {}}
                     >
                         {cooldown > 0 ? (
-                            <span className="text-[10px] font-extrabold">{cooldown}s</span>
+                            <span className="text-[10px] font-bold tabular-nums">{cooldown}s</span>
                         ) : (
-                            <Send className="w-5 h-5 fill-current mf-ignore-tracking" />
+                            <Send className="w-4 h-4 fill-current mf-ignore-tracking" />
                         )}
                     </button>
                 </div>

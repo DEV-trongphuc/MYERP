@@ -83,7 +83,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
                         <div className="w-full rounded-[14px] bg-rose-50/70 border border-rose-200/80 p-2.5 relative group flex items-center justify-between shadow-xs">
                             <div className="flex items-center gap-2.5 min-w-0">
                                 <div className="w-7 h-7 rounded-xl bg-[#BD1D2D]/10 border border-rose-200 flex items-center justify-center shrink-0">
-                                    <Sparkles className="w-3.5 h-3.5 text-[#BD1D2D] animate-pulse" />
+                                    <Sparkles className="w-3.5 h-3.5 text-[#BD1D2D]" strokeWidth={1.75} />
                                 </div>
                                 <div className="min-w-0">
                                     <div className="text-[11px] font-bold text-slate-900 truncate flex items-center gap-1.5">

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Check, UploadCloud, RotateCcw, Image as ImageIcon, LayoutGrid, Sparkles, Layers, Sliders, Loader2 } from 'lucide-react';
+import { X, Check, UploadCloud, RotateCcw, Image as ImageIcon, LayoutGrid, Sliders, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
 import { compressToWebP } from '../../utils/imageCompress';
@@ -445,17 +445,16 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
               width: '38px',
               height: '38px',
               borderRadius: '10px',
-              background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
+              background: '#BD1D2D',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#fff',
-              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)'
+              color: '#fff'
             }}>
-              <Sliders size={20} />
+              <Sliders size={18} strokeWidth={1.75} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--color-text)' }}>
+              <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-text)' }}>
                 Tùy biến Bàn làm việc
               </h2>
               <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
@@ -619,10 +618,10 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
                 <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }} className="custom-scrollbar-hidden">
                   {[
                     { id: 'all', label: `Tất cả (${PRESET_WALLPAPERS.length})` },
-                    { id: 'Văn phòng', label: '💼 Văn phòng' },
-                    { id: 'Thiên nhiên', label: '🏔️ Thiên nhiên' },
-                    { id: 'Trừu tượng', label: '✨ Trừu tượng' },
-                    { id: 'Tối giản', label: '🪴 Tối giản' }
+                    { id: 'Văn phòng', label: 'Văn phòng' },
+                    { id: 'Thiên nhiên', label: 'Thiên nhiên' },
+                    { id: 'Trừu tượng', label: 'Trừu tượng' },
+                    { id: 'Tối giản', label: 'Tối giản' }
                   ].map(cat => {
                     const isActive = wallpaperTag === cat.id;
                     return (
@@ -903,7 +902,6 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
             type="button"
             onClick={handleReset}
             disabled={isUploading}
-            className="hover-lift"
             style={{
               background: 'transparent',
               border: '1px solid var(--color-border)',
@@ -928,7 +926,6 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
               type="button"
               onClick={onClose}
               disabled={isUploading}
-              className="hover-lift"
               style={{
                 background: 'var(--color-surface)',
                 border: '1px solid var(--color-border)',
@@ -947,7 +944,6 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
               type="button"
               onClick={handleApply}
               disabled={isUploading}
-              className="hover-lift"
               style={{
                 background: 'var(--color-primary)',
                 border: 'none',

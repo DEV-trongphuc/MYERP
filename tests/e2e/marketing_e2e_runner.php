@@ -315,11 +315,11 @@ function detectPhpBinary(): string {
     if (defined('PHP_BINARY') && is_executable(PHP_BINARY)) {
         return PHP_BINARY;
     }
-    $candidates = [
-        'C:\\Users\\LENOVO\\AppData\\Local\\Microsoft\\WinGet\\Packages\\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\\php.exe',
+    $candidates = array_filter([
+        getenv('PHP_BIN') ?: null,
         'php.exe',
         'php'
-    ];
+    ]);
     foreach ($candidates as $cand) {
         if (is_executable($cand)) {
             return $cand;

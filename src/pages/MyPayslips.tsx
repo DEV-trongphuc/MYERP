@@ -1,20 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { fetchAPI } from '../utils/api';
-import api from '../api/axios';
 import { 
-  FileText, Calendar, CheckCircle, ShieldCheck, PenTool,
-  Clock, DollarSign, Award, Percent, HelpCircle, Plus, Send,
-  ChevronLeft, ChevronRight, XCircle, CheckCircle2, Download, AlertCircle, Loader2
+  FileText, CheckCircle, ShieldCheck, PenTool,
+  Clock, DollarSign, Award, Percent, Download, AlertCircle, Loader2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { EmptyCard } from '../components/ui/EmptyCard';
-import { Avatar } from '../components/ui/Avatar';
 import { ApprovalDetailDrawer } from './Approvals';
 import { CustomModal } from '../components/ui/CustomModal';
 import { AnimatePresence } from 'framer-motion';
+import { ensureArray, extractArray } from '../utils/safeArray';
 
 export default function MyPayslips() {
   const { t } = useLanguage();
@@ -136,7 +134,7 @@ export default function MyPayslips() {
   // Fetch users list
   useEffect(() => {
     fetchAPI('users?all=1').then(res => {
-      setUsers(res?.data || []);
+      setUsers(extractArray(res));
     }).catch(() => {});
   }, []);
 
@@ -159,7 +157,7 @@ export default function MyPayslips() {
   const loadAllPayslips = async () => {
     try {
       const res = await fetchAPI('hrm/payroll?month_year=all');
-      setAllPayslips(res?.data || []);
+      setAllPayslips(extractArray(res));
     } catch (err) {
       setAllPayslips([]);
     }
@@ -215,7 +213,7 @@ export default function MyPayslips() {
   const loadLeaves = async () => {
     try {
       const res = await fetchAPI('hrm/leaves');
-      setLeavesList(res?.data || []);
+      setLeavesList(extractArray(res));
     } catch (err: any) {
       setLeavesList([]);
     }
@@ -224,7 +222,7 @@ export default function MyPayslips() {
   const loadAdvances = async () => {
     try {
       const res = await fetchAPI('hrm/advances');
-      setAdvancesList(res?.data || []);
+      setAdvancesList(extractArray(res));
     } catch (err: any) {
       setAdvancesList([]);
     }
@@ -464,7 +462,7 @@ export default function MyPayslips() {
             {t('Phiếu lương')}
           </h1>
           <p className="page-subtitle">
-            {t('Tra cứu phiếu lương, đăng ký lịch nghỉ phép và tạm ứng thu nhập nhanh chóng.')}
+            {t('Tra cứu phiếu lương, đăng ký lịch nghỉ phép và tạm ứng thu nhập')}
           </p>
         </div>
         
@@ -500,16 +498,16 @@ export default function MyPayslips() {
               background: 'var(--color-surface, #ffffff)',
               border: '1px solid var(--color-border, #e2e8f0)',
               borderRadius: isMobile ? '12px' : '16px',
-              padding: isMobile ? '12px 14px' : '20px 24px',
+              padding: isMobile ? '12px 16px' : '20px 24px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
               boxShadow: '0 1px 3px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.04)',
-              minHeight: isMobile ? '95px' : '135px'
+              minHeight: isMobile ? '96px' : '136px'
             }}>
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                  <span style={{ fontSize: isMobile ? '0.625rem' : '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                  <span style={{ fontSize: isMobile ? '0.625rem' : '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     {t('TỔNG THỰC NHẬN')}
                   </span>
                   <div style={{
@@ -526,12 +524,12 @@ export default function MyPayslips() {
                     <DollarSign size={isMobile ? 13 : 16} />
                   </div>
                 </div>
-                <strong style={{ fontSize: isMobile ? '1.1rem' : '1.625rem', fontWeight: 900, color: 'var(--color-text, #1e293b)', display: 'block', lineHeight: 1.2 }}>
+                <strong style={{ fontSize: isMobile ? '1.1rem' : '1.625rem', fontWeight: 700, color: 'var(--color-text, #1e293b)', display: 'block', lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>
                   {formatCurrency(totalNet)}
                 </strong>
               </div>
-              <div style={{ marginTop: isMobile ? '6px' : '12px', borderTop: '1px solid #f1f5f9', paddingTop: '6px' }}>
-                <span style={{ fontSize: isMobile ? '0.65rem' : '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ marginTop: isMobile ? '8px' : '12px', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
+                <span style={{ fontSize: isMobile ? '0.65rem' : '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', fontVariantNumeric: 'tabular-nums' }}>
                   <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }}></span>
                   {t('TB')}: <strong style={{ color: 'var(--color-text, #1e293b)' }}>{formatCurrency(avgNet)}</strong>{!isMobile && ` / ${t('tháng')}`}
                 </span>
@@ -543,16 +541,16 @@ export default function MyPayslips() {
               background: 'var(--color-surface, #ffffff)',
               border: '1px solid var(--color-border, #e2e8f0)',
               borderRadius: isMobile ? '12px' : '16px',
-              padding: isMobile ? '12px 14px' : '20px 24px',
+              padding: isMobile ? '12px 16px' : '20px 24px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
               boxShadow: '0 1px 3px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.04)',
-              minHeight: isMobile ? '95px' : '135px'
+              minHeight: isMobile ? '96px' : '136px'
             }}>
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                  <span style={{ fontSize: isMobile ? '0.625rem' : '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                  <span style={{ fontSize: isMobile ? '0.625rem' : '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     {t('BẢO HIỂM')}
                   </span>
                   <div style={{
@@ -569,11 +567,11 @@ export default function MyPayslips() {
                     <ShieldCheck size={isMobile ? 13 : 16} />
                   </div>
                 </div>
-                <strong style={{ fontSize: isMobile ? '1.1rem' : '1.625rem', fontWeight: 900, color: 'var(--color-text, #1e293b)', display: 'block', lineHeight: 1.2 }}>
+                <strong style={{ fontSize: isMobile ? '1.1rem' : '1.625rem', fontWeight: 700, color: 'var(--color-text, #1e293b)', display: 'block', lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>
                   {formatCurrency(totalInsurance)}
                 </strong>
               </div>
-              <div style={{ marginTop: isMobile ? '6px' : '12px', borderTop: '1px solid #f1f5f9', paddingTop: '6px' }}>
+              <div style={{ marginTop: isMobile ? '8px' : '12px', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
                 <span style={{ fontSize: isMobile ? '0.65rem' : '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }}></span>
                   {t('BHXH, BHYT')}
@@ -586,16 +584,16 @@ export default function MyPayslips() {
               background: 'var(--color-surface, #ffffff)',
               border: '1px solid var(--color-border, #e2e8f0)',
               borderRadius: isMobile ? '12px' : '16px',
-              padding: isMobile ? '12px 14px' : '20px 24px',
+              padding: isMobile ? '12px 16px' : '20px 24px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
               boxShadow: '0 1px 3px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.04)',
-              minHeight: isMobile ? '95px' : '135px'
+              minHeight: isMobile ? '96px' : '136px'
             }}>
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                  <span style={{ fontSize: isMobile ? '0.625rem' : '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                  <span style={{ fontSize: isMobile ? '0.625rem' : '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     {t('TỔNG THƯỞNG')}
                   </span>
                   <div style={{
@@ -612,11 +610,11 @@ export default function MyPayslips() {
                     <Award size={isMobile ? 13 : 16} />
                   </div>
                 </div>
-                <strong style={{ fontSize: isMobile ? '1.1rem' : '1.625rem', fontWeight: 900, color: 'var(--color-text, #1e293b)', display: 'block', lineHeight: 1.2 }}>
+                <strong style={{ fontSize: isMobile ? '1.1rem' : '1.625rem', fontWeight: 700, color: 'var(--color-text, #1e293b)', display: 'block', lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>
                   {formatCurrency(totalBonus)}
                 </strong>
               </div>
-              <div style={{ marginTop: isMobile ? '6px' : '12px', borderTop: '1px solid #f1f5f9', paddingTop: '6px' }}>
+              <div style={{ marginTop: isMobile ? '8px' : '12px', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
                 <span style={{ fontSize: isMobile ? '0.65rem' : '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }}></span>
                   {t('KPI & Thưởng')}
@@ -629,16 +627,16 @@ export default function MyPayslips() {
               background: 'var(--color-surface, #ffffff)',
               border: '1px solid var(--color-border, #e2e8f0)',
               borderRadius: isMobile ? '12px' : '16px',
-              padding: isMobile ? '12px 14px' : '20px 24px',
+              padding: isMobile ? '12px 16px' : '20px 24px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
               boxShadow: '0 1px 3px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.04)',
-              minHeight: isMobile ? '95px' : '135px'
+              minHeight: isMobile ? '96px' : '136px'
             }}>
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                  <span style={{ fontSize: isMobile ? '0.625rem' : '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                  <span style={{ fontSize: isMobile ? '0.625rem' : '0.73rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     {t('THUẾ TNCN')}
                   </span>
                   <div style={{
@@ -655,12 +653,12 @@ export default function MyPayslips() {
                     <Percent size={isMobile ? 13 : 16} />
                   </div>
                 </div>
-                <strong style={{ fontSize: isMobile ? '1.1rem' : '1.625rem', fontWeight: 900, color: 'var(--color-text, #1e293b)', display: 'block', lineHeight: 1.2 }}>
+                <strong style={{ fontSize: isMobile ? '1.1rem' : '1.625rem', fontWeight: 700, color: 'var(--color-text, #1e293b)', display: 'block', lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>
                   {formatCurrency(totalTax)}
                 </strong>
               </div>
-              <div style={{ marginTop: isMobile ? '6px' : '12px', borderTop: '1px solid #f1f5f9', paddingTop: '6px' }}>
-                <span style={{ fontSize: isMobile ? '0.65rem' : '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ marginTop: isMobile ? '8px' : '12px', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
+                <span style={{ fontSize: isMobile ? '0.65rem' : '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', fontVariantNumeric: 'tabular-nums' }}>
                   <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }}></span>
                   {t('Năm')} {selectedYear}
                 </span>
@@ -710,7 +708,7 @@ export default function MyPayslips() {
                       }
                     }}
                     style={{
-                      padding: '12px 10px',
+                      padding: '12px',
                       borderRadius: '10px',
                       background: isSelected 
                         ? 'var(--color-surface, #ffffff)' 
@@ -729,7 +727,7 @@ export default function MyPayslips() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '4px',
-                      transition: 'all 0.15s ease',
+                      transition: 'border-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1)',
                       boxShadow: isSelected 
                         ? 'var(--shadow-md)'
                         : isAvailable
@@ -737,7 +735,6 @@ export default function MyPayslips() {
                           : 'none',
                       pointerEvents: isAvailable ? 'auto' : 'none'
                     }}
-                    className={isAvailable ? 'hover-translate-y' : ''}
                   >
                     <span style={{ 
                       fontSize: '0.8rem', 
@@ -750,19 +747,20 @@ export default function MyPayslips() {
                       <>
                         <span style={{ 
                           fontSize: '0.8rem', 
-                          fontWeight: 800, 
+                          fontWeight: 700, 
                           color: isSelected ? 'var(--color-primary, #3b82f6)' : 'var(--color-text, #1e293b)',
-                          marginTop: '2px'
+                          marginTop: '2px',
+                          fontVariantNumeric: 'tabular-nums'
                         }}>
                           {formatCurrency(payslipForMonth.net_salary)}
                         </span>
                         <span style={{ 
-                          fontSize: '0.6rem', 
-                          fontWeight: 700, 
+                          fontSize: '0.625rem', 
+                          fontWeight: 600, 
                           color: payslipForMonth.status === 'confirmed' ? '#10b981' : '#f59e0b',
                           background: payslipForMonth.status === 'confirmed' ? 'rgba(16, 185, 129, 0.06)' : 'rgba(245, 158, 11, 0.06)',
-                          padding: '1px 6px',
-                          borderRadius: '12px',
+                          padding: '2px 6px',
+                          borderRadius: '6px',
                           marginTop: '2px',
                           border: `1px solid ${payslipForMonth.status === 'confirmed' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)'}`
                         }}>
@@ -770,7 +768,7 @@ export default function MyPayslips() {
                         </span>
                       </>
                     ) : (
-                      <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontStyle: 'italic', marginTop: '2px' }}>
+                      <span style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>
                         Chưa có
                       </span>
                     )}
@@ -794,7 +792,7 @@ export default function MyPayslips() {
                       setIsModalOpen(true);
                     }}
                     style={{
-                      padding: '12px 10px',
+                      padding: '12px',
                       borderRadius: '10px',
                       background: isSelected 
                         ? 'var(--color-surface, #ffffff)' 
@@ -808,12 +806,11 @@ export default function MyPayslips() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '4px',
-                      transition: 'all 0.15s ease',
+                      transition: 'border-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1)',
                       boxShadow: isSelected 
                         ? 'var(--shadow-md)'
                         : 'var(--shadow-sm)'
                     }}
-                    className="hover-translate-y"
                   >
                     <span style={{ 
                       fontSize: '0.8rem', 
@@ -825,19 +822,20 @@ export default function MyPayslips() {
                     </span>
                     <span style={{ 
                       fontSize: '0.8rem', 
-                      fontWeight: 800, 
+                      fontWeight: 700, 
                       color: isSelected ? 'var(--color-primary, #3b82f6)' : 'var(--color-text, #1e293b)',
-                      marginTop: '2px'
+                      marginTop: '2px',
+                      fontVariantNumeric: 'tabular-nums'
                     }}>
                       {formatCurrency(payslipForPeriod.net_salary)}
                     </span>
                     <span style={{ 
-                      fontSize: '0.6rem', 
-                      fontWeight: 700, 
+                      fontSize: '0.625rem', 
+                      fontWeight: 600, 
                       color: payslipForPeriod.status === 'confirmed' ? '#10b981' : '#f59e0b',
                       background: payslipForPeriod.status === 'confirmed' ? 'rgba(16, 185, 129, 0.06)' : 'rgba(245, 158, 11, 0.06)',
-                      padding: '1px 6px',
-                      borderRadius: '12px',
+                      padding: '2px 6px',
+                      borderRadius: '6px',
                       marginTop: '2px',
                       border: `1px solid ${payslipForPeriod.status === 'confirmed' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)'}`
                     }}>
@@ -877,7 +875,7 @@ export default function MyPayslips() {
                 )}
                 <div style={{ flex: 1 }}>
                   <strong style={{ fontSize: '0.9rem', color: payslip.status === 'confirmed' ? '#10b981' : '#3b82f6' }}>
-                    {payslip.status === 'confirmed' ? t('Bảng lương đã ký nhận thành công!') : payslip.status === 'sent' ? t('Phiếu lương đang chờ bạn ký xác nhận') : t('Phiếu lương nháp (chưa công bố)')}
+                    {payslip.status === 'confirmed' ? t('Bảng lương đã ký nhận thành công') : payslip.status === 'sent' ? t('Phiếu lương đang chờ bạn ký xác nhận') : t('Phiếu lương nháp (chưa công bố)')}
                   </strong>
                   <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
                     {payslip.status === 'confirmed' 
@@ -904,7 +902,7 @@ export default function MyPayslips() {
                     borderRadius: '8px',
                     cursor: 'pointer',
                     boxShadow: '0 2px 8px rgba(239, 68, 68, 0.2)',
-                    transition: 'all 0.2s'
+                    transition: 'background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1)'
                   }}
                   onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
                   onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
@@ -936,7 +934,7 @@ export default function MyPayslips() {
                     {companyLogoUrl ? (
                       <img src={companyLogoUrl} alt="Logo" style={{ height: 36, maxWidth: 90, objectFit: 'contain' }} />
                     ) : (
-                      <div style={{ background: 'var(--color-primary)', color: 'white', padding: '6px 10px', borderRadius: '8px', fontWeight: 900, fontSize: '0.85rem' }}>
+                      <div style={{ background: 'var(--color-primary)', color: 'white', padding: '6px 10px', borderRadius: '8px', fontWeight: 700, fontSize: '0.85rem' }}>
                         {companyName.split(' ').slice(-2).map(w => w[0]).join('').toUpperCase()}
                       </div>
                     )}
@@ -992,7 +990,7 @@ export default function MyPayslips() {
                   </div>
                 </div>
 
-                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '0.75rem', fontSize: '0.8rem' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '0.75rem', fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid var(--color-border-light)', color: '#1e293b', background: '#f8fafc', fontWeight: 700 }}>
                       <th style={{ padding: '6px 12px', textAlign: 'left' }}>{t('Khoản mục')}</th>
@@ -1076,18 +1074,19 @@ export default function MyPayslips() {
                 </table>
                 <div style={{ marginTop: '1rem', borderTop: '2px double #cbd5e1', paddingTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <strong style={{ fontSize: '0.85rem', textTransform: 'uppercase' }}>{t('THỰC LĨNH CHUYỂN KHOẢN (NET PAY)')}</strong>
-                  <strong style={{ fontSize: '1.25rem', color: 'var(--color-primary)' }}>{formatCurrency(payslip.net_salary)}</strong>
+                  <strong style={{ fontSize: '1.25rem', color: 'var(--color-primary)', fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(payslip.net_salary)}</strong>
                 </div>
                 {payslip.status === 'confirmed' && payslip.signature_url && (
                   <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontStyle: 'italic', marginBottom: 4 }}>{t('Đã xác nhận & ký nhận online')}</span>
+                    <span style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: 4 }}>{t('Đã xác nhận & ký nhận online')}</span>
                     <img src={payslip.signature_url} alt="Signature" style={{ width: '120px', height: '48px', objectFit: 'contain', borderBottom: '1px solid #64748b' }} />
                     <strong style={{ fontSize: '0.78rem', marginTop: 4 }}>{payslip.employee_name}</strong>
                   </div>
                 )}
                 {payslip.status === 'disputed' && payslip.note && (
-                  <div style={{ marginTop: '1rem', padding: '8px 12px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', fontSize: '0.8rem' }}>
-                    <strong>⚠️ {t('Đã gửi yêu cầu thay đổi:')}</strong> {payslip.note}
+                  <div style={{ marginTop: '1rem', padding: '8px 12px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                    <span><strong>{t('Đã gửi yêu cầu thay đổi:')}</strong> {payslip.note}</span>
                   </div>
                 )}
               </div>
@@ -1101,17 +1100,17 @@ export default function MyPayslips() {
                     <canvas ref={canvasRef} width={500} height={120} style={{ width: '100%', height: '100%', cursor: 'crosshair', backgroundColor: 'white', backgroundImage: 'radial-gradient(#e2e8f0 1.2px, transparent 1.2px)', backgroundSize: '20px 20px' }} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: '0.75rem' }}>
-                    <button onClick={clearCanvas} disabled={submitting} className="btn secondary hover-lift" style={{ padding: '5px 12px', fontSize: '0.78rem' }}>{t('Vẽ lại')}</button>
+                    <button onClick={clearCanvas} disabled={submitting} className="btn secondary" style={{ padding: '6px 12px', fontSize: '0.78rem' }}>{t('Vẽ lại')}</button>
                     <button
                       onClick={() => setDisputeModalOpen(true)}
                       disabled={submitting}
-                      className="btn outline hover-lift"
-                      style={{ padding: '5px 14px', fontSize: '0.78rem', color: '#ef4444' }}
+                      className="btn outline"
+                      style={{ padding: '6px 14px', fontSize: '0.78rem', color: '#ef4444' }}
                     >
                       <AlertCircle size={13} />
                       {t('Yêu cầu thay đổi')}
                     </button>
-                    <button onClick={handleConfirmPayslip} disabled={submitting} className="btn primary hover-lift" style={{ padding: '5px 18px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <button onClick={handleConfirmPayslip} disabled={submitting} className="btn primary" style={{ padding: '6px 18px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                       {submitting ? <Loader2 size={13} className="spin" /> : <CheckCircle size={13} />}
                       {submitting ? t('Đang ký...') : t('Ký xác nhận lương')}
                     </button>
@@ -1139,8 +1138,8 @@ export default function MyPayslips() {
             rows={4}
           />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '1rem' }}>
-            <button onClick={() => setDisputeModalOpen(false)} disabled={sendingDispute} className="btn secondary hover-lift">{t('Hủy')}</button>
-            <button onClick={handleSendDispute} disabled={sendingDispute} className="btn primary hover-lift" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <button onClick={() => setDisputeModalOpen(false)} disabled={sendingDispute} className="btn secondary">{t('Hủy')}</button>
+            <button onClick={handleSendDispute} disabled={sendingDispute} className="btn primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               {sendingDispute && <Loader2 size={14} className="spin" />}
               <span>{sendingDispute ? t('Đang gửi...') : t('Gửi yêu cầu')}</span>
             </button>

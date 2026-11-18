@@ -52,10 +52,10 @@ const WebJourneyReport: React.FC<WebReportProps> = ({ dateRange }) => {
     const overview = data?.overview || {};
 
     const stats = [
-        { label: 'NB. TRUY CẬP (USERS)', value: overview.visitors || 0, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
-        { label: 'PHIÊN (SESSIONS)', value: overview.sessions || 0, icon: ArrowUpRight, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-        { label: 'XEM TRANG (VIEWS)', value: overview.pageViews || 0, icon: MousePointerClick, color: 'text-[var(--color-primary)]', bg: 'bg-orange-50' },
-        { label: 'Thời gian TB', value: overview.avgDuration ? `${Math.round(overview.avgDuration)}s` : '0s', icon: Clock, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+        { label: 'Người truy cập', value: overview.visitors || 0, icon: Users, color: 'text-[#BD1D2D]', bg: 'bg-[#fef2f2]' },
+        { label: 'Phiên truy cập', value: overview.sessions || 0, icon: ArrowUpRight, color: 'text-[#BD1D2D]', bg: 'bg-[#fef2f2]' },
+        { label: 'Lượt xem trang', value: overview.pageViews || 0, icon: MousePointerClick, color: 'text-slate-700', bg: 'bg-slate-100' },
+        { label: 'Thời gian TB', value: overview.avgDuration ? `${Math.round(overview.avgDuration)}s` : '0s', icon: Clock, color: 'text-slate-700', bg: 'bg-slate-100' },
     ];
 
     return (
@@ -84,56 +84,56 @@ const WebJourneyReport: React.FC<WebReportProps> = ({ dateRange }) => {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {stats.map((stat, idx) => (
-                    <div key={idx} className="bg-white rounded-[14px] lg:rounded-[18px] p-4 lg:p-6 border border-slate-100 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 group hover:shadow-md transition-all">
-                        <div className="space-y-1 w-full">
-                            <h4 className="text-[9px] lg:text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</h4>
+                    <div key={idx} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                        <div className="space-y-1.5 w-full">
+                            <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{stat.label}</h4>
                             {loading ? (
-                                <div className="h-8 w-24 bg-slate-200 rounded animate-pulse mt-1"></div>
+                                <div className="h-7 w-24 bg-slate-200 rounded animate-pulse mt-1"></div>
                             ) : (
-                                <div className="text-xl lg:text-3xl font-black text-slate-800 tracking-tight">{stat.value.toLocaleString()}</div>
+                                <div className={`text-2xl font-bold tracking-tight tabular-nums ${idx === 1 ? 'text-[#BD1D2D]' : 'text-slate-900'}`}>{typeof stat.value === 'number' ? stat.value.toLocaleString('vi-VN') : stat.value}</div>
                             )}
                         </div>
-                        <div className={`w-10 h-10 lg:w-14 lg:h-14 ${stat.bg} rounded-xl lg:rounded-[14px] flex items-center justify-center shrink-0`}>
-                            <stat.icon className={`w-5 h-5 lg:w-6 lg:h-6 ${stat.color}`} />
+                        <div className={`w-9 h-9 ${stat.bg} rounded-lg flex items-center justify-center shrink-0`}>
+                            <stat.icon className={`w-4 h-4 ${stat.color}`} />
                         </div>
                     </div>
                 ))}
             </div>
 
             {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Traffic Trend */}
-                <div className="lg:col-span-2 bg-white p-5 lg:p-8 rounded-[14px] lg:rounded-[18px] border border-slate-100 shadow-sm">
-                    <div className="flex items-center justify-between mb-8">
+                <div className="lg:col-span-2 bg-white p-5 lg:p-6 rounded-2xl border border-slate-200 shadow-xs">
+                    <div className="flex items-center justify-between mb-6">
                         <div>
-                            <h3 className="text-sm lg:text-base font-black text-slate-800 uppercase tracking-tight">Lưu lượng truy cập</h3>
-                            <p className="text-[9px] lg:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Sessions & Views</p>
+                            <h3 className="text-base font-bold text-slate-900">Lưu lượng truy cập</h3>
+                            <p className="text-xs text-slate-500 mt-0.5">Số phiên &amp; lượt xem trang theo ngày</p>
                         </div>
                     </div>
                     <div className="h-[250px] lg:h-[300px]">
                         {loading ? (
                             <div className="w-full h-full flex items-end gap-3 p-4 animate-pulse">
                                 {[...Array(14)].map((_, i) => (
-                                    <div key={i} className="flex-1 bg-slate-100 rounded-t-lg" style={{ height: `${Math.random() * 60 + 20}%` }}></div>
+                                    <div key={i} className="flex-1 bg-slate-100 rounded-t-lg" style={{ height: `${((i * 19) % 60) + 20}%` }}></div>
                                 ))}
                             </div>
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={data?.chart || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                <AreaChart data={data?.chart || []} margin={{ top: 10, right: 10, left: -16, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="colorSessions" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                            <stop offset="5%" stopColor="#C6333D" stopOpacity={0.16} />
+                                            <stop offset="95%" stopColor="#C6333D" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} dy={10} tickFormatter={(val) => val.split('-').slice(1).reverse().join('/')} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} />
-                                    <Tooltip contentStyle={{ border: 'none', borderRadius: '24px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', padding: '16px' }} />
-                                    <Area type="monotone" dataKey="sessions" name="Phiên" stroke="#3b82f6" strokeWidth={3} fill="url(#colorSessions)" />
-                                    <Area type="monotone" dataKey="pageViews" name="Xem trang" stroke="#7c3aed" strokeWidth={3} fill="none" />
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} dy={8} tickFormatter={(val) => val.split('-').slice(1).reverse().join('/')} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} />
+                                    <Tooltip contentStyle={{ border: '1px solid #e2e8f0', borderRadius: '10px', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)', padding: '10px 14px', fontVariantNumeric: 'tabular-nums', fontSize: '12px' }} />
+                                    <Area type="monotone" dataKey="sessions" name="Phiên" stroke="#C6333D" strokeWidth={2.25} fill="url(#colorSessions)" />
+                                    <Area type="monotone" dataKey="pageViews" name="Xem trang" stroke="#334155" strokeWidth={2.25} fill="none" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         )}
@@ -141,9 +141,9 @@ const WebJourneyReport: React.FC<WebReportProps> = ({ dateRange }) => {
                 </div>
 
                 {/* Top Sources */}
-                <div className="bg-white p-5 lg:p-8 rounded-[14px] lg:rounded-[18px] border border-slate-100 shadow-sm">
-                    <div className="mb-6">
-                        <h3 className="text-sm lg:text-base font-black text-slate-800 uppercase tracking-tight">Nguồn truy cập</h3>
+                <div className="bg-white p-5 lg:p-6 rounded-2xl border border-slate-200 shadow-xs">
+                    <div className="mb-5">
+                        <h3 className="text-base font-bold text-slate-900">Nguồn truy cập</h3>
                     </div>
                     <div className="space-y-4">
                         {loading ? (
@@ -169,7 +169,7 @@ const WebJourneyReport: React.FC<WebReportProps> = ({ dateRange }) => {
                                             <div className="text-[9px] font-bold text-slate-400 uppercase">{source.medium}</div>
                                         </div>
                                     </div>
-                                    <div className="text-xs font-black text-slate-800">{source.sessions.toLocaleString()}</div>
+                                    <div className="text-xs font-bold text-slate-900 tabular-nums">{source.sessions.toLocaleString('vi-VN')}</div>
                                 </div>
                             ))
                         )}
@@ -178,20 +178,20 @@ const WebJourneyReport: React.FC<WebReportProps> = ({ dateRange }) => {
             </div>
 
             {/* Top Pages Table */}
-            <div className="bg-white p-5 lg:p-8 rounded-[14px] lg:rounded-[18px] border border-slate-100 shadow-sm">
-                <h3 className="text-sm lg:text-base font-black text-slate-800 uppercase tracking-tight mb-6">Trang phổ biến nhất</h3>
+            <div className="bg-white p-5 lg:p-6 rounded-2xl border border-slate-200 shadow-xs">
+                <h3 className="text-base font-bold text-slate-900 mb-5">Trang phổ biến nhất</h3>
                 <div className="overflow-x-auto -mx-5 lg:-mx-0">
                     <div className="inline-block min-w-full align-middle px-5 lg:px-0">
-                        <table className="w-full text-left">
+                        <table className="w-full text-left tabular-nums">
                             <thead>
-                                <tr className="border-b border-slate-100">
-                                    <th className="pb-4 text-[9px] lg:text-[10px] font-black text-slate-400 uppercase tracking-widest min-w-[200px]">Trang & URL</th>
-                                    <th className="pb-4 text-[9px] lg:text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Xem trang</th>
-                                    <th className="pb-4 text-[9px] lg:text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">TG TB</th>
-                                    <th className="pb-4 text-[9px] lg:text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Bounce</th>
+                                <tr className="border-b border-slate-200">
+                                    <th className="pb-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider min-w-[200px]">Trang &amp; URL</th>
+                                    <th className="pb-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Xem trang</th>
+                                    <th className="pb-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">TG TB</th>
+                                    <th className="pb-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Bounce</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-50">
+                            <tbody className="divide-y divide-slate-100">
                                 {loading ? (
                                     [...Array(5)].map((_, i) => (
                                         <tr key={i} className="animate-pulse">

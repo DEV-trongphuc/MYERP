@@ -586,15 +586,15 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
 
     const funnelData = [
         { name: isZns ? 'Tin nhắn đã gửi' : 'Đã gửi (Sent)', value: sentCount, fill: '#94a3b8', icon: Send },
-        { name: isZns ? 'Đã nhận (Delivered)' : 'Đã nhận (Delivered)', value: deliveredCount, fill: '#2563eb', icon: CheckCircle2 },
+        { name: isZns ? 'Đã nhận (Delivered)' : 'Đã nhận (Delivered)', value: deliveredCount, fill: '#334155', icon: CheckCircle2 },
         { name: isZns ? 'Lượt xem (Seen)' : 'Đã mở (Opened)', value: stats.opened, fill: '#10b981', icon: isZns ? BadgeCheck : MailOpen },
-        ...(isZns ? [] : [{ name: 'Đã click (Unique Click)', value: stats.clicked, fill: '#ec4899', icon: MousePointer2, subValue: (stats as any).total_clicked ? `Total: ${(stats as any).total_clicked}` : null }]),
+        ...(isZns ? [] : [{ name: 'Đã click (Unique Click)', value: stats.clicked, fill: '#C6333D', icon: MousePointer2, subValue: (stats as any).total_clicked ? `Total: ${(stats as any).total_clicked}` : null }]),
     ];
 
     const healthData = [
         { name: isZns ? 'Đã nhận' : 'Hộp thư chính', value: retainedCount, fill: '#10b981' },
-        { name: isZns ? 'Lỗi gửi' : 'Tỷ lệ (Bounce)', value: stats.bounced, fill: '#f43f5e' },
-        ...(isZns ? [] : [{ name: 'Hủy đăng ký (Unsub)', value: stats.unsubscribed, fill: '#8b5cf6' }])
+        { name: isZns ? 'Lỗi gửi' : 'Tỷ lệ (Bounce)', value: stats.bounced, fill: '#C6333D' },
+        ...(isZns ? [] : [{ name: 'Hủy đăng ký (Unsub)', value: stats.unsubscribed, fill: '#64748b' }])
     ].filter(d => d.value > 0);
 
     const targetLists = localCampaign.target?.listIds.map(id => allLists.find(l => l.id === id)).filter(Boolean) || [];
@@ -722,7 +722,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                         <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-1.5">
                             {/* Status badge with animated live indicators */}
                             {localCampaign.status === 'sending' ? (
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full text-xs font-black uppercase tracking-wider shadow-md shadow-blue-500/30 animate-pulse">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#BD1D2D] text-white rounded-full text-xs font-bold uppercase tracking-wider shadow-xs">
                                     <span className="relative flex h-2 w-2">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                                         <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
@@ -871,71 +871,68 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                     {activeTab === 'overview' && (
                         <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-8">
                             {localCampaign.status === 'sending' && (
-                                <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 rounded-[14px] border border-blue-500/30 p-6 shadow-xl shadow-blue-950/20 text-white relative overflow-hidden flex flex-col gap-4">
-                                    <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-400/10 rounded-full blur-[60px] pointer-events-none" />
+                                <div className="bg-slate-900 rounded-2xl border border-slate-700/80 p-6 shadow-md text-white relative overflow-hidden flex flex-col gap-4">
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
                                         <div className="flex items-center gap-3.5">
-                                            <div className="w-12 h-12 bg-blue-500/20 text-cyan-300 border border-cyan-400/30 rounded-[14px] flex items-center justify-center shadow-inner relative">
-                                                <Send className="w-6 h-6 animate-pulse" />
-                                                <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
-                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                                                    <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-cyan-400"></span>
+                                            <div className="w-12 h-12 bg-rose-500/15 text-rose-300 border border-rose-400/30 rounded-xl flex items-center justify-center relative">
+                                                <Send className="w-5 h-5" />
+                                                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-[#BD1D2D]"></span>
                                                 </span>
                                             </div>
                                             <div>
                                                 <div className="flex items-center gap-2">
-                                                    <h5 className="text-sm md:text-base font-black text-white uppercase tracking-tight">
+                                                    <h5 className="text-sm md:text-base font-bold text-white uppercase tracking-tight">
                                                         Chiến dịch đang được gửi trực tiếp (Live Sending)
                                                     </h5>
-                                                    <span className="px-2 py-0.5 bg-cyan-400/20 border border-cyan-300/30 text-cyan-300 text-[10px] font-black rounded-full uppercase tracking-wider animate-pulse">
+                                                    <span className="px-2 py-0.5 bg-white/10 border border-white/15 text-slate-200 text-[10px] font-semibold rounded-full uppercase tracking-wider">
                                                         Đang truyền tin...
                                                     </span>
                                                 </div>
-                                                <p className="text-[11px] text-blue-200/80 font-bold uppercase tracking-widest mt-0.5">
+                                                <p className="text-[11px] text-slate-300 font-medium mt-0.5">
                                                     Tiến trình gửi SMTP đang hoạt động liên tục và tự động cập nhật
                                                 </p>
                                             </div>
                                         </div>
                                         <div className="text-left sm:text-right">
-                                            <p className="text-3xl font-black text-cyan-300 tracking-tight drop-shadow-sm font-mono">
+                                            <p className="text-3xl font-bold text-white tracking-tight font-mono tabular-nums">
                                                 {Math.min(100, Math.round(((localCampaign.stats?.sent || 0) / Math.max(1, localCampaign.totalTargetAudience || 1)) * 100))}%
                                             </p>
-                                            <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wider">Tiến độ hoàn thành</p>
+                                            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Tiến độ hoàn thành</p>
                                         </div>
                                     </div>
 
-                                    {/* Progress bar with animated stripes */}
-                                    <div className="w-full h-4 bg-black/40 border border-white/10 rounded-full overflow-hidden p-0.5 relative z-10">
+                                    {/* Progress bar */}
+                                    <div className="w-full h-3 bg-white/10 border border-white/10 rounded-full overflow-hidden p-0.5 relative z-10">
                                         <div
-                                            className="h-full bg-gradient-to-r from-cyan-400 via-blue-400 to-emerald-400 rounded-full transition-all duration-700 ease-out shadow-lg shadow-cyan-500/50 relative overflow-hidden"
+                                            className="h-full bg-[#BD1D2D] rounded-full transition-[width] duration-500 ease-out relative overflow-hidden"
                                             style={{ width: `${Math.min(100, Math.max(2, ((localCampaign.stats?.sent || 0) / Math.max(1, localCampaign.totalTargetAudience || 1)) * 100))}%` }}
-                                        >
-                                            <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.3)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.3)_50%,rgba(255,255,255,0.3)_75%,transparent_75%,transparent)] bg-[length:20px_20px] animate-sending-shimmer" />
-                                        </div>
+                                        />
                                     </div>
 
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[11px] font-bold text-blue-100 relative z-10">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[11px] font-semibold text-slate-200 relative z-10">
                                         <div className="flex flex-wrap items-center gap-4">
                                             <span className="uppercase tracking-wider">
-                                                Đã gửi: <span className="text-cyan-300 font-black text-sm">{(localCampaign.stats?.sent || 0).toLocaleString()}</span>
+                                                Đã gửi: <span className="text-white font-bold text-sm tabular-nums">{(localCampaign.stats?.sent || 0).toLocaleString()}</span>
                                             </span>
                                             <span className="uppercase tracking-wider">
-                                                Còn lại: <span className="text-white font-black text-sm">{Math.max(0, (localCampaign.totalTargetAudience || 0) - (localCampaign.stats?.sent || 0)).toLocaleString()}</span>
+                                                Còn lại: <span className="text-white font-bold text-sm tabular-nums">{Math.max(0, (localCampaign.totalTargetAudience || 0) - (localCampaign.stats?.sent || 0)).toLocaleString()}</span>
                                             </span>
                                             {(localCampaign.stats?.failed || 0) > 0 && (
                                                 <span className="text-rose-300 uppercase tracking-wider">
-                                                    Thất bại: <span className="font-black text-sm">{(localCampaign.stats?.failed || 0).toLocaleString()}</span>
+                                                    Thất bại: <span className="font-bold text-sm tabular-nums">{(localCampaign.stats?.failed || 0).toLocaleString()}</span>
                                                 </span>
                                             )}
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <span className="text-blue-200/80 uppercase tracking-widest text-[10px]">
+                                            <span className="text-slate-400 uppercase tracking-wider text-[10px] tabular-nums">
                                                 Mục tiêu: {(localCampaign.totalTargetAudience || 0).toLocaleString()} liên hệ
                                             </span>
                                             <button
                                                 onClick={handlePauseCampaign}
                                                 disabled={pauseLoading}
-                                                className="ml-2 px-3 py-1.5 bg-rose-500/80 hover:bg-rose-600 text-white text-[10px] font-black uppercase rounded-xl transition-all flex items-center gap-1.5 shadow-md shadow-rose-900/30 cursor-pointer"
+                                                className="ml-2 px-3 py-1.5 bg-[#BD1D2D] hover:bg-[#a61826] text-white text-[10px] font-bold uppercase rounded-lg transition-colors duration-150 flex items-center gap-1.5 cursor-pointer"
                                                 title="Tạm dừng gửi chiến dịch ngay lập tức"
                                             >
                                                 {pauseLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <PauseCircle className="w-3.5 h-3.5" />}
@@ -944,10 +941,10 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                             <button
                                                 onClick={handleTriggerRefresh}
                                                 disabled={refreshLoading}
-                                                className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-[10px] font-black uppercase rounded-xl transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
+                                                className="px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white text-[10px] font-bold uppercase rounded-lg transition-colors duration-150 flex items-center gap-1.5 cursor-pointer"
                                                 title="Nếu tiến độ bị kẹt, nhấn để kích hoạt lại tiến trình gửi"
                                             >
-                                                {refreshLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3.5 h-3.5 text-cyan-300" />}
+                                                {refreshLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3.5 h-3.5 text-rose-300" />}
                                                 Đẩy gửi tiếp
                                             </button>
                                         </div>
@@ -1013,14 +1010,14 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
 
                             <div className="flex flex-col gap-4">
                                 {associatedFlow && (
-                                    <div className="bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-950 p-6 rounded-[18px] shadow-lg shadow-indigo-900/20 text-white flex flex-col md:flex-row items-center justify-between gap-6 border border-white/5">
+                                    <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-sm text-white flex flex-col md:flex-row items-center justify-between gap-6">
                                         <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 bg-white/10 rounded-[14px] flex items-center justify-center">
-                                                <GitBranch className="w-6 h-6 text-orange-300" />
+                                            <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
+                                                <GitBranch className="w-6 h-6 text-rose-400" />
                                             </div>
                                             <div>
-                                                <h4 className="text-sm font-black uppercase tracking-wider">Kịch bản chăm sóc sau chiến dịch</h4>
-                                                <p className="text-xs text-indigo-100 font-medium mt-0.5">Chiến dịch này đang kích hoạt Flow: <span className="font-bold underline">{associatedFlow.name}</span></p>
+                                                <h4 className="text-sm font-bold uppercase tracking-wider">Kịch bản chăm sóc sau chiến dịch</h4>
+                                                <p className="text-xs text-slate-300 font-medium mt-0.5">Chiến dịch này đang kích hoạt Flow: <span className="font-bold underline">{associatedFlow.name}</span></p>
                                             </div>
                                         </div>
                                         <Button
@@ -1029,7 +1026,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                                 onClose();
                                             }}
                                             variant="secondary"
-                                            className="bg-white text-indigo-600 border-none hover:bg-slate-50 shadow-md !rounded-xl px-6"
+                                            className="bg-white text-slate-900 border-none hover:bg-slate-100 shadow-xs !rounded-xl px-6"
                                             icon={ExternalLink}
                                         >
                                             Xem Báo cáo Flow
@@ -1121,9 +1118,9 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                             <div className="flex items-center gap-3">
                                                 {/* Legend */}
                                                 <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#94a3b8' }} /><span className="text-[10px] font-bold text-slate-500">{isZns ? 'Đã gửi' : 'Sent'}</span></div>
-                                                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#2563eb' }} /><span className="text-[10px] font-bold text-slate-500">Delivered</span></div>
+                                                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#334155' }} /><span className="text-[10px] font-bold text-slate-500">Delivered</span></div>
                                                 <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#10b981' }} /><span className="text-[10px] font-bold text-slate-500">{isZns ? 'Đã xem' : 'Opened'}</span></div>
-                                                {!isZns && <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#ec4899' }} /><span className="text-[10px] font-bold text-slate-500">Clicked</span></div>}
+                                                {!isZns && <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#C6333D' }} /><span className="text-[10px] font-bold text-slate-500">Clicked</span></div>}
                                             </div>
                                         </div>
                                         <div className="p-6 min-h-[280px]">
@@ -1239,30 +1236,29 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                                 </div>
                                                 <div className="flex justify-between items-center text-xs group cursor-pointer" onClick={() => handleNavigateToAudienceFilter('unsubscribed')}>
                                                     <div className="flex items-center gap-2">
-                                                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#8b5cf6' }} />
+                                                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#64748b' }} />
                                                         <span className="text-slate-600 font-bold group-hover:text-slate-900 transition-colors">{isZns ? 'Hủy đăng ký (Unsub)' : 'Hủy đăng ký (Unsub)'}</span>
                                                     </div>
-                                                    <span className="font-mono font-bold text-violet-600">{isZns ? '0.00% (0)' : `${unsubRate}% (${stats.unsubscribed})`}</span>
+                                                    <span className="font-mono font-bold text-slate-700 tabular-nums">{isZns ? '0.00% (0)' : `${unsubRate}% (${stats.unsubscribed})`}</span>
                                                 </div>
                                             </div>
                                         </div>
                                     </Card>
 
-                                    <div className="p-5 bg-blue-50 border border-blue-100 rounded-[18px] relative overflow-hidden">
-                                        <div className="absolute -right-4 -top-4 w-20 h-20 bg-blue-200 rounded-full opacity-20 blur-xl" />
-                                        <h4 className="text-xs font-black text-blue-800 uppercase tracking-widest mb-3">Thông tin gửi</h4>
+                                    <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl relative overflow-hidden">
+                                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Thông tin gửi</h4>
                                         <div className="space-y-2 text-[11px]">
                                             <div className="flex justify-between">
-                                                <span className="text-blue-600/70 font-bold">Subject:</span>
-                                                <span className="text-blue-900 font-bold truncate max-w-[150px]">{localCampaign.subject}</span>
+                                                <span className="text-slate-500 font-semibold">Subject:</span>
+                                                <span className="text-slate-900 font-bold truncate max-w-[150px]">{localCampaign.subject}</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span className="text-blue-600/70 font-bold">{isZns ? 'ZNS Template:' : 'From:'}</span>
-                                                <span className="text-blue-900 font-bold">{isZns ? localCampaign.templateId : localCampaign.senderEmail}</span>
+                                                <span className="text-slate-500 font-semibold">{isZns ? 'ZNS Template:' : 'From:'}</span>
+                                                <span className="text-slate-900 font-bold">{isZns ? localCampaign.templateId : localCampaign.senderEmail}</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span className="text-blue-600/70 font-bold">{isZns ? 'Hệ thống:' : 'Tracking:'}</span>
-                                                <span className="text-blue-900 font-bold">{isZns ? 'Zalo Open API' : (localCampaign.trackingEnabled ? 'ON' : 'OFF')}</span>
+                                                <span className="text-slate-500 font-semibold">{isZns ? 'Hệ thống:' : 'Tracking:'}</span>
+                                                <span className="text-slate-900 font-bold">{isZns ? 'Zalo Open API' : (localCampaign.trackingEnabled ? 'ON' : 'OFF')}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -1537,10 +1533,10 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                     </div>
                                     <div className="p-8 flex flex-col md:flex-row md:items-center justify-between gap-8 relative z-10">
                                         <div className="space-y-1">
-                                            <h5 className="text-sm font-black text-amber-900 uppercase tracking-widest flex items-center gap-2">
-                                                <Zap className={`w-4 h-4 text-orange-500 ${statsLoading ? 'animate-bounce' : ''}`} /> Phân tích đối tượng
+                                            <h5 className="text-sm font-bold text-amber-900 uppercase tracking-wider flex items-center gap-2">
+                                                <Zap className="w-4 h-4 text-amber-600" /> Phân tích đối tượng
                                             </h5>
-                                            <p className="text-xs text-amber-700/70 font-medium tracking-tight">Đối tượng mà bạn chọn đã thay đổi kể từ lần gửi cuối cùng của chiến dịch này.</p>
+                                            <p className="text-xs text-amber-700/80 font-medium">Đối tượng mà bạn chọn đã thay đổi kể từ lần gửi cuối cùng của chiến dịch này</p>
                                         </div>
                                         {statsLoading ? (
                                             <div className="flex items-center gap-10">
@@ -1612,7 +1608,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                     {targetLists.length > 0 ? targetLists.map(list => (
                                         <div key={list.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-[14px] shadow-sm">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center border border-indigo-100"><List className="w-5 h-5" /></div>
+                                                <div className="w-10 h-10 bg-slate-100 text-slate-700 rounded-xl flex items-center justify-center border border-slate-200"><List className="w-5 h-5" /></div>
                                                 <div>
                                                     <p className="text-sm font-bold text-slate-800">{list.name}</p>
                                                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Static List</p>
@@ -1789,7 +1785,7 @@ const CampaignDetailDrawer: React.FC<CampaignDetailDrawerProps> = ({
                                                                 </span>
                                                             )}
                                                             {log.type === 'click_link' && (
-                                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-pink-50 text-pink-600 border border-pink-100 text-[9px] font-black uppercase tracking-wide">
+                                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-50 text-[#BD1D2D] border border-rose-200/70 text-[10px] font-bold uppercase tracking-wide">
                                                                     <MousePointer2 className="w-3 h-3" /> Clicked
                                                                 </span>
                                                             )}

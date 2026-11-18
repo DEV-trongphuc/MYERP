@@ -195,7 +195,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
             const invalidFiles = files.filter(file => !/_[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(file.name));
             if (invalidFiles.length > 0) {
                 const invalidNames = invalidFiles.map(f => f.name).join('\n- ');
-                toast.error(`LỖI ĐỊNH DẠNG TÊN FILE!\n\nCác file sau không hợp lệ ở chế độ "Gửi Riêng":\n- ${invalidNames}\n\nYêu cầu: Tên file phải chứa Email (VD: Hopdong_khachA@gmail.com.pdf)`);
+                toast.error(`Lỗi định dạng tên file\n\nCác file sau không hợp lệ ở chế độ "Gửi Riêng":\n- ${invalidNames}\n\nYêu cầu: Tên file phải chứa Email (VD: Hopdong_khachA@gmail.com.pdf)`);
                 if (fileInputRef.current) fileInputRef.current.value = '';
                 return;
             }
@@ -286,8 +286,8 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                     </button>
 
                     {showPersonalization.target === 'subject' && (
-                        <div className="absolute right-0 top-20 z-50 w-56 bg-white rounded-[14px] shadow-2xl border border-slate-100 p-2 animate-in zoom-in-95">
-                            <p className="text-[9px] font-black uppercase text-slate-400 p-2 tracking-widest">Cá nhân hóa tiêu đề</p>
+                        <div className="absolute right-0 top-20 z-50 w-56 bg-white rounded-xl shadow-2xl border border-slate-200 p-2">
+                            <p className="text-[9px] font-bold uppercase text-slate-400 p-2 tracking-widest">Cá nhân hóa tiêu đề</p>
                             <div className="grid grid-cols-1 gap-1">
                                 {MERGE_TAGS.map(tag => (
                                     <button
@@ -308,7 +308,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                         <label className="block text-sm font-bold text-slate-700">Chọn Email gửi đi</label>
                         <div className="group relative cursor-help">
                             <Info className="w-4 h-4 text-slate-400 hover:text-blue-500 transition-colors" />
-                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-slate-800 text-white text-[10px] rounded-lg shadow-xl z-50 text-center animate-in fade-in zoom-in slide-in-from-bottom-2">
+                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-slate-800 text-white text-[10px] rounded-lg shadow-xl z-50 text-center">
                                 Các email này đã được xác thực trong phần Cài đặt. Nếu chưa có, hãy vào Cài đặt để thêm nhé.
                                 <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
                             </div>
@@ -325,7 +325,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                                         localStorage.setItem('mailflow_last_sender_email', email.value);
                                     }
                                 }}
-                                className={`flex items-center justify-between p-4 rounded-[14px] border-2 transition-all text-left ${config.senderEmail === email.value ? 'border-[#2563eb] bg-blue-50/40 ring-4 ring-blue-50' : 'border-slate-100 bg-white hover:border-slate-200'} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                className={`flex items-center justify-between p-4 rounded-xl border-2 transition-colors text-left ${config.senderEmail === email.value ? 'border-[#2563eb] bg-blue-50/40 ring-4 ring-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
                                 disabled={disabled}
                             >
                                 <div className="flex items-center gap-3">
@@ -333,7 +333,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                                         <ShieldCheck className="w-4 h-4" />
                                     </div>
                                     <div>
-                                        <p className="text-xs font-black text-slate-800">{email.label}</p>
+                                        <p className="text-xs font-bold text-slate-800">{email.label}</p>
                                         <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest flex items-center">
                                             Đã xác minh
                                             {index === 0 && <span className="ml-2 text-[9px] text-blue-600 font-bold uppercase tracking-widest bg-blue-100/80 border border-blue-200/50 px-2 py-0.5 rounded-full shrink-0">Mặc định</span>}
@@ -343,7 +343,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                                 {config.senderEmail === email.value && <Zap className="w-4 h-4 text-blue-600 fill-blue-600" />}
                             </button>
                         )) : (
-                            <div className="p-4 bg-rose-50 border border-rose-100 rounded-[14px] flex items-center gap-3 text-rose-600">
+                            <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-3 text-rose-600">
                                 <Info className="w-5 h-5 shrink-0" />
                                 <p className="text-xs font-bold">Chưa có email xác minh. Hãy vào Cài đặt để thêm.</p>
                             </div>
@@ -355,20 +355,20 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
             {/* 2. CONTENT SOURCE SELECTOR */}
             <div className="pt-4 border-t border-slate-100 space-y-4">
                 <div className="flex items-center gap-2 ml-1">
-                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">Nội dung Email</label>
-                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[9px] font-black uppercase rounded-full tracking-widest">Thiết kế chuẩn</span>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Nội dung Email</label>
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[9px] font-bold uppercase rounded-full tracking-widest">Thiết kế chuẩn</span>
                 </div>
                 <div className="flex bg-slate-100 p-1 rounded-[var(--radius-md)]">
                     <button
                         onClick={() => handleModeChange('template')}
-                        className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${sourceMode === 'template' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors ${sourceMode === 'template' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         disabled={disabled}
                     >
                         <Layout className="w-3.5 h-3.5" /> Chọn Mẫu (Visual)
                     </button>
                     <button
                         onClick={() => handleModeChange('html')}
-                        className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${sourceMode === 'html' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors ${sourceMode === 'html' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         disabled={disabled}
                     >
                         <Code className="w-3.5 h-3.5" /> HTML Code
@@ -376,13 +376,13 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                 </div>
 
                 {sourceMode === 'template' && (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                    <div className="space-y-4">
                         {/* Cảnh báo khi template đã bị xóa */}
                         {templateDeleted && (
-                            <div className="flex items-start gap-3 p-4 bg-rose-50 border-2 border-rose-200 rounded-[14px] animate-in fade-in">
+                            <div className="flex items-start gap-3 p-4 bg-rose-50 border-2 border-rose-200 rounded-xl">
                                 <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
                                 <div className="flex-1">
-                                    <p className="text-sm font-bold text-rose-700">⚠️ Mẫu email đã bị xóa!</p>
+                                    <p className="text-sm font-bold text-rose-700">Mẫu email đã bị xóa</p>
                                     <p className="text-xs text-rose-600 mt-1">
                                         Mẫu email được chọn cho bước này không còn tồn tại trong hệ thống. Email sẽ <strong>không gửi được</strong> cho đến khi chọn lại mẫu mới.
                                     </p>
@@ -397,7 +397,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                             </div>
                         )}
                         {selectedTemplate ? (
-                            <div className="group relative rounded-xl border-2 border-[#2563eb]/20 hover:border-[#2563eb] transition-all overflow-hidden bg-white shadow-lg hover:shadow-xl">
+                            <div className="group relative rounded-xl border-2 border-[#2563eb]/20 hover:border-[#2563eb] transition-colors overflow-hidden bg-white shadow-md hover:shadow-lg">
                                 <div className="aspect-[16/9] bg-slate-50 relative overflow-hidden">
                                     {selectedTemplate.htmlContent ? (
                                         <iframe
@@ -408,19 +408,19 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                                             title="Email Preview"
                                         />
                                     ) : (
-                                        <img src={selectedTemplate.thumbnail} className="w-full h-full object-cover transition-all duration-500 opacity-80 group-hover:opacity-100" alt={selectedTemplate.name} />
+                                        <img src={selectedTemplate.thumbnail} className="w-full h-full object-cover transition-opacity duration-300 opacity-85 group-hover:opacity-100" alt={selectedTemplate.name} />
                                     )}
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent pointer-events-none" />
                                     <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
                                         <div>
                                             <h4 className="font-bold text-white text-sm drop-shadow-lg">{selectedTemplate.name}</h4>
-                                            <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest drop-shadow">{selectedTemplate.category}</p>
+                                            <p className="text-[9px] font-bold text-blue-300 uppercase tracking-widest drop-shadow">{selectedTemplate.category}</p>
                                         </div>
                                         <div className="flex gap-2 flex-nowrap shrink-0 ml-4 max-w-full overflow-x-auto pb-1 custom-scrollbar">
-                                            <button onClick={() => setShowPicker(true)} className="px-3 py-2 bg-slate-900/50 backdrop-blur-md text-white rounded-[var(--radius-md)] text-[10px] font-black uppercase hover:bg-slate-800 transition-all whitespace-nowrap shadow-sm shrink-0 flex items-center" title="Đổi sang mẫu email khác">Đổi mẫu</button>
+                                            <button onClick={() => setShowPicker(true)} className="px-3 py-2 bg-slate-900/60 backdrop-blur-md text-white rounded-[var(--radius-md)] text-[10px] font-bold uppercase hover:bg-slate-800 transition-colors whitespace-nowrap shadow-sm shrink-0 flex items-center" title="Đổi sang mẫu email khác">Đổi mẫu</button>
                                             <button
                                                 onClick={() => setIsEditingTemplate(true)}
-                                                className="px-3 py-2 bg-white text-[#2563eb] rounded-[var(--radius-md)] text-[10px] font-black uppercase hover:bg-blue-50 transition-all flex items-center gap-1 shadow-sm whitespace-nowrap shrink-0"
+                                                className="px-3 py-2 bg-white text-[#2563eb] rounded-[var(--radius-md)] text-[10px] font-bold uppercase hover:bg-blue-50 transition-colors flex items-center gap-1 shadow-sm whitespace-nowrap shrink-0"
                                                 title="Sửa mẫu trực tiếp"
                                             >
                                                 <Edit3 className="w-3.5 h-3.5" /> Sửa mẫu
@@ -435,7 +435,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                                                         setPreviewData({ template: selectedTemplate });
                                                     }
                                                 }}
-                                                className="px-3 py-2 bg-blue-600 text-white rounded-[var(--radius-md)] text-[10px] font-black uppercase hover:bg-blue-700 transition-all flex items-center gap-1 shadow-sm whitespace-nowrap shrink-0"
+                                                className="px-3 py-2 bg-blue-600 text-white rounded-[var(--radius-md)] text-[10px] font-bold uppercase hover:bg-blue-700 transition-colors flex items-center gap-1 shadow-sm whitespace-nowrap shrink-0"
                                                 title="Xem trước mẫu"
                                             >
                                                 <Eye className="w-3.5 h-3.5" /> Xem
@@ -447,10 +447,10 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                         ) : (
                             <button
                                 onClick={() => setShowPicker(true)}
-                                className={`w-full py-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 text-slate-400 flex flex-col items-center justify-center gap-3 hover:bg-white hover:border-blue-300 hover:text-blue-600 transition-all group shadow-inner ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                className={`w-full py-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 text-slate-400 flex flex-col items-center justify-center gap-3 hover:bg-white hover:border-blue-300 hover:text-blue-600 transition-colors group shadow-inner ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
                                 disabled={disabled}
                             >
-                                <div className="p-3 bg-white rounded-[var(--radius-md)] shadow-sm group-hover:scale-110 transition-transform"><Layout className="w-6 h-6" /></div>
+                                <div className="p-3 bg-white rounded-[var(--radius-md)] shadow-sm"><Layout className="w-6 h-6" /></div>
                                 <span className="text-xs font-bold uppercase tracking-wider">Chọn mẫu từ thư viện</span>
                             </button>
                         )}
@@ -459,7 +459,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
 
                 {/* MODE: HTML CODE */}
                 {sourceMode === 'html' && (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                    <div className="space-y-4">
                         <div className="relative">
                             <div className="absolute top-0 right-0 z-10 flex gap-2">
                                 {/* VARIABLE DROPDOWN */}
@@ -476,9 +476,9 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                                     {showVarDropdown && (
                                         <>
                                             <div className="fixed inset-0 z-20" onClick={() => setShowVarDropdown(false)}></div>
-                                            <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-[14px] shadow-xl border border-slate-100 overflow-hidden z-30 animate-in fade-in zoom-in-95">
-                                                <div className="bg-slate-50 px-4 py-2 border-b border-slate-100">
-                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Click để chèn</p>
+                                            <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-30">
+                                                <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Click để chèn</p>
                                                 </div>
                                                 <div className="max-h-60 overflow-y-auto custom-scrollbar p-1">
                                                     {MERGE_TAGS.map((tag) => (
@@ -506,7 +506,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                             </div>
                             <textarea
                                 ref={textAreaRef}
-                                className="w-full h-64 bg-[#1e293b] text-indigo-100 font-mono text-xs p-4 pt-10 rounded-[14px] outline-none border-2 border-transparent focus:border-blue-500 transition-all resize-y leading-relaxed custom-scrollbar"
+                                className="w-full h-64 bg-[#1e293b] text-slate-100 font-mono text-xs p-4 pt-10 rounded-xl outline-none border-2 border-transparent focus:border-blue-500 transition-colors resize-y leading-relaxed custom-scrollbar"
                                 placeholder="<html><body><h1>Paste your HTML here...</h1></body></html>"
                                 value={config.customHtml || ''}
                                 onChange={(e) => onChange({ ...config, customHtml: e.target.value })}
@@ -520,10 +520,10 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
 
             {/* 3. ATTACHMENTS SECTION */}
             <div className="pt-4 border-t border-slate-100 space-y-4">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest block ml-1">Tệp đính kèm (Attachments)</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block ml-1">Tệp đính kèm (Attachments)</label>
                 <div className="space-y-4">
                     {/* Toggle for Personalized Mode */}
-                    <div className={`mb-4 p-4 rounded-[14px] border-2 transition-all flex items-center justify-between cursor-pointer ${isPersonalizedMode ? 'bg-blue-50/50 border-blue-200' : 'bg-slate-50 border-slate-100'} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`} onClick={() => !disabled && setIsPersonalizedMode(!isPersonalizedMode)}>
+                    <div className={`mb-4 p-4 rounded-xl border-2 transition-colors flex items-center justify-between cursor-pointer ${isPersonalizedMode ? 'bg-blue-50/50 border-blue-200' : 'bg-slate-50 border-slate-200'} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`} onClick={() => !disabled && setIsPersonalizedMode(!isPersonalizedMode)}>
                         <div className="flex items-center gap-3">
                             <div className={`w-10 h-6 rounded-full p-1 transition-colors duration-300 flex items-center ${isPersonalizedMode ? 'bg-blue-600 justify-end' : 'bg-slate-300 justify-start'}`}>
                                 <div className="w-4 h-4 bg-white rounded-full shadow-md"></div>
@@ -538,9 +538,9 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
 
                     {/* Personalized Mode Info */}
                     {isPersonalizedMode && (
-                        <div className="p-4 bg-blue-50/50 border border-blue-100/50 rounded-[14px] flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+                        <div className="p-4 bg-blue-50/50 border border-blue-200 rounded-xl flex items-start gap-3">
                             <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-                            <p className="text-[10px] text-blue-700 font-medium leading-relaxed italic">
+                            <p className="text-[10px] text-blue-700 font-medium leading-relaxed">
                                 Khi chế độ này BẬT, tên file đính kèm phải chứa địa chỉ email của người nhận (VD: `invoice_john@example.com.pdf`). File chỉ được gửi nếu khớp email.
                             </p>
                         </div>
@@ -555,7 +555,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                                 if (isPersonalizedMode) setIsUploadModalOpen(true);
                                 else fileInputRef.current?.click();
                             }}
-                            className="flex-1 cursor-pointer py-3.5 border-2 border-dashed rounded-[14px] flex items-center justify-center gap-2 text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50/30 transition-all"
+                            className="flex-1 cursor-pointer py-3.5 border-2 border-dashed rounded-xl flex items-center justify-center gap-2 text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
                         >
                             {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                             <span className="text-[10px] font-bold uppercase">
@@ -568,7 +568,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                         <button
                             type="button"
                             onClick={() => !disabled && setIsLibraryOpen(true)}
-                            className="px-4 py-3.5 border-2 border-dashed border-blue-200 rounded-[14px] flex items-center gap-1.5 text-blue-500 hover:text-blue-700 hover:border-blue-400 hover:bg-blue-50/40 transition-all text-[10px] font-bold uppercase shrink-0"
+                            className="px-4 py-3.5 border-2 border-dashed border-blue-200 rounded-xl flex items-center gap-1.5 text-blue-500 hover:text-blue-700 hover:border-blue-400 hover:bg-blue-50/40 transition-colors text-[10px] font-bold uppercase shrink-0"
                             title="Chọn file từ thư viện đã upload"
                         >
                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -581,18 +581,18 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
 
                     {/* Attachment List */}
                     {attachments.length > 0 ? attachments.map((att) => (
-                        <div key={att.id} className={`border rounded-[14px] p-3 animate-in fade-in slide-in-from-bottom-2 transition-colors ${att.logic !== 'all' ? 'bg-blue-50/30 border-blue-100' : 'bg-white border-slate-100'}`}>
+                        <div key={att.id} className={`border rounded-xl p-3 transition-colors ${att.logic !== 'all' ? 'bg-blue-50/30 border-blue-200' : 'bg-white border-slate-200'}`}>
                             <div className="flex items-start justify-between gap-3">
                                 <div className="flex items-center gap-3 overflow-hidden">
                                     <a href={att.url || '#'} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 group flex-1 min-w-0" title="Bấm để xem tệp">
-                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${att.logic !== 'all' ? 'bg-blue-100 text-blue-600 border-blue-200 group-hover:bg-blue-500 group-hover:text-white' : 'bg-slate-50 text-slate-400 border-slate-100 group-hover:bg-blue-500 group-hover:text-white group-hover:border-blue-500'}`}>
+                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${att.logic !== 'all' ? 'bg-blue-100 text-blue-600 border-blue-200 group-hover:bg-blue-500 group-hover:text-white' : 'bg-slate-50 text-slate-400 border-slate-200 group-hover:bg-blue-500 group-hover:text-white group-hover:border-blue-500'}`}>
                                             <FileIcon className="w-5 h-5" />
                                         </div>
                                         <div className="min-w-0 cursor-pointer">
                                             <p className="text-xs font-bold text-slate-700 truncate group-hover:text-blue-600 transition-colors" title={att.name}>{att.name}</p>
                                             <div className="flex items-center gap-2">
-                                                <p className="text-[9px] text-slate-400 font-mono">{(att.size / 1024).toFixed(1)} KB</p>
-                                                {att.logic !== 'all' && <span className="text-[8px] font-black text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded uppercase">Personalized</span>}
+                                                <p className="text-[9px] text-slate-400 font-mono tabular-nums">{(att.size / 1024).toFixed(1)} KB</p>
+                                                {att.logic !== 'all' && <span className="text-[8px] font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded uppercase">Personalized</span>}
                                             </div>
                                         </div>
                                     </a>
@@ -609,7 +609,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                     )) : null}
 
                     {attachments.length === 0 && (
-                        <div className="p-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[14px] text-center text-slate-400 text-xs italic">
+                        <div className="p-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 text-xs">
                             Chưa có tệp đính kèm.
                         </div>
                     )}
@@ -726,7 +726,7 @@ const EmailActionConfig: React.FC<EmailActionConfigProps> = ({ config, onChange,
                                 return [...prev, immediateUpdated];
                             });
                             invalidateEmailTemplatesMemoryCache(selectedTemplate.id, immediateUpdated);
-                            toast.success('Đã cấu hình & lưu lại mẫu!');
+                            toast.success('Đã cấu hình & lưu lại mẫu');
                             setIsEditingTemplate(false);
                             // Refresh template view to update thumbnail/changes from server
                             const detail = await api.get<Template>(`templates?id=${selectedTemplate.id}`, {}, { force: true });

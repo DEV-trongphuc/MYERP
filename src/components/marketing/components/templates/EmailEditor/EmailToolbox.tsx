@@ -144,8 +144,8 @@ const EmailToolbox: React.FC<EmailToolboxProps> = ({ blocks, onDragStart, onSele
                         <LucideIcons.Blocks className="w-3.5 h-3.5 shrink-0" />
                         <span className="text-[9px] font-bold uppercase tracking-wider truncate">Blocks</span>
                     </button>
-                    <button type="button" onClick={() => setActiveTab('templates')} className={`flex-1 py-2 px-1 rounded-lg flex items-center justify-center gap-1 transition-all outline-none focus:outline-none cursor-pointer ${activeTab === 'templates' ? 'bg-white shadow-sm text-[var(--color-primary)]' : 'text-slate-400 hover:text-slate-600'}`}>
-                        <LucideIcons.Sparkles className="w-3.5 h-3.5 shrink-0" />
+                    <button type="button" onClick={() => setActiveTab('templates')} className={`flex-1 py-2 px-1 rounded-lg flex items-center justify-center gap-1 transition-colors outline-none focus:outline-none cursor-pointer ${activeTab === 'templates' ? 'bg-white shadow-sm text-[var(--color-primary)]' : 'text-slate-400 hover:text-slate-600'}`}>
+                        <LucideIcons.LayoutGrid className="w-3.5 h-3.5 shrink-0" />
                         <span className="text-[9px] font-bold uppercase tracking-wider truncate">Mẫu</span>
                     </button>
                     <button type="button" onClick={() => setActiveTab('saved')} className={`flex-1 py-2 px-1 rounded-lg flex items-center justify-center gap-1 transition-all outline-none focus:outline-none cursor-pointer ${activeTab === 'saved' ? 'bg-white shadow-sm text-[var(--color-primary)]' : 'text-slate-400 hover:text-slate-600'}`}>
